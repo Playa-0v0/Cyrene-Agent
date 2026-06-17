@@ -1,7 +1,7 @@
 import * as fs from "fs"
 import * as path from "path"
 import { app } from "electron"
-import { MemoryCandidate } from "./memory-types"
+import { MemoryCandidate, L0_FIELD_DESCRIPTIONS } from "./memory-types"
 
 interface ModelSettings {
   baseUrl: string
@@ -118,6 +118,7 @@ function normalizeCandidate(input: unknown): MemoryCandidate | null {
   if (typeof triggerText !== "string" || !triggerText.trim()) return null
   return {
     layer,
+    field: typeof record.field === 'string' ? record.field : undefined,
     content: content.trim(),
     confidence,
     triggerText: triggerText.trim(),
@@ -165,6 +166,11 @@ async function callChatCompletions(
 }
 
 export class MemoryJudge {
+  private buildL0FieldPrompt(): string {
+    return Object.entries(L0_FIELD_DESCRIPTIONS)
+      .map(([field, description]) => `  · ${field}：${description}`)
+      .join('\n')
+  }
   async judge(
     userMessage: string,
     assistantMessage: string,
@@ -184,7 +190,14 @@ export class MemoryJudge {
         "你是一个记忆提取器，分析对话内容，判断是否有值得长期记住的信息。",
         "",
         "记忆层级定义：",
-        "- L0：用户的稳定身份信息（职业、长期兴趣、称呼偏好、语言习惯）",
+        "- L0：用户的稳定身份信息。",
+        "  识别到 L0 信息时，必须同时在 field 字段里指定要写入哪个格子。",
+        "  可用的 field 值如下（只能用这些，不能自己发明）：",
+        this.buildL0FieldPrompt(),
+        "",
+        "  重要：field 的值必须严格是上方列出的英文字段名，",
+        "  例如 preferredName、occupation，",
+        "  不能用 nickname、name、job 等其他词。",
         "- L1：用户近期目标或阶段性偏好（最近想做什么、近期关注什么）",
         "- L2：具体事件或情绪经历（今天发生了什么、某件具体的事）",
         "",
@@ -200,16 +213,35 @@ export class MemoryJudge {
         "- 不要用 markdown 代码块包裹 JSON，直接输出裸 JSON",
         "- 数组第一个字符必须是 [，最后一个字符必须是 ]",
         "",
-        "只返回 JSON 数组，禁止输出任何其他文字：",
-        "[",
-        "  {",
-        "    \"layer\": \"L0\"|\"L1\"|\"L2\",",
-        "    \"content\": \"提炼后的记忆内容\",",
-        "    \"confidence\": 0.0~1.0,",
-        "    \"triggerText\": \"原始触发文本（原文片段，不超过50字）\"",
-        "  }",
-        "]",
-        "如果没有值得记住的信息，返回空数组：[]",
+        "输出格式为 JSON 数组，禁止用 markdown 代码块包裹，直接输出裸 JSON。",
+        "",
+        "L0 候选（必须包含 field）：",
+        "{",
+        "  \"layer\": \"L0\",",
+        "  \"field\": \"preferredName\",",
+        "  \"content\": \"提炼后的内容，用「」代替引号\",",
+        "  \"confidence\": 0.0~1.0,",
+        "  \"triggerText\": \"原始触发文本，不超过50字，用「」代替引号\"",
+        "}",
+        "",
+        "L1 候选（不需要 field）：",
+        "{",
+        "  \"layer\": \"L1\",",
+        "  \"content\": \"提炼后的内容\",",
+        "  \"confidence\": 0.0~1.0,",
+        "  \"triggerText\": \"原始触发文本\"",
+        "}",
+        "",
+        "L2 候选（不需要 field）：",
+        "{",
+        "  \"layer\": \"L2\",",
+        "  \"content\": \"提炼后的内容\",",
+        "  \"confidence\": 0.0~1.0,",
+        "  \"triggerText\": \"原始触发文本\"",
+        "}",
+        "",
+        "没有值得记录的信息时，输出：[]",
+        "content 和 triggerText 里禁止出现英文双引号，用「」替代。",
       ].join("\n")
 
       const userPrompt = [
@@ -247,7 +279,7 @@ export class MemoryJudge {
 
       console.log(`[MemoryJudge] 提取候选: ${candidates.length} 条（过滤后）`)
       console.log(
-        `[MemoryJudge] 候选详情: ${candidates.map((item) => `${item.layer}(\"${item.content}\", ${item.confidence.toFixed(2)})`).join(" ")}`,
+        `[MemoryJudge] 候选详情: ${candidates.map((item) => item.layer === "L0" && item.field ? `${item.layer}.${item.field}(\"${item.content.slice(0, 20)}\", ${item.confidence.toFixed(2)})` : `${item.layer}(\"${item.content.slice(0, 20)}\", ${item.confidence.toFixed(2)})`).join(" ")}`,
       )
       return candidates
     } catch (error) {
