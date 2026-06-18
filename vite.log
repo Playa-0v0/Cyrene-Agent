@@ -1,9 +1,0 @@
-
-  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m289[22m[2m[0m ms[22m
-
-  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5180[22m/[39m
-[2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
-[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
-[2m21:42:14[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mmain.ts[22m
-[2m21:44:39[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mmain.ts[22m
-[2m22:29:26[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mmain.ts[22m
