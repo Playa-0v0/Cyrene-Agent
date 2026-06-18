@@ -156,6 +156,9 @@ interface ModelPreset {
   baseUrl: string;
   mainModels: string[];
   iconUrl: string;
+  // 视觉模型的 OpenAI 兼容 baseUrl。仅当主配走 Anthropic 入口、视觉要走 OpenAI 入口时才标
+  // （如 MiniMax 主配 /anthropic，视觉走 /v1）。勾选"同步主模型"时 UI 用它填视觉框。
+  visionBaseUrl?: string;
   // 标记为 true 时，该项在 <select> 里显示但不可选；
   // 用于"已列出但 vendor adapter 还没接好"的情况，避免用户选到后调用直接报错。
   disabled?: boolean;
@@ -268,6 +271,8 @@ const MODEL_PRESETS: ModelPreset[] = [
     baseUrl: "https://api.minimaxi.com/anthropic",
     mainModels: ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.5"],
     iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/minimax.svg",
+    // 主配走 /anthropic，但视觉要走 OpenAI 入口 /v1。勾"同步"时 UI 自动用这个，用户不用手改。
+    visionBaseUrl: "https://api.minimaxi.com/v1",
   },
   {
     // DeepSeek：v1 vendor adapter 不为它做协议层强制，仅作为 OpenAI 兼容厂商列出。
@@ -619,12 +624,17 @@ function applyModeUI(): void {
 /**
  * 视觉同步 UI：勾选"与主聊天模型相同"时，三框变只读 + 值随主配置。
  * 主配置改了它跟着改（通过事件监听联动）。
+ * baseUrl 特殊处理：若当前厂商标了 visionBaseUrl（主配走 Anthropic 入口、视觉要走 OpenAI 入口），
+ * 用 visionBaseUrl 填视觉框，让用户看到的就是正确的视觉入口，不用手动改。
  */
 function applyVisionSyncUI(): void {
   const synced = visionSyncCheckbox.checked;
   if (synced) {
     visionFieldsWrap.classList.add("is-locked");
-    visionBaseUrlInput.value = baseUrlInput.value;
+    // 找当前厂商 preset，看有没有 visionBaseUrl
+    const preset = findPreset(providerInput.value);
+    const visionBaseUrl = preset?.visionBaseUrl || baseUrlInput.value;
+    visionBaseUrlInput.value = visionBaseUrl;
     visionApiKeyInput.value = apiKeyInput.value;
     visionModelInput.value = getCurrentModelValue();
   } else {
@@ -990,8 +1000,13 @@ visionSyncCheckbox.addEventListener("change", () => {
   setSaveStatus("有未保存的更改");
 });
 
-// 主配置变化时，若同步勾选，联动更新视觉三框
-baseUrlInput.addEventListener("input", () => { if (visionSyncCheckbox.checked) visionBaseUrlInput.value = baseUrlInput.value; });
+// 主配置变化时，若同步勾选，联动更新视觉三框。
+// baseUrl 用 visionBaseUrl（若有），其他直接复制。
+baseUrlInput.addEventListener("input", () => {
+  if (!visionSyncCheckbox.checked) return;
+  const preset = findPreset(providerInput.value);
+  visionBaseUrlInput.value = preset?.visionBaseUrl || baseUrlInput.value;
+});
 apiKeyInput.addEventListener("input", () => { if (visionSyncCheckbox.checked) visionApiKeyInput.value = apiKeyInput.value; });
 modelInput.addEventListener("input", () => { if (visionSyncCheckbox.checked) visionModelInput.value = modelInput.value; });
 modelSelect.addEventListener("change", () => { if (visionSyncCheckbox.checked) visionModelInput.value = modelSelect.value; });
