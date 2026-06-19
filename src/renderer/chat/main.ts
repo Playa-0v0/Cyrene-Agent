@@ -124,7 +124,7 @@ let currentModelConfig: ModelConfig | null = null;
 
 function formatModelHint(config: ModelConfig | null): string {
   if (!config || !config.connected) return "模型未连接";
-  return `${config.model} · 已连接`;
+  return `${config.model} 已连接`;
 }
 
 function applyModelConfig(config: ModelConfig | null): void {
@@ -452,7 +452,7 @@ async function send(): Promise<void> {
   sending = true;
   sendBtn.disabled = true;
   await refreshModelConfig();
-  chatHintEl.textContent = currentModelConfig?.connected ? `${currentModelConfig.model} · 思考中…` : "模型未连接";
+  chatHintEl.textContent = currentModelConfig?.connected ? `${currentModelConfig.model} 思考中…` : "模型未连接";
 
   const userMsg: Message = {
     id: String(Date.now()),

@@ -91,15 +91,22 @@ body {
   text-shadow: 0 0 16px rgba(236, 72, 153, 0.24);
 }
 
+/* 名字与状态之间的分隔点：弱化，不抢 loader 和名字。
+   两侧负 margin 抵消父级 12px gap，让名字·状态紧凑成一组。 */
+.chat__name-sep {
+  color: rgba(235, 229, 245, 0.35);
+  font-size: 13px;
+  user-select: none;
+  margin: 0 -6px;
+}
+
+/* 状态文字：合到一行后去掉原来的胶囊背景，改成纯淡色文字，
+   跟名字形成主次。main.ts 里 chatHintEl.textContent 只覆盖这里，
+   不影响前面的名字和分隔点。 */
 .chat__hint {
   font: var(--rb-text-micro);
-  color: rgba(235, 229, 245, 0.72);
-  padding: 4px 10px;
-  border: 1px solid rgba(255, 182, 220, 0.22);
-  border-radius: var(--rb-radius-full);
+  color: rgba(235, 229, 245, 0.55);
   white-space: nowrap;
-  background: rgba(255, 255, 255, 0.07);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 /* 左上角触发按钮：内嵌旋转 loader 动画，点击调出会话侧栏（侧栏逻辑后续接入）。
