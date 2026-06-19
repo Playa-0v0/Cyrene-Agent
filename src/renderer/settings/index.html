@@ -722,33 +722,59 @@
             </div>
           </div>
           <div class="panel-body">
-            <div class="schedule-usage">
-              <div class="usage-info">
-                <span class="usage-label">⚡ Token 用量</span>
-                <span class="usage-number" id="token-usage-number">2,470</span>
-                <span class="usage-total" id="token-usage-total">/ 5,000</span>
+            <!-- 时间范围切换 -->
+            <div class="token-range" role="tablist" aria-label="时间范围">
+              <button type="button" class="token-range__btn is-active" data-range="7" role="tab" aria-selected="true">7d</button>
+              <button type="button" class="token-range__btn" data-range="14" role="tab" aria-selected="false">14d</button>
+              <button type="button" class="token-range__btn" data-range="30" role="tab" aria-selected="false">30d</button>
+            </div>
+
+            <!-- Hero 指标区：总消耗(大字)+请求数(右上小字)，下面三小框 -->
+            <div class="token-hero">
+              <div class="token-hero__main">
+                <span class="token-hero__label">📊 真实消耗</span>
+                <span class="token-hero__value" id="token-total">12,470</span>
               </div>
-              <div class="usage-bar" aria-hidden="true">
-                <div class="usage-bar__fill" id="token-usage-fill" style="width: 49.4%;"></div>
+              <div class="token-hero__req">
+                <span class="token-hero__req-label">🔢 请求数</span>
+                <span class="token-hero__req-value" id="token-requests">42</span>
+              </div>
+            </div>
+            <div class="token-stats">
+              <div class="token-stat">
+                <span class="token-stat__icon">📥</span>
+                <span class="token-stat__label">输入</span>
+                <span class="token-stat__value" id="token-input">8,200</span>
+              </div>
+              <div class="token-stat">
+                <span class="token-stat__icon">📤</span>
+                <span class="token-stat__label">输出</span>
+                <span class="token-stat__value" id="token-output">4,270</span>
+              </div>
+              <div class="token-stat">
+                <span class="token-stat__icon">🎯</span>
+                <span class="token-stat__label">命中</span>
+                <span class="token-stat__value" id="token-hit">N/A</span>
               </div>
             </div>
 
+            <!-- 柱状图（保留 CSS 版，按时间范围动态生成天数） -->
+            <div class="token-section-title">📈 每日消耗柱状图</div>
             <div class="mini-chart" aria-hidden="true">
-              <div class="mini-chart__avg"><span>日均 2.8K</span></div>
-              <div class="mini-chart__bars">
-                <div class="chart-bar chart-bar--mo"><span>Mo</span></div>
-                <div class="chart-bar chart-bar--tu chart-bar--peak"><span>Tu</span></div>
-                <div class="chart-bar chart-bar--we"><span>We</span></div>
-                <div class="chart-bar chart-bar--th"><span>Th</span></div>
-                <div class="chart-bar chart-bar--fr"><span>Fr</span></div>
-                <div class="chart-bar chart-bar--sa"><span>Sa</span></div>
-                <div class="chart-bar chart-bar--su"><span>Su</span></div>
-              </div>
+              <div class="mini-chart__avg"><span id="token-avg-label">日均 1.8K</span></div>
+              <div class="mini-chart__bars" id="token-bar-chart"></div>
             </div>
 
-            <div class="schedule-note">📊 本周 Token 消耗趋势 ｜ 峰值 4.8K（周二）</div>
+            <!-- 波浪面积图（Chart.js，输入蓝/输出粉双曲线） -->
+            <div class="token-section-title">🌊 使用趋势</div>
+            <div class="token-trend-wrap">
+              <canvas id="token-trend-chart"></canvas>
+            </div>
 
-            <p class="token-panel__hint">💡 数据接入后，这里将显示真实的每日 Token 消耗统计。</p>
+            <!-- hover tooltip 浮层（柱状图和波浪图共用） -->
+            <div class="token-tooltip" id="token-tooltip" hidden></div>
+
+            <p class="token-panel__hint">💡 命中/未命中为缓存统计占位，数据接入后显示真实值。当前所有数据为演示假数据。</p>
           </div>
         </section>
 

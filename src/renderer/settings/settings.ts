@@ -2213,3 +2213,297 @@ window.chatStore?.onActiveSessionChanged((sessionId) => {
     el.classList.toggle("is-active", el.dataset.sessionId === sessionId);
   });
 });
+
+/* ============================================================
+   📊 Token 用量面板：指标卡片 + 柱状图 + Chart.js 波浪图
+   - 时间范围 7d/14d/30d 切换，切换后重新生成假数据并重渲
+   - hover 柱子/波浪节点 → tooltip 显示当天 输入/输出/命中/未命中
+   - 数据全是假数据占位，接真实统计后替换 generateFakeData 即可
+   ============================================================ */
+
+import { Chart, registerables, type ChartConfiguration } from "chart.js";
+
+Chart.register(...registerables);
+
+interface TokenDayData {
+  date: string;       // ISO 日期 "06-15"
+  weekday: string;    // "周日"
+  input: number;
+  output: number;
+  hit: number;        // 缓存命中（占位 0）
+  miss: number;       // 缓存未命中（占位 0）
+}
+
+const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+
+// 根据天数生成假数据（带随机波动，模拟真实趋势）
+function generateFakeData(days: number): TokenDayData[] {
+  const result: TokenDayData[] = [];
+  const now = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    // 假数据：input 800-2000，output 是 input 的 30-60%
+    const input = Math.round(800 + Math.random() * 1200);
+    const output = Math.round(input * (0.3 + Math.random() * 0.3));
+    result.push({
+      date: `${mm}-${dd}`,
+      weekday: WEEKDAYS[d.getDay()],
+      input,
+      output,
+      hit: 0,
+      miss: 0,
+    });
+  }
+  return result;
+}
+
+// 柱状图：根据数据动态生成柱子（复用 chart.css 的 .chart-bar 样式）
+function renderTokenBarChart(data: TokenDayData[]): void {
+  const container = document.getElementById("token-bar-chart");
+  if (!container) return;
+  container.innerHTML = "";
+
+  const maxVal = Math.max(...data.map((d) => d.input + d.output), 1);
+  const peakIdx = data.reduce((peak, d, i, arr) =>
+    (d.input + d.output) > (arr[peak].input + arr[peak].output) ? i : peak, 0);
+
+  // 柱状图最多显示 14 根（30d 时隔天显示），避免太挤
+  const displayData = data.length > 14
+    ? data.filter((_, i) => i % 2 === 0)
+    : data;
+
+  for (let i = 0; i < displayData.length; i++) {
+    const d = displayData[i];
+    const total = d.input + d.output;
+    const heightPct = Math.max(8, (total / maxVal) * 100);
+    const bar = document.createElement("div");
+    bar.className = "chart-bar";
+    // 用 inline style 控制高度（chart.css 里是固定 px，这里动态覆盖）
+    bar.style.setProperty("--bar-h", heightPct + "%");
+    // 峰值柱加标记
+    const origIdx = data.indexOf(d);
+    if (origIdx === peakIdx) bar.classList.add("chart-bar--peak");
+
+    // 覆盖 ::before 的高度——用内联 style 不行（伪元素），
+    // 改用 CSS 变量 + 在 chart.css 补规则太麻烦；
+    // 这里直接用 data 属性 + 额外 style 标签注入。
+    // 更简单：直接创建真实 div 代替伪元素
+    bar.innerHTML = "";
+    const fill = document.createElement("div");
+    fill.style.cssText = `width:100%;max-width:24px;height:${heightPct}%;min-height:8px;border-radius:9999px;background:linear-gradient(180deg,#ec4899,#ff8ccc);box-shadow:0 0 10px rgba(236,72,153,0.22);align-self:flex-end;`;
+    fill.style.position = "relative";
+
+    const label = document.createElement("span");
+    label.textContent = d.date.split("-")[1]; // 只显示日
+    bar.appendChild(fill);
+    bar.appendChild(label);
+
+    // hover tooltip
+    bar.addEventListener("mouseenter", (e) => showTokenTooltip(e, d));
+    bar.addEventListener("mousemove", (e) => moveTokenTooltip(e));
+    bar.addEventListener("mouseleave", hideTokenTooltip);
+
+    container.appendChild(bar);
+  }
+
+  // 日均标签
+  const avgEl = document.getElementById("token-avg-label");
+  if (avgEl) {
+    const avg = Math.round(data.reduce((s, d) => s + d.input + d.output, 0) / data.length);
+    avgEl.textContent = `日均 ${formatTokenShort(avg)}`;
+  }
+}
+
+function formatTokenShort(n: number): string {
+  if (n >= 1000) return (n / 1000).toFixed(1) + "K";
+  return String(n);
+}
+
+// tooltip 显示/移动/隐藏
+function showTokenTooltip(e: MouseEvent, d: TokenDayData): void {
+  const tip = document.getElementById("token-tooltip");
+  if (!tip) return;
+  tip.innerHTML = `
+    <div class="token-tooltip__date">${d.date} ${d.weekday}</div>
+    <div class="token-tooltip__row"><span>📥 输入</span><span>${d.input.toLocaleString()}</span></div>
+    <div class="token-tooltip__row"><span>📤 输出</span><span>${d.output.toLocaleString()}</span></div>
+    <div class="token-tooltip__row"><span>🎯 命中</span><span>${d.hit > 0 ? d.hit.toLocaleString() : "N/A"}</span></div>
+    <div class="token-tooltip__row"><span>❌ 未命中</span><span>${d.miss > 0 ? d.miss.toLocaleString() : "N/A"}</span></div>
+  `;
+  tip.hidden = false;
+  moveTokenTooltip(e);
+}
+
+function moveTokenTooltip(e: MouseEvent): void {
+  const tip = document.getElementById("token-tooltip");
+  if (!tip || tip.hidden) return;
+  const offset = 14;
+  let x = e.clientX + offset;
+  let y = e.clientY + offset;
+  // 防止超出视口右边
+  const tipW = tip.offsetWidth;
+  if (x + tipW > window.innerWidth) x = e.clientX - tipW - offset;
+  tip.style.left = x + "px";
+  tip.style.top = y + "px";
+}
+
+function hideTokenTooltip(): void {
+  const tip = document.getElementById("token-tooltip");
+  if (tip) tip.hidden = true;
+}
+
+// Chart.js 波浪面积图
+let tokenTrendChart: Chart | null = null;
+
+function renderTokenTrendChart(data: TokenDayData[]): void {
+  const canvas = document.getElementById("token-trend-chart") as HTMLCanvasElement | null;
+  if (!canvas) return;
+
+  // 销毁旧实例避免重叠
+  if (tokenTrendChart) { tokenTrendChart.destroy(); tokenTrendChart = null; }
+
+  const labels = data.map((d) => d.date);
+  const inputData = data.map((d) => d.input);
+  const outputData = data.map((d) => d.output);
+
+  const config: ChartConfiguration = {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "📥 输入",
+          data: inputData,
+          borderColor: "#3b82f6",
+          backgroundColor: "rgba(59, 130, 246, 0.15)",
+          fill: true,
+          tension: 0.4,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: "#3b82f6",
+        },
+        {
+          label: "📤 输出",
+          data: outputData,
+          borderColor: "#ff8ccc",
+          backgroundColor: "rgba(255, 140, 204, 0.15)",
+          fill: true,
+          tension: 0.4,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: "#ff8ccc",
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          position: "top",
+          labels: { color: "rgba(235, 229, 245, 0.7)", font: { size: 11 }, boxWidth: 12, boxHeight: 12 },
+        },
+        tooltip: {
+          // 用 Chart.js 自带 tooltip，显示输入/输出/命中/未命中
+          backgroundColor: "rgba(30, 20, 45, 0.95)",
+          borderColor: "rgba(255, 182, 220, 0.3)",
+          borderWidth: 1,
+          titleColor: "rgba(254, 247, 255, 0.95)",
+          bodyColor: "rgba(235, 229, 245, 0.85)",
+          padding: 10,
+          cornerRadius: 10,
+          displayColors: true,
+          callbacks: {
+            title: (items) => {
+              const idx = items[0].dataIndex;
+              const d = data[idx];
+              return `${d.date} ${d.weekday}`;
+            },
+            label: (item) => {
+              const idx = item.dataIndex;
+              const d = data[idx];
+              const which = item.datasetIndex === 0 ? "input" : "output";
+              const val = which === "input" ? d.input : d.output;
+              return `${which === "input" ? "📥 输入" : "📤 输出"}: ${val.toLocaleString()}`;
+            },
+            afterBody: (items) => {
+              const idx = items[0].dataIndex;
+              const d = data[idx];
+              return [
+                `🎯 命中: ${d.hit > 0 ? d.hit.toLocaleString() : "N/A"}`,
+                `❌ 未命中: ${d.miss > 0 ? d.miss.toLocaleString() : "N/A"}`,
+              ];
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: "rgba(235, 229, 245, 0.45)", font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+        },
+        y: {
+          grid: { color: "rgba(255, 182, 220, 0.08)" },
+          ticks: {
+            color: "rgba(235, 229, 245, 0.45)",
+            font: { size: 10 },
+            callback: (v) => formatTokenShort(Number(v)),
+          },
+          beginAtZero: true,
+        },
+      },
+    },
+  };
+
+  tokenTrendChart = new Chart(canvas, config);
+}
+
+// 更新指标卡片
+function updateTokenStats(data: TokenDayData[]): void {
+  const totalInput = data.reduce((s, d) => s + d.input, 0);
+  const totalOutput = data.reduce((s, d) => s + d.output, 0);
+  const total = totalInput + totalOutput;
+  const requests = data.length * 6; // 假数据：每天约6次请求
+
+  const set = (id: string, val: string) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+  set("token-total", total.toLocaleString());
+  set("token-requests", requests.toLocaleString());
+  set("token-input", totalInput.toLocaleString());
+  set("token-output", totalOutput.toLocaleString());
+  set("token-hit", "N/A");
+}
+
+// 刷新整个面板（切换时间范围时调用）
+function refreshTokenPanel(days: number): void {
+  const data = generateFakeData(days);
+  updateTokenStats(data);
+  renderTokenBarChart(data);
+  renderTokenTrendChart(data);
+}
+
+// 时间范围按钮交互
+document.querySelectorAll<HTMLButtonElement>(".token-range__btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".token-range__btn").forEach((b) => {
+      b.classList.remove("is-active");
+      b.setAttribute("aria-selected", "false");
+    });
+    btn.classList.add("is-active");
+    btn.setAttribute("aria-selected", "true");
+    const days = Number(btn.dataset.range) || 7;
+    refreshTokenPanel(days);
+  });
+});
+
+// 初始渲染（面板首次显示时已有内容）
+void refreshTokenPanel(7);
