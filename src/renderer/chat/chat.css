@@ -943,6 +943,17 @@ body {
   30% { opacity: 1; }
 }
 
+/* 流式逐字渐显：每个字 span 从透明淡入，营造打字机渐显感 */
+.msg__char {
+  display: inline;
+  animation: char-fade-in 200ms ease-out;
+}
+
+@keyframes char-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* 空态：当前会话无消息时显示（设置面板"+新对话"或删除清空后的过渡态） */
 .chat__empty-state {
   position: absolute;

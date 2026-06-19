@@ -66,8 +66,8 @@ function buildToolSpecs(): ToolSpec[] {
   }));
 }
 
-/** 逐字切片：按字符（emoji 安全）切，每片最多 chunkSize 字。 */
-function sliceToDeltas(text: string, chunkSize = 4): string[] {
+/** 逐字切片：按字符（emoji 安全）切，每片 1 字（渲染端 CSS 渐显用）。 */
+function sliceToDeltas(text: string, chunkSize = 1): string[] {
   const chars = Array.from(text);
   const out: string[] = [];
   for (let i = 0; i < chars.length; i += chunkSize) {
@@ -86,8 +86,11 @@ function emitTextMessage(
   text: string,
 ): void {
   observer.next({ type: EventType.TEXT_MESSAGE_START, messageId, role: "assistant" });
-  // 整段一次发（FC 是一次性拿全文，前端逐字流式感由渲染层做或后续切片）
-  observer.next({ type: EventType.TEXT_MESSAGE_CONTENT, messageId, delta: text });
+  // 逐字切片发 delta（每片 4 字，emoji 安全），渲染端逐字累积实现流式感。
+  // FC 仍是 stream:false 一次性拿全文，这里切片只是把"整段一次"变成"多段快速"。
+  for (const delta of sliceToDeltas(text)) {
+    observer.next({ type: EventType.TEXT_MESSAGE_CONTENT, messageId, delta });
+  }
   observer.next({ type: EventType.TEXT_MESSAGE_END, messageId });
 }
 

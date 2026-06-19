@@ -450,6 +450,7 @@ function render(): void {
   for (const m of messages) {
     const row = document.createElement("div");
     row.className = `msg msg--${m.role}`;
+    row.dataset.msgId = m.id;
 
     const avatar = document.createElement("div");
     avatar.className = "msg__avatar";
@@ -720,22 +721,62 @@ async function send(): Promise<void> {
     });
 
     // AG-UI 事件流：订阅 window.agui.onEvent，按事件类型渲染
+    // 主进程在 FC 完成后瞬间把所有 delta 发完，渲染端用"回放队列"按固定节奏逐字显示，
+    // 营造真流式感。流式中的气泡用增量 span 追加 + CSS 渐显，不调 render() 全量重建。
+    const deltaQueue: string[] = [];
+    let playbackTimer: number | null = null;
+    let runFinishedArrived = false;
+    /** 找到当前流式消息的气泡 DOM（TEXT_MESSAGE_START 时 render 过一次，带 data-msg-id）。 */
+    const getStreamingBubble = (): HTMLElement | null => {
+      const row = messagesEl.querySelector(`[data-msg-id="${streamMsgId}"]`);
+      return row ? row.querySelector(".msg__bubble") as HTMLElement : null;
+    };
+    // 终态条件：RUN_FINISHED 到达 AND 回放队列空。两者都满足才 finishRun。
+    const tryFinish = (): void => {
+      if (runFinishedArrived && deltaQueue.length === 0 && playbackTimer === null) {
+        finishRun();
+      }
+    };
+    const startPlayback = (): void => {
+      if (playbackTimer !== null) return;
+      playbackTimer = window.setInterval(() => {
+        const next = deltaQueue.shift();
+        if (next !== undefined) {
+          streamContent += next;
+          // 增量追加 span 到气泡，CSS 渐显。不调 render()，避免全量重建卡顿。
+          const bubble = getStreamingBubble();
+          if (bubble) {
+            const span = document.createElement("span");
+            span.className = "msg__char";
+            span.textContent = next;
+            bubble.appendChild(span);
+          }
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+          return;
+        }
+        // 队列空了
+        if (playbackTimer !== null) { clearInterval(playbackTimer); playbackTimer = null; }
+        tryFinish();
+      }, 40);
+    };
     const offEvent = window.agui!.onEvent((rawEvent) => {
       try {
         const event = rawEvent as AguiBaseEvent;
         const msg = messages.find(m => m.id === streamMsgId);
         switch (event.type) {
           case "TEXT_MESSAGE_START":
+            // 切换 thinking 点 → 空气泡，render 一次建立 DOM（带 data-msg-id）
             if (msg) { msg.thinking = false; render(); }
             break;
           case "TEXT_MESSAGE_CONTENT":
             if (event.delta) {
-              streamContent += event.delta;
-              if (msg) { msg.thinking = false; msg.content = streamContent; render(); }
+              deltaQueue.push(event.delta);
+              if (msg) { msg.thinking = false; }
+              startPlayback();
             }
             break;
           case "TEXT_MESSAGE_END":
-            // 文本流结束，content 已是完整文本
+            // 所有 delta 已入队
             break;
           case "CUSTOM":
             // 主进程发的自定义事件：sticker
@@ -744,8 +785,9 @@ async function send(): Promise<void> {
             }
             break;
           case "RUN_FINISHED":
-            // 终态：这轮结束，触发收尾
-            finishRun();
+            // 终态信号到达，但要等回放队列空才真正 finishRun（保证流式播完）
+            runFinishedArrived = true;
+            tryFinish();
             break;
           case "RUN_ERROR":
             failRun(new Error(event.content || "模型请求失败"));
