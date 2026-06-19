@@ -2284,17 +2284,18 @@ function renderTokenBarChart(data: TokenDayData[]): void {
     const total = d.input + d.output;
     const barH = Math.max(6, Math.round((total / maxVal) * chartHeight));
     const bar = document.createElement("div");
-    bar.className = "chart-bar";
+    bar.className = "token-bar";
     // 峰值柱加标记
     const origIdx = data.indexOf(d);
-    if (origIdx === peakIdx) bar.classList.add("chart-bar--peak");
+    if (origIdx === peakIdx) bar.classList.add("token-bar--peak");
 
     // 真实 fill div（不用伪元素，直接控制像素高度）
     const fill = document.createElement("div");
-    fill.className = "chart-bar__fill";
+    fill.className = "token-bar__fill";
     fill.style.height = barH + "px";
 
     const label = document.createElement("span");
+    label.className = "token-bar__label";
     label.textContent = d.date.split("-")[1]; // 只显示日
     bar.appendChild(fill);
     bar.appendChild(label);

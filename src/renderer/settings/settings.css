@@ -1692,7 +1692,7 @@ body {
    ============================================================ */
 
 #token-panel .panel-body {
-  max-width: 600px;
+  max-width: 720px;
 }
 
 /* 时间范围切换按钮组 */
@@ -1825,6 +1825,54 @@ body {
 
 #token-panel .mini-chart {
   margin: 0 0 18px;
+}
+
+/* token 面板柱子：独立类名，不用共享 .chart-bar（避免 ::before 伪元素干扰） */
+.token-bar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  flex: 1 1 0;
+  height: 100%;
+  padding-bottom: 18px;
+  cursor: pointer;
+}
+
+.token-bar__fill {
+  width: 100%;
+  max-width: 24px;
+  border-radius: var(--rb-radius-full);
+  background: linear-gradient(180deg, #ec4899 0%, #ff8ccc 100%);
+  box-shadow: 0 0 10px rgba(236, 72, 153, 0.22);
+  flex: 0 0 auto;
+  transition: height 0.3s ease;
+}
+
+.token-bar--peak .token-bar__fill {
+  box-shadow: 0 0 14px rgba(236, 72, 153, 0.4);
+}
+
+.token-bar--peak::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.5px solid #ff8ccc;
+  box-shadow: 0 0 8px rgba(236, 72, 153, 0.32);
+}
+
+.token-bar__label {
+  position: absolute;
+  bottom: 0;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(235, 229, 245, 0.52);
 }
 
 /* 波浪图容器 */
