@@ -13,20 +13,34 @@ const LOG_PREFIX = "[BuiltinTools]";
 const FETCH_TIMEOUT_MS = 20_000;
 const FETCH_MAX_BYTES = 512 * 1024; // 单次最多 512KB，防止 LLM 上下文爆炸
 
+// HTML → Markdown 清洗：用 turndown 转成 LLM 最易理解的 markdown 格式
+// 保留标题层级/列表/代码块/表格/链接，比纯 strip 标签信息量大得多
+import TurndownService from "turndown";
+
+const turndown = new TurndownService({
+  headingStyle: "atx",        // <h1>→# <h2>→##
+  codeBlockStyle: "fenced",   // <pre><code>→```围栏代码块（LLM 更认）
+  bulletListMarker: "-",
+  emDelimiter: "*",           // <em>→*斜体*
+});
+
 function stripHtml(html: string): string {
-  // 简单清洗：去 <script>/<style>/注释，剩下的 HTML 标签全删，留文本
+  // 先去 script/style/注释（turndown 不会自动去这些，留着会污染 markdown）
   let s = html.replace(/<script[\s\S]*?<\/script>/gi, " ");
   s = s.replace(/<style[\s\S]*?<\/style>/gi, " ");
   s = s.replace(/<!--[\s\S]*?-->/g, " ");
-  s = s.replace(/<[^>]+>/g, " ");
-  s = s
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-  return s.replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
+  // 转 markdown（保留结构），失败则退回纯 strip 标签
+  try {
+    const md = turndown.turndown(s);
+    // 压缩多余空行（turndown 有时会留连续空行）
+    return md.replace(/\n{3,}/g, "\n\n").trim();
+  } catch {
+    // turndown 解析失败（畸形 HTML），退回原来的纯标签剥离
+    s = s.replace(/<[^>]+>/g, " ");
+    s = s.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+    return s.replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
+  }
 }
 
 async function executeFetchUrl(args: Record<string, unknown>): Promise<string> {
@@ -73,8 +87,8 @@ toolRegistry.register({
   id: "fetch_url",
   name: "读取网页",
   description:
-    "下载指定 URL 的内容并返回正文。支持 http/https，HTML 会自动转成纯文本。" +
-    "适合给 agent 阅读 README、GitHub 仓库说明、MCP 安装文档等。" +
+    "下载指定 URL 的内容并返回正文。支持 http/https，HTML 会用 turndown 转成结构化 markdown" +
+    "（保留标题/列表/代码块/表格），便于阅读。适合给 agent 读 README、GitHub 仓库说明、MCP 安装文档等。" +
     "参数：url (必填，完整 http(s) 地址)，format (可选 markdown|raw，默认 markdown)。",
   enabled: true,
   risk: "network",

@@ -12,6 +12,7 @@
     "start": "electron ."
   },
   "devDependencies": {
+    "@types/turndown": "^5.0.6",
     "concurrently": "^9.2.1",
     "cross-env": "^7.0.3",
     "electron": "^33.0.0",
@@ -31,6 +32,7 @@
     "pixi.js": "^7.3.0",
     "playwright": "^1.60.0",
     "rxjs": "^7.8.1",
+    "turndown": "^7.2.4",
     "wink-bm25-text-search": "^3.1.2",
     "ws": "^8.21.0"
   }
