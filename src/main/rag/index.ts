@@ -100,6 +100,23 @@ export async function searchMemory(
   return results.map((r) => r.entry.text);
 }
 
+// ── History search with metadata（供 recall_history 工具用）──
+// 跟 searchMemory 的区别：返回完整 entry（含 createdAt / metadata），
+// 让召回工具能按时间排序、展示时间戳。
+export async function searchHistoryEntries(
+  query: string,
+  topK = 5
+): Promise<Array<{ text: string; createdAt: number; score: number; metadata?: Record<string, unknown> }>> {
+  if (!retriever) return [];
+  const results = await retriever.retrieve(query, "chat_history", topK);
+  return results.map((r) => ({
+    text: r.entry.text,
+    createdAt: r.entry.createdAt,
+    score: r.score,
+    metadata: r.entry.metadata,
+  }));
+}
+
 // ── Worldbook search (keyword-only, no vector) ──
 export async function searchWorldbook(userInput: string): Promise<string[]> {
   if (!worldbook) return [];

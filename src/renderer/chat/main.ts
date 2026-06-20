@@ -64,7 +64,7 @@ interface ChatApi {
 
 /** AG-UI 事件流 API（window.agui）。 */
 interface AguiApi {
-  run: (input: { messages: unknown[]; style: string }) => Promise<{ success: boolean; error?: string }>;
+  run: (input: { messages: unknown[]; style: string; sessionId?: string }) => Promise<{ success: boolean; error?: string }>;
   onEvent: (callback: (event: unknown) => void) => () => void;
   cancel: () => Promise<boolean>;
 }
@@ -994,6 +994,7 @@ async function send(): Promise<void> {
     const ack = await window.agui!.run({
       messages: buildModelMessages(),
       style: getCurrentStyle(),
+      sessionId: currentSessionId || undefined,
     });
     if (!ack.success) {
       offEvent();

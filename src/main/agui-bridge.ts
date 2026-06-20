@@ -18,11 +18,13 @@ import {
   type CyreneRunOptions,
   type CyreneRunResult,
 } from "./orchestrator/cyrene-agent";
+import { indexConversationTurn } from "./orchestrator/history-tools";
 
 /** 渲染进程发起 run 时传的输入。 */
 export interface AguiRunInput {
   messages: unknown[];   // 原始 {role, content}[]，主进程会 normalize
   style: string;         // 人格 style 文件名
+  sessionId?: string;    // 会话 ID，用于历史召回按会话隔离（可选，默认 "default"）
 }
 
 /** 调用方（index.ts）注入：把输入转成 agent 需要的 options（含 system prompt 拼接）。 */
@@ -108,6 +110,13 @@ export function registerAgUiIpc(
         try {
           if (agent.lastResult) {
             await onFinished(agent.lastResult, latestUserText);
+            // 历史召回用：把这轮对话存入向量库（异步，不阻塞，失败不影响主流程）
+            // 放在 onFinished 之后，确保记忆/sticker 等副作用先跑完
+            void indexConversationTurn(
+              input.sessionId || "default",
+              latestUserText,
+              agent.lastResult.reply,
+            );
           }
         } catch (err) {
           console.warn("[AgUiBridge] 副作用失败（不影响结果）:", err);
