@@ -705,10 +705,13 @@ async function bochaSearch(query: string, key: string): Promise<string> {
     if (!resp.ok) {
       return `[错误] 搜索失败：HTTP ${resp.status}`;
     }
-    const data = await resp.json() as {
+    // 博查 API 响应包了一层 { code, data: { webPages: { value: [...] } } }
+    // 兼容旧结构（直接 webPages）和新结构（data.webPages）
+    const raw = await resp.json() as {
       webPages?: { value?: BochaResult[] };
+      data?: { webPages?: { value?: BochaResult[] } };
     };
-    const results = data.webPages?.value ?? [];
+    const results = raw.data?.webPages?.value ?? raw.webPages?.value ?? [];
     if (results.length === 0) {
       return `[提示] 搜索"${query}"没有找到结果。`;
     }
