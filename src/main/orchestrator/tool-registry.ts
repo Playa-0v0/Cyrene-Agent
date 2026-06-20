@@ -5,6 +5,12 @@ import { searchMemory } from "../rag/index";
 import type { ToolRiskLevel } from "../permission";
 import type { ToolContext } from "./tool-context";
 
+/** JSON Schema 片段：参数可以是简单类型，也可以是 array/object（含 items/properties）。 */
+export type JsonSchemaProp =
+  | { type: string; description?: string; enum?: string[] }
+  | { type: "array"; description?: string; items: JsonSchemaProp }
+  | { type: "object"; description?: string; properties: Record<string, JsonSchemaProp>; required?: string[] };
+
 export interface ToolDefinition {
   id: string;           // 工具唯一标识，如 "imported_docs"
   name: string;         // 展示名，如 "导入文档"
@@ -15,7 +21,7 @@ export interface ToolDefinition {
   // MCP 兼容字段：参数 schema，后续接 MCP 时直接复用
   inputSchema: {
     type: "object";
-    properties: Record<string, { type: string; description: string }>;
+    properties: Record<string, JsonSchemaProp>;
     required?: string[];
   };
   /** 工具若声明 needsContext，调度层执行时会传入 ToolContext。默认不声明=不传。 */

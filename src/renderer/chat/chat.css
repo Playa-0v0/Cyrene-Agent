@@ -1124,3 +1124,103 @@ body {
   margin: 0;
   letter-spacing: 0.5px;
 }
+
+/* ── 任务进度面板（todo_write 工具触发，左上角固定）── */
+.todo-panel {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  width: 280px;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: rgba(250, 245, 252, 0.96);
+  border: 1px solid rgba(249, 203, 223, 0.6);
+  border-radius: 12px;
+  padding: 12px 14px;
+  z-index: 50;
+  box-shadow: 0 4px 16px rgba(180, 120, 200, 0.15);
+  animation: todo-slide-in 200ms ease-out;
+  font-size: 13px;
+  color: #4a3a4e;
+}
+
+.todo-panel.empty {
+  opacity: 0;
+  transform: translateX(-12px);
+  transition: opacity 300ms ease, transform 300ms ease;
+  pointer-events: none;
+}
+
+.todo-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  color: #8b5a9e;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.todo-panel__close {
+  cursor: pointer;
+  color: #b0a0b8;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.todo-panel__close:hover { color: #8b5a9e; }
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px dashed rgba(180, 120, 200, 0.15);
+}
+.todo-item:last-child { border-bottom: none; }
+
+.todo-item__icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid #c9a3c0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: white;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.todo-item.completed .todo-item__icon {
+  background: #4ade80;
+  border-color: #4ade80;
+}
+
+.todo-item.in_progress .todo-item__icon {
+  background: #fbbf24;
+  border-color: #fbbf24;
+  animation: todo-pulse 1.5s ease-in-out infinite;
+}
+
+.todo-item__content {
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.todo-item.completed .todo-item__content {
+  text-decoration: line-through;
+  color: #9a8a9e;
+}
+
+@keyframes todo-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes todo-slide-in {
+  from { transform: translateX(-20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}

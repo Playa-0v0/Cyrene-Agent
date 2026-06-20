@@ -83,6 +83,18 @@ interface AguiBaseEvent {
   value?: unknown; // CUSTOM 事件的 value
 }
 
+/** 任务清单状态（todo_write 工具推过来的）。 */
+interface TodoItem {
+  id: string;
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+  priority?: "high" | "medium" | "low";
+}
+interface TodoState {
+  todos: TodoItem[];
+  updatedAt: number;
+}
+
 declare global {
   interface Window {
     chat?: ChatApi;
@@ -419,6 +431,57 @@ function formatTime(at: number): string {
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
+}
+
+/** 渲染左上角任务进度面板。todos 为空时收起并稍后移除。 */
+function renderTodoPanel(state: TodoState | null): void {
+  let panel = document.querySelector(".todo-panel") as HTMLElement | null;
+
+  // 空清单：收起动画后移除
+  if (!state || !state.todos || state.todos.length === 0) {
+    if (panel) {
+      panel.classList.add("empty");
+      setTimeout(() => panel?.remove(), 300);
+    }
+    return;
+  }
+
+  // 首次出现：建面板
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.className = "todo-panel";
+    document.body.appendChild(panel);
+  }
+  panel.classList.remove("empty");
+
+  const statusIcon = (s: string): string => {
+    if (s === "completed") return "✓";
+    return "";
+  };
+
+  panel.innerHTML = `
+    <div class="todo-panel__header">
+      <span>📋 任务进度</span>
+      <span class="todo-panel__close" title="收起">×</span>
+    </div>
+    ${state.todos.map(t => `
+      <div class="todo-item ${t.status}">
+        <span class="todo-item__icon">${statusIcon(t.status)}</span>
+        <span class="todo-item__content">${escapeHtml(t.content)}</span>
+      </div>
+    `).join("")}
+  `;
+
+  panel.querySelector(".todo-panel__close")?.addEventListener("click", () => {
+    panel!.classList.add("empty");
+    setTimeout(() => panel!.remove(), 300);
+  });
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]!));
 }
 
 /** 构建天气卡片 DOM 元素（不插入，由调用方决定位置）。 */
@@ -898,13 +961,15 @@ async function send(): Promise<void> {
             }
             break;
           case "CUSTOM":
-            // 主进程发的自定义事件：sticker / 天气卡片
+            // 主进程发的自定义事件：sticker / 天气卡片 / 任务清单
             if (event.name === "cyrene.sticker") {
               sticker = (event.value as StickerId | null) ?? null;
             } else if (event.name === "cyrene.weather") {
               // 暂存天气数据，等 runDone 后 render 再插入（避免 render 的 replaceChildren 清掉卡片）
               console.log("[Chat] 收到天气卡片数据:", JSON.stringify(event.value)?.slice(0, 100));
               pendingWeatherCard = event.value as Record<string, unknown>;
+            } else if (event.name === "cyrene.todos") {
+              renderTodoPanel(event.value as TodoState | null);
             }
             break;
           case "RUN_FINISHED":

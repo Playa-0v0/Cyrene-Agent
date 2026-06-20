@@ -26,7 +26,7 @@ import { registerChatsIpc } from "./chats/chats-ipc";
 import { recordUsage, getUsage, flush as flushTokenUsage } from "./token-usage-store";
 import { uploadFile as ttsUploadFile, cloneVoice as ttsCloneVoice, synthesize as ttsSynthesize } from "./tts/minimax-engine";
 import { registerAgUiIpc, type AguiRunInput } from "./agui-bridge";
-import { setWeatherConfig, setSearchConfig } from "./orchestrator/built-in-tools";
+import { setWeatherConfig, setSearchConfig, loadTodos, onTodosChange } from "./orchestrator/built-in-tools";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -2260,6 +2260,26 @@ app.whenReady().then(async () => {
 
   // 聊天会话存储 IPC（chats-store.initialize 会建好 cyrene-chats 目录并加载 index）
   registerChatsIpc();
+
+  // 任务清单（todo_write 工具的持久化 + 事件广播）：
+  // - loadTodos 从磁盘恢复上次未完成的任务（跨重启延续）
+  // - onTodosChange 订阅变化，把 TodoState 作为 CUSTOM 事件转发给所有聊天窗口
+  //   渲染端收到 cyrene.todos 后渲染左上角进度面板
+  loadTodos();
+  onTodosChange((state) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue;
+      try {
+        win.webContents.send(IPC.AGUI_EVENT, {
+          type: "CUSTOM",
+          name: "cyrene.todos",
+          value: state,
+        });
+      } catch (e) {
+        console.warn("[Cyrene] todos 广播失败:", e);
+      }
+    }
+  });
 
   // AG-UI 事件流桥：渲染进程 invoke(AGUI_RUN) → CyreneAgent 跑 FC 循环 → 事件透传
   // buildOptions 复用 requestModelReply 的上下文构建；onRunFinished 复用副作用

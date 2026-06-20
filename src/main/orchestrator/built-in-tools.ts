@@ -836,4 +836,75 @@ toolRegistry.register({
   execute: executeWebSearch,
 });
 
+// ── 工具：todo_write ──────────────────────────────────────
+// 任务拆解可视化工具。让昔涟能像 Claude Code 一样把复杂任务拆成步骤展示给用户。
+// 每次调用整体覆盖当前清单（不是增量）。store 持久化 + 通知主进程转发 CUSTOM 事件。
+
+import { setTodos, getTodos, clearTodos, type TodoItem } from "./todo-store";
+
+toolRegistry.register({
+  id: "todo_write",
+  name: "任务清单",
+  description:
+    "更新当前任务清单（todo list）。用于把复杂任务拆解成可执行步骤，让用户看到进度。\n\n" +
+    "何时用：\n" +
+    "- 用户给的任务有 2 步以上（'帮我查 X 然后整理成报告'）\n" +
+    "- 用户要求'规划一下''拆解一下''分步骤完成'\n" +
+    "- 你自己判断这个任务需要多轮工具调用才能完成\n\n" +
+    "不要用于：\n" +
+    "- 简单问答（一句话能答完）\n" +
+    "- 纯闲聊\n" +
+    "- 已经在 todo 里的步骤更新（直接整体覆盖即可）\n\n" +
+    "用法：每次调用用完整列表覆盖（不是增量）。status 用 pending/in_progress/completed。\n" +
+    "开始做某一步时把它标 in_progress，做完标 completed。\n" +
+    "完成所有步骤后调一次空列表清空，表示任务结束。",
+  enabled: true,
+  risk: "safe",
+  inputSchema: {
+    type: "object",
+    properties: {
+      todos: {
+        type: "array",
+        description: "任务列表。完整覆盖当前清单。空数组表示清空（任务结束）。",
+        items: {
+          type: "object",
+          properties: {
+            id:       { type: "string", description: "任务唯一标识，如 '1' '2' '3'" },
+            content:  { type: "string", description: "任务描述" },
+            status:   { type: "string", description: "状态：pending(待办) / in_progress(进行中) / completed(已完成)" },
+            priority: { type: "string", description: "可选优先级：high/medium/low" },
+          },
+        },
+      },
+    },
+    required: ["todos"],
+  },
+  execute: async (args) => {
+    const items = (args.todos || []) as TodoItem[];
+
+    // 空列表 = 清空（任务结束）
+    if (items.length === 0) {
+      clearTodos();
+      return "[todo_write] 已清空任务清单（任务结束）";
+    }
+
+    const state = setTodos(items);
+
+    // 返回给 LLM 的简短摘要，不返回全部内容（避免 token 浪费）
+    const counts = items.reduce((acc, t) => {
+      acc[t.status] = (acc[t.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return "[todo_write] 已更新任务清单：共 " + items.length + " 项，" +
+      "进行中 " + (counts.in_progress || 0) + " / " +
+      "已完成 " + (counts.completed || 0) + " / " +
+      "待办 " + (counts.pending || 0) +
+      "。updatedAt=" + state.updatedAt;
+  },
+});
+
+// 暴露给 index.ts 在 startup 调用，避免 tree-shake 掉
+export { loadTodos, onTodosChange, getTodos as getCurrentTodos } from "./todo-store";
+
 console.log(LOG_PREFIX, "已注册：fetch_url / run_shell / install_mcp_server / weather / web_search");
