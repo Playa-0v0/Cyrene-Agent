@@ -87,4 +87,20 @@ describe("SkillRegistry", () => {
   it("getReference skill 不存在返回 null", () => {
     expect(reg.getReference("nope", "x.md")).toBeNull();
   });
+
+  it("getBody bodyPath 不存在返回 null", () => {
+    reg.register(entry("a", { bodyPath: "/nonexistent/path/SKILL.md" }));
+    expect(reg.getBody("a")).toBeNull();
+  });
+
+  it("getReference 文件被删返回 null", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "reg-"));
+    const refDir = path.join(tmp, "references");
+    fs.mkdirSync(refDir, { recursive: true });
+    fs.writeFileSync(path.join(refDir, "ok.md"), "ref", "utf8");
+    reg.register(entry("a", { dirPath: tmp, references: ["ok.md"] }));
+    fs.unlinkSync(path.join(refDir, "ok.md"));
+    expect(reg.getReference("a", "ok.md")).toBeNull();
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
 });

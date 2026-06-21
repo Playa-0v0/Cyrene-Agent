@@ -4,6 +4,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { SkillEntry } from "./types";
+import { parseSkillFrontmatter } from "./skill-scanner";
 
 export class SkillRegistry {
   private skills = new Map<string, SkillEntry>();
@@ -42,7 +43,9 @@ export class SkillRegistry {
     if (!s) return null;
     try {
       const raw = fs.readFileSync(s.bodyPath, "utf8");
-      const body = parseBodyOnly(raw);
+      // 复用 scanner 的 gray-matter 解析剥离 frontmatter，避免与 scanner 正则分叉（BOM/多行 ---）
+      const parsed = parseSkillFrontmatter(raw);
+      const body = parsed ? parsed.body : raw.trim();
       this.bodyCache.set(id, body);
       return body;
     } catch {
@@ -67,12 +70,6 @@ export class SkillRegistry {
       return null;
     }
   }
-}
-
-/** 从 SKILL.md 原文去掉 frontmatter，只返回正文（frontmatter 在扫描阶段已校验过）。 */
-function parseBodyOnly(content: string): string {
-  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-  return m ? m[2].trim() : content.trim();
 }
 
 // 全局单例

@@ -30,6 +30,11 @@ describe("parseSlashCommand", () => {
     expect(parseSlashCommand("/ something", KNOWN)).toEqual({ hit: false });
   });
 
+  it("//x 和 /id/extra 不命中（防误吞）", () => {
+    expect(parseSlashCommand("//x", KNOWN)).toEqual({ hit: false });
+    expect(parseSlashCommand("/write-expense-report/extra", KNOWN)).toEqual({ hit: false });
+  });
+
   it("空已知列表时任何 /id 都放行", () => {
     expect(parseSlashCommand("/write-expense-report", [])).toEqual({ hit: false });
   });

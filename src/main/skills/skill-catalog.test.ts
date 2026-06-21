@@ -33,6 +33,12 @@ describe("buildSkillCatalog", () => {
     expect(out).not.toContain("[tools:");
   });
 
+  it("tools 空数组不输出 tools 标注", () => {
+    const out = buildSkillCatalog([e("a", "x", [])]);
+    expect(out).toContain("- a: x");
+    expect(out).not.toContain("[tools:");
+  });
+
   it("disabled skill 不进清单", () => {
     const out = buildSkillCatalog([e("a", "x"), e("b", "y", undefined, false)]);
     expect(out).toContain("- a: x");
