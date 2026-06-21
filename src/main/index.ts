@@ -1154,7 +1154,7 @@ function resolveSlashActivation<T extends { role: string; content: string }>(mes
   if (lastUserIdx < 0) return "";
   const lastUser = messages[lastUserIdx];
   if (typeof lastUser.content !== "string") return "";
-  const knownIds = skillRegistry.getEnabled().map(s => s.id);
+  const knownIds = skillRegistry.getAll().map(s => s.id);
   const parsed = parseSlashCommand(lastUser.content, knownIds);
   if (!parsed.hit || !parsed.skillId) return "";
   const skill = skillRegistry.getById(parsed.skillId);
@@ -1168,7 +1168,7 @@ function resolveSlashActivation<T extends { role: string; content: string }>(mes
   }
   // skill 不存在/未启用：替换该 user 消息为提示
   const available = skillRegistry.getEnabled().map(s => s.id).join(", ") || "(无)";
-  messages[lastUserIdx] = { ...lastUser, content: `[系统提示：skill not found: ${parsed.skillId}。可用 skill: ${available}]` } as T;
+  messages[lastUserIdx] = { ...lastUser, content: `[系统提示：skill 未启用或不存在: ${parsed.skillId}。可用 skill: ${available}]` } as T;
   return "";
 }
 
