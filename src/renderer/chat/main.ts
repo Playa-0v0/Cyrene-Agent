@@ -467,22 +467,46 @@ function renderTodoPanel(state: TodoState | null): void {
   }
   panel.classList.remove("empty");
 
+  const total = state.todos.length;
+  const done = state.todos.filter((t) => t.status === "completed").length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" style="width:0.75rem;height:0.75rem"><path fill-rule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd"/></svg>`;
+
+  const priorityBadge = (p: string): string => {
+    if (p === "high") return `<span class="todo-badge todo-badge--high">高优先级</span>`;
+    if (p === "medium") return `<span class="todo-badge todo-badge--medium">中优先级</span>`;
+    if (p === "low") return `<span class="todo-badge todo-badge--low">低优先级</span>`;
+    return "";
+  };
+
   const statusIcon = (s: string): string => {
-    if (s === "completed") return "✓";
+    if (s === "completed") return checkIcon;
+    if (s === "in_progress") return "●";
     return "";
   };
 
   panel.innerHTML = `
     <div class="todo-panel__header">
-      <span>📋 任务进度</span>
+      <div>
+        <div class="todo-panel__title">📋 任务进度</div>
+        <div class="todo-panel__count">${done}/${total} 已完成</div>
+      </div>
       <span class="todo-panel__close" title="收起">×</span>
     </div>
-    ${state.todos.map(t => `
-      <div class="todo-item ${t.status}">
-        <span class="todo-item__icon">${statusIcon(t.status)}</span>
-        <span class="todo-item__content">${escapeHtml(t.content)}</span>
-      </div>
-    `).join("")}
+    <hr class="todo-panel__divider" />
+    <div class="todo-panel__progress">
+      <div class="todo-progress__track"><div class="todo-progress__fill" style="width:${pct}%"></div></div>
+      <span class="todo-progress__label">${pct}%</span>
+    </div>
+    <div class="todo-list">
+      ${state.todos.map(t => `
+        <div class="todo-item ${t.status}">
+          <span class="todo-item__icon">${statusIcon(t.status)}</span>
+          <span class="todo-item__text">${escapeHtml(t.content)}</span>
+          <span class="todo-item__meta">${priorityBadge(t.priority || "")}</span>
+        </div>
+      `).join("")}
+    </div>
   `;
 
   panel.querySelector(".todo-panel__close")?.addEventListener("click", () => {
