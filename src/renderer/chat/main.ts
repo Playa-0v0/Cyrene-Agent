@@ -59,7 +59,7 @@ interface ChatApi {
     toggleMaximize: () => void;
     isMaximized: () => Promise<boolean>;
     sendMessage: (messages: Array<{ role: "user" | "model"; content: string }>, style: string) => Promise<ChatReplyPayload>;
-    ingestFiles: (paths: string[]) => Promise<Attachment[]>;
+    ingestDroppedFiles: (files: File[]) => Promise<Attachment[]>;
   }
 
 /** AG-UI 事件流 API（window.agui）。 */
@@ -1135,33 +1135,22 @@ const fileInput = document.getElementById("file-input") as HTMLInputElement | nu
 const attachBtn = document.getElementById("attach-btn") as HTMLButtonElement | null;
 let attachedFiles: Attachment[] = [];
 	
-	// ── path-based 文件摄入 ──
-	// 用 Electron File.path 取真实路径 → IPC → main 侧 fs 读取+路由。
-	// 文件夹由 main 侧 fs walkDir 递归展开，不再在渲染层用 webkitGetAsEntry。
-	async function ingestDroppedFiles(files: File[]): Promise<void> {
-	  if (files.length === 0) return;
-	  attachBtn!.disabled = true;
-	  // 同步取路径（File.path 是 Electron 扩展属性）
-	  const paths: string[] = [];
-	  for (const f of files) {
-	    // @ts-ignore — Electron 扩展属性 File.path
-	    if (typeof f.path === "string") paths.push(f.path);
-	  }
-	  if (paths.length === 0) {
-	    attachBtn!.disabled = false;
-	    return;
-	  }
-	  try {
-	    const results = await window.chat!.ingestFiles(paths);
-	    if (results.length > 0) attachedFiles = [...attachedFiles, ...results];
-	    updateFileTags();
-	  } catch (err: unknown) {
-	    window.alert("文件摄入失败：" + ((err as Error)?.message || String(err)));
-	  } finally {
-	    attachBtn!.disabled = false;
-	    fileInput!.value = "";
-	  }
-	}
+// ── path-based 文件摄入 ──
+// 路径提取在 preload（webUtils.getPathForFile），renderer 不碰 Electron API。
+async function ingestDroppedFiles(files: File[]): Promise<void> {
+  if (files.length === 0) return;
+  attachBtn!.disabled = true;
+  try {
+    const results = await window.chat!.ingestDroppedFiles(files);
+    if (results && results.length > 0) attachedFiles = [...attachedFiles, ...results];
+    updateFileTags();
+  } catch (err: unknown) {
+    window.alert("文件摄入失败：" + ((err as Error)?.message || String(err)));
+  } finally {
+    attachBtn!.disabled = false;
+    fileInput!.value = "";
+  }
+}
 	
 	function updateFileTags(): void {
 	  const container = document.getElementById("file-tags");

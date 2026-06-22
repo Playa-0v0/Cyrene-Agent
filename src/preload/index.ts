@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { IPC } from "../shared/ipc-channels";
 
 const cyreneApi = {
@@ -23,8 +23,19 @@ const chatApi = {
   toggleMaximize: () => ipcRenderer.send(IPC.CHAT_TOGGLE_MAXIMIZE),
   isMaximized: () => ipcRenderer.invoke(IPC.CHAT_IS_MAXIMIZED),
   sendMessage: (messages: unknown[], style: string) => ipcRenderer.invoke(IPC.CHAT_SEND_MESSAGE, messages, style),
-  /** 批量摄入文件/目录路径。paths 由渲染层通过 File.path 提取（Electron 扩展属性）。 */
-  ingestFiles: (paths: string[]) => ipcRenderer.invoke(IPC.CHAT_INGEST_FILES, paths),
+  /** 从 dataTransfer.files 或 fileInput.files 提取路径后批量摄入。
+   *  路径提取在 preload（webUtils.getPathForFile），避免 Electron 33 中 File.path 不可用的问题。 */
+  ingestDroppedFiles: async (files: File[]): Promise<unknown[]> => {
+    const paths: string[] = [];
+    for (const f of files) {
+      try {
+        const p = webUtils.getPathForFile(f);
+        if (p) paths.push(p);
+      } catch { /* 跳过无法识别路径的文件 */ }
+    }
+    if (paths.length === 0) return [];
+    return ipcRenderer.invoke(IPC.CHAT_INGEST_FILES, paths);
+  },
   onStreamChunk: (cb: (chunk: string) => void) => { ipcRenderer.on(IPC.CHAT_STREAM_CHUNK, (_e: unknown, chunk: string) => cb(chunk)); },
   onStreamDone: (cb: (payload: unknown) => void) => { ipcRenderer.on(IPC.CHAT_STREAM_DONE, (_e: unknown, payload: unknown) => cb(payload)); },
   removeStreamListeners: () => { ipcRenderer.removeAllListeners(IPC.CHAT_STREAM_CHUNK); ipcRenderer.removeAllListeners(IPC.CHAT_STREAM_DONE); },
