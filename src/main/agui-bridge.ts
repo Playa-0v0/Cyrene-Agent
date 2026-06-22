@@ -25,6 +25,8 @@ export interface AguiRunInput {
   messages: unknown[];   // 原始 {role, content}[]，主进程会 normalize
   style: string;         // 人格 style 文件名
   sessionId?: string;    // 会话 ID，用于历史召回按会话隔离（可选，默认 "default"）
+  /** 本轮附件（文本内容，临时注入系统上下文，不存历史）。 */
+  attachments?: { name: string; text: string }[];
 }
 
 /** 调用方（index.ts）注入：把输入转成 agent 需要的 options（含 system prompt 拼接）。 */

@@ -5,6 +5,7 @@ import * as os from "os";
 import { IPC } from "../shared/ipc-channels";
 import { STATUS_KEYWORDS, STICKER_EXPLICIT_TRIGGERS, STICKER_CONTENT_TRIGGERS, STICKER_MAP } from "./status-keywords";
 import { initRAG, buildMemoryContext, addMemory, importDocument, switchEmbeddingModel, deleteImportedDoc } from "./rag";
+import { ingestPaths } from "./rag/file-ingest";
 import { buildAlwaysOnContext, runFunctionCallingLoop, scheduleMemoryWrite } from "./orchestrator";
 import { getAdapter, buildVendorUrl } from "./orchestrator/vendors";
 import { getCapability } from "./orchestrator/vendors/capabilities";
@@ -1885,19 +1886,15 @@ ipcMain.handle(IPC.CHAT_SEND_MESSAGE, async (_event, messages: unknown) => {
   return requestModelReply(messages);
 });
 
-ipcMain.handle(IPC.CHAT_IMPORT_DOCUMENT, async (_event, payload: unknown) => {
-  const record = payload as { fileName?: unknown; content?: unknown };
-  const fileName = typeof record?.fileName === "string" ? record.fileName : "uploaded-file";
-  const content = typeof record?.content === "string" ? record.content : "";
-  if (!content.trim()) return { chunks: 0, error: "??????" };
+ipcMain.handle(IPC.CHAT_INGEST_FILES, async (_event, paths: unknown) => {
+  const list = Array.isArray(paths) ? paths.filter((p): p is string => typeof p === "string") : [];
+  if (list.length === 0) return [];
   try {
-    console.log("[Cyrene] importDocument start:", fileName, "size:", content.length);
-    const chunks = await importDocument(content, fileName);
-    console.log("[Cyrene] importDocument done:", chunks, "chunks");
-    return { chunks };
+    const results = await ingestPaths(list, importDocument);
+    return results;
   } catch (err: any) {
-    console.error("[Cyrene] importDocument ERROR:", err?.message || err);
-    return { chunks: 0, error: err?.message || String(err) };
+    console.error("[Cyrene] ingestFiles ERROR:", err?.message || err);
+    return [];
   }
 });
 ipcMain.on(IPC.SIDEBAR_MINIMIZE, () => {
@@ -2385,12 +2382,20 @@ app.whenReady().then(async () => {
       // 事实层在前，人格层在后，skill 清单 + /命令激活放最后
       const skillCatalog = buildSkillCatalog(skillRegistry.getEnabled());
       const skillActivation = resolveSlashActivation(messages);
+      // 附件内容（本轮临时注入，不存历史）
+      let attachmentContext = "";
+      const atts = input.attachments;
+      if (atts && atts.length > 0) {
+        const parts = atts.map((a) => `--- ${a.name} ---\n${a.text}`);
+        attachmentContext = `\n\n【本轮附件内容】\n${parts.join("\n\n")}`;
+      }
       const systemContent =
         (environmentContext ? environmentContext + "\n\n" : "") +
         (alwaysOnContext ? alwaysOnContext + "\n\n" : "") +
         buildSystemPrompt(input.style || "01_default.md") +
         (skillCatalog ? "\n\n---\n\n" + skillCatalog : "") +
-        skillActivation;
+        skillActivation +
+        attachmentContext;
 
       const fcMessages = [
         { role: "system" as const, content: systemContent },

@@ -23,7 +23,8 @@ const chatApi = {
   toggleMaximize: () => ipcRenderer.send(IPC.CHAT_TOGGLE_MAXIMIZE),
   isMaximized: () => ipcRenderer.invoke(IPC.CHAT_IS_MAXIMIZED),
   sendMessage: (messages: unknown[], style: string) => ipcRenderer.invoke(IPC.CHAT_SEND_MESSAGE, messages, style),
-  importDocument: (fileName: string, content: string) => ipcRenderer.invoke(IPC.CHAT_IMPORT_DOCUMENT, { fileName, content }),
+  /** 批量摄入文件/目录路径。paths 由渲染层通过 File.path 提取（Electron 扩展属性）。 */
+  ingestFiles: (paths: string[]) => ipcRenderer.invoke(IPC.CHAT_INGEST_FILES, paths),
   onStreamChunk: (cb: (chunk: string) => void) => { ipcRenderer.on(IPC.CHAT_STREAM_CHUNK, (_e: unknown, chunk: string) => cb(chunk)); },
   onStreamDone: (cb: (payload: unknown) => void) => { ipcRenderer.on(IPC.CHAT_STREAM_DONE, (_e: unknown, payload: unknown) => cb(payload)); },
   removeStreamListeners: () => { ipcRenderer.removeAllListeners(IPC.CHAT_STREAM_CHUNK); ipcRenderer.removeAllListeners(IPC.CHAT_STREAM_DONE); },

@@ -18,7 +18,7 @@ export const IPC = {
   CHAT_TOGGLE_MAXIMIZE: "chat:toggle-maximize",
   CHAT_IS_MAXIMIZED: "chat:is-maximized",
   CHAT_SEND_MESSAGE: "chat:send-message",
-  CHAT_IMPORT_DOCUMENT: "chat:import-document",
+  CHAT_INGEST_FILES: "chat:ingest-files",
   CHAT_STREAM_CHUNK: "chat:stream-chunk",
   CHAT_STREAM_DONE: "chat:stream-done",
 

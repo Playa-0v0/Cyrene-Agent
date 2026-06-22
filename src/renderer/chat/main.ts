@@ -54,17 +54,19 @@ interface ModelConfigApi {
 }
 
 interface ChatApi {
-  minimize: () => void;
-  close: () => void;
-  toggleMaximize: () => void;
-  isMaximized: () => Promise<boolean>;
-  sendMessage: (messages: Array<{ role: "user" | "model"; content: string }>, style: string) => Promise<ChatReplyPayload>;
-  importDocument: (fileName: string, content: string) => Promise<{ chunks: number; error?: string }>;
-}
+    minimize: () => void;
+    close: () => void;
+    toggleMaximize: () => void;
+    isMaximized: () => Promise<boolean>;
+    sendMessage: (messages: Array<{ role: "user" | "model"; content: string }>, style: string) => Promise<ChatReplyPayload>;
+    ingestFiles: (paths: string[]) => Promise<Attachment[]>;
+  }
 
 /** AG-UI 事件流 API（window.agui）。 */
+const BUDGET_CHARS = 60000;
+
 interface AguiApi {
-  run: (input: { messages: unknown[]; style: string; sessionId?: string }) => Promise<{ success: boolean; error?: string }>;
+  run: (input: { messages: unknown[]; style: string; sessionId?: string; attachments?: { name: string; text: string }[] }) => Promise<{ success: boolean; error?: string }>;
   onEvent: (callback: (event: unknown) => void) => () => void;
   cancel: () => Promise<boolean>;
 }
@@ -81,6 +83,17 @@ interface AguiBaseEvent {
   stepName?: string;
   name?: string;   // CUSTOM 事件的 name
   value?: unknown; // CUSTOM 事件的 value
+}
+
+/** 文件摄入结果（与 main 侧 file-ingest.ts 的 Attachment 对齐）。 */
+type AttachmentKind = "text" | "indexed" | "empty" | "unsupported";
+
+interface Attachment {
+  name: string;
+  kind: AttachmentKind;
+  text?: string;
+  chunks?: number;
+  reason?: string;
 }
 
 /** 任务清单状态（todo_write 工具推过来的）。 */
@@ -820,10 +833,46 @@ async function send(): Promise<void> {
     return;
   }
 
-    const fileHint = attachedFiles.length > 0
-    ? "\n\n【已上传文件：" + attachedFiles.map(f => f.name).join("、") + "，已导入 RAG，请结合相关文件片段回答。】"
-    : "";
-  const fullUserText = (text || (attachedFiles.length > 0 ? "请帮我看看这些文件" : "")) + fileHint;
+    // Option C（临时注入）：内容不进 messages 历史，只附在 agui.run payload 传给本轮。
+    // fullUserText 只放精简 hint 进 history，不堆内容。
+    const hintsByKind: string[] = [];
+    const turnTextAttachments: { name: string; text: string }[] = [];
+    let budgetUsed = 0;
+    const budgetExceeded: string[] = [];
+    for (const f of attachedFiles) {
+      switch (f.kind) {
+        case "text":
+          if (f.text) {
+            const remaining = BUDGET_CHARS - budgetUsed;
+            if (f.text.length > remaining) {
+              turnTextAttachments.push({ name: f.name, text: f.text.slice(0, remaining) });
+              budgetExceeded.push(f.name);
+              budgetUsed = BUDGET_CHARS;
+            } else {
+              turnTextAttachments.push({ name: f.name, text: f.text });
+              budgetUsed += f.text.length;
+            }
+          }
+          hintsByKind.push(`📝 ${f.name}（附件，内容已注入本轮上下文）`);
+          break;
+        case "indexed":
+          hintsByKind.push(`📚 ${f.name}（已索引 ${f.chunks ?? 0} 段，可用 imported_docs 工具检索）`);
+          break;
+        case "empty":
+          hintsByKind.push(`📄 ${f.name}（为空）`);
+          break;
+        case "unsupported":
+          hintsByKind.push(`⚠️ ${f.name}（暂不支持：${f.reason || ""}）`);
+          break;
+      }
+    }
+    if (budgetExceeded.length > 0) {
+      hintsByKind.push(`⚠️ ${budgetExceeded.join("、")} 已省略部分内容（超一轮预算）`);
+    }
+    const fileHint = hintsByKind.length > 0
+      ? "\n\n【本轮文件】\n" + hintsByKind.join("\n")
+      : "";
+    const fullUserText = (text || (attachedFiles.length > 0 ? "请帮我看看这些文件" : "")) + fileHint;
 
   sending = true;
   sendBtn.disabled = true;
@@ -995,6 +1044,7 @@ async function send(): Promise<void> {
       messages: buildModelMessages(),
       style: getCurrentStyle(),
       sessionId: currentSessionId || undefined,
+      attachments: turnTextAttachments,
     });
     if (!ack.success) {
       offEvent();
@@ -1083,134 +1133,91 @@ inputEl.addEventListener("keydown", (e) => {
 /* ===== File upload ===== */
 const fileInput = document.getElementById("file-input") as HTMLInputElement | null;
 const attachBtn = document.getElementById("attach-btn") as HTMLButtonElement | null;
-let attachedFiles: Array<{ name: string; chunks: number }> = [];
-
-// ── 拖放目录递归收集文件 ──
-// Electron 拖文件夹时 dataTransfer.files[0] 是指向目录的 File，直接 .text() 会触发
-// fs 读目录 → libuv ENOENT。用 webkitGetAsEntry 判断目录并递归取内部真实文件。
-function entryToFile(entry: FileSystemFileEntry): Promise<File | null> {
-  return new Promise((resolve) => entry.file(resolve, () => resolve(null)));
-}
-
-function readDirEntry(entry: FileSystemDirectoryEntry, prefix: string, out: File[]): Promise<void> {
-  return new Promise((resolve) => {
-    const reader = entry.createReader();
-    const readBatch = (): void => {
-      reader.readEntries(async (entries) => {
-        if (entries.length === 0) { resolve(); return; }
-        for (const e of entries) {
-          const name = prefix ? prefix + "/" + e.name : e.name;
-          if (e.isDirectory) {
-            await readDirEntry(e as FileSystemDirectoryEntry, name, out);
-          } else if (e.isFile) {
-            const f = await entryToFile(e as FileSystemFileEntry);
-            // 给目录内文件补上相对路径名，避免重名混淆
-            if (f) out.push(new File([f], name, { type: f.type, lastModified: f.lastModified }));
-          }
-        }
-        readBatch(); // readEntries 每次最多返回 100 条，循环读完
-      }, () => resolve());
-    };
-    readBatch();
-  });
-}
-
-function collectFilesFromDataTransfer(items: DataTransferItemList): Promise<File[]> {
-  return new Promise((resolve) => {
-    const out: File[] = [];
-    let pending = 0;
-    let settled = false;
-    const finish = (): void => { if (!settled && pending === 0) { settled = true; resolve(out); } };
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.kind !== "file") continue;
-      const entry = item.webkitGetAsEntry?.();
-      if (!entry) {
-        // 无 entry（老环境/部分 Electron）→ 直接拿 File
-        const f = item.getAsFile();
-        if (f) out.push(f);
-        continue;
-      }
-      pending += 1;
-      if (entry.isDirectory) {
-        readDirEntry(entry as FileSystemDirectoryEntry, entry.name, out).finally(() => { pending -= 1; finish(); });
-      } else if (entry.isFile) {
-        entryToFile(entry as FileSystemFileEntry).then((f) => { if (f) out.push(f); pending -= 1; finish(); });
-      } else {
-        pending -= 1;
-      }
-    }
-    finish();
-  });
-}
-
-attachBtn?.addEventListener("click", () => {
-  fileInput?.click();
-});
-
-async function importFiles(fileList: File[] | FileList): Promise<void> {
-  const files = Array.from(fileList);
-  if (files.length === 0) return;
-  attachBtn!.disabled = true;
-  const imported: Array<{ name: string; chunks: number }> = [];
-  let errors: string[] = [];
-  for (const file of files) {
-    try {
-      const text = await file.text();
-      const result = await window.chat?.importDocument(file.name, text);
-      if (result?.error) throw new Error(result.error);
-      imported.push({ name: file.name, chunks: result?.chunks ?? 0 });
-    } catch (err: any) {
-      errors.push(file.name + ": " + (err?.message || String(err)));
-    }
-  }
-  attachedFiles = [...attachedFiles, ...imported];
-  attachBtn!.disabled = false;
-  fileInput.value = "";
-  updateFileTags();
-  if (errors.length > 0) {
-    window.alert("部分文件导入失败：\n" + errors.join("\n"));
-  }
-}
-
-function updateFileTags(): void {
-  const container = document.getElementById("file-tags");
-  if (!container) return;
-  container.innerHTML = "";
-  if (attachedFiles.length === 0) {
-    attachBtn?.classList.remove("has-file");
-    return;
-  }
-  attachBtn?.classList.add("has-file");
-  attachedFiles.forEach((f, i) => {
-    const tag = document.createElement("div");
-    tag.className = "chat__file-tag";
-    const label = document.createElement("span");
-    label.textContent = "📄 " + f.name;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "file-tag-remove";
-    btn.textContent = "×";
-    btn.addEventListener("click", () => {
-      attachedFiles.splice(i, 1);
-      updateFileTags();
-    });
-    tag.appendChild(label);
-    tag.appendChild(btn);
-    container.appendChild(tag);
-  });
-}
-
-fileInput?.addEventListener("change", () => {
-  if (fileInput.files) importFiles(fileInput.files);
-});
-
-function removeAttachedFiles(): void {
-  attachedFiles = [];
-  attachBtn?.classList.remove("has-file");
-  const container = document.getElementById("file-tags");
-  if (container) container.innerHTML = "";
-}
+let attachedFiles: Attachment[] = [];
+	
+	// ── path-based 文件摄入 ──
+	// 用 Electron File.path 取真实路径 → IPC → main 侧 fs 读取+路由。
+	// 文件夹由 main 侧 fs walkDir 递归展开，不再在渲染层用 webkitGetAsEntry。
+	async function ingestDroppedFiles(files: File[]): Promise<void> {
+	  if (files.length === 0) return;
+	  attachBtn!.disabled = true;
+	  // 同步取路径（File.path 是 Electron 扩展属性）
+	  const paths: string[] = [];
+	  for (const f of files) {
+	    // @ts-ignore — Electron 扩展属性 File.path
+	    if (typeof f.path === "string") paths.push(f.path);
+	  }
+	  if (paths.length === 0) {
+	    attachBtn!.disabled = false;
+	    return;
+	  }
+	  try {
+	    const results = await window.chat!.ingestFiles(paths);
+	    if (results.length > 0) attachedFiles = [...attachedFiles, ...results];
+	    updateFileTags();
+	  } catch (err: unknown) {
+	    window.alert("文件摄入失败：" + ((err as Error)?.message || String(err)));
+	  } finally {
+	    attachBtn!.disabled = false;
+	    fileInput!.value = "";
+	  }
+	}
+	
+	function updateFileTags(): void {
+	  const container = document.getElementById("file-tags");
+	  if (!container) return;
+	  container.innerHTML = "";
+	  if (attachedFiles.length === 0) {
+	    attachBtn?.classList.remove("has-file");
+	    return;
+	  }
+	  attachBtn?.classList.add("has-file");
+	  const kindLabel: Record<AttachmentKind, string> = {
+	    text: "📝",
+	    indexed: "📚",
+	    empty: "📄",
+	    unsupported: "⚠️",
+	  };
+	  attachedFiles.forEach((f, i) => {
+	    const tag = document.createElement("div");
+	    tag.className = "chat__file-tag";
+	    const label = document.createElement("span");
+	    const icon = kindLabel[f.kind] || "📄";
+	    const detail = f.kind === "text" ? "（附件）" :
+	      f.kind === "indexed" ? `（${f.chunks ?? 0} 段）` :
+	      f.kind === "empty" ? "（空）" :
+	      "（暂不支持）";
+	    label.textContent = `${icon} ${f.name} ${detail}`;
+	    const btn = document.createElement("button");
+	    btn.type = "button";
+	    btn.className = "file-tag-remove";
+	    btn.textContent = "×";
+	    btn.addEventListener("click", () => {
+	      attachedFiles.splice(i, 1);
+	      updateFileTags();
+	    });
+	    tag.appendChild(label);
+	    tag.appendChild(btn);
+	    container.appendChild(tag);
+	  });
+	}
+	
+	attachBtn?.addEventListener("click", () => {
+	  fileInput?.click();
+	});
+	
+	fileInput?.addEventListener("change", () => {
+	  if (fileInput.files && fileInput.files.length > 0) {
+	    void ingestDroppedFiles(Array.from(fileInput.files));
+	  }
+	});
+	
+	function removeAttachedFiles(): void {
+	  attachedFiles = [];
+	  attachBtn?.classList.remove("has-file");
+	  const container = document.getElementById("file-tags");
+	  if (container) container.innerHTML = "";
+	}
 
 /* ===== Drag & drop ===== */
 const chatEl = document.querySelector(".chat") as HTMLElement | null;
@@ -1240,19 +1247,11 @@ document.addEventListener("drop", async (e) => {
   e.preventDefault();
   dragCounter = 0;
   chatEl?.classList.remove("chat--drag-over");
-  // 用 webkitGetAsEntry 识别目录：拖文件夹时 dataTransfer.files 会含指向目录的 File，
-  // 直接 file.text() 会触发 fs 读目录 → ENOENT。这里递归收集目录内的真实文件。
-  const items = e.dataTransfer?.items;
-  if (items && items.length > 0) {
-    const collected = await collectFilesFromDataTransfer(items);
-    if (collected.length > 0) void importFiles(collected);
-    else if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-      void importFiles(Array.from(e.dataTransfer.files));
-    }
-    return;
-  }
-  if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-    void importFiles(Array.from(e.dataTransfer.files));
+  // path-based：直接把 dataTransfer.files 传 ingestDroppedFiles，
+  // main 侧 fs.statSync 判断文件/文件夹后递归展开。
+  const files = e.dataTransfer?.files;
+  if (files && files.length > 0) {
+    void ingestDroppedFiles(Array.from(files));
   }
 });
 
