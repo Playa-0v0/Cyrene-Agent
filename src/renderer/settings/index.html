@@ -988,38 +988,20 @@
                   <span class="tts-engine__icon">🔇</span>
                   <span class="tts-engine__name">关闭</span>
                 </button>
-                <button type="button" class="tts-engine" data-engine="volcano" role="radio" aria-checked="false">
-                  <span class="tts-engine__icon">🌋</span>
-                  <span class="tts-engine__name">火山引擎</span>
-                  <span class="tts-engine__tag">云端</span>
-                </button>
                 <button type="button" class="tts-engine" data-engine="minimax" role="radio" aria-checked="false">
                   <span class="tts-engine__icon">✨</span>
                   <span class="tts-engine__name">MiniMax</span>
                   <span class="tts-engine__tag">云端</span>
                 </button>
-                <button type="button" class="tts-engine" data-engine="gptsovits" role="radio" aria-checked="false">
-                  <span class="tts-engine__icon">🤖</span>
-                  <span class="tts-engine__name">GPT-SoVITS</span>
-                  <span class="tts-engine__tag">本地</span>
-                </button>
-                <button type="button" class="tts-engine" data-engine="vits2" role="radio" aria-checked="false">
-                  <span class="tts-engine__icon">🎵</span>
-                  <span class="tts-engine__name">VITS2</span>
+                <button type="button" class="tts-engine" data-engine="voxcpm2" role="radio" aria-checked="false">
+                  <span class="tts-engine__icon">🗣️</span>
+                  <span class="tts-engine__name">Voxcpm2</span>
                   <span class="tts-engine__tag">本地</span>
                 </button>
               </div>
             </div>
 
             <!-- 引擎配置表单（选中哪个显示哪个） -->
-            <div class="tts-config" id="tts-config-volcano" hidden>
-              <h2 class="tts-section__title">🌋 火山引擎配置</h2>
-              <div class="tts-field"><label>App ID</label><input type="text" id="tts-volcano-appid" placeholder="火山引擎语音 App ID" /></div>
-              <div class="tts-field"><label>Access Token</label><input type="password" id="tts-volcano-token" placeholder="访问令牌" /></div>
-              <div class="tts-field"><label>音色 ID</label><input type="text" id="tts-volcano-voice" placeholder="训练好的音色 ID" /></div>
-              <button type="button" class="ghost-btn" id="tts-volcano-test">🔊 测试发音</button>
-            </div>
-
             <div class="tts-config" id="tts-config-minimax" hidden>
               <h2 class="tts-section__title">✨ MiniMax 配置</h2>
               <div class="tts-field"><label>API Key</label><input type="password" id="tts-minimax-key" placeholder="MiniMax API Key" /></div>
@@ -1037,7 +1019,6 @@
               <div class="tts-clone-section">
                 <h3 class="tts-clone-title">🎙️ 音色快速复刻</h3>
                 <p class="tts-clone-hint">上传昔涟配音（mp3/m4a/wav，10秒~5分钟，≤20MB），训练专属音色</p>
-
                 <div class="tts-field">
                   <label>配音文件</label>
                   <input type="text" id="tts-clone-file" placeholder="点击右侧选择音频文件" readonly />
@@ -1065,21 +1046,14 @@
               </div>
             </div>
 
-            <div class="tts-config" id="tts-config-gptsovits" hidden>
-              <h2 class="tts-section__title">🤖 GPT-SoVITS 配置</h2>
-              <div class="tts-field"><label>API 地址</label><input type="text" id="tts-gptsovits-url" placeholder="http://localhost:9880" value="http://localhost:9880" /></div>
-              <div class="tts-field"><label>模型路径</label><input type="text" id="tts-gptsovits-model" placeholder="训练好的模型文件路径（可选）" /></div>
-              <button type="button" class="ghost-btn" id="tts-gptsovits-test">🔊 测试发音</button>
+            <div class="tts-config" id="tts-config-voxcpm2" hidden>
+              <h2 class="tts-section__title">🗣️ Voxcpm2 配置</h2>
+              <div class="tts-field"><label>API 地址</label><input type="text" id="tts-voxcpm2-url" placeholder="http://localhost:5000" value="http://localhost:5000" /></div>
+              <div class="tts-field"><label>预设名</label><input type="text" id="tts-voxcpm2-preset" placeholder="音色预设名称（可选）" /></div>
+              <button type="button" class="ghost-btn" id="tts-voxcpm2-test">🔊 测试发音</button>
             </div>
 
-            <div class="tts-config" id="tts-config-vits2" hidden>
-              <h2 class="tts-section__title">🎵 VITS2 配置</h2>
-              <div class="tts-field"><label>API 地址</label><input type="text" id="tts-vits2-url" placeholder="http://localhost:9880" value="http://localhost:9880" /></div>
-              <div class="tts-field"><label>模型路径</label><input type="text" id="tts-vits2-model" placeholder="训练好的模型文件路径（可选）" /></div>
-              <button type="button" class="ghost-btn" id="tts-vits2-test">🔊 测试发音</button>
-            </div>
-
-            <p class="tts-hint">💡 云端引擎需在各平台控制台用昔涟配音素材训练音色，拿到音色 ID 填入上方。本地引擎需自行安装 GPT-SoVITS / VITS2 并起 HTTP 服务。</p>
+            <p class="tts-hint">💡 云端引擎需在 MiniMax 控制台用昔涟配音素材训练音色，拿到音色 ID 填入上方。本地引擎需自行安装 Voxcpm2 并起 HTTP 服务。</p>
           </div>
         </section>
 

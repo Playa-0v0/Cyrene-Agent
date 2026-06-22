@@ -150,7 +150,7 @@ interface GeneralSettings {
   launchAtLogin: boolean;
   language: "zh-CN";
   // TTS 配置
-  ttsEngine: "off" | "volcano" | "minimax" | "gptsovits" | "vits2";
+  ttsEngine: "off" | "minimax";
   ttsAutoRead: boolean;
   ttsSpeed: number;
   ttsVolume: number;
@@ -159,6 +159,9 @@ interface GeneralSettings {
   ttsMinimaxVoiceId: string;
   /** MiniMax 合成模型：speech-2.8-hd(高保真¥3.5/万字符) | speech-2.8-turbo(极速¥2.0/万字符) */
   ttsMinimaxModel: "speech-2.8-hd" | "speech-2.8-turbo";
+  // Voxcpm2
+  ttsVoxcpm2Url: string;
+  ttsVoxcpm2Preset: string;
   /** 天气源：open-meteo(免配置默认) | amap(高德,需填key) */
   weatherSource: "open-meteo" | "amap";
   /** 天气插件是否启用（开关） */
@@ -170,15 +173,6 @@ interface GeneralSettings {
   searchBochaKey: string;
   searchTavilyKey: string;
   searchMinimaxKey: string;
-  // 火山（后续接入）
-  ttsVolcanoAppId: string;
-  ttsVolcanoToken: string;
-  ttsVolcanoVoiceId: string;
-  // 本地引擎
-  ttsGptsovitsUrl: string;
-  ttsGptsovitsModel: string;
-  ttsVits2Url: string;
-  ttsVits2Model: string;
 }
 
 
@@ -267,6 +261,8 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   ttsMinimaxKey: "",
   ttsMinimaxVoiceId: "",
   ttsMinimaxModel: "speech-2.8-turbo",
+  ttsVoxcpm2Url: "http://localhost:5000",
+  ttsVoxcpm2Preset: "",
   weatherSource: "open-meteo",
   weatherEnabled: false,
   amapKey: "",
@@ -274,13 +270,6 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   searchBochaKey: "",
   searchTavilyKey: "",
   searchMinimaxKey: "",
-  ttsVolcanoAppId: "",
-  ttsVolcanoToken: "",
-  ttsVolcanoVoiceId: "",
-  ttsGptsovitsUrl: "http://localhost:9880",
-  ttsGptsovitsModel: "",
-  ttsVits2Url: "http://localhost:9880",
-  ttsVits2Model: "",
 };
 
 function getSettingsPath(): string {
@@ -594,7 +583,7 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
     launchAtLogin: Boolean(input?.launchAtLogin),
     language: "zh-CN",
     // TTS 配置
-    ttsEngine: (["off", "volcano", "minimax", "gptsovits", "vits2"].includes(input?.ttsEngine as string) ? input?.ttsEngine : "off") as GeneralSettings["ttsEngine"],
+    ttsEngine: (["off", "minimax"].includes(input?.ttsEngine as string) ? input?.ttsEngine : "off") as GeneralSettings["ttsEngine"],
     ttsAutoRead: input?.ttsAutoRead === undefined ? DEFAULT_GENERAL_SETTINGS.ttsAutoRead : Boolean(input.ttsAutoRead),
     ttsSpeed: typeof input?.ttsSpeed === "number" ? Math.max(0.5, Math.min(2, input.ttsSpeed)) : DEFAULT_GENERAL_SETTINGS.ttsSpeed,
     ttsVolume: typeof input?.ttsVolume === "number" ? Math.max(0, Math.min(1, input.ttsVolume)) : DEFAULT_GENERAL_SETTINGS.ttsVolume,
@@ -612,13 +601,8 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
     searchBochaKey: typeof input?.searchBochaKey === "string" ? input.searchBochaKey : "",
     searchTavilyKey: typeof input?.searchTavilyKey === "string" ? input.searchTavilyKey : "",
     searchMinimaxKey: typeof input?.searchMinimaxKey === "string" ? input.searchMinimaxKey : "",
-    ttsVolcanoAppId: typeof input?.ttsVolcanoAppId === "string" ? input.ttsVolcanoAppId : "",
-    ttsVolcanoToken: typeof input?.ttsVolcanoToken === "string" ? input.ttsVolcanoToken : "",
-    ttsVolcanoVoiceId: typeof input?.ttsVolcanoVoiceId === "string" ? input.ttsVolcanoVoiceId : "",
-    ttsGptsovitsUrl: typeof input?.ttsGptsovitsUrl === "string" ? input.ttsGptsovitsUrl : DEFAULT_GENERAL_SETTINGS.ttsGptsovitsUrl,
-    ttsGptsovitsModel: typeof input?.ttsGptsovitsModel === "string" ? input.ttsGptsovitsModel : "",
-    ttsVits2Url: typeof input?.ttsVits2Url === "string" ? input.ttsVits2Url : DEFAULT_GENERAL_SETTINGS.ttsVits2Url,
-    ttsVits2Model: typeof input?.ttsVits2Model === "string" ? input.ttsVits2Model : "",
+    ttsVoxcpm2Url: typeof input?.ttsVoxcpm2Url === "string" ? input.ttsVoxcpm2Url : DEFAULT_GENERAL_SETTINGS.ttsVoxcpm2Url,
+    ttsVoxcpm2Preset: typeof input?.ttsVoxcpm2Preset === "string" ? input.ttsVoxcpm2Preset : "",
   };
 }
 

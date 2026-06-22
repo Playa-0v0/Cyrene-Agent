@@ -2953,16 +2953,9 @@ async function loadTtsConfig(): Promise<void> {
   (ttsEl("tts-minimax-model") as HTMLSelectElement).value =
     ttsConfig.ttsMinimaxModel === "speech-2.8-hd" ? "speech-2.8-hd" : "speech-2.8-turbo";
 
-  // 火山
-  ttsEl("tts-volcano-appid").value = String(ttsConfig.ttsVolcanoAppId ?? "");
-  ttsEl("tts-volcano-token").value = String(ttsConfig.ttsVolcanoToken ?? "");
-  ttsEl("tts-volcano-voice").value = String(ttsConfig.ttsVolcanoVoiceId ?? "");
-
-  // 本地
-  ttsEl("tts-gptsovits-url").value = String(ttsConfig.ttsGptsovitsUrl ?? "http://localhost:9880");
-  ttsEl("tts-gptsovits-model").value = String(ttsConfig.ttsGptsovitsModel ?? "");
-  ttsEl("tts-vits2-url").value = String(ttsConfig.ttsVits2Url ?? "http://localhost:9880");
-  ttsEl("tts-vits2-model").value = String(ttsConfig.ttsVits2Model ?? "");
+  // Voxcpm2
+  ttsEl("tts-voxcpm2-url").value = String(ttsConfig.ttsVoxcpm2Url ?? "http://localhost:5000");
+  ttsEl("tts-voxcpm2-preset").value = String(ttsConfig.ttsVoxcpm2Preset ?? "");
 }
 
 function updateTtsSliderLabels(): void {
@@ -3032,13 +3025,8 @@ const ttsSaveFields: Array<[string, string]> = [
   ["tts-minimax-key", "ttsMinimaxKey"],
   ["tts-minimax-voice", "ttsMinimaxVoiceId"],
   ["tts-minimax-model", "ttsMinimaxModel"],
-  ["tts-volcano-appid", "ttsVolcanoAppId"],
-  ["tts-volcano-token", "ttsVolcanoToken"],
-  ["tts-volcano-voice", "ttsVolcanoVoiceId"],
-  ["tts-gptsovits-url", "ttsGptsovitsUrl"],
-  ["tts-gptsovits-model", "ttsGptsovitsModel"],
-  ["tts-vits2-url", "ttsVits2Url"],
-  ["tts-vits2-model", "ttsVits2Model"],
+  ["tts-voxcpm2-url", "ttsVoxcpm2Url"],
+  ["tts-voxcpm2-preset", "ttsVoxcpm2Preset"],
 ];
 for (const [elId, field] of ttsSaveFields) {
   ttsEl(elId).addEventListener("change", () => saveTtsField(field, ttsEl(elId).value));
