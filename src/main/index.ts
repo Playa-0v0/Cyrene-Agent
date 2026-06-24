@@ -285,6 +285,9 @@ const CHAT_REQUEST_TIMEOUT_MS = 180000; // FC 总预算：12 轮 × 推理模型
 /** 桌宠窗口的基础尺寸（zoom=1.0 时）。缩放因子改变窗口与模型尺寸，二者同步。 */
 const PET_WINDOW_BASE_WIDTH = 400;
 const PET_WINDOW_BASE_HEIGHT = 500;
+
+/** 任务栏 / 托盘图标路径（相对于 dist/main/main/）。所有窗口共用同一个 .ico。 */
+const APP_ICON_PATH = path.join(__dirname, "..", "..", "..", "assets", "tray-icon.ico");
 let runtimeState: RuntimeState = {
     status: "陪伴中",
     feeling: "平静",
@@ -1452,6 +1455,7 @@ function createWindow(): void {
     skipTaskbar: true,
     resizable: false,
     hasShadow: false,
+    icon: APP_ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, "..", "..", "preload", "preload", "index.js"),
       contextIsolation: true,
@@ -1523,6 +1527,7 @@ function createChatWindow(sessionId?: string): void {
     minWidth: 960,
     minHeight: 540,
     title: "Cyrene · 聊天",
+    icon: APP_ICON_PATH,
     backgroundColor: "#00000000",
     autoHideMenuBar: true,
     show: false,
@@ -1581,6 +1586,7 @@ function createSidebarWindow(): void {
     minWidth: 56,
     minHeight: 540,
     title: "昔涟 · 状态",
+    icon: APP_ICON_PATH,
     backgroundColor: "#00000000",
     autoHideMenuBar: true,
     show: false,
@@ -1627,6 +1633,7 @@ function createTasksWindow(): void {
     height: 720,
     minHeight: 540,
     title: "昔涟 · 今日日程",
+    icon: APP_ICON_PATH,
     backgroundColor: "#00000000",
     autoHideMenuBar: true,
     show: false,
@@ -1681,6 +1688,7 @@ function createSettingsWindow(section?: string): void {
     minWidth: 920,
     minHeight: 580,
     title: "昔涟 · 设置",
+    icon: APP_ICON_PATH,
     backgroundColor: "#00000000",
     autoHideMenuBar: true,
     show: false,
@@ -1784,8 +1792,7 @@ async function createStickerManagerWindow(): Promise<{ ok: boolean; error?: stri
 }
 
 function createTray(): void {
-  const iconPath = path.join(__dirname, "..", "..", "..", "assets", "tray-icon.ico");
-  const icon = nativeImage.createFromPath(iconPath);
+  const icon = nativeImage.createFromPath(APP_ICON_PATH);
   tray = new Tray(icon);
 
   const contextMenu = Menu.buildFromTemplate([
