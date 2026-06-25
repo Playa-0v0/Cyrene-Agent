@@ -1220,6 +1220,8 @@ body {
   left: 50%;
   transform: translateX(-50%);
   width: 20rem;
+  max-height: 70vh;
+  overflow: hidden;
   z-index: 50;
   animation: todo-slide-in 0.3s ease-out;
 

@@ -27,6 +27,7 @@ import {
 import { extractLastUserQuery, type ToolContext } from "./tool-context";
 import { recordUsage } from "../token-usage-store";
 import { resetReadRefs } from "../skills/skill-tools";
+import { truncateToolResult, compressConversation } from "./context-manager";
 
 const LOG_PREFIX = "[CyreneAgent]";
 const MAX_TOOL_ROUNDS = 20; // 多步任务（写 Excel 多 sheet、生成图片等）可能耗多轮；到顶强制无工具总结兜底
@@ -294,7 +295,8 @@ async function runFcLoopWithEvents(
         }
 
         allToolResults.push({ toolId: tc.name, args, output });
-        execResults.push({ toolCall: tc, output });
+        // execResults 进 conversation，截断防单条大结果爆窗
+        execResults.push({ toolCall: tc, output: truncateToolResult(output) });
 
         // 工具调用结果事件 + 结束事件
         observer.next({
@@ -307,6 +309,10 @@ async function runFcLoopWithEvents(
       }
 
       conversation = adapter.appendToolResults(conversation, execResults);
+
+      // 防线②：窗口级压缩——conversation 累积超阈值时摘要化旧轮次
+      conversation = compressConversation(conversation);
+
       observer.next({ type: EventType.STEP_FINISHED, stepName: `round-${round + 1}` });
       continue;
     }
