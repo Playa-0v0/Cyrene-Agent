@@ -251,6 +251,20 @@ interface GeneralSettings {
   searchBochaKey: string;
   searchTavilyKey: string;
   searchMinimaxKey: string;
+  /** ✉️邮件发送插件是否启用 */
+  emailEnabled: boolean;
+  /** SMTP 主机，如 smtp.qq.com */
+  emailSmtpHost: string;
+  /** SMTP 端口，如 465（SSL）/ 587（STARTTLS） */
+  emailSmtpPort: number;
+  /** 使用 SSL/TLS（465 通常 true，587 通常 false；用户可覆盖） */
+  emailSmtpSecure: boolean;
+  /** 发件邮箱地址 */
+  emailSmtpUser: string;
+  /** SMTP 授权码（非邮箱登录密码） */
+  emailSmtpPass: string;
+  /** 发件人显示名（可选） */
+  emailFromName: string;
 }
 
 
@@ -345,6 +359,13 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   searchBochaKey: "",
   searchTavilyKey: "",
   searchMinimaxKey: "",
+  emailEnabled: false,
+  emailSmtpHost: "",
+  emailSmtpPort: 465,
+  emailSmtpSecure: true,
+  emailSmtpUser: "",
+  emailSmtpPass: "",
+  emailFromName: "",
 };
 
 function getSettingsPath(): string {
@@ -651,6 +672,10 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
     const num = typeof value === "number" ? value : Number(value);
     return Number.isFinite(num) ? Math.max(0, Math.min(100, Math.round(num))) : fallback;
   };
+  const clampPort = (value: unknown, fallback: number) => {
+    const num = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(num) ? Math.max(1, Math.min(65535, Math.round(num))) : fallback;
+  };
   return {
     musicEnabled: Boolean(input?.musicEnabled),
     musicVolume: clamp(input?.musicVolume, DEFAULT_GENERAL_SETTINGS.musicVolume),
@@ -681,6 +706,16 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
     searchBochaKey: typeof input?.searchBochaKey === "string" ? input.searchBochaKey : "",
     searchTavilyKey: typeof input?.searchTavilyKey === "string" ? input.searchTavilyKey : "",
     searchMinimaxKey: typeof input?.searchMinimaxKey === "string" ? input.searchMinimaxKey : "",
+    // 邮件（SMTP）配置
+    emailEnabled: Boolean(input?.emailEnabled),
+    emailSmtpHost: typeof input?.emailSmtpHost === "string" ? input.emailSmtpHost : "",
+    emailSmtpPort: clampPort(input?.emailSmtpPort, DEFAULT_GENERAL_SETTINGS.emailSmtpPort),
+    emailSmtpSecure: input?.emailSmtpSecure === undefined
+      ? (clampPort(input?.emailSmtpPort, DEFAULT_GENERAL_SETTINGS.emailSmtpPort) === 465)
+      : Boolean(input.emailSmtpSecure),
+    emailSmtpUser: typeof input?.emailSmtpUser === "string" ? input.emailSmtpUser : "",
+    emailSmtpPass: typeof input?.emailSmtpPass === "string" ? input.emailSmtpPass : "",
+    emailFromName: typeof input?.emailFromName === "string" ? input.emailFromName : "",
     ttsVoxcpm2Url: typeof input?.ttsVoxcpm2Url === "string" ? input.ttsVoxcpm2Url : DEFAULT_GENERAL_SETTINGS.ttsVoxcpm2Url,
     ttsVoxcpm2Preset: typeof input?.ttsVoxcpm2Preset === "string" ? input.ttsVoxcpm2Preset : "",
   };
