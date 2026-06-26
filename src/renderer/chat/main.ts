@@ -872,6 +872,7 @@ function render(): void {
       speakBtn.textContent = "🔊";
       // 点击逻辑：正在播放则停止，否则开始朗读（避免重叠）
       speakBtn.addEventListener("click", () => {
+        console.log("[TTS] 喇叭点击, currentTtsAudio=", currentTtsAudio ? "有" : "无");
         if (currentTtsAudio) {
           stopCurrentTts();
         } else {
@@ -1136,12 +1137,41 @@ async function synthesizeAndPlayCached(
   existing?: { ttsCacheKey?: string },
 ): Promise<{ cacheKey: string } | null> {
   if (!window.tts) return null;
+
+  // 回听优先：如果旧消息有 ttsCacheKey，直接尝试读缓存文件播放，不需要 apiKey/voiceId。
+  // 只有缓存文件不存在、需要合成新音频时才检查 apiKey/voiceId。
   const settings = await loadTtsSettings();
   if (!settings || settings.ttsEngine === "off") return null;
 
-  // 目前只接了 MiniMax，其他引擎后续加
+  if (existing?.ttsCacheKey) {
+    try {
+      // 先尝试用旧 key 直接读缓存
+      const result = await window.tts.synthesizeCached({
+        apiKey: "cache-only",     // 占位，缓存命中不会用到
+        voiceId: "cache-only",    // 占位
+        text,
+        speed: settings.ttsSpeed,
+        volume: settings.ttsVolume,
+        model: settings.ttsMinimaxModel,
+        expectedCacheKey: existing.ttsCacheKey,
+      });
+      // 缓存命中 → 直接播放
+      if (result.cached) {
+        console.log("[TTS] 缓存命中，直接播放");
+        playTtsBase64(result.base64);
+        return { cacheKey: result.cacheKey };
+      }
+    } catch {
+      // 缓存读取失败，继续走正常合成流程
+    }
+  }
+
+  // 需要合成新音频 → 检查 apiKey/voiceId
   if (settings.ttsEngine !== "minimax") return null;
-  if (!settings.ttsMinimaxKey || !settings.ttsMinimaxVoiceId) return null;
+  if (!settings.ttsMinimaxKey || !settings.ttsMinimaxVoiceId) {
+    console.warn("[TTS] 缺少 apiKey 或 voiceId，无法合成新音频");
+    return null;
+  }
 
   try {
     const result = await window.tts.synthesizeCached({

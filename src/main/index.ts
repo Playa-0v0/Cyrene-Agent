@@ -2493,42 +2493,40 @@ app.whenReady().then(async () => {
     model?: string; format?: "mp3" | "wav" | "pcm";
     expectedCacheKey?: string;
   }) => {
-    if (!payload?.apiKey || !payload?.voiceId || !payload?.text) {
-      throw new Error("缺少必要参数（apiKey/voiceId/text）");
-    }
-
     const format = payload.format ?? "mp3";
-    const cacheKey = buildTtsCacheKey(payload);
-    const audioPath = getTtsCachePath(cacheKey, format);
-    fs.mkdirSync(path.dirname(audioPath), { recursive: true });
 
-    if (payload.expectedCacheKey && payload.expectedCacheKey !== cacheKey) {
-      appendMinimaxTtsLog({
-        requestId: `tts-cache-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        ts: new Date().toISOString(),
-        phase: "cache.key_mismatch",
-        expectedCacheKey: payload.expectedCacheKey,
-        actualCacheKey: cacheKey,
-        textChars: Array.from(payload.text).length,
-      });
+    // 回听优先：如果 expectedCacheKey 对应的缓存文件存在，直接返回，不需要 apiKey/voiceId。
+    let expectedPath: string | null = null;
+    if (payload.expectedCacheKey) {
+      try {
+        expectedPath = getTtsCachePath(payload.expectedCacheKey, format);
+      } catch { /* expectedCacheKey 格式非法，忽略 */ }
     }
-
-    if (fs.existsSync(audioPath)) {
-      const cachedBuffer = fs.readFileSync(audioPath);
+    if (expectedPath && fs.existsSync(expectedPath)) {
+      const cachedBuffer = fs.readFileSync(expectedPath);
       appendMinimaxTtsLog({
         requestId: `tts-cache-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         ts: new Date().toISOString(),
         phase: "cache.hit",
-        cacheKey,
+        cacheKey: payload.expectedCacheKey,
         audioBytes: cachedBuffer.length,
         textChars: Array.from(payload.text).length,
       });
       return {
         base64: cachedBuffer.toString("base64"),
-        cacheKey,
+        cacheKey: payload.expectedCacheKey,
         cached: true,
       };
     }
+
+    // 缓存未命中 → 需要合成，检查 apiKey/voiceId
+    if (!payload?.apiKey || !payload?.voiceId || !payload?.text || payload.apiKey === "cache-only") {
+      throw new Error("缓存未命中且缺少必要参数（apiKey/voiceId/text）");
+    }
+
+    const cacheKey = buildTtsCacheKey(payload);
+    const audioPath = getTtsCachePath(cacheKey, format);
+    fs.mkdirSync(path.dirname(audioPath), { recursive: true });
 
     const audioBuffer = await ttsSynthesize({
       ...payload,
