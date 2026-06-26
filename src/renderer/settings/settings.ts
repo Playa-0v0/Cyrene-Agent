@@ -1220,25 +1220,27 @@ void loadEmailConfig();
 
 // ── 🎧ASR 设置 ──
 const asrEngineSelect = document.getElementById("asr-engine") as HTMLSelectElement | null;
-const asrVolcanoConfig = document.getElementById("asr-volcano-config");
-const asrVolcanoAppIdInput = document.getElementById("asr-volcano-app-id") as HTMLInputElement | null;
-const asrVolcanoApiKeyInput = document.getElementById("asr-volcano-api-key") as HTMLInputElement | null;
+const asrAliyunConfig = document.getElementById("asr-aliyun-config");
+const asrAliyunAppKeyInput = document.getElementById("asr-aliyun-app-key") as HTMLInputElement | null;
+const asrAliyunAccessKeyIdInput = document.getElementById("asr-aliyun-access-key-id") as HTMLInputElement | null;
+const asrAliyunAccessKeySecretInput = document.getElementById("asr-aliyun-access-key-secret") as HTMLInputElement | null;
 const asrLanguageSelect = document.getElementById("asr-language") as HTMLSelectElement | null;
 const asrVadSilenceInput = document.getElementById("asr-vad-silence") as HTMLInputElement | null;
 const asrShowTranscriptCheckbox = document.getElementById("asr-show-transcript") as HTMLInputElement | null;
 
-function syncAsrVolcanoVisibility(): void {
-  if (asrVolcanoConfig) {
-    (asrVolcanoConfig as HTMLElement).style.display = asrEngineSelect?.value === "volcano" ? "block" : "none";
+function syncAsrVisibility(): void {
+  if (asrAliyunConfig) {
+    (asrAliyunConfig as HTMLElement).style.display = asrEngineSelect?.value === "aliyun" ? "block" : "none";
   }
 }
 
 asrEngineSelect?.addEventListener("change", () => {
-  syncAsrVolcanoVisibility();
+  syncAsrVisibility();
   void saveAsrField("asrEngine", asrEngineSelect.value);
 });
-asrVolcanoAppIdInput?.addEventListener("input", () => debouncedSaveAsr("asrVolcanoAppId", asrVolcanoAppIdInput.value.trim()));
-asrVolcanoApiKeyInput?.addEventListener("input", () => debouncedSaveAsr("asrVolcanoApiKey", asrVolcanoApiKeyInput.value.trim()));
+asrAliyunAppKeyInput?.addEventListener("input", () => debouncedSaveAsr("asrAliyunAppKey", asrAliyunAppKeyInput.value.trim()));
+asrAliyunAccessKeyIdInput?.addEventListener("input", () => debouncedSaveAsr("asrAliyunAccessKeyId", asrAliyunAccessKeyIdInput.value.trim()));
+asrAliyunAccessKeySecretInput?.addEventListener("input", () => debouncedSaveAsr("asrAliyunAccessKeySecret", asrAliyunAccessKeySecretInput.value.trim()));
 asrLanguageSelect?.addEventListener("change", () => void saveAsrField("asrLanguage", asrLanguageSelect.value));
 asrVadSilenceInput?.addEventListener("input", () => {
   void saveAsrField("asrVadSilenceMs", Number(asrVadSilenceInput.value) || 1000);
@@ -1265,13 +1267,14 @@ async function loadAsrConfig(): Promise<void> {
     const cfg = await window.tts?.loadSettings();
     if (cfg) {
       if (asrEngineSelect) asrEngineSelect.value = String(cfg.asrEngine ?? "off");
-      if (asrVolcanoAppIdInput) asrVolcanoAppIdInput.value = String(cfg.asrVolcanoAppId ?? "");
-      if (asrVolcanoApiKeyInput) asrVolcanoApiKeyInput.value = String(cfg.asrVolcanoApiKey ?? "");
+      if (asrAliyunAppKeyInput) asrAliyunAppKeyInput.value = String(cfg.asrAliyunAppKey ?? "");
+      if (asrAliyunAccessKeyIdInput) asrAliyunAccessKeyIdInput.value = String(cfg.asrAliyunAccessKeyId ?? "");
+      if (asrAliyunAccessKeySecretInput) asrAliyunAccessKeySecretInput.value = String(cfg.asrAliyunAccessKeySecret ?? "");
       if (asrLanguageSelect) asrLanguageSelect.value = String(cfg.asrLanguage ?? "zh");
       if (asrVadSilenceInput) asrVadSilenceInput.value = String(cfg.asrVadSilenceMs ?? 1000);
       if (asrShowTranscriptCheckbox) asrShowTranscriptCheckbox.checked = Boolean(cfg.asrShowTranscript);
     }
-    syncAsrVolcanoVisibility();
+    syncAsrVisibility();
   } catch (err) {
     console.warn("[asr] 加载 ASR 配置失败", err);
   }

@@ -1,75 +1,48 @@
-// 火山引擎流式 ASR 引擎 —— 大模型流式语音识别。
+// 阿里云实时语音识别 ASR 引擎 —— WebSocket + JSON 协议。
 //
-// 文档：https://www.volcengine.com/docs/6561/80818
-// 协议：自定义二进制帧（header 4字节 + sequence 4字节 + payload_size 4字节 + gzip payload）
-// 鉴权：WebSocket headers（旧版 X-Api-App-Key + X-Api-Access-Key；新版 X-Api-Key）
-// URL：wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async（双向流式优化版）
+// 文档：https://help.aliyun.com/zh/isi/developer-reference/websocket
+// URL：wss://nls-gateway.cn-shanghai.aliyuncs.com/ws/v1?token=<token>
+// 鉴权：用 AccessKeyId + AccessKeySecret 获取临时 token，拼到 URL 里
+// 协议：JSON 文本帧（StartTranscription/StopTranscription）+ 二进制帧（PCM 音频）
+// 音频：PCM 16kHz/16bit/mono
 
 import { WebSocket } from "ws";
-import { gzipSync, gunzipSync } from "node:zlib";
+import { createHmac } from "node:crypto";
 import { randomUUID } from "node:crypto";
 
-const LOG_PREFIX = "[VolcanoASR]";
+const LOG_PREFIX = "[AliyunASR]";
+const NLS_GATEWAY = "wss://nls-gateway.cn-shanghai.aliyuncs.com/ws/v1";
 
-// 二进制协议常量
-const PROTOCOL_V1 = 0x10;        // (1 << 4) | 0(header_size=1 → 4字节)
-const MSG_FULL_REQ = 0x10;       // (1 << 4) | 0  full client request
-const MSG_AUDIO_REQ = 0x20;      // (2 << 4) | 0  audio only request
-const MSG_FULL_RESP = 0x90;      // (9 << 4) | 0  full server response
-const MSG_ERROR = 0xF0;          // (15 << 4) | 0 error response
-const FLAG_POS_SEQ = 0x01;       // 有 sequence 且为正
-const FLAG_LAST = 0x02;          // 最后一包
-const FLAG_NEG_SEQ = 0x03;       // 有 sequence 且为负（最后一包）
-const SERIAL_JSON = 0x10;       // (1 << 4) | 0  JSON 序列化
-const SERIAL_NONE = 0x00;       // 无序列化（音频数据）
-const COMPRESS_GZIP = 0x01;      // gzip 压缩
-const COMPRESS_NONE = 0x00;      // 不压缩
-
-/** 火山 ASR 流式识别会话 */
+/** 阿里云 ASR 流式识别会话 */
 export class VolcanoAsrStream {
   private ws: WebSocket | null = null;
   private stopped = false;
-  private sequence = 1;
   private audioBuffer = Buffer.alloc(0);
+  private taskId = randomUUID().replace(/-/g, "");
 
   constructor(
     private readonly onPartial: (text: string) => void,
     private readonly onFinal: (text: string) => void,
   ) {}
 
-  /**
-   * 开始识别会话：连 WebSocket，鉴权，发配置帧。
-   * appId = App ID（旧版控制台）或 App Key（新版控制台）
-   * apiKey = Access Token（旧版）或留空（新版，鉴权用 X-Api-Key=appId）
-   * isNewConsole = 是否新版控制台（新版用 X-Api-Key，旧版用 X-Api-App-Key + X-Api-Access-Key）
-   */
-  start(appId: string, apiKey: string, language: string): void {
-    const reqId = randomUUID();
-    const resourceId = "volc.seedasr.sauc.duration"; // 豆包 ASR 2.0 小时版
-    const url = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async";
-    console.log(LOG_PREFIX, `连接 ASR... appid=${appId}, lang=${language}`);
-
-    // 鉴权 headers（同时兼容新旧版控制台）
-    const headers: Record<string, string> = {
-      "X-Api-Resource-Id": resourceId,
-      "X-Api-Request-Id": reqId,
-      "X-Api-Connect-Id": reqId,
-      "X-Api-Sequence": "-1",
-    };
-    if (apiKey) {
-      // 旧版控制台：App ID + Access Token
-      headers["X-Api-App-Key"] = appId;
-      headers["X-Api-Access-Key"] = apiKey;
-    } else {
-      // 新版控制台：App Key
-      headers["X-Api-Key"] = appId;
+  /** 开始识别会话：获取 token → 连 WebSocket → 发 StartTranscription */
+  async start(appKey: string, accessKeyId: string, accessKeySecret: string, language: string): Promise<void> {
+    console.log(LOG_PREFIX, `获取 token... appKey=${appKey}`);
+    let token: string;
+    try {
+      token = await this.getToken(accessKeyId, accessKeySecret);
+    } catch (err) {
+      console.error(LOG_PREFIX, "获取 token 失败:", err);
+      return;
     }
+    console.log(LOG_PREFIX, "token 获取成功，连接 WebSocket...");
 
-    this.ws = new WebSocket(url, { headers });
+    const url = `${NLS_GATEWAY}?token=${encodeURIComponent(token)}`;
+    this.ws = new WebSocket(url);
 
     this.ws.on("open", () => {
-      console.log(LOG_PREFIX, "WS 已连接，发送配置帧");
-      this.sendConfig(language);
+      console.log(LOG_PREFIX, "WS 已连接，发送 StartTranscription");
+      this.sendStartTranscription(appKey, language);
     });
 
     this.ws.on("message", (raw: Buffer) => this.handleMessage(raw));
@@ -77,169 +50,162 @@ export class VolcanoAsrStream {
     this.ws.on("close", (code) => console.log(LOG_PREFIX, `WS 关闭: ${code}`));
   }
 
-  /** 发送配置帧（full client request，二进制协议） */
-  private sendConfig(language: string): void {
-    const langMap: Record<string, string> = { zh: "zh-CN", en: "en-US", auto: "zh-CN" };
-    const payload = {
-      user: { uid: "cyrene" },
-      audio: {
-        format: "pcm",
-        codec: "raw",
-        rate: 16000,
-        bits: 16,
-        channel: 1,
+  /** 发送 StartTranscription 指令（JSON 文本帧） */
+  private sendStartTranscription(appKey: string, language: string): void {
+    const langMap: Record<string, string> = { zh: "zh-CN", en: "en-US" };
+    const msg = {
+      header: {
+        message_id: randomUUID().replace(/-/g, ""),
+        task_id: this.taskId,
+        namespace: "SpeechTranscriber",
+        name: "StartTranscription",
+        appkey: appKey,
       },
-      request: {
-        model_name: "bigmodel",
-        enable_itn: true,
-        enable_punc: true,
-        show_utterances: true,
-        language: langMap[language] ?? "zh-CN",
+      payload: {
+        format: "pcm",
+        sample_rate: 16000,
+        enable_intermediate_result: true,
+        enable_punctuation_prediction: true,
+        enable_inverse_text_normalization: true,
+        max_sentence_silence: 800,
       },
     };
-    const frame = this.buildFrame(MSG_FULL_REQ, FLAG_POS_SEQ, SERIAL_JSON, COMPRESS_GZIP, payload, this.sequence);
-    this.sequence++;
-    try { this.ws?.send(frame); } catch (err) { console.error(LOG_PREFIX, "发送配置帧失败:", err); }
+    try {
+      this.ws?.send(JSON.stringify(msg));
+    } catch (err) {
+      console.error(LOG_PREFIX, "发送 StartTranscription 失败:", err);
+    }
   }
 
   /** 发送一帧 PCM 音频（攒够 200ms/6400 字节再发） */
   sendAudio(pcmFrame: Buffer): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || this.stopped) return;
     this.audioBuffer = Buffer.concat([this.audioBuffer, pcmFrame]);
-    // 200ms = 16000 * 0.2 * 2 bytes = 6400 字节
+    // 200ms = 16000 * 0.2 * 2 = 6400 字节
     while (this.audioBuffer.length >= 6400) {
       const chunk = this.audioBuffer.subarray(0, 6400);
       this.audioBuffer = this.audioBuffer.subarray(6400);
-      const frame = this.buildFrame(MSG_AUDIO_REQ, FLAG_POS_SEQ, SERIAL_NONE, COMPRESS_GZIP, chunk, this.sequence);
-      this.sequence++;
-      this.ws.send(frame, { binary: true });
+      this.ws.send(chunk, { binary: true });
     }
   }
 
-  /** 结束识别，发最后一包（负包），关闭连接 */
+  /** 结束识别：发剩余音频 + StopTranscription */
   stop(): void {
     if (this.stopped) return;
     this.stopped = true;
-    // 发剩余的音频
-    if (this.audioBuffer.length > 0 && this.ws?.readyState === WebSocket.OPEN) {
-      const frame = this.buildFrame(MSG_AUDIO_REQ, FLAG_POS_SEQ, SERIAL_NONE, COMPRESS_GZIP, this.audioBuffer, this.sequence);
-      this.sequence++;
-      try { this.ws.send(frame, { binary: true }); } catch { /* ignore */ }
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+    // 发剩余音频
+    if (this.audioBuffer.length > 0) {
+      try { this.ws.send(this.audioBuffer, { binary: true }); } catch { /* ignore */ }
       this.audioBuffer = Buffer.alloc(0);
     }
-    // 发负包（最后一包）
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      const negFrame = this.buildFrame(MSG_AUDIO_REQ, FLAG_NEG_SEQ, SERIAL_NONE, COMPRESS_GZIP, Buffer.alloc(0), -this.sequence);
-      try { this.ws.send(negFrame, { binary: true }); } catch { /* ignore */ }
-    }
-    setTimeout(() => { try { this.ws?.close(); } catch { /* ignore */ } }, 1000);
+
+    // 发 StopTranscription 指令
+    const msg = {
+      header: {
+        message_id: randomUUID().replace(/-/g, ""),
+        task_id: this.taskId,
+        namespace: "SpeechTranscriber",
+        name: "StopTranscription",
+      },
+    };
+    try { this.ws.send(JSON.stringify(msg)); } catch { /* ignore */ }
+
+    setTimeout(() => { try { this.ws?.close(); } catch { /* ignore */ } }, 2000);
   }
 
-  // ── 二进制协议编解码 ──
-
-  /** 构建二进制帧 */
-  private buildFrame(msgType: number, flags: number, serial: number, compress: number, payload: unknown, seq: number): Buffer {
-    const payloadData = payload instanceof Buffer
-      ? payload
-      : Buffer.from(JSON.stringify(payload), "utf-8");
-    const compressed = compress === COMPRESS_GZIP ? gzipSync(payloadData) : payloadData;
-
-    const header = Buffer.alloc(4);
-    header[0] = PROTOCOL_V1;              // version=1, header_size=1(4字节)
-    header[1] = msgType | flags;          // message type + flags
-    header[2] = serial | compress;        // serialization + compression
-    header[3] = 0x00;                     // reserved
-
-    const seqBuf = Buffer.alloc(4);
-    seqBuf.writeInt32BE(seq, 0);
-
-    const sizeBuf = Buffer.alloc(4);
-    sizeBuf.writeUInt32BE(compressed.length, 0);
-
-    return Buffer.concat([header, seqBuf, sizeBuf, compressed]);
-  }
-
-  /** 解析服务端二进制响应 */
+  /** 解析服务端 JSON 响应 */
   private handleMessage(raw: Buffer): void {
     try {
-      if (raw.length < 4) return;
-      const headerSize = raw[0] & 0x0f;
-      const messageType = raw[1] >> 4;
-      const flags = raw[1] & 0x0f;
-      const serialization = raw[2] >> 4;
-      const compression = raw[2] & 0x0f;
+      const msg = JSON.parse(raw.toString()) as {
+        header?: {
+          status?: number;
+          status_text?: string;
+          task_id?: string;
+          name?: string;
+        };
+        payload?: {
+          result?: string;
+          index?: number;
+          time?: number;
+          confidence?: number;
+        };
+      };
 
-      let offset = headerSize * 4; // header_size * 4 = 实际 header 字节数
-      if (offset < 4 || offset > raw.length) offset = 4;
+      const status = msg.header?.status;
+      const eventName = msg.header?.name;
 
-      let payload = raw.subarray(offset);
-      let isLast = false;
-
-      // 解析 flags
-      if (flags & 0x01) {
-        // 有 sequence 字段（4字节）
-        if (flags & 0x02) isLast = true;
-        payload = payload.subarray(4);
-      }
-      if (flags & 0x04) {
-        // 有 event 字段（4字节）
-        payload = payload.subarray(4);
-      }
-
-      // 错误响应
-      if (messageType === 0x0F) {
-        if (payload.length >= 8) {
-          const code = payload.readInt32BE(0);
-          const msgSize = payload.readUInt32BE(4);
-          const errMsg = payload.subarray(8, 8 + msgSize).toString("utf-8");
-          console.error(LOG_PREFIX, `ASR 错误: code=${code}, msg=${errMsg}`);
-        }
+      if (status !== 20000000 && status !== undefined) {
+        console.error(LOG_PREFIX, `ASR 错误: status=${status}, msg=${msg.header?.status_text}`);
         return;
       }
 
-      // full server response：先读 payload_size
-      if (payload.length >= 4) {
-        const payloadSize = payload.readUInt32BE(0);
-        payload = payload.subarray(4, 4 + payloadSize);
-      }
-      if (payload.length === 0) return;
-
-      // gzip 解压
-      if (compression === COMPRESS_GZIP) {
-        try { payload = gunzipSync(payload); } catch (err) {
-          console.error(LOG_PREFIX, "gzip 解压失败:", err);
-          return;
-        }
-      }
-
-      // JSON 解析
-      if (serialization === 1) {
-        const result = JSON.parse(payload.toString("utf-8")) as {
-          result?: { text?: string; utterances?: Array<{ text?: string; definite?: boolean }> };
-        };
-        const text = result.result?.text
-          ?? result.result?.utterances?.map(u => u.text ?? "").join("")
-          ?? "";
+      if (eventName === "TranscriptionStarted") {
+        console.log(LOG_PREFIX, "转写已开始，可以发送音频");
+      } else if (eventName === "TranscriptionResultChanged") {
+        // 中间结果
+        const text = msg.payload?.result ?? "";
+        if (text) this.onPartial(text);
+      } else if (eventName === "SentenceEnd") {
+        // 最终结果
+        const text = msg.payload?.result ?? "";
         if (text) {
-          if (isLast) {
-            console.log(LOG_PREFIX, "最终识别:", text);
-            this.onFinal(text);
-          } else {
-            this.onPartial(text);
-          }
+          console.log(LOG_PREFIX, "最终识别:", text);
+          this.onFinal(text);
         }
+      } else if (eventName === "TranscriptionCompleted") {
+        console.log(LOG_PREFIX, "转写已完成");
       }
     } catch (err) {
       console.error(LOG_PREFIX, "解析响应失败:", err);
     }
+  }
+
+  /** 用 AccessKeyId + AccessKeySecret 获取阿里云临时 token */
+  private async getToken(accessKeyId: string, accessKeySecret: string): Promise<string> {
+    // 阿里云 NLS token 获取：RPC 风格 API 签名
+    const params: Record<string, string> = {
+      AccessKeyId: accessKeyId,
+      Action: "CreateToken",
+      Format: "JSON",
+      RegionId: "cn-shanghai",
+      SignatureMethod: "HMAC-SHA256",
+      SignatureNonce: randomUUID().replace(/-/g, ""),
+      SignatureVersion: "1.0",
+      Timestamp: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
+      Version: "2019-02-28",
+    };
+
+    // 按字母序排列参数
+    const sortedKeys = Object.keys(params).sort();
+    const canonicalQuery = sortedKeys.map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`).join("&");
+
+    // 构建签名字符串
+    const stringToSign = `GET&%2F&${encodeURIComponent(canonicalQuery)}`;
+
+    // HMAC-SHA256 签名（阿里云签名附加 &）
+    const signature = createHmac("sha256", accessKeySecret + "&")
+      .update(stringToSign)
+      .digest("base64");
+
+    // 构建完整 URL
+    const url = `https://nls-meta.cn-shanghai.aliyuncs.com/?${canonicalQuery}&Signature=${encodeURIComponent(signature)}`;
+
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json() as { Token?: { Id?: string }; errmsg?: string };
+    if (!data.Token?.Id) throw new Error(data.errmsg || "token 获取失败");
+    return data.Token.Id;
   }
 }
 
 // ── 配置注入 ──
 
 export interface AsrConfig {
-  appId: string;
-  apiKey: string;
+  appKey: string;
+  accessKeyId: string;
+  accessKeySecret: string;
   language: string;
   engine: string;
 }

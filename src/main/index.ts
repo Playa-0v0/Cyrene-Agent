@@ -269,12 +269,14 @@ interface GeneralSettings {
   emailSmtpPass: string;
   /** 发件人显示名（可选） */
   emailFromName: string;
-  /** 🎧ASR 服务商：off(关闭) | volcano(火山引擎) | local(本地,占位) */
-  asrEngine: "off" | "volcano" | "local";
-  /** 火山引擎 ASR AppId */
-  asrVolcanoAppId: string;
-  /** 火山引擎 ASR ApiKey */
-  asrVolcanoApiKey: string;
+  /** 🎧ASR 服务商：off(关闭) | aliyun(阿里云) | local(本地,占位) */
+  asrEngine: "off" | "aliyun" | "local";
+  /** 阿里云智能语音交互 AppKey */
+  asrAliyunAppKey: string;
+  /** 阿里云 RAM AccessKey ID */
+  asrAliyunAccessKeyId: string;
+  /** 阿里云 RAM AccessKey Secret */
+  asrAliyunAccessKeySecret: string;
   /** ASR 识别语言：zh(中文) | en(英文) | auto(自动) */
   asrLanguage: "zh" | "en" | "auto";
   /** VAD 静默检测阈值（毫秒），500~2000，默认 1000 */
@@ -383,8 +385,9 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   emailSmtpPass: "",
   emailFromName: "",
   asrEngine: "off",
-  asrVolcanoAppId: "",
-  asrVolcanoApiKey: "",
+  asrAliyunAppKey: "",
+  asrAliyunAccessKeyId: "",
+  asrAliyunAccessKeySecret: "",
   asrLanguage: "zh",
   asrVadSilenceMs: 1000,
   asrShowTranscript: false,
@@ -739,11 +742,12 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
     emailSmtpPass: typeof input?.emailSmtpPass === "string" ? input.emailSmtpPass : "",
     emailFromName: typeof input?.emailFromName === "string" ? input.emailFromName : "",
     // ASR（语音识别）配置
-    asrEngine: ["off", "volcano", "local"].includes(String(input?.asrEngine))
-      ? (input!.asrEngine as "off" | "volcano" | "local")
+    asrEngine: ["off", "aliyun", "local"].includes(String(input?.asrEngine))
+      ? (input!.asrEngine as "off" | "aliyun" | "local")
       : "off",
-    asrVolcanoAppId: typeof input?.asrVolcanoAppId === "string" ? input.asrVolcanoAppId : "",
-    asrVolcanoApiKey: typeof input?.asrVolcanoApiKey === "string" ? input.asrVolcanoApiKey : "",
+    asrAliyunAppKey: typeof input?.asrAliyunAppKey === "string" ? input.asrAliyunAppKey : "",
+    asrAliyunAccessKeyId: typeof input?.asrAliyunAccessKeyId === "string" ? input.asrAliyunAccessKeyId : "",
+    asrAliyunAccessKeySecret: typeof input?.asrAliyunAccessKeySecret === "string" ? input.asrAliyunAccessKeySecret : "",
     asrLanguage: ["zh", "en", "auto"].includes(String(input?.asrLanguage))
       ? (input!.asrLanguage as "zh" | "en" | "auto")
       : "zh",
@@ -1623,8 +1627,8 @@ function createWindow(): void {
   // 注入 ASR 配置获取器（通话功能用，实时读 GeneralSettings）
   setAsrConfig(() => {
     const s = loadGeneralSettings();
-    if (s.asrEngine !== "volcano") return null;
-    return { appId: s.asrVolcanoAppId, apiKey: s.asrVolcanoApiKey, language: s.asrLanguage, engine: s.asrEngine };
+    if (s.asrEngine !== "aliyun") return null;
+    return { appKey: s.asrAliyunAppKey, accessKeyId: s.asrAliyunAccessKeyId, accessKeySecret: s.asrAliyunAccessKeySecret, language: s.asrLanguage, engine: s.asrEngine };
   });
 
   // 注入通话模型/TTS 配置获取器

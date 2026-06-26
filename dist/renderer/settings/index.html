@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>昔涟 · 设置</title>
-  <script type="module" crossorigin src="../assets/settings-Cvj9_Twz.js"></script>
+  <script type="module" crossorigin src="../assets/settings-D1Q0oRfV.js"></script>
   <link rel="modulepreload" crossorigin href="../assets/base-Cc1qE-wh.js">
   <link rel="modulepreload" crossorigin href="../assets/chat-ui-kPmAHPjl.js">
   <link rel="stylesheet" crossorigin href="../assets/base-4LTpmnF5.css">
@@ -1271,32 +1271,35 @@
                 <label for="asr-engine">ASR 服务商</label>
                 <select id="asr-engine">
                   <option value="off">关闭</option>
-                  <option value="volcano">火山引擎（云端）</option>
+                  <option value="aliyun">阿里云（实时语音识别）</option>
                   <option value="local">本地（占位，敬请期待）</option>
                 </select>
               </div>
-              <p class="tts-hint">选择「火山引擎」后填入下方配置。本地引擎为占位，后续支持。</p>
+              <p class="tts-hint">选择「阿里云」后填入下方配置。</p>
             </div>
 
-            <div class="tts-section" id="asr-volcano-config">
-              <h2 class="tts-section__title">🌋 火山引擎配置</h2>
+            <div class="tts-section" id="asr-aliyun-config">
+              <h2 class="tts-section__title">☁️ 阿里云配置</h2>
               <div class="tts-field">
-                <label for="asr-volcano-app-id">App ID</label>
-                <input type="text" id="asr-volcano-app-id" placeholder="火山引擎控制台 → 语音技术 → 应用" autocomplete="off" />
+                <label for="asr-aliyun-app-key">App Key</label>
+                <input type="text" id="asr-aliyun-app-key" placeholder="智能语音交互控制台 → 项目设置 → AppKey" autocomplete="off" />
               </div>
               <div class="tts-field">
-                <label for="asr-volcano-api-key">API Key</label>
-                <input type="password" id="asr-volcano-api-key" placeholder="火山引擎 Access Token" autocomplete="off" />
+                <label for="asr-aliyun-access-key-id">AccessKey ID</label>
+                <input type="text" id="asr-aliyun-access-key-id" placeholder="RAM 访问控制 → AccessKey 管理" autocomplete="off" />
+              </div>
+              <div class="tts-field">
+                <label for="asr-aliyun-access-key-secret">AccessKey Secret</label>
+                <input type="password" id="asr-aliyun-access-key-secret" placeholder="创建 AccessKey 时显示的 Secret" autocomplete="off" />
               </div>
               <div class="tts-field">
                 <label for="asr-language">识别语言</label>
                 <select id="asr-language">
                   <option value="zh">中文</option>
                   <option value="en">英文</option>
-                  <option value="auto">自动检测</option>
                 </select>
               </div>
-              <p class="tts-hint">火山引擎 → 控制台 → 语音技术 → 流式语音识别（大模型版），创建应用获取 App ID 和 Access Token。</p>
+              <p class="tts-hint">阿里云 → 智能语音交互控制台 → 创建项目获取 AppKey。AccessKey 在 RAM 访问控制台获取（ram.console.aliyun.com/manage/ak）。Token 会自动获取，无需手动填写。</p>
             </div>
 
             <div class="tts-section">

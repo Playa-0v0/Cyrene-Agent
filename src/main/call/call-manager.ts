@@ -83,25 +83,25 @@ function sendTtsAudio(base64: string): void {
 export function startCall(): void {
   if (active) return;
   const cfg = getAsrConfig();
-  if (!cfg || cfg.engine !== "volcano" || !cfg.appId || !cfg.apiKey) {
-    sendError("ASR 未配置：请在设置→ASR 中配置火山引擎 AppId 和 ApiKey");
+  if (!cfg || cfg.engine !== "aliyun" || !cfg.appKey || !cfg.accessKeyId || !cfg.accessKeySecret) {
+    sendError("ASR 未配置：请在设置→ASR 中配置阿里云 AppKey 和 AccessKey");
     sendState("ERROR");
     return;
   }
 
   active = true;
   finalText = "";
-  startAsrStream(cfg.appId, cfg.apiKey, cfg.language);
+  startAsrStream(cfg);
   sendState("LISTENING");
 }
 
 /** 创建并启动一个 ASR 流。 */
-function startAsrStream(appId: string, apiKey: string, language: string): void {
+function startAsrStream(cfg: { appKey: string; accessKeyId: string; accessKeySecret: string; language: string }): void {
   asrStream = new VolcanoAsrStream(
     (text) => sendAsrResult(text, undefined),
     (text) => { finalText = text; sendAsrResult(undefined, text); },
   );
-  asrStream.start(appId, apiKey, language);
+  asrStream.start(cfg.appKey, cfg.accessKeyId, cfg.accessKeySecret, cfg.language);
 }
 
 /** 结束本轮（VAD 静默）：停 ASR → 跑 agent → TTS → 播放。 */
@@ -172,7 +172,7 @@ function restartAsr(): void {
   if (!cfg) return;
   if (asrStream) asrStream.stop();
   finalText = "";
-  startAsrStream(cfg.appId, cfg.apiKey, cfg.language);
+  startAsrStream(cfg);
 }
 
 /** 挂断：清理一切。 */
