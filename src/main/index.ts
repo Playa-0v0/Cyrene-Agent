@@ -2015,7 +2015,7 @@ function createCallWindow(): void {
 
   const display = screen.getPrimaryDisplay();
   const { width: dw, height: dh } = display.workArea;
-  const CALL_W = 450;
+  const CALL_W = 420;
   const CALL_H = 800;
   const cx = Math.max(0, Math.floor((dw - CALL_W) / 2));
   const cy = Math.max(0, Math.floor((dh - CALL_H) / 2));
@@ -2025,7 +2025,7 @@ function createCallWindow(): void {
     y: display.workArea.y + cy,
     width: CALL_W,
     height: CALL_H,
-    minWidth: 450,
+    minWidth: 420,
     minHeight: 600,
     title: "Cyrene · 语音通话",
     icon: APP_ICON_PATH,
