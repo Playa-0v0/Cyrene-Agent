@@ -14,7 +14,7 @@ import { buildToneInjection } from "./orchestrator/tone-injector";
 import { getAdapter, buildVendorUrl } from "./orchestrator/vendors";
 import { getCapability } from "./orchestrator/vendors/capabilities";
 import type { VisionConfig } from "./orchestrator/vision-captioner";
-import { toolRegistry } from "./orchestrator/tool-registry";
+import { toolRegistry, type ToolDefinition } from "./orchestrator/tool-registry";
 // 触发 built-in-tools 的副作用注册（fetch_url / run_shell / install_mcp_server）
 import "./orchestrator/built-in-tools";
 // 触发 fs-tools 的副作用注册（read_file / list_dir / write_file / read_image）
@@ -38,6 +38,7 @@ import type { L0Profile, L1Profile } from "./memory/memory-types";
 import { registerChatsIpc } from "./chats/chats-ipc";
 import { recordUsage, getUsage, flush as flushTokenUsage } from "./token-usage-store";
 import { uploadFile as ttsUploadFile, cloneVoice as ttsCloneVoice, synthesize as ttsSynthesize } from "./tts/minimax-engine";
+import { synthesize as gptsovitsSynthesize } from "./tts/gptsovits-engine";
 import { registerAgUiIpc, type AguiRunInput } from "./agui-bridge";
 import { setWeatherConfig, setSearchConfig, loadTodos, onTodosChange, setDelegateSettings } from "./orchestrator/built-in-tools";
 import { registerRecallHistoryTool } from "./orchestrator/history-tools";
@@ -84,12 +85,26 @@ function appendMinimaxTtsLog(entry: Record<string, unknown>): void {
   }
 }
 
+function appendGptsovitsTtsLog(entry: Record<string, unknown>): void {
+  try {
+    const logDir = path.join(app.getPath("userData"), "logs");
+    fs.mkdirSync(logDir, { recursive: true });
+    const logFile = path.join(logDir, "gptsovits-tts.log");
+    fs.appendFileSync(logFile, JSON.stringify(entry, null, 2) + "\n", "utf8");
+    if (entry.phase === "request.begin") {
+      console.log("[TTS GPT-SoVITS] 诊断日志:", logFile);
+    }
+  } catch (err) {
+    console.warn("[TTS GPT-SoVITS] 写诊断日志失败:", err);
+  }
+}
+
 function getTtsCacheDir(): string {
   return path.join(app.getPath("userData"), "cyrene-tts-cache");
 }
 
 function assertTtsCacheKey(cacheKey: string): string {
-  if (!/^minimax-[a-f0-9]{64}$/.test(cacheKey)) {
+  if (!/^(minimax|gptsovits)-[a-f0-9]{64}$/.test(cacheKey)) {
     throw new Error("非法 TTS 缓存 key");
   }
   return cacheKey;
@@ -116,6 +131,27 @@ function buildTtsCacheKey(payload: {
     text: payload.text,
   });
   return "minimax-" + createHash("sha256").update(source, "utf8").digest("hex");
+}
+
+function buildGptsovitsCacheKey(payload: {
+  baseUrl: string;
+  refAudioPath: string;
+  promptText: string;
+  text: string;
+  speed?: number;
+  format?: "wav" | "mp3";
+}): string {
+  const source = JSON.stringify({
+    version: 1,
+    engine: "gptsovits",
+    baseUrl: payload.baseUrl,
+    refAudioPath: payload.refAudioPath,
+    promptText: payload.promptText,
+    speed: payload.speed ?? 1,
+    format: payload.format ?? "wav",
+    text: payload.text,
+  });
+  return "gptsovits-" + createHash("sha256").update(source, "utf8").digest("hex");
 }
 
 function getTtsCachePath(cacheKey: string, format: "mp3" | "wav" | "pcm" = "mp3"): string {
@@ -230,7 +266,7 @@ interface GeneralSettings {
   launchAtLogin: boolean;
   language: "zh-CN";
   // TTS 配置
-  ttsEngine: "off" | "minimax";
+  ttsEngine: "off" | "minimax" | "gptsovits";
   ttsAutoRead: boolean;
   ttsSpeed: number;
   ttsVolume: number;
@@ -239,9 +275,11 @@ interface GeneralSettings {
   ttsMinimaxVoiceId: string;
   /** MiniMax 合成模型：speech-2.8-hd(高保真¥3.5/万字符) | speech-2.8-turbo(极速¥2.0/万字符) */
   ttsMinimaxModel: "speech-2.8-hd" | "speech-2.8-turbo";
-  // Voxcpm2
-  ttsVoxcpm2Url: string;
-  ttsVoxcpm2Preset: string;
+  // GPT-SoVITS（本地）
+  ttsGptsovitsBaseUrl: string;
+  ttsGptsovitsRefAudioPath: string;
+  ttsGptsovitsPromptText: string;
+  ttsGptsovitsFormat: "wav" | "mp3";
   /** 天气源：open-meteo(免配置默认) | amap(高德,需填key) */
   weatherSource: "open-meteo" | "amap";
   /** 天气插件是否启用（开关） */
@@ -367,8 +405,10 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   ttsMinimaxKey: "",
   ttsMinimaxVoiceId: "",
   ttsMinimaxModel: "speech-2.8-turbo",
-  ttsVoxcpm2Url: "http://localhost:5000",
-  ttsVoxcpm2Preset: "",
+  ttsGptsovitsBaseUrl: "http://localhost:9880",
+  ttsGptsovitsRefAudioPath: "",
+  ttsGptsovitsPromptText: "",
+  ttsGptsovitsFormat: "wav",
   weatherSource: "open-meteo",
   weatherEnabled: false,
   amapKey: "",
@@ -712,7 +752,7 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
     launchAtLogin: Boolean(input?.launchAtLogin),
     language: "zh-CN",
     // TTS 配置
-    ttsEngine: (["off", "minimax"].includes(input?.ttsEngine as string) ? input?.ttsEngine : "off") as GeneralSettings["ttsEngine"],
+    ttsEngine: (["off", "minimax", "gptsovits"].includes(input?.ttsEngine as string) ? input?.ttsEngine : "off") as GeneralSettings["ttsEngine"],
     ttsAutoRead: input?.ttsAutoRead === undefined ? DEFAULT_GENERAL_SETTINGS.ttsAutoRead : Boolean(input.ttsAutoRead),
     ttsSpeed: typeof input?.ttsSpeed === "number" ? Math.max(0.5, Math.min(2, input.ttsSpeed)) : DEFAULT_GENERAL_SETTINGS.ttsSpeed,
     ttsVolume: typeof input?.ttsVolume === "number" ? Math.max(0, Math.min(1, input.ttsVolume)) : DEFAULT_GENERAL_SETTINGS.ttsVolume,
@@ -755,8 +795,10 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
       ? Math.max(300, Math.min(30000, Math.round(input.asrVadSilenceMs)))
       : DEFAULT_GENERAL_SETTINGS.asrVadSilenceMs,
     asrShowTranscript: Boolean(input?.asrShowTranscript),
-    ttsVoxcpm2Url: typeof input?.ttsVoxcpm2Url === "string" ? input.ttsVoxcpm2Url : DEFAULT_GENERAL_SETTINGS.ttsVoxcpm2Url,
-    ttsVoxcpm2Preset: typeof input?.ttsVoxcpm2Preset === "string" ? input.ttsVoxcpm2Preset : "",
+    ttsGptsovitsBaseUrl: typeof input?.ttsGptsovitsBaseUrl === "string" ? input.ttsGptsovitsBaseUrl : DEFAULT_GENERAL_SETTINGS.ttsGptsovitsBaseUrl,
+    ttsGptsovitsRefAudioPath: typeof input?.ttsGptsovitsRefAudioPath === "string" ? input.ttsGptsovitsRefAudioPath : "",
+    ttsGptsovitsPromptText: typeof input?.ttsGptsovitsPromptText === "string" ? input.ttsGptsovitsPromptText : "",
+    ttsGptsovitsFormat: input?.ttsGptsovitsFormat === "mp3" ? "mp3" : "wav",
   };
 }
 
@@ -1237,7 +1279,9 @@ function loadPromptFile(filename: string): string {
 function buildSystemPrompt(styleFile: string): string {
   const parts: string[] = [];
   
-  const system = loadPromptFile("system.md");
+  // styleFile 以 "talk" 开头时走纯聊天模式：用 talk_system.md 替换 system.md（不调工具）
+  const isTalkMode = styleFile.startsWith("talk");
+  const system = loadPromptFile(isTalkMode ? "talk_system.md" : "system.md");
   if (system) parts.push(system);
   
   const identity = loadPromptFile("identity.md");
@@ -1249,8 +1293,11 @@ function buildSystemPrompt(styleFile: string): string {
   const canon = loadPromptFile("canon_quotes.md");
   if (canon) parts.push(canon);
   
-  const style = loadPromptFile("styles/" + styleFile);
-  if (style) parts.push(style);
+  // 纯聊天模式不加载 style 文件（talk_system.md 已包含完整规则）
+  if (!isTalkMode) {
+    const style = loadPromptFile("styles/" + styleFile);
+    if (style) parts.push(style);
+  }
   
   return parts.join("\n\n---\n\n");
 }
@@ -1640,8 +1687,14 @@ function createWindow(): void {
     () => {
       const s = loadGeneralSettings();
       return {
-        ttsEngine: s.ttsEngine, ttsMinimaxKey: s.ttsMinimaxKey, ttsMinimaxVoiceId: s.ttsMinimaxVoiceId,
-        ttsSpeed: s.ttsSpeed, ttsVolume: s.ttsVolume, ttsMinimaxModel: s.ttsMinimaxModel,
+        ttsEngine: s.ttsEngine,
+        ttsMinimaxKey: s.ttsMinimaxKey, ttsMinimaxVoiceId: s.ttsMinimaxVoiceId,
+        ttsMinimaxModel: s.ttsMinimaxModel,
+        ttsSpeed: s.ttsSpeed, ttsVolume: s.ttsVolume,
+        ttsGptsovitsBaseUrl: s.ttsGptsovitsBaseUrl,
+        ttsGptsovitsRefAudioPath: s.ttsGptsovitsRefAudioPath,
+        ttsGptsovitsPromptText: s.ttsGptsovitsPromptText,
+        ttsGptsovitsFormat: s.ttsGptsovitsFormat,
       };
     },
     // 通话专用 system prompt 构建器（时间+常驻+记忆+phone人设+skill+语气，不要环境上下文）
@@ -2787,6 +2840,95 @@ app.whenReady().then(async () => {
     };
   });
 
+  // GPT-SoVITS 语音合成 → base64 音频（测试发音用，不缓存）
+  ipcMain.handle(IPC.TTS_SYNTHESIZE_GPTSOVITS, async (_event, payload: {
+    baseUrl: string; refAudioPath: string; promptText: string; text: string;
+    speed?: number; format?: "wav" | "mp3";
+  }) => {
+    if (!payload?.baseUrl || !payload?.refAudioPath || !payload?.promptText || !payload?.text) {
+      throw new Error("缺少必要参数（baseUrl/refAudioPath/promptText/text）");
+    }
+    const result = await gptsovitsSynthesize({
+      ...payload,
+      debugLog: appendGptsovitsTtsLog,
+    });
+    const cacheKey = buildGptsovitsCacheKey(payload);
+    return {
+      base64: result.audio.toString("base64"),
+      cacheKey,
+      cached: false,
+      format: result.format,
+    };
+  });
+
+  // GPT-SoVITS 语音合成 + 本地缓存（聊天朗读用）
+  ipcMain.handle(IPC.TTS_SYNTHESIZE_CACHED_GPTSOVITS, async (_event, payload: {
+    baseUrl: string; refAudioPath: string; promptText: string; text: string;
+    speed?: number; format?: "wav" | "mp3";
+    expectedCacheKey?: string;
+  }) => {
+    const format: "wav" | "mp3" = payload.format ?? "wav";
+
+    // 回听优先：如果 expectedCacheKey 对应的缓存文件存在，直接返回，不需要 baseUrl/refAudioPath。
+    let expectedPath: string | null = null;
+    if (payload.expectedCacheKey) {
+      try {
+        expectedPath = getTtsCachePath(payload.expectedCacheKey, format);
+      } catch { /* expectedCacheKey 格式非法，忽略 */ }
+    }
+    if (expectedPath && fs.existsSync(expectedPath)) {
+      const cachedBuffer = fs.readFileSync(expectedPath);
+      appendGptsovitsTtsLog({
+        requestId: `gptsovits-cache-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        ts: new Date().toISOString(),
+        phase: "cache.hit",
+        cacheKey: payload.expectedCacheKey,
+        audioBytes: cachedBuffer.length,
+        textChars: Array.from(payload.text).length,
+      });
+      return {
+        base64: cachedBuffer.toString("base64"),
+        cacheKey: payload.expectedCacheKey,
+        cached: true,
+        format,
+      };
+    }
+
+    // 缓存未命中 → 需要合成，检查必要参数
+    if (!payload?.baseUrl || !payload?.refAudioPath || !payload?.promptText || !payload?.text) {
+      throw new Error("缓存未命中且缺少必要参数（baseUrl/refAudioPath/promptText/text）");
+    }
+
+    const cacheKey = buildGptsovitsCacheKey(payload);
+    const audioPath = getTtsCachePath(cacheKey, format);
+    fs.mkdirSync(path.dirname(audioPath), { recursive: true });
+
+    const result = await gptsovitsSynthesize({
+      baseUrl: payload.baseUrl,
+      refAudioPath: payload.refAudioPath,
+      promptText: payload.promptText,
+      text: payload.text,
+      speed: payload.speed,
+      format,
+      debugLog: appendGptsovitsTtsLog,
+    });
+    fs.writeFileSync(audioPath, result.audio);
+    appendGptsovitsTtsLog({
+      requestId: `gptsovits-cache-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      ts: new Date().toISOString(),
+      phase: "cache.write",
+      cacheKey,
+      audioBytes: result.audio.length,
+      textChars: Array.from(payload.text).length,
+    });
+    return {
+      base64: result.audio.toString("base64"),
+      cacheKey,
+      cached: false,
+      format: result.format,
+    };
+  });
+
   // 聊天会话存储 IPC（chats-store.initialize 会建好 cyrene-chats 目录并加载 index）
   registerChatsIpc();
 
@@ -2931,6 +3073,7 @@ app.whenReady().then(async () => {
         const parts = atts.map((a) => `--- ${a.name} ---\n${a.text}`);
         attachmentContext = `\n\n【本轮附件内容】\n${parts.join("\n\n")}`;
       }
+      const isTalkMode = (input.style || "").startsWith("talk");
       const systemContent =
         (environmentContext ? environmentContext + "\n\n" : "") +
         (alwaysOnContext ? alwaysOnContext + "\n\n" : "") +
@@ -2949,6 +3092,8 @@ app.whenReady().then(async () => {
           settings: { provider: settings.provider, baseUrl: settings.baseUrl, model: settings.model, apiKey: settings.apiKey },
           messages: fcMessages,
           timeoutMs: CHAT_REQUEST_TIMEOUT_MS,
+          // 纯聊天模式：不传工具，模型只做文字回复
+          ...(isTalkMode ? { tools: [] as ToolDefinition[] } : {}),
         },
         latestUserText,
       };
