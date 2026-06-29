@@ -47,17 +47,17 @@ export async function synthesize(opts: GptsovitsSynthesizeOptions): Promise<Gpts
     throw new Error(`参考音频文件不存在: ${opts.refAudioPath}`);
   }
 
-  // 2) 构造 form-encoded body
-  const params = new URLSearchParams();
-  params.set("refer_wav_path", opts.refAudioPath);
-  params.set("prompt_text", opts.promptText);
-  params.set("text", opts.text);
-  params.set("text_language", "中英混合");
-  params.set("prompt_language", "中英混合");
-  params.set("speed_factor", String(opts.speed ?? 1));
-  params.set("streaming", "false");
-  params.set("format", format);
-  const body = params.toString();
+  // 2) 构造 JSON body（GPT-SoVITS api_v2 用 FastAPI/Pydantic，期望 application/json）
+  const body = JSON.stringify({
+    refer_wav_path: opts.refAudioPath,
+    prompt_text: opts.promptText,
+    text: opts.text,
+    text_lang: "中英混合",
+    prompt_lang: "中英混合",
+    speed_factor: opts.speed ?? 1,
+    streaming: false,
+    format: format,
+  });
 
   // baseUrl 去掉尾部斜杠，拼 /api/tts
   const url = opts.baseUrl.replace(/\/+$/, "") + TTS_PATH;
@@ -78,7 +78,7 @@ export async function synthesize(opts: GptsovitsSynthesizeOptions): Promise<Gpts
   try {
     resp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: { "Content-Type": "application/json" },
       body,
       signal: controller.signal,
     });
