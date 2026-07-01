@@ -330,32 +330,101 @@ function stopMicrophone(): void {
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
 }
 
-// ── TTS 播放 ──
+// ── TTS 播放 + Live2D 嘴型联动 ──
+// 复用聊天窗口的逻辑：音频播放时通过 live2dSpeech IPC 让宠物窗口小人嘴巴张合。
+const AUDIO_MOUTH_DELAY_MS = 800;
+
 let currentAudio: HTMLAudioElement | null = null;
+let speechToken = 0;
+
+function nextSpeechToken(): number {
+  speechToken += 1;
+  return speechToken;
+}
+
+/** 停止嘴型联动（挂断 / 新 TTS / 错误时调用）。 */
+function stopLive2dMouth(): void {
+  speechToken += 1;
+  window.live2dSpeech?.stopMouth();
+}
+
+function waitForAudioMetadata(audio: HTMLAudioElement): Promise<number | null> {
+  return new Promise((resolve) => {
+    if (Number.isFinite(audio.duration) && audio.duration > 0) {
+      resolve(audio.duration);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      cleanup();
+      resolve(null);
+    }, 3000);
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      audio.removeEventListener("loadedmetadata", onLoaded);
+      audio.removeEventListener("error", onError);
+    };
+    const onLoaded = () => {
+      cleanup();
+      resolve(Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : null);
+    };
+    const onError = () => {
+      cleanup();
+      resolve(null);
+    };
+    audio.addEventListener("loadedmetadata", onLoaded, { once: true });
+    audio.addEventListener("error", onError, { once: true });
+  });
+}
 
 function playTtsAudio(base64: string): void {
+  // 停掉旧音频和嘴型
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  stopLive2dMouth();
+
+  const token = nextSpeechToken();
   const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
   const blob = new Blob([bytes], { type: "audio/mp3" });
   const url = URL.createObjectURL(blob);
-  currentAudio = new Audio(url);
-  currentAudio.onended = () => {
+  const audio = new Audio(url);
+  audio.preload = "auto";
+  audio.load();
+  currentAudio = audio;
+
+  // 重置表情，准备嘴型联动
+  window.live2dSpeech?.prepare();
+
+  audio.onended = () => {
     URL.revokeObjectURL(url);
-    currentAudio = null;
+    if (currentAudio === audio) currentAudio = null;
+    if (speechToken === token) stopLive2dMouth();
     window.call?.ttsDone();
   };
-  currentAudio.onerror = () => {
+  audio.onerror = () => {
     URL.revokeObjectURL(url);
-    currentAudio = null;
+    if (currentAudio === audio) currentAudio = null;
+    if (speechToken === token) stopLive2dMouth();
     window.call?.ttsDone();
   };
-  currentAudio.play().catch(() => {
+  audio.play().catch(() => {
+    if (speechToken === token) stopLive2dMouth();
     window.call?.ttsDone();
   });
+
+  // 等音频 metadata 获取时长，延迟后驱动嘴型
+  void (async () => {
+    const durationSec = await waitForAudioMetadata(audio);
+    if (speechToken !== token) return;
+    const durationMs = durationSec === null ? 0 : Math.max(0, durationSec * 1000 - AUDIO_MOUTH_DELAY_MS);
+    window.setTimeout(() => {
+      if (speechToken !== token) return;
+      if (durationMs > 0) window.live2dSpeech?.startMouth(durationMs);
+    }, AUDIO_MOUTH_DELAY_MS);
+  })();
 }
 
 function stopTts(): void {
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  stopLive2dMouth();
 }
 
 // ── IPC 事件监听 ──
@@ -445,6 +514,11 @@ declare global {
     };
     tts?: {
       loadSettings: () => Promise<Record<string, unknown>>;
+    };
+    live2dSpeech?: {
+      prepare: () => void;
+      startMouth: (durationMs: number) => void;
+      stopMouth: () => void;
     };
   }
 }

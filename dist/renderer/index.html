@@ -16,14 +16,45 @@
       display: block;
       width: 100%; height: 100%;
     }
-  </style>
+    /* Opener 主动开口气泡 */
+    #opener-bubble {
+      position: absolute;
+      bottom: 60%;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 280px;
+      padding: 10px 16px;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 16px;
+      font-size: 14px;
+      color: #333;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: auto;
+      cursor: pointer;
+      z-index: 10;
+    }
+    #opener-bubble.opener-bubble--show { opacity: 1; }
+    #opener-bubble::after {
+      content: "";
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 8px solid transparent;
+      border-top-color: rgba(255, 255, 255, 0.95);
+      border-bottom: 0;
+    }
+  </style>
   <!-- Cubism 4 Core (required by pixi-live2d-display/cubism4) -->
   <script src="./live2dcubismcore.min.js"></script>
-  <script type="module" crossorigin src="./assets/renderer-Dd0BLGFz.js"></script>
+  <script type="module" crossorigin src="./assets/renderer-Bt3F8cjP.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/base-Cc1qE-wh.js">
   <link rel="stylesheet" crossorigin href="./assets/base-4LTpmnF5.css">
 </head>
 <body>
-  <canvas id="live2d-canvas"></canvas>
+  <canvas id="live2d-canvas"></canvas>
+  <div id="opener-bubble" hidden></div>
 </body>
 </html>

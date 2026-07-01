@@ -4,11 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>昔涟 · 设置</title>
-  <script type="module" crossorigin src="../assets/settings-D1Q0oRfV.js"></script>
+  <script type="module" crossorigin src="../assets/settings-B_tORTew.js"></script>
   <link rel="modulepreload" crossorigin href="../assets/base-Cc1qE-wh.js">
   <link rel="modulepreload" crossorigin href="../assets/chat-ui-kPmAHPjl.js">
   <link rel="stylesheet" crossorigin href="../assets/base-4LTpmnF5.css">
-  <link rel="stylesheet" crossorigin href="../assets/settings-B5hEn9dG.css">
+  <link rel="stylesheet" crossorigin href="../assets/settings-UyFMSHl6.css">
 </head>
 <body>
   <div class="settings-shell">
@@ -73,7 +73,10 @@
           <div class="preset-row">
             <label class="field field--full">
               <span>模型预设</span>
-              <select id="preset-select"></select>
+              <div class="preset-select-row">
+                <select id="preset-select"></select>
+                <a id="preset-website-link" class="preset-website-link" href="#" target="_blank" rel="noopener noreferrer" title="前往厂商官网">↗</a>
+              </div>
             </label>
           </div>
 
@@ -1191,9 +1194,9 @@
                   <span class="tts-engine__name">MiniMax</span>
                   <span class="tts-engine__tag">云端</span>
                 </button>
-                <button type="button" class="tts-engine" data-engine="voxcpm2" role="radio" aria-checked="false">
+                <button type="button" class="tts-engine" data-engine="gptsovits" role="radio" aria-checked="false">
                   <span class="tts-engine__icon">🗣️</span>
-                  <span class="tts-engine__name">Voxcpm2</span>
+                  <span class="tts-engine__name">GPT-SoVITS</span>
                   <span class="tts-engine__tag">本地</span>
                 </button>
               </div>
@@ -1244,14 +1247,57 @@
               </div>
             </div>
 
-            <div class="tts-config" id="tts-config-voxcpm2" hidden>
-              <h2 class="tts-section__title">🗣️ Voxcpm2 配置</h2>
-              <div class="tts-field"><label>API 地址</label><input type="text" id="tts-voxcpm2-url" placeholder="http://localhost:5000" value="http://localhost:5000" /></div>
-              <div class="tts-field"><label>预设名</label><input type="text" id="tts-voxcpm2-preset" placeholder="音色预设名称（可选）" /></div>
-              <button type="button" class="ghost-btn" id="tts-voxcpm2-test">🔊 测试发音</button>
+            <div class="tts-config" id="tts-config-gptsovits" hidden>
+              <h2 class="tts-section__title">🗣️ GPT-SoVITS 配置</h2>
+              <div class="tts-field">
+                <label>API 地址 (baseUrl)</label>
+                <input type="text" id="tts-gptsovits-url" placeholder="http://localhost:9880" value="http://localhost:9880" />
+              </div>
+              <div class="tts-field">
+                <label>参考音频路径</label>
+                <input type="text" id="tts-gptsovits-ref-audio" placeholder="点击右侧选择音频文件" readonly />
+                <button type="button" class="ghost-btn tts-pick-btn" id="tts-gptsovits-ref-pick">选择</button>
+              </div>
+              <div class="tts-field">
+                <label>参考音频对应的文本</label>
+                <input type="text" id="tts-gptsovits-prompt-text" placeholder="例：你好，我是昔涟" />
+              </div>
+              <div class="tts-field">
+                <label>输出格式</label>
+                <select id="tts-gptsovits-format">
+                  <option value="wav">wav（推荐，gptsovits 默认）</option>
+                  <option value="mp3">mp3（需服务端支持）</option>
+                </select>
+              </div>
+              <button type="button" class="ghost-btn" id="tts-gptsovits-test">🔊 测试发音</button>
+              <div class="tts-clone-status" id="tts-gptsovits-test-status"></div>
             </div>
 
-            <p class="tts-hint">💡 云端引擎需在 MiniMax 控制台用昔涟配音素材训练音色，拿到音色 ID 填入上方。本地引擎需自行安装 Voxcpm2 并起 HTTP 服务。</p>
+            <p class="tts-hint">💡 云端引擎需在 MiniMax 控制台用昔涟配音素材训练音色，拿到音色 ID 填入上方。本地引擎需自行启动 GPT-SoVITS 服务（api_v2 端点），并提供参考音频与文本。baseUrl 不含路径，路径硬编码 /api/tts。</p>
+
+            <hr class="api-section-divider" />
+            <div class="tts-section">
+              <h2 class="tts-section__title">主动开口</h2>
+              <p class="tts-hint">昔涟会在你没主动聊天时，偶尔自己冒一句话关心你（基于时间/空闲/天气）。走预合成音频，0 token。</p>
+              <div class="tts-engines" role="radiogroup" aria-label="主动开口档位">
+                <button type="button" class="opener-mode is-active" data-mode="off" role="radio" aria-checked="true">
+                  <span class="tts-engine__icon">🔇</span>
+                  <span class="tts-engine__name">关闭</span>
+                </button>
+                <button type="button" class="opener-mode" data-mode="quiet" role="radio" aria-checked="false">
+                  <span class="tts-engine__icon">🌙</span>
+                  <span class="tts-engine__name">安静</span>
+                </button>
+                <button type="button" class="opener-mode" data-mode="normal" role="radio" aria-checked="false">
+                  <span class="tts-engine__icon">🌸</span>
+                  <span class="tts-engine__name">普通</span>
+                </button>
+                <button type="button" class="opener-mode" data-mode="lively" role="radio" aria-checked="false">
+                  <span class="tts-engine__icon">✨</span>
+                  <span class="tts-engine__name">活泼</span>
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 

@@ -39,6 +39,7 @@ import { registerChatsIpc } from "./chats/chats-ipc";
 import { recordUsage, getUsage, flush as flushTokenUsage } from "./token-usage-store";
 import { uploadFile as ttsUploadFile, cloneVoice as ttsCloneVoice, synthesize as ttsSynthesize } from "./tts/minimax-engine";
 import { synthesize as gptsovitsSynthesize } from "./tts/gptsovits-engine";
+import { startOpener, stopOpener, setLive2dWindow, reloadManifest, handleBubbleClick, handleChatWindowOpened } from "./opener/opener-runner";
 import { registerAgUiIpc, type AguiRunInput } from "./agui-bridge";
 import { setWeatherConfig, setSearchConfig, loadTodos, onTodosChange, setDelegateSettings } from "./orchestrator/built-in-tools";
 import { registerRecallHistoryTool } from "./orchestrator/history-tools";
@@ -1627,6 +1628,16 @@ function createWindow(): void {
 
   applyGeneralSettings(loadGeneralSettings());
 
+  // Opener 主动开口：注入桌宠窗口 + 启动 tick
+  setLive2dWindow(mainWindow);
+  reloadManifest();
+  const initOpener = () => {
+    const s = loadGeneralSettings();
+    stopOpener();
+    if (s.openerMode !== "off") startOpener(s.openerMode);
+  };
+  initOpener();
+
   // 注入天气工具配置获取器：每次工具执行时实时读 key/默认城市
   // （用户改了设置不用重启就能生效）
   setWeatherConfig(
@@ -1784,6 +1795,7 @@ function createChatWindow(sessionId?: string): void {
   if (chatWindow && !chatWindow.isDestroyed()) {
     chatWindow.show();
     chatWindow.focus();
+    handleChatWindowOpened();  // Opener 响应窗口内打开 chat = 接话
     // 窗口已存在：通过事件让渲染进程切到目标会话（不重 load）
     if (sessionId) {
       chatWindow.webContents.send(IPC.CHATS_SWITCH_SESSION, sessionId);
@@ -1829,6 +1841,7 @@ function createChatWindow(sessionId?: string): void {
 
   chatWindow.once("ready-to-show", () => {
     chatWindow?.show();
+    handleChatWindowOpened();  // Opener 响应窗口内打开 chat = 接话
   });
 
   chatWindow.on("closed", () => {
@@ -2729,11 +2742,24 @@ app.whenReady().then(async () => {
       await syncVolcanoSearchMcp(saved);
     }
 
+    // Opener 主动开口：档位变化时重启
+    if ("openerMode" in tts) {
+      stopOpener();
+      if (saved.openerMode !== "off") startOpener(saved.openerMode);
+    }
+
     // 返回不含密钥明文的副本（前端展示用）
     return saved;
   });
   ipcMain.handle(IPC.TTS_LOAD_SETTINGS, () => {
     return loadGeneralSettings();
+  });
+
+  // Opener 反馈：点气泡接话
+  ipcMain.on(IPC.OPENER_FEEDBACK, (_event, payload: { type: "clicked"; sceneId: string; itemId: string }) => {
+    if (payload?.type === "clicked") {
+      handleBubbleClick(payload.sceneId, payload.itemId);
+    }
   });
 
   // 上传音频文件 → file_id
@@ -3209,6 +3235,7 @@ app.on("window-all-closed", () => {});
 // 应用退出前把 token 用量缓存落盘（防抖未触发的最后一次写）
 app.on("before-quit", () => {
   schedulerEngine?.stop();
+  stopOpener();
   flushTokenUsage();
 });
 

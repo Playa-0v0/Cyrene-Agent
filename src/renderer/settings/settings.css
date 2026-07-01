@@ -1600,6 +1600,38 @@ body {
   color: #fff;
 }
 
+/* 预设下拉框 + 官网链接 */
+.preset-select-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.preset-select-row select {
+  flex: 1;
+  min-width: 0;
+}
+.preset-website-link {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  padding: 0;
+  border-radius: 12px;
+  color: rgba(235, 229, 245, 0.72);
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 182, 220, 0.14);
+  font-size: 16px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+.preset-website-link:hover {
+  border-color: rgba(255, 182, 220, 0.34);
+  background: rgba(255, 255, 255, 0.10);
+  color: #fff;
+}
+
 /* ============================================================
    💬 聊天面板：会话列表
    - 顶部"+新对话"按钮（铺满宽度，带 hover/active 动效）

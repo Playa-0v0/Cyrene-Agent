@@ -1003,6 +1003,11 @@ body {
   margin-left: 10px;
   font-weight: 600;
 }
+.dm-divider {
+  height: 1px;
+  margin: 4px 12px;
+  background: rgba(255, 182, 220, 0.12);
+}
 
 
 /* ── Placeholder Bubble (thinking state) ── */

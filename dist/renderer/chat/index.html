@@ -4,11 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>昔涟 · 聊天</title>
-  <script type="module" crossorigin src="../assets/chat-ColkkH0V.js"></script>
+  <script type="module" crossorigin src="../assets/chat-m85Y8wrL.js"></script>
   <link rel="modulepreload" crossorigin href="../assets/base-Cc1qE-wh.js">
   <link rel="modulepreload" crossorigin href="../assets/chat-ui-kPmAHPjl.js">
   <link rel="stylesheet" crossorigin href="../assets/base-4LTpmnF5.css">
-  <link rel="stylesheet" crossorigin href="../assets/chat-B78H3wxU.css">
+  <link rel="stylesheet" crossorigin href="../assets/chat-Kr05XmMg.css">
 </head>
 <body>
   <div class="chat">
@@ -53,6 +53,11 @@
             </span>
           </div>
           <div class="chat__titlebar-actions">
+            <div class="dropdown-trigger" data-dropdown="mode-dropdown">
+              <span class="dt-label">模式</span>
+              <span class="dt-value" id="mode-val">协作</span>
+              <span class="dt-arrow"></span>
+            </div>
             <div class="dropdown-trigger" data-dropdown="style-dropdown">
               <span class="dt-label">风格</span>
               <span class="dt-value" id="style-val">温柔 · 和善</span>
@@ -104,6 +109,10 @@
       <div class="sticker-picker__grid" id="sticker-picker-grid"></div>
     </div>
   </div>
+  <div class="dropdown-menu" id="mode-dropdown">
+    <div class="dm-opt is-active" data-value="collab">🛠️ 协作</div>
+    <div class="dm-opt" data-value="talk">💬 日常聊天</div>
+  </div>
   <div class="dropdown-menu" id="style-dropdown">
     <div class="dm-title">聊天风格</div>
     <div class="dm-opt is-active" data-value="01_default.md">🌸 温柔 · 和善</div>
