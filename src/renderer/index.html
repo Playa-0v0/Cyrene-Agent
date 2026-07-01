@@ -16,6 +16,36 @@
       display: block;
       width: 100%; height: 100%;
     }
+    /* Opener 主动开口气泡 */
+    #opener-bubble {
+      position: absolute;
+      bottom: 60%;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 280px;
+      padding: 10px 16px;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 16px;
+      font-size: 14px;
+      color: #333;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: auto;
+      cursor: pointer;
+      z-index: 10;
+    }
+    #opener-bubble.opener-bubble--show { opacity: 1; }
+    #opener-bubble::after {
+      content: "";
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 8px solid transparent;
+      border-top-color: rgba(255, 255, 255, 0.95);
+      border-bottom: 0;
+    }
   </style>
   <link rel="stylesheet" href="./ui/tokens.css" />
   <link rel="stylesheet" href="./ui/fonts.css" />
@@ -25,6 +55,7 @@
 </head>
 <body>
   <canvas id="live2d-canvas"></canvas>
+  <div id="opener-bubble" hidden></div>
   <script type="module" src="./main.ts"></script>
 </body>
 </html>

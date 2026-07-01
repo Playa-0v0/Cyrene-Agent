@@ -4,6 +4,7 @@ import { MouseFocusController } from "./live2d/focus";
 import { ExpressionResetController } from "./live2d/expression-reset";
 import { MouthSyncController } from "./live2d/mouth-sync";
 import { SpeakingMotionController } from "./live2d/speaking-motion";
+import { OpenerBubbleController } from "./live2d/opener-bubble";
 import { ClickThroughController } from "./live2d/click-through";
 
 const canvas = document.getElementById("live2d-canvas") as HTMLCanvasElement;
@@ -56,6 +57,12 @@ const manager = new Live2DManager({
     expressionReset = new ExpressionResetController(model);
     mouthSync = new MouthSyncController(model);
     speakingMotion = new SpeakingMotionController(model);
+    // Opener 主动开口气泡
+    const openerBubbleEl = document.getElementById("opener-bubble");
+    if (openerBubbleEl) {
+      const openerBubble = new OpenerBubbleController(openerBubbleEl);
+      live2dSpeechOffs.push(openerBubble.attach());
+    }
     live2dSpeechOffs = [
       window.live2dSpeech?.onPrepare(() => {
         void expressionReset?.resetNow();
