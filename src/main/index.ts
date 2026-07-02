@@ -276,6 +276,8 @@ interface GeneralSettings {
   ttsMinimaxVoiceId: string;
   /** MiniMax 合成模型：speech-2.8-hd(高保真¥3.5/万字符) | speech-2.8-turbo(极速¥2.0/万字符) */
   ttsMinimaxModel: "speech-2.8-hd" | "speech-2.8-turbo";
+  /** MiniMax 流式播放（边合成边播，首字延迟低）；false=完整合成收完再播 */
+  ttsStreaming: boolean;
   // GPT-SoVITS（本地）
   ttsGptsovitsBaseUrl: string;
   ttsGptsovitsRefAudioPath: string;
@@ -408,6 +410,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   ttsMinimaxKey: "",
   ttsMinimaxVoiceId: "",
   ttsMinimaxModel: "speech-2.8-turbo",
+  ttsStreaming: true,
   ttsGptsovitsBaseUrl: "http://localhost:9880",
   ttsGptsovitsRefAudioPath: "",
   ttsGptsovitsPromptText: "",
@@ -763,6 +766,7 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
     ttsMinimaxKey: typeof input?.ttsMinimaxKey === "string" ? input.ttsMinimaxKey : "",
     ttsMinimaxVoiceId: typeof input?.ttsMinimaxVoiceId === "string" ? input.ttsMinimaxVoiceId : "",
     ttsMinimaxModel: input?.ttsMinimaxModel === "speech-2.8-hd" ? "speech-2.8-hd" : "speech-2.8-turbo",
+    ttsStreaming: input?.ttsStreaming === undefined ? true : Boolean(input.ttsStreaming),
     weatherSource: ["open-meteo", "amap"].includes(String(input?.weatherSource))
       ? (input!.weatherSource as "open-meteo" | "amap")
       : "open-meteo",
@@ -2873,6 +2877,84 @@ app.whenReady().then(async () => {
       cacheKey,
       cached: false,
     };
+  });
+
+  // 流式语音合成（minimax WS 边合成边推 chunk 给渲染端播）
+  // 主进程同时攒完整 buffer 落盘缓存，下次同文本走缓存
+  ipcMain.handle(IPC.TTS_STREAM_START, async (event, payload: {
+    apiKey: string; voiceId: string; text: string;
+    speed?: number; volume?: number; pitch?: number;
+    model?: string; format?: "mp3" | "wav" | "pcm";
+    expectedCacheKey?: string;
+  }) => {
+    const format = payload.format ?? "mp3";
+    const sender = event.sender;
+
+    // 回听优先：expectedCacheKey 命中缓存直接发完整 base64（走 STREAM_END，不走 chunk）
+    let expectedPath: string | null = null;
+    if (payload.expectedCacheKey) {
+      try { expectedPath = getTtsCachePath(payload.expectedCacheKey, format); } catch { /* */ }
+    }
+    if (expectedPath && fs.existsSync(expectedPath)) {
+      const cachedBuf = fs.readFileSync(expectedPath);
+      appendMinimaxTtsLog({
+        requestId: `tts-stream-cache-${Date.now()}`,
+        ts: new Date().toISOString(),
+        phase: "stream.cache.hit",
+        cacheKey: payload.expectedCacheKey,
+        audioBytes: cachedBuf.length,
+      });
+      // 缓存命中：一次性发完整音频（渲染端会按 STREAM_END 处理，直接播完整 buffer）
+      sender.send(IPC.TTS_AUDIO_CHUNK, { base64: cachedBuf.toString("base64") });
+      sender.send(IPC.TTS_STREAM_END, { cacheKey: payload.expectedCacheKey, cached: true, format });
+      return { started: false, cacheKey: payload.expectedCacheKey, cached: true };
+    }
+
+    if (!payload?.apiKey || !payload?.voiceId || !payload?.text) {
+      throw new Error("流式合成缺少必要参数（apiKey/voiceId/text）");
+    }
+
+    const cacheKey = buildTtsCacheKey(payload);
+    const audioPath = getTtsCachePath(cacheKey, format);
+    fs.mkdirSync(path.dirname(audioPath), { recursive: true });
+    const fullChunks: Buffer[] = [];
+
+    // 异步合成，不 await（handler 立即返回，chunk 通过 send 推送）
+    void (async () => {
+      try {
+        const audioBuffer = await ttsSynthesize({
+          apiKey: payload.apiKey,
+          voiceId: payload.voiceId,
+          text: payload.text,
+          speed: payload.speed,
+          volume: payload.volume,
+          pitch: payload.pitch,
+          model: payload.model,
+          format,
+          debugLog: appendMinimaxTtsLog,
+          onChunk: (chunkBase64) => {
+            fullChunks.push(Buffer.from(chunkBase64, "base64"));
+            if (!sender.isDestroyed()) sender.send(IPC.TTS_AUDIO_CHUNK, { base64: chunkBase64 });
+          },
+        });
+        // 落盘缓存（用完整 buffer，不用拼接的 fullChunks——synthesize 返回的更可靠）
+        fs.writeFileSync(audioPath, audioBuffer);
+        appendMinimaxTtsLog({
+          requestId: `tts-stream-${Date.now()}`,
+          ts: new Date().toISOString(),
+          phase: "stream.cache.write",
+          cacheKey,
+          audioBytes: audioBuffer.length,
+        });
+        if (!sender.isDestroyed()) sender.send(IPC.TTS_STREAM_END, { cacheKey, cached: false, format });
+      } catch (err) {
+        if (!sender.isDestroyed()) {
+          sender.send(IPC.TTS_STREAM_ERROR, { message: err instanceof Error ? err.message : String(err) });
+        }
+      }
+    })();
+
+    return { started: true, cacheKey, cached: false };
   });
 
   // GPT-SoVITS 语音合成 → base64 音频（测试发音用，不缓存）

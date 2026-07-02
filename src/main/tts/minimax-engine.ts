@@ -160,6 +160,8 @@ export interface SynthesizeOptions {
   format?: "mp3" | "wav" | "pcm";  // 默认 mp3
   sampleRate?: number;   // 默认 32000
   debugLog?: (entry: Record<string, unknown>) => void; // 本地诊断日志（不上传）
+  /** 流式回调：每收到一段 audio chunk 就调一次（传 base64）。不传 = 完整合成模式。 */
+  onChunk?: (chunkBase64: string) => void;
 }
 
 /**
@@ -272,9 +274,14 @@ export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
 
         // 收到音频块 → hex 解码拼接。音频内容很大，只记长度，不把 hex 全量写日志。
         if (msg.data?.audio) {
-          audioChunks.push(Buffer.from(msg.data.audio, "hex"));
+          const chunkBuf = Buffer.from(msg.data.audio, "hex");
+          audioChunks.push(chunkBuf);
           audioChunkCount += 1;
           audioHexChars += msg.data.audio.length;
+          // 流式模式：每收到一块就回调（base64）
+          if (opts.onChunk) {
+            try { opts.onChunk(chunkBuf.toString("base64")); } catch { /* ignore */ }
+          }
           log({ phase: "response.audio_chunk", hexChars: msg.data.audio.length, chunkIndex: audioChunkCount });
         }
 

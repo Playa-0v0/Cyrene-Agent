@@ -3688,6 +3688,7 @@ async function loadTtsConfig(): Promise<void> {
   ttsEl("tts-minimax-voice").value = String(ttsConfig.ttsMinimaxVoiceId ?? "");
   (ttsEl("tts-minimax-model") as HTMLSelectElement).value =
     ttsConfig.ttsMinimaxModel === "speech-2.8-hd" ? "speech-2.8-hd" : "speech-2.8-turbo";
+  ttsEl("tts-streaming").checked = ttsConfig.ttsStreaming !== false;
 
   // GPT-SoVITS
   ttsEl("tts-gptsovits-url").value = String(ttsConfig.ttsGptsovitsBaseUrl ?? "http://localhost:9880");
@@ -3812,6 +3813,11 @@ for (const [elId, field] of ttsSaveFields) {
 // GPT-SoVITS 格式选择（select，change 时直接保存）
 (ttsEl("tts-gptsovits-format") as HTMLSelectElement).addEventListener("change", () => {
   void saveTtsField("ttsGptsovitsFormat", (ttsEl("tts-gptsovits-format") as HTMLSelectElement).value as "wav" | "mp3");
+});
+
+// MiniMax 流式播放开关
+ttsEl("tts-streaming").addEventListener("change", () => {
+  void saveTtsField("ttsStreaming", ttsEl("tts-streaming").checked);
 });
 
 // GPT-SoVITS 选择参考音频

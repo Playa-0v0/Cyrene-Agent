@@ -995,6 +995,8 @@ interface TtsSettings {
   ttsGptsovitsRefAudioPath: string;
   ttsGptsovitsPromptText: string;
   ttsGptsovitsFormat: "wav" | "mp3";
+  // MiniMax 流式播放
+  ttsStreaming: boolean;
 }
 
 interface TtsApi {
@@ -1013,6 +1015,16 @@ interface TtsApi {
     speed?: number; format?: "wav" | "mp3";
     expectedCacheKey?: string;
   }) => Promise<{ base64: string; cacheKey: string; cached: boolean; format: "wav" | "mp3" }>;
+  // 流式合成（minimax，边推 chunk 边播）
+  streamStart: (payload: {
+    apiKey: string; voiceId: string; text: string;
+    speed?: number; volume?: number; pitch?: number;
+    model?: string; format?: "mp3" | "wav" | "pcm";
+    expectedCacheKey?: string;
+  }) => Promise<{ started: boolean; cacheKey: string; cached: boolean }>;
+  onAudioChunk: (callback: (payload: { base64: string }) => void) => () => void;
+  onStreamEnd: (callback: (payload: { cacheKey: string; cached: boolean; format: "mp3" | "wav" | "pcm" }) => void) => () => void;
+  onStreamError: (callback: (payload: { message: string }) => void) => () => void;
   loadSettings: () => Promise<Record<string, unknown>>;
 }
 
@@ -1075,6 +1087,7 @@ async function loadTtsSettings(): Promise<TtsSettings | null> {
       ttsGptsovitsRefAudioPath: String(raw.ttsGptsovitsRefAudioPath ?? ""),
       ttsGptsovitsPromptText: String(raw.ttsGptsovitsPromptText ?? ""),
       ttsGptsovitsFormat: raw.ttsGptsovitsFormat === "mp3" ? "mp3" : "wav",
+      ttsStreaming: raw.ttsStreaming !== false,
     };
   } catch {
     return null;
@@ -1150,6 +1163,142 @@ function playTtsBase64(base64: string, format: "wav" | "mp3" = "mp3"): void {
   })();
 }
 
+/**
+ * 流式播放 MiniMax TTS（MediaSource + SourceBuffer 边收边播）。
+ * 返回 cacheKey（供回写消息）。失败时 fallback 到完整合成。
+ */
+async function streamAndPlayCached(
+  settings: TtsSettings,
+  text: string,
+  existing?: { ttsCacheKey?: string },
+): Promise<{ cacheKey: string } | null> {
+  if (!window.tts) return null;
+
+  const token = nextSpeechToken();
+  let mediaSource: MediaSource | null = null;
+  let sourceBuffer: SourceBuffer | null = null;
+  let audioEl: HTMLAudioElement | null = null;
+  const chunkQueue: Uint8Array[] = [];
+  let ended = false;
+  let resolvedCacheKey: string | null = null;
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let offChunk: (() => void) | null = null;
+  let offEnd: (() => void) | null = null;
+  let offErr: (() => void) | null = null;
+  let done = false;
+
+  const cleanup = () => {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    offChunk?.(); offEnd?.(); offErr?.();
+    offChunk = offEnd = offErr = null;
+  };
+
+  // 轮询 flush：每 30ms 检查一次，能 append 就 append，结束且队列空就 endOfStream + resolve
+  const startPolling = (resolve: (v: { cacheKey: string } | null) => void) => {
+    pollTimer = setInterval(() => {
+      if (speechToken !== token) {
+        cleanup();
+        try { mediaSource?.endOfStream(); } catch { /* */ }
+        resolve(null);
+        return;
+      }
+      if (sourceBuffer && !sourceBuffer.updating && chunkQueue.length > 0) {
+        const chunk = chunkQueue.shift()!;
+        try {
+          sourceBuffer.appendBuffer(chunk);
+        } catch {
+          // 队列满或冲突，放回下次
+          chunkQueue.unshift(chunk);
+        }
+      }
+      // 结束且队列空 → endOfStream
+      if (ended && chunkQueue.length === 0 && sourceBuffer && !sourceBuffer.updating && !done) {
+        done = true;
+        try { mediaSource?.endOfStream(); } catch { /* */ }
+        cleanup();
+        resolve(resolvedCacheKey ? { cacheKey: resolvedCacheKey } : null);
+      }
+    }, 30);
+  };
+
+  try {
+    // 启动流式合成
+    await window.tts.streamStart({
+      apiKey: settings.ttsMinimaxKey,
+      voiceId: settings.ttsMinimaxVoiceId,
+      text,
+      speed: settings.ttsSpeed,
+      volume: settings.ttsVolume,
+      model: settings.ttsMinimaxModel,
+      format: "mp3",
+      expectedCacheKey: existing?.ttsCacheKey,
+    });
+
+    // 注册监听（只注册一次）
+    offChunk = window.tts.onAudioChunk((payload) => {
+      if (speechToken !== token) return;
+      const bytes = Uint8Array.from(atob(payload.base64), (c) => c.charCodeAt(0));
+      chunkQueue.push(bytes);
+    });
+    offEnd = window.tts.onStreamEnd((payload) => {
+      ended = true;
+      resolvedCacheKey = payload.cacheKey;
+    });
+    offErr = window.tts.onStreamError((payload) => {
+      console.warn("[TTS] 流式错误:", payload.message);
+      ended = true;  // 当作结束，让轮询 resolve
+      cleanup();
+      try { mediaSource?.endOfStream(); } catch { /* */ }
+    });
+
+    // 设置 MediaSource + Audio
+    mediaSource = new MediaSource();
+    const url = URL.createObjectURL(mediaSource);
+    audioEl = new Audio(url);
+    currentTtsAudio = audioEl;
+
+    stopLive2dMouth();
+    window.live2dSpeech?.prepare();
+
+    audioEl.onended = () => {
+      URL.revokeObjectURL(url);
+      if (currentTtsAudio === audioEl) currentTtsAudio = null;
+      if (speechToken === token) stopLive2dMouth();
+    };
+
+    mediaSource.addEventListener("sourceopen", () => {
+      try {
+        sourceBuffer = mediaSource!.addSourceBuffer("audio/mpeg");
+        sourceBuffer.mode = "sequence";
+        void audioEl!.play().then(() => {
+          if (speechToken !== token) return;
+          // 嘴动 + 荡秋千（用文本字数粗估时长）
+          const estDurationMs = Math.max(2000, Array.from(text).length * 180);
+          window.live2dSpeech?.startMouth(estDurationMs);
+        }).catch((err) => console.warn("[TTS] 流式播放失败:", err));
+      } catch (err) {
+        console.warn("[TTS] SourceBuffer 创建失败:", err);
+      }
+    });
+
+    // 超时兜底（30s）
+    setTimeout(() => {
+      if (!done) {
+        ended = true;
+      }
+    }, 30000);
+
+    // 等 STREAM_END + 队列 flush 完
+    return await new Promise<{ cacheKey: string } | null>((resolve) => {
+      startPolling(resolve);
+    });
+  } catch (err) {
+    console.warn("[TTS] 流式启动失败:", err);
+    cleanup();
+    return null;  // 调用方 fallback 到完整合成
+  }
+}
+
 async function synthesizeAndPlayCached(
   text: string,
   existing?: { ttsCacheKey?: string },
@@ -1208,6 +1357,12 @@ async function synthesizeAndPlayCached(
     if (!settings.ttsMinimaxKey || !settings.ttsMinimaxVoiceId) {
       console.warn("[TTS] 缺少 apiKey 或 voiceId，无法合成新音频");
       return null;
+    }
+    // 流式优先（默认开）：边合成边播，首字延迟低；失败 fallback 完整合成
+    if (settings.ttsStreaming) {
+      const stream = await streamAndPlayCached(settings, text, existing);
+      if (stream) return stream;
+      console.warn("[TTS] 流式失败，fallback 完整合成");
     }
     try {
       const result = await window.tts.synthesizeCached({

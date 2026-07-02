@@ -173,6 +173,11 @@ export const IPC = {
   TTS_CLONE: "tts:clone",           // 音色快速复刻 → voice_id
   TTS_SYNTHESIZE: "tts:synthesize", // 语音合成 → audio buffer(base64)
   TTS_SYNTHESIZE_CACHED: "tts:synthesize-cached", // 语音合成 + 本地音频缓存
+  // 流式语音合成（边合成边播，首字延迟低）
+  TTS_STREAM_START: "tts:stream-start",           // 渲染端 → main：启动流式合成
+  TTS_AUDIO_CHUNK: "tts:audio-chunk",             // main → 渲染端：推一段音频 base64
+  TTS_STREAM_END: "tts:stream-end",               // main → 渲染端：流式结束（含 cacheKey）
+  TTS_STREAM_ERROR: "tts:stream-error",           // main → 渲染端：流式错误
   TTS_SAVE_SETTINGS: "tts:save-settings",   // 保存 TTS 配置
   TTS_LOAD_SETTINGS: "tts:load-settings",   // 加载 TTS 配置
   TTS_PICK_AUDIO: "tts:pick-audio",         // 选择音频文件（dialog）
