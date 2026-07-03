@@ -200,11 +200,14 @@ export class ChannelDispatcher {
     const parts: OutgoingPart[] = [{ kind: "text", text: replyText }];
 
     // Phase 3：TTS 音频自动追加（如果启用且适配器支持 audio）
+    console.log(LOG, `TTS 决策: ttsEnabled=${this.settings.ttsEnabled} hasFn=${!!this.deps.synthesizeTts}`);
     if (this.settings.ttsEnabled && this.deps.synthesizeTts) {
       const adapterCap = this.deps.manager.getAdapter(msg.channel)?.capability;
+      console.log(LOG, `TTS 决策: adapterCap.audio=${adapterCap?.audio}`);
       if (adapterCap?.audio) {
         try {
           const audioBuf = await this.deps.synthesizeTts(replyText);
+          console.log(LOG, `TTS 决策: 合成结果 length=${audioBuf?.length ?? "null"}`);
           if (audioBuf && audioBuf.length > 0) {
             // 写到 userData/channels/audio/<messageId>.mp3 缓存
             const audioDir = path.join(app.getPath("userData"), "channels", "audio");
