@@ -46,7 +46,7 @@
     "gray-matter": "^4.0.3",
     "js-yaml": "^5.0.0",
     "llamaindex": "^0.12.1",
-    "music-metadata": "^11.13.0",
+    "music-metadata": "^7.14.0",
     "nodejieba": "^3.5.8",
     "nodemailer": "^9.0.1",
     "pdfkit": "^0.19.1",
