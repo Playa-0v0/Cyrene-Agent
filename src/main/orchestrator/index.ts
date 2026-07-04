@@ -1,7 +1,7 @@
 // Orchestrator — unified entry point
 // Function Calling 模式下，Orchestrator 只负责构建 always-on 上下文（世界书 + L0/L1）
 // 工具的选择和执行由 function-calling.ts 的 runFunctionCallingLoop 处理
-import { updateWorldbookActivation, getPermanentWorldbookEntries, getActiveWorldbookEntries, searchMemory } from "../rag";
+import { updateWorldbookActivation, getPermanentWorldbookEntries, getActiveWorldbookEntries, getCascadeWorldbookEntries, searchMemory } from "../rag";
 import { memoryStore } from "../memory/memory-store";
 import { entityGraph } from "../memory/entity-graph";
 import { toolRegistry } from "./tool-registry";
@@ -89,8 +89,18 @@ export async function buildAlwaysOnContext(
       .slice(-1)[0]?.content ?? "";
     updateWorldbookActivation(userInput, lastAssistant);  // 打分（本轮用户 + 上轮模型）
     const active = getActiveWorldbookEntries();           // 阈值门控 + 注入
-    if (active.length > 0) {
-      parts.push("【已激活的世界知识】\n以下内容已由当前用户消息触发，视为真实且已知。回复时请自然使用这些信息，不要说「不知道」、「第一次听说」或要求用户介绍，除非内容本身存在矛盾。\n\n" + active.join("\n\n"));
+    // One-Shot cascade：用户命中后连带触发的条目（不入 DMAE 状态表，只本轮有效）
+    const cascade = getCascadeWorldbookEntries();
+    const allInjected = active.length > 0 || cascade.length > 0;
+    if (allInjected) {
+      const sections: string[] = [];
+      if (active.length > 0) {
+        sections.push(active.join("\n\n"));
+      }
+      if (cascade.length > 0) {
+        sections.push(cascade.join("\n\n"));
+      }
+      parts.push("【已激活的世界知识】\n以下内容已由当前用户消息触发，视为真实且已知。回复时请自然使用这些信息，不要说「不知道」、「第一次听说」或要求用户介绍，除非内容本身存在矛盾。\n\n" + sections.join("\n\n"));
     }
   } catch (err) {
     console.warn("[Orchestrator] worldbook dmae failed:", err);

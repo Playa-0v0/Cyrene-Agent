@@ -52,6 +52,7 @@ export function parseFixtureMarkdown(content: string, fileName: string): Worldbo
       permanent,
       enabled: true,
       intrinsicValue,
+      linkTriggers: [],
     });
   }
 

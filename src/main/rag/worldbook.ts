@@ -10,6 +10,7 @@ export interface WorldbookEntry {
   permanent: boolean;        // 常驻：始终注入 Prompt，不进 DMAE
   enabled: boolean;
   intrinsicValue: number;    // ★ 长期价值基准（固定）；v3.4 参与 Floor（首次激活基线）和 Resistance（遗忘抵抗），不参与 Reward
+  linkTriggers: string[];    // 连带触发词（One-Shot 一次性）：本条目被用户命中时，连带触发这些关键词对应的条目；[] 表示无
 }
 
 // ── DMAE runtime state (per entry, keyed by entry.id) ──
@@ -44,8 +45,8 @@ export const DEFAULT_DMAE_PARAMS: DmaeParams = {
   wakeK: 8,
   efficiencyFloor: 0.05,
   rewardGain: 5,
-  decayAlpha: 1.0,
-  decayBeta: 0.3,
+  decayAlpha: 5.0,    // 用户目标：I=60 顶多 6 轮归零；高 I 自然多赖 1-2 轮
+  decayBeta: 0.5,
 };
 
 // ── 策略接口（v3.4 框架固化，以后不再改）──
@@ -121,6 +122,8 @@ export class WorldbookManager {
   private entries: WorldbookEntry[] = [];
   private worldbookDir: string;
   private state = new Map<string, EntryState>();
+  // ── One-Shot cascade：本轮用户命中后连带触发的条目（不入 DMAE 状态表，只本轮有效）──
+  private lastCascadeEntries: WorldbookEntry[] = [];
   private params: DmaeParams;
   private rewardStrategy: RewardStrategy;
   private decayStrategy: DecayStrategy;
@@ -227,6 +230,7 @@ export class WorldbookManager {
       let priority = 5;
       let permanent = false;
       let intrinsicValue = WorldbookManager.DEFAULT_INTRINSIC_VALUE;
+      let linkTriggers: string[] = [];
       let contentStart = i;
 
       while (i < lines.length) {
@@ -253,6 +257,15 @@ export class WorldbookManager {
           const val = metaLine.replace(/^-\s*(初始分|initial_score|内在价值|intrinsic_value)[：:]/, "").trim();
           const parsed = parseFloat(val);
           intrinsicValue = Number.isFinite(parsed) ? parsed : WorldbookManager.DEFAULT_INTRINSIC_VALUE;
+          i++;
+        } else if (metaLine.startsWith("- 连带触发词:") || metaLine.startsWith("- 连带触发词：") ||
+                   metaLine.startsWith("- 连带触发:") || metaLine.startsWith("- 连带触发：") ||
+                   metaLine.startsWith("- link_triggers:") || metaLine.startsWith("- link_triggers：")) {
+          const val = metaLine.replace(/^-\s*(连带触发词|连带触发|link_triggers)[：:]/, "").trim();
+          // "无" / "无" / "" 表示不连带
+          if (val && val !== "无" && val !== "无" && val !== "none" && val !== "-") {
+            linkTriggers = val.split(/[,，、]/).map((k) => k.trim()).filter(Boolean);
+          }
           i++;
         } else if (metaLine.startsWith("---")) {
           // Separator line — stop metadata parsing
@@ -291,6 +304,7 @@ export class WorldbookManager {
           permanent,
           enabled: true,
           intrinsicValue,
+          linkTriggers,
         });
       }
       // suppress unused-var lint for contentStart (kept for parity with original structure)
@@ -315,6 +329,16 @@ export class WorldbookManager {
     const params = this.params;
     const max = params.maxScore;
     const changed: Array<{ id: string; aOld: number; aNew: number; reason: string }> = [];
+
+    // ── 第一遍：收集本轮所有 userHit 条目 id（cascade 通道用，DMAE 主循环也要）──
+    const userHitEntryIds = new Set<string>();
+    for (const entry of this.entries) {
+      if (!entry.enabled || entry.permanent) continue;
+      if (entry.keywords.length === 0) continue;
+      if (entry.keywords.some((kw) => user.includes(kw))) {
+        userHitEntryIds.add(entry.id);
+      }
+    }
 
     for (const entry of this.entries) {
       if (!entry.enabled || entry.permanent) continue;
@@ -379,6 +403,45 @@ export class WorldbookManager {
         console.log(`  ${c.id}: ${c.aOld.toFixed(1)} → ${c.aNew.toFixed(1)}  (${c.reason})`);
       }
     }
+
+    // ── One-Shot 联动触发（不入 DMAE 状态表，只本轮有效）──
+    // 规则：只有 userHit 的条目才有连带触发权；cascade 目标不再级联（1 层封顶）。
+    // 防死循环 3 条硬约束：
+    //   1. 1 层封顶：cascade 只从 userHit 触发，cascade 目标不会再 cascade
+    //   2. userHit 拦截：cascade 目标已在 userHit 列表则跳过（已被主动激活）
+    //   3. cascade 集合去重：同条目本轮只 cascade 一次
+    this.lastCascadeEntries = [];
+    const cascadeInjected = new Set<string>();
+    for (const entry of this.entries) {
+      if (!userHitEntryIds.has(entry.id)) continue;
+      if (entry.linkTriggers.length === 0) continue;
+      if (entry.permanent || !entry.enabled) continue;
+
+      // 找 linkTriggers 对应的子条目（关键词命中）
+      const targets = this.entries.filter(e =>
+        e.enabled && !e.permanent &&
+        e.keywords.some(kw => entry.linkTriggers.includes(kw))
+      );
+
+      for (const target of targets) {
+        // 硬约束 2：跳过 userHit
+        if (userHitEntryIds.has(target.id)) continue;
+        // 硬约束 3：cascade 去重
+        if (cascadeInjected.has(target.id)) continue;
+
+        cascadeInjected.add(target.id);
+        this.lastCascadeEntries.push(target);
+      }
+    }
+
+    if (this.debug && this.lastCascadeEntries.length > 0) {
+      console.log(`[Worldbook/Cascade] ${this.lastCascadeEntries.length} entries one-shot injected: ${this.lastCascadeEntries.map(e => e.id).join(", ")}`);
+    }
+  }
+
+  // 取本轮 One-Shot cascade 触发的条目（仅供 orchestrator 注入用，不进 DMAE 状态表）
+  getCascadeEntries(): WorldbookEntry[] {
+    return [...this.lastCascadeEntries];
   }
 
   // ── 业务层：阈值门控 + 注入 ──

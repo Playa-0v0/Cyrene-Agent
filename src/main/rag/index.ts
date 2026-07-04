@@ -138,6 +138,16 @@ export function getActiveWorldbookEntries(): string[] {
   return worldbook.getActiveEntries();
 }
 
+// ── Worldbook One-Shot：取本轮 cascade 触发的条目（不入 DMAE 状态表）──
+// 返回带条目标题的完整内容（与 getActiveWorldbookEntries 一致格式，便于合并注入）
+export function getCascadeWorldbookEntries(): string[] {
+  if (!worldbook) return [];
+  return worldbook.getCascadeEntries().map(e => {
+    const title = e.id.replace(/^wb_[^_]+_/, "").replace(/_/g, " ");
+    return `【${title}】\n${e.content}`;
+  });
+}
+
 // ── Get permanent worldbook entries ──
 export function getPermanentWorldbookEntries(): string[] {
   if (!worldbook) return [];
