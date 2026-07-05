@@ -61,7 +61,7 @@ export interface ReflectionLog {
 export interface ConflictLog {
   id: string
   createdAt: number
-  status: "pending" | "confirmed" | "dismissed"
+  status: "candidate" | "pending" | "confirmed" | "dismissed"
   sourceL2Id: string
   targetL2Id: string
   sourceRagId?: string

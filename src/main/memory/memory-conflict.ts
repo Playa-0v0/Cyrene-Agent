@@ -1,5 +1,5 @@
-export interface ConflictVerdict {
-  isConflict: boolean
+export interface PossibleConflictCandidate {
+  isCandidate: boolean
   reason?: string
   confidence: number
 }
@@ -77,9 +77,9 @@ function hasSharedTopic(textA: string, textB: string): boolean {
   return false
 }
 
-export function judgeLocalMemoryConflict(newContent: string, existingContent: string): ConflictVerdict {
+export function findPossibleConflictCandidate(newContent: string, existingContent: string): PossibleConflictCandidate {
   if (!hasSharedTopic(newContent, existingContent)) {
-    return { isConflict: false, confidence: 0 }
+    return { isCandidate: false, confidence: 0 }
   }
 
   const a = normalize(newContent)
@@ -91,12 +91,12 @@ export function judgeLocalMemoryConflict(newContent: string, existingContent: st
     const bHasNeg = negatives.some((n) => b.includes(n))
     if ((aHasPos && bHasNeg) || (bHasPos && aHasNeg)) {
       return {
-        isConflict: true,
-        reason: `shared topic with contradiction: ${positive}`,
-        confidence: 0.75,
+        isCandidate: true,
+        reason: `possible shared-topic lexical contradiction: ${positive}`,
+        confidence: 0.35,
       }
     }
   }
 
-  return { isConflict: false, confidence: 0 }
+  return { isCandidate: false, confidence: 0 }
 }

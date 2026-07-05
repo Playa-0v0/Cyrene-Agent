@@ -1,7 +1,7 @@
 import { memoryStore } from "./memory-store"
 import type { L0WritableField } from "./memory-store"
 import { MemoryCandidate, L0_FIELD_DESCRIPTIONS, L2Memory } from "./memory-types"
-import { judgeLocalMemoryConflict } from "./memory-conflict"
+import { findPossibleConflictCandidate } from "./memory-conflict"
 import { addMemory, searchMemory } from "../rag/index"
 
 type L1Field = "recentGoals" | "recentPreferences"
@@ -114,22 +114,22 @@ export class MemoryManager {
       const isSimilar = similarTexts.some((st) => st === existing.content || existing.content.includes(st.slice(0, 20)))
       if (!isSimilar) continue
 
-      const verdict = judgeLocalMemoryConflict(content, existing.content)
-      if (verdict.isConflict) {
-        // 检测到矛盾：在现有条目上标记
+      const candidate = findPossibleConflictCandidate(content, existing.content)
+      if (candidate.isCandidate) {
+        // 本地规则只产出疑似候选，不确认冲突真伪。
         const marked = await memoryStore.markL2Conflict(existing.id, newRagId)
         if (marked) {
           await memoryStore.appendConflictLog({
-            status: "pending",
+            status: "candidate",
             sourceL2Id: newL2Id,
             targetL2Id: existing.id,
             sourceRagId: newRagId,
             targetRagId: existing.ragId,
-            reason: verdict.reason ?? "local keyword contradiction",
-            confidence: verdict.confidence,
+            reason: candidate.reason ?? "possible local lexical contradiction",
+            confidence: candidate.confidence,
             detector: "local",
           })
-          console.log(`[MemoryManager] ⚠️ 检测到记忆冲突: "${preview(existing.content, 30)}" ↔ "${preview(content, 30)}"`)
+          console.log(`[MemoryManager] ⚠️ 发现疑似记忆冲突候选: "${preview(existing.content, 30)}" ↔ "${preview(content, 30)}"`)
         }
       }
     }

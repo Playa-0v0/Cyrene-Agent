@@ -100,7 +100,7 @@ describe("MemoryManager L2 sync", () => {
     expect(traceEvents[failureIndex].error).toBe("RAG down")
   })
 
-  it("writes pending conflict logs separately when local conflict detection matches", async () => {
+  it("writes candidate conflict logs separately when local candidate detection matches", async () => {
     ragMock.addMemory.mockResolvedValue("rag_new")
     ragMock.searchMemory.mockResolvedValue(["用户喜欢香菇"])
     const { memoryManager } = await import("./memory-manager")
@@ -126,7 +126,7 @@ describe("MemoryManager L2 sync", () => {
 
     expect(conflictLogs).toHaveLength(1)
     expect(conflictLogs[0]).toMatchObject({
-      status: "pending",
+      status: "candidate",
       sourceRagId: "rag_new",
       targetRagId: "rag_existing",
       targetL2Id: existing.id,

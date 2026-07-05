@@ -160,7 +160,7 @@ describe("memoryStore", () => {
     const { memoryStore } = await import("./memory-store")
     for (let i = 0; i < 101; i++) {
       await memoryStore.appendConflictLog({
-        status: "pending",
+        status: "candidate",
         sourceL2Id: `source_${i}`,
         targetL2Id: `target_${i}`,
         sourceRagId: `rag_source_${i}`,
