@@ -64,9 +64,11 @@ export interface MemoryCandidate {
 }
 
 export interface MemoryStore {
+  schemaVersion: number
   l0: L0Profile
   l1: L1Profile
   l2: L2Memory[]
   reflectionLogs?: ReflectionLog[]
+  /** @deprecated Use schemaVersion for memory.json migrations. */
   version: number
 }

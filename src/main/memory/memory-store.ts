@@ -2,6 +2,9 @@ import * as fs from "fs"
 import * as path from "path"
 import { app } from "electron"
 import { L0Profile, L1Profile, L2Memory, MemoryStore, ReflectionLog } from "./memory-types"
+import { appendMemoryTrace } from "./memory-trace"
+
+const CURRENT_SCHEMA_VERSION = 2
 
 const DEFAULT_L0: L0Profile = {
   nickname: "",
@@ -23,6 +26,7 @@ const DEFAULT_L1: L1Profile = {
 }
 
 const DEFAULT_STORE: MemoryStore = {
+  schemaVersion: CURRENT_SCHEMA_VERSION,
   l0: { ...DEFAULT_L0 },
   l1: { ...DEFAULT_L1 },
   l2: [],
@@ -32,6 +36,35 @@ const DEFAULT_STORE: MemoryStore = {
 
 function getMemoryPath(): string {
   return path.join(app.getPath("userData"), "memory.json")
+}
+
+function cloneDefaultStore(): MemoryStore {
+  return {
+    ...DEFAULT_STORE,
+    l0: { ...DEFAULT_L0 },
+    l1: { ...DEFAULT_L1 },
+    l2: [],
+    reflectionLogs: [],
+  }
+}
+
+function backupMemoryFile(filePath: string): void {
+  if (!fs.existsSync(filePath)) return
+  const dir = path.dirname(filePath)
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
+  const backupPath = path.join(dir, `memory.backup.${timestamp}.json`)
+  fs.copyFileSync(filePath, backupPath)
+}
+
+export function repairMigrations(store: Partial<MemoryStore>): MemoryStore {
+  return {
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    l0: { ...DEFAULT_L0, ...store.l0 },
+    l1: { ...DEFAULT_L1, ...store.l1 },
+    l2: Array.isArray(store.l2) ? store.l2 : [],
+    reflectionLogs: Array.isArray(store.reflectionLogs) ? store.reflectionLogs : [],
+    version: typeof store.version === "number" ? store.version : 1,
+  }
 }
 
 class MemoryStoreManager {
@@ -44,20 +77,42 @@ class MemoryStoreManager {
       if (fs.existsSync(filePath)) {
         const raw = fs.readFileSync(filePath, "utf8")
         const parsed = JSON.parse(raw) as Partial<MemoryStore>
-        this.cache = {
-          l0: { ...DEFAULT_L0, ...parsed.l0 },
-          l1: { ...DEFAULT_L1, ...parsed.l1 },
-          l2: Array.isArray(parsed.l2) ? parsed.l2 : [],
-          reflectionLogs: Array.isArray(parsed.reflectionLogs) ? parsed.reflectionLogs : [],
-          version: typeof parsed.version === "number" ? parsed.version : 1,
+        const needsMigration = parsed.schemaVersion !== CURRENT_SCHEMA_VERSION
+        this.cache = repairMigrations(parsed)
+        if (needsMigration) {
+          backupMemoryFile(filePath)
+          await this.save(this.cache)
+          appendMemoryTrace({
+            op: "migration.upgrade",
+            layer: "migration",
+            status: "ok",
+            details: { schemaVersion: CURRENT_SCHEMA_VERSION },
+          })
         }
       } else {
-        this.cache = { ...DEFAULT_STORE, l0: { ...DEFAULT_L0 }, l1: { ...DEFAULT_L1 } }
+        this.cache = cloneDefaultStore()
         await this.save(this.cache)
+        appendMemoryTrace({
+          op: "store.init",
+          layer: "store",
+          status: "ok",
+          details: { schemaVersion: CURRENT_SCHEMA_VERSION },
+        })
       }
-    } catch {
-      this.cache = { ...DEFAULT_STORE, l0: { ...DEFAULT_L0 }, l1: { ...DEFAULT_L1 } }
+    } catch (err) {
+      try {
+        backupMemoryFile(filePath)
+      } catch {
+        // 如果连备份也失败，仍然生成干净默认文件，避免主流程被记忆文件阻塞。
+      }
+      this.cache = cloneDefaultStore()
       await this.save(this.cache)
+      appendMemoryTrace({
+        op: "migration.recoverDefault",
+        layer: "migration",
+        status: "error",
+        error: err instanceof Error ? err.message : String(err),
+      })
     }
     return this.cache
   }
@@ -79,6 +134,12 @@ class MemoryStoreManager {
     const store = await this.load()
     store.l0 = { ...store.l0, ...patch, updatedAt: Date.now() }
     await this.save(store)
+    appendMemoryTrace({
+      op: "l0.update",
+      layer: "L0",
+      status: "ok",
+      details: { fields: Object.keys(patch) },
+    })
   }
 
   async getL1(): Promise<L1Profile> {
@@ -90,6 +151,12 @@ class MemoryStoreManager {
     const store = await this.load()
     store.l1 = { ...store.l1, ...patch }
     await this.save(store)
+    appendMemoryTrace({
+      op: "l1.update",
+      layer: "L1",
+      status: "ok",
+      details: { fields: Object.keys(patch) },
+    })
   }
 
   async addL2(input: Omit<L2Memory, "id" | "createdAt" | "lastAccessedAt" | "accessCount" | "weight" | "status">): Promise<L2Memory> {
@@ -105,6 +172,14 @@ class MemoryStoreManager {
     }
     store.l2.push(memory)
     await this.save(store)
+    appendMemoryTrace({
+      op: "l2.add",
+      layer: "L2",
+      status: "ok",
+      l2Id: memory.id,
+      ragId: memory.ragId,
+      details: { isSummary: memory.isSummary === true },
+    })
     return memory
   }
 
@@ -127,6 +202,14 @@ class MemoryStoreManager {
       mem.status = "archived"
     }
     await this.save(store)
+    appendMemoryTrace({
+      op: "l2.weight.update",
+      layer: "L2",
+      status: "ok",
+      l2Id: mem.id,
+      ragId: mem.ragId,
+      details: { delta, weight: mem.weight, accessCount: mem.accessCount, memoryStatus: mem.status },
+    })
   }
 
   async pinL2(id: string, pinned: boolean): Promise<void> {
@@ -146,12 +229,26 @@ class MemoryStoreManager {
       mem.status = "archived"
     }
     await this.save(store)
+    appendMemoryTrace({
+      op: "l2.pin",
+      layer: "L2",
+      status: "ok",
+      l2Id: mem.id,
+      ragId: mem.ragId,
+      details: { pinned, memoryStatus: mem.status },
+    })
   }
 
   async deleteL2(id: string): Promise<void> {
     const store = await this.load()
     store.l2 = store.l2.filter((m) => m.id !== id)
     await this.save(store)
+    appendMemoryTrace({
+      op: "l2.delete",
+      layer: "L2",
+      status: "ok",
+      l2Id: id,
+    })
   }
 
   async markL2Conflict(id: string, conflictRagId: string): Promise<L2Memory | null> {
@@ -167,6 +264,14 @@ class MemoryStoreManager {
     }
 
     await this.save(store)
+    appendMemoryTrace({
+      op: "l2.conflict.mark",
+      layer: "L2",
+      status: "ok",
+      l2Id: mem.id,
+      ragId: mem.ragId,
+      details: { conflictRagId, memoryStatus: mem.status },
+    })
     return mem
   }
 
@@ -189,6 +294,12 @@ class MemoryStoreManager {
       store.reflectionLogs = store.reflectionLogs.slice(-50)
     }
     await this.save(store)
+    appendMemoryTrace({
+      op: "reflection.log.add",
+      layer: "reflection",
+      status: "ok",
+      details: { type: entry.type, id: entry.id },
+    })
   }
 
   async getReflectionLogs(): Promise<ReflectionLog[]> {
@@ -205,6 +316,12 @@ class MemoryStoreManager {
       }
     }
     await this.save(store)
+    appendMemoryTrace({
+      op: "l2.status.batch",
+      layer: "L2",
+      status: "ok",
+      details: { ids, memoryStatus: status },
+    })
   }
 
   async decayL2Weights(delta = 1): Promise<number> {
@@ -228,6 +345,12 @@ class MemoryStoreManager {
     if (changed > 0) {
       await this.save(store)
     }
+    appendMemoryTrace({
+      op: "l2.decay",
+      layer: "L2",
+      status: changed > 0 ? "ok" : "skip",
+      details: { delta, changed },
+    })
     return changed
   }
 
@@ -249,6 +372,12 @@ class MemoryStoreManager {
       results.push(memory)
     }
     await this.save(store)
+    appendMemoryTrace({
+      op: "l2.add.batch",
+      layer: "L2",
+      status: "ok",
+      details: { ids: results.map((item) => item.id), count: results.length },
+    })
     return results
   }
 }

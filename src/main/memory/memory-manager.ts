@@ -137,17 +137,16 @@ export class MemoryManager {
         // 检测到矛盾：在现有条目上标记
         const marked = await memoryStore.markL2Conflict(existing.id, newRagId)
         if (marked) {
-          await memoryStore.addReflectionLog({
-            type: "conflict_detected",
-            summary: "检测到记忆冲突",
-            details: `${existing.id} 与 ${newRagId}: "${preview(existing.content, 80)}" ↔ "${preview(content, 80)}"`,
-          })
           console.log(`[MemoryManager] ⚠️ 检测到记忆冲突: "${preview(existing.content, 30)}" ↔ "${preview(content, 30)}"`)
         }
       }
     }
   }
 
+  /**
+   * 手动触发的 L2 权重衰减。当前尚未挂载到生产调度；
+   * 后续会由 memory-scheduler 统一决定触发策略。
+   */
   async runDecay(): Promise<void> {
     const changed = await memoryStore.decayL2Weights()
     console.log(`[MemoryManager] L2 权重衰减完成，更新 ${changed} 条`)

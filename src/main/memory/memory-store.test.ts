@@ -13,6 +13,16 @@ vi.mock("electron", () => ({
   },
 }))
 
+function readTraceEvents(): Array<Record<string, unknown>> {
+  const tracePath = path.join(electronMock.userDataDir, "memory-trace.log")
+  if (!fs.existsSync(tracePath)) return []
+  return fs.readFileSync(tracePath, "utf8")
+    .trim()
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+}
+
 describe("memoryStore", () => {
   beforeEach(() => {
     electronMock.userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "memory-store-"))
@@ -39,6 +49,10 @@ describe("memoryStore", () => {
     )
     expect(persisted.l2[0].conflictWith).toEqual(["rag_new"])
     expect(persisted.l2[0].status).toBe("aging")
+
+    const traceEvents = readTraceEvents()
+    expect(traceEvents.some((event) => event.op === "l2.add" && event.l2Id === existing.id)).toBe(true)
+    expect(traceEvents.some((event) => event.op === "l2.conflict.mark" && event.l2Id === existing.id)).toBe(true)
   })
 
   it("keeps pinned L2 memories active when marking conflicts", async () => {
@@ -91,5 +105,32 @@ describe("memoryStore", () => {
     expect(persisted.l2.find((m: { id: string }) => m.id === active.id).status).toBe("archived")
     expect(persisted.l2.find((m: { id: string }) => m.id === pinned.id).weight).toBe(10)
     expect(persisted.l2.find((m: { id: string }) => m.id === pinned.id).status).toBe("active")
+  })
+
+  it("migrates legacy memory files with a backup", async () => {
+    const memoryPath = path.join(electronMock.userDataDir, "memory.json")
+    fs.writeFileSync(
+      memoryPath,
+      JSON.stringify({
+        l0: { preferredName: "伙伴" },
+        l1: { roundCount: 7 },
+        l2: [],
+        reflectionLogs: [],
+        version: 1,
+      }),
+      "utf8",
+    )
+
+    const { memoryStore } = await import("./memory-store")
+    const store = await memoryStore.load()
+    const persisted = JSON.parse(fs.readFileSync(memoryPath, "utf8"))
+    const backups = fs.readdirSync(electronMock.userDataDir).filter((name) => name.startsWith("memory.backup."))
+
+    expect(store.schemaVersion).toBe(2)
+    expect(persisted.schemaVersion).toBe(2)
+    expect(store.l0.preferredName).toBe("伙伴")
+    expect(store.l1.roundCount).toBe(7)
+    expect(backups).toHaveLength(1)
+    expect(readTraceEvents().some((event) => event.op === "migration.upgrade")).toBe(true)
   })
 })
