@@ -103,11 +103,47 @@ export async function addMemory(
 export async function searchMemory(
   query: string,
   source?: string,
-  topK = 5
+  topK = 5,
+  options?: { recordRecall?: boolean }
 ): Promise<string[]> {
+  const results = await searchMemoryEntries(query, source, topK, options);
+  return results.map((r) => r.text);
+}
+
+export async function searchMemoryEntries(
+  query: string,
+  source?: string,
+  topK = 5,
+  options?: { recordRecall?: boolean }
+): Promise<Array<{ id: string; text: string; createdAt: number; score: number; metadata?: Record<string, unknown> }>> {
   if (!retriever) return [];
   const results = await retriever.retrieve(query, source, topK);
-  return results.map((r) => r.entry.text);
+  if (options?.recordRecall !== false) {
+    await recordUserMemoryRecalls(results);
+  }
+  return results.map((r) => ({
+    id: r.entry.id,
+    text: r.entry.text,
+    createdAt: r.entry.createdAt,
+    score: r.score,
+    metadata: r.entry.metadata,
+  }));
+}
+
+async function recordUserMemoryRecalls(results: Array<{ entry: MemoryEntry }>): Promise<void> {
+  const l2Ids = results
+    .filter((r) => r.entry.source === "user_memory")
+    .map((r) => r.entry.metadata?.l2Id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+  if (l2Ids.length === 0) return;
+  try {
+    const { memoryStore } = await import("../memory/memory-store");
+    for (const l2Id of new Set(l2Ids)) {
+      await memoryStore.updateL2RecallStats(l2Id, 1);
+    }
+  } catch (err) {
+    console.warn("[RAG] failed to record user memory recall:", err);
+  }
 }
 
 // ── History search with metadata（供 recall_history 工具用）──

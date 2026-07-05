@@ -133,6 +133,29 @@ describe("memoryStore", () => {
     expect(traceEvents.some((event) => event.op === "l2.weight.update" && event.l2Id === memory.id)).toBe(true)
   })
 
+  it("marks L2 sync status and persists rag ids", async () => {
+    const { memoryStore } = await import("./memory-store")
+    const memory = await memoryStore.addL2Memory({
+      content: "用户喜欢可靠的长期记忆",
+      triggerText: "长期记忆要可靠",
+      sourceConversationId: "test",
+      isPinned: false,
+      syncStatus: "pending_sync",
+    })
+
+    const synced = await memoryStore.markL2SyncStatus(memory.id, "synced", "rag_synced")
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(electronMock.userDataDir, "memory.json"), "utf8"),
+    )
+    const traceEvents = readTraceEvents()
+
+    expect(synced?.syncStatus).toBe("synced")
+    expect(synced?.ragId).toBe("rag_synced")
+    expect(persisted.l2[0].syncStatus).toBe("synced")
+    expect(persisted.l2[0].ragId).toBe("rag_synced")
+    expect(traceEvents.some((event) => event.op === "l2.sync.success" && event.l2Id === memory.id)).toBe(true)
+  })
+
   it("migrates legacy memory files with a backup", async () => {
     const memoryPath = path.join(electronMock.userDataDir, "memory.json")
     fs.writeFileSync(
@@ -140,7 +163,19 @@ describe("memoryStore", () => {
       JSON.stringify({
         l0: { preferredName: "伙伴" },
         l1: { roundCount: 7 },
-        l2: [],
+        l2: [{
+          id: "l2_legacy",
+          content: "旧记忆",
+          triggerText: "旧触发",
+          sourceConversationId: "test",
+          createdAt: 1,
+          lastAccessedAt: 1,
+          accessCount: 0,
+          weight: 0,
+          isPinned: false,
+          status: "active",
+          ragId: "rag_legacy",
+        }],
         reflectionLogs: [],
         version: 1,
       }),
@@ -156,6 +191,7 @@ describe("memoryStore", () => {
     expect(persisted.schemaVersion).toBe(2)
     expect(store.l0.preferredName).toBe("伙伴")
     expect(store.l1.roundCount).toBe(7)
+    expect(store.l2[0].syncStatus).toBe("synced")
     expect(backups).toHaveLength(1)
     expect(readTraceEvents().some((event) => event.op === "migration.upgrade")).toBe(true)
   })

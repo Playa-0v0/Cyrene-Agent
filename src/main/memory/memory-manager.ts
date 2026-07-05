@@ -93,23 +93,32 @@ export class MemoryManager {
   }
 
   private async writeL2(candidate: MemoryCandidate): Promise<void> {
-    const ragId = await addMemory(candidate.content, "user_memory", {
-      triggerText: candidate.triggerText,
-      confidence: candidate.confidence,
-    })
-
     const l2Input: Omit<L2Memory, "id" | "createdAt" | "lastAccessedAt" | "accessCount" | "weight" | "status"> = {
       content: candidate.content,
       triggerText: candidate.triggerText,
       sourceConversationId: "",
-      ragId,
       embedding: [],
       isPinned: false,
+      syncStatus: "pending_sync",
     }
 
-    await memoryStore.addL2Memory(l2Input)
+    const l2 = await memoryStore.addL2Memory(l2Input)
 
-    console.log(`[MemoryManager] L2 写入: "${preview(candidate.content, 30)}"（ragId: ${ragId}）`)
+    let ragId: string | undefined
+    try {
+      ragId = await addMemory(candidate.content, "user_memory", {
+        triggerText: candidate.triggerText,
+        confidence: candidate.confidence,
+        l2Id: l2.id,
+      })
+      await memoryStore.markL2SyncStatus(l2.id, "synced", ragId)
+    } catch (err) {
+      await memoryStore.markL2SyncStatus(l2.id, "sync_failed", undefined, err)
+      console.warn("[MemoryManager] L2 已写入，但 RAG 同步失败:", err)
+      return
+    }
+
+    console.log(`[MemoryManager] L2 写入: "${preview(candidate.content, 30)}"（l2Id: ${l2.id}, ragId: ${ragId}）`)
 
     // ── 冲突检测：检查新记忆是否与现有记忆矛盾 ──
     try {
@@ -126,7 +135,7 @@ export class MemoryManager {
     const activeL2 = allL2.filter((m) => m.status !== "archived" && m.ragId && m.ragId !== newRagId)
 
     // 用 searchMemory 做向量相似度匹配
-    const similarTexts = await searchMemory(content, "user_memory", 5)
+    const similarTexts = await searchMemory(content, "user_memory", 5, { recordRecall: false })
     if (similarTexts.length === 0) return
 
     // 在 activeL2 中找内容匹配的，再检查是否语义矛盾

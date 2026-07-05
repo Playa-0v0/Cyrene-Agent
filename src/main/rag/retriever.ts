@@ -176,7 +176,7 @@ export class HybridRetriever {
   private bm25Search(query: string, source?: string, topK = 15): SearchResult[] {
     const entries = this.store["entries"] as Array<{
       id: string; text: string; embedding: number[]; source: string;
-      weight: number; createdAt: number; lastRecalledAt: number;
+      weight: number; createdAt: number; lastRecalledAt: number; metadata?: Record<string, unknown>;
     }>;
 
     const docs = source ? entries.filter((e) => e.source === source) : entries;
@@ -219,6 +219,7 @@ export class HybridRetriever {
             weight: doc.weight,
             createdAt: doc.createdAt,
             lastRecalledAt: doc.lastRecalledAt,
+            metadata: doc.metadata,
           },
           score: 0,
         };
@@ -233,6 +234,7 @@ export class HybridRetriever {
           weight: doc.weight,
           createdAt: doc.createdAt,
           lastRecalledAt: doc.lastRecalledAt,
+          metadata: doc.metadata,
         },
         score: bm25Score(queryTokenInfo, docTokens, docFreq, totalDocs, avgDocLen),
       };

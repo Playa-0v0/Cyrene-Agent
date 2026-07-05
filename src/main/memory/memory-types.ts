@@ -26,6 +26,8 @@ export interface L1Profile {
   roundCount: number
 }
 
+export type L2SyncStatus = "pending_sync" | "synced" | "sync_failed"
+
 export interface L2Memory {
   id: string
   content: string
@@ -37,6 +39,7 @@ export interface L2Memory {
   weight: number
   isPinned: boolean
   status: "active" | "aging" | "archived"
+  syncStatus?: L2SyncStatus
   embedding?: number[]
   ragId?: string
   /** 是否为压缩总结条目（由 Reflection 生成） */

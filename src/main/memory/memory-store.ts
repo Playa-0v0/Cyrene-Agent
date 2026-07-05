@@ -1,7 +1,7 @@
 import * as fs from "fs"
 import * as path from "path"
 import { app } from "electron"
-import { L0Profile, L1Profile, L2Memory, MemoryStore, ReflectionLog } from "./memory-types"
+import { L0Profile, L1Profile, L2Memory, L2SyncStatus, MemoryStore, ReflectionLog } from "./memory-types"
 import { appendMemoryTrace } from "./memory-trace"
 
 const CURRENT_SCHEMA_VERSION = 2
@@ -65,7 +65,10 @@ export function repairMigrations(store: Partial<MemoryStore>): MemoryStore {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     l0: { ...DEFAULT_L0, ...store.l0 },
     l1: { ...DEFAULT_L1, ...store.l1 },
-    l2: Array.isArray(store.l2) ? store.l2 : [],
+    l2: Array.isArray(store.l2) ? store.l2.map((memory) => ({
+      ...memory,
+      syncStatus: memory.syncStatus ?? (memory.ragId ? "synced" : "pending_sync"),
+    })) : [],
     reflectionLogs: Array.isArray(store.reflectionLogs) ? store.reflectionLogs : [],
     version: typeof store.version === "number" ? store.version : 1,
   }
@@ -186,6 +189,7 @@ class MemoryStoreManager {
       accessCount: 0,
       weight: 0,
       status: "active",
+      syncStatus: input.syncStatus ?? (input.ragId ? "synced" : "pending_sync"),
     }
     store.l2.push(memory)
     await this.save(store)
@@ -195,7 +199,7 @@ class MemoryStoreManager {
       status: "ok",
       l2Id: memory.id,
       ragId: memory.ragId,
-      details: { isSummary: memory.isSummary === true },
+      details: { isSummary: memory.isSummary === true, syncStatus: memory.syncStatus },
     })
     return memory
   }
@@ -274,6 +278,25 @@ class MemoryStoreManager {
 
   async updateL2Weight(id: string, delta: number): Promise<void> {
     await this.updateL2RecallStats(id, delta)
+  }
+
+  async markL2SyncStatus(id: string, syncStatus: L2SyncStatus, ragId?: string, error?: unknown): Promise<L2Memory | null> {
+    const store = await this.load()
+    const mem = store.l2.find((m) => m.id === id)
+    if (!mem) return null
+    mem.syncStatus = syncStatus
+    if (ragId) mem.ragId = ragId
+    await this.save(store)
+    appendMemoryTrace({
+      op: syncStatus === "synced" ? "l2.sync.success" : syncStatus === "sync_failed" ? "l2.sync.failure" : "l2.sync.pending",
+      layer: "L2",
+      status: syncStatus === "sync_failed" ? "error" : "ok",
+      l2Id: mem.id,
+      ragId: mem.ragId,
+      details: { syncStatus },
+      error: error instanceof Error ? error.message : error ? String(error) : null,
+    })
+    return mem
   }
 
   async markL2Conflict(id: string, conflictRagId: string): Promise<L2Memory | null> {
