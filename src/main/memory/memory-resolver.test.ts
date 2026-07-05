@@ -8,15 +8,22 @@ const electronMock = vi.hoisted(() => ({
   userDataDir: "",
 }))
 
+const ragMock = vi.hoisted(() => ({
+  addMemory: vi.fn(),
+}))
+
 vi.mock("electron", () => ({
   app: {
     getPath: () => electronMock.userDataDir,
   },
 }))
 
+vi.mock("../rag/index", () => ragMock)
+
 describe("memory conflict resolver", () => {
   beforeEach(() => {
     electronMock.userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "memory-resolver-"))
+    ragMock.addMemory.mockReset()
     vi.resetModules()
   })
 
@@ -114,6 +121,7 @@ describe("memory conflict resolver", () => {
   it("runs one queued resolver item and applies the result", async () => {
     const { memoryStore } = await import("./memory-store")
     const { runResolverQueueOnce } = await import("./memory-resolver")
+    ragMock.addMemory.mockResolvedValue("rag_resolved")
     const oldMemory = await memoryStore.addL2Memory({
       content: "用户喜欢跑步",
       triggerText: "我喜欢跑步",
@@ -163,6 +171,143 @@ describe("memory conflict resolver", () => {
     expect(queue).toHaveLength(0)
     expect(conflictLogs[0].resolverStatus).toBe("resolved")
     expect(conflictLogs[0].resolutionType).toBe("preference_evolution")
+    const store = await memoryStore.load()
+    const resolvedMemory = store.l2.find((memory) => memory.id === conflictLogs[0].resolutionMemoryId)
+    expect(resolvedMemory?.syncStatus).toBe("synced")
+    expect(resolvedMemory?.ragId).toBe("rag_resolved")
+    expect(ragMock.addMemory).toHaveBeenCalledWith(
+      "用户过去喜欢跑步，但现在不喜欢跑步。",
+      "user_memory",
+      expect.objectContaining({
+        l2Id: resolvedMemory?.id,
+        conflictLogId: log.id,
+        resolutionType: "preference_evolution",
+        sourceL2Id: newMemory.id,
+        targetL2Id: oldMemory.id,
+      }),
+    )
+  })
+
+  it("keeps resolver resolution when syncing the resolved memory to RAG fails", async () => {
+    const { memoryStore } = await import("./memory-store")
+    const { runResolverQueueOnce } = await import("./memory-resolver")
+    ragMock.addMemory.mockRejectedValue(new Error("rag down"))
+    const oldMemory = await memoryStore.addL2Memory({
+      content: "用户喜欢喝咖啡",
+      triggerText: "我喜欢喝咖啡",
+      sourceConversationId: "test",
+      ragId: "rag_old",
+      isPinned: false,
+    })
+    const newMemory = await memoryStore.addL2Memory({
+      content: "用户现在不喜欢喝咖啡",
+      triggerText: "我现在不喜欢喝咖啡",
+      sourceConversationId: "test",
+      ragId: "rag_new",
+      isPinned: false,
+    })
+    const log = await memoryStore.appendConflictLog({
+      status: "candidate",
+      sourceL2Id: newMemory.id,
+      targetL2Id: oldMemory.id,
+      reason: "test",
+      confidence: 0.8,
+      detector: "local",
+    })
+    await memoryStore.scoreConflictLog(log.id, {
+      conflictScore: 80,
+      resolverPriority: "high",
+      scoringSignals: { ragCandidate: true, evidenceAvailable: true, penalties: [] },
+    })
+
+    const result = await runResolverQueueOnce({
+      callLLM: async () => JSON.stringify({
+        resolutionType: "preference_evolution",
+        resolvedSummary: "用户过去喜欢喝咖啡，但现在不喜欢喝咖啡。",
+        reason: "用户表达了当前偏好变化。",
+        confidence: 0.88,
+        actions: {
+          createResolvedMemory: true,
+          oldMemoryStatus: "superseded",
+          newMemoryStatus: "merged",
+        },
+      }),
+    })
+
+    const conflictLogs = await memoryStore.getConflictLogs()
+    const store = await memoryStore.load()
+    const resolvedMemory = store.l2.find((memory) => memory.id === conflictLogs[0].resolutionMemoryId)
+
+    expect(result.status).toBe("resolved")
+    expect(conflictLogs[0].resolverStatus).toBe("resolved")
+    expect(resolvedMemory?.syncStatus).toBe("sync_failed")
+    expect(resolvedMemory?.ragId).toBeUndefined()
+  })
+
+  it("records resolver run traces and rate limits back-to-back runs", async () => {
+    const { memoryStore } = await import("./memory-store")
+    const { runResolverQueueOnce } = await import("./memory-resolver")
+    ragMock.addMemory.mockResolvedValue("rag_resolved")
+
+    for (const topic of ["跑步", "咖啡"]) {
+      const oldMemory = await memoryStore.addL2Memory({
+        content: `用户喜欢${topic}`,
+        triggerText: `我喜欢${topic}`,
+        sourceConversationId: "test",
+        ragId: `rag_old_${topic}`,
+        isPinned: false,
+      })
+      const newMemory = await memoryStore.addL2Memory({
+        content: `用户现在不喜欢${topic}`,
+        triggerText: `我现在不喜欢${topic}`,
+        sourceConversationId: "test",
+        ragId: `rag_new_${topic}`,
+        isPinned: false,
+      })
+      const log = await memoryStore.appendConflictLog({
+        status: "candidate",
+        sourceL2Id: newMemory.id,
+        targetL2Id: oldMemory.id,
+        reason: "test",
+        confidence: 0.8,
+        detector: "local",
+      })
+      await memoryStore.scoreConflictLog(log.id, {
+        conflictScore: 80,
+        resolverPriority: "high",
+        scoringSignals: { ragCandidate: true, evidenceAvailable: true, penalties: [] },
+      })
+    }
+
+    const deps = {
+      callLLM: async () => JSON.stringify({
+        resolutionType: "preference_evolution",
+        resolvedSummary: "用户过去喜欢该事项，但现在不喜欢该事项。",
+        reason: "用户表达了当前偏好变化。",
+        confidence: 0.88,
+        actions: {
+          createResolvedMemory: true,
+          oldMemoryStatus: "superseded",
+          newMemoryStatus: "merged",
+        },
+      }),
+    }
+
+    const first = await runResolverQueueOnce(deps, { now: 1_000, minIntervalMs: 60_000 })
+    const second = await runResolverQueueOnce(deps, { now: 1_001, minIntervalMs: 60_000 })
+    const queue = await memoryStore.getResolverQueue()
+    const tracePath = path.join(electronMock.userDataDir, "memory-trace.log")
+    const traceOps = fs.readFileSync(tracePath, "utf8")
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => JSON.parse(line).op)
+
+    expect(first.status).toBe("resolved")
+    expect(second.status).toBe("rate_limited")
+    expect(queue).toHaveLength(1)
+    expect(traceOps).toContain("resolver.run.start")
+    expect(traceOps).toContain("resolver.run.success")
+    expect(traceOps).toContain("resolver.run.rate_limited")
   })
 
   it("marks resolver item failed when resolver throws", async () => {

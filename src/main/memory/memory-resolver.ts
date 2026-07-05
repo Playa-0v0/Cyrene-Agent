@@ -1,6 +1,7 @@
 import { getAdapterForConfig } from "../orchestrator/vendors"
 import type { ChatMessage, VendorConfig } from "../orchestrator/vendors"
 import { recordUsage } from "../token-usage-store"
+import { addMemory } from "../rag/index"
 import { appendMemoryTrace } from "./memory-trace"
 import { memoryStore } from "./memory-store"
 import type { ConflictLog, L2Memory, MemoryEvidence } from "./memory-types"
@@ -55,9 +56,14 @@ export interface ResolverDeps {
 }
 
 export interface ResolverRunResult {
-  status: "skip" | "resolved" | "failed"
+  status: "skip" | "resolved" | "failed" | "rate_limited"
   conflictLogId?: string
   error?: string
+}
+
+export interface ResolverRunOptions {
+  now?: number
+  minIntervalMs?: number
 }
 
 const DEFAULT_MODEL_SETTINGS: ResolverModelSettings = {
@@ -66,6 +72,9 @@ const DEFAULT_MODEL_SETTINGS: ResolverModelSettings = {
   model: "deepseek-v4-pro",
   apiKey: "",
 }
+
+const DEFAULT_RESOLVER_MIN_INTERVAL_MS = 60_000
+let lastResolverRunAt: number | null = null
 
 function loadResolverModelSettings(): ResolverModelSettings {
   try {
@@ -278,11 +287,64 @@ async function markResolverFailed(conflictLogId: string, error: unknown): Promis
   })
 }
 
-export async function runResolverQueueOnce(deps?: ResolverDeps): Promise<ResolverRunResult> {
+async function syncResolvedMemoryToRag(log: ConflictLog): Promise<void> {
+  if (!log.resolutionMemoryId || !log.resolutionType) return
+  const store = await memoryStore.load()
+  const resolvedMemory = store.l2.find((memory) => memory.id === log.resolutionMemoryId)
+  if (!resolvedMemory || resolvedMemory.syncStatus === "synced") return
+
+  try {
+    const ragId = await addMemory(resolvedMemory.content, "user_memory", {
+      l2Id: resolvedMemory.id,
+      source: "memory_resolver",
+      conflictLogId: log.id,
+      resolutionType: log.resolutionType,
+      sourceL2Id: log.sourceL2Id,
+      targetL2Id: log.targetL2Id,
+    })
+    await memoryStore.markL2SyncStatus(resolvedMemory.id, "synced", ragId)
+  } catch (err) {
+    await memoryStore.markL2SyncStatus(resolvedMemory.id, "sync_failed", undefined, err)
+  }
+}
+
+export async function runResolverQueueOnce(deps?: ResolverDeps, options: ResolverRunOptions = {}): Promise<ResolverRunResult> {
   const [next] = await memoryStore.getResolverQueue(1)
   if (!next) return { status: "skip" }
 
+  const now = options.now ?? Date.now()
+  const minIntervalMs = options.minIntervalMs ?? DEFAULT_RESOLVER_MIN_INTERVAL_MS
+  if (lastResolverRunAt !== null && now - lastResolverRunAt < minIntervalMs) {
+    appendMemoryTrace({
+      op: "resolver.run.rate_limited",
+      layer: "L2",
+      status: "skip",
+      l2Id: next.sourceL2Id,
+      ragId: next.sourceRagId,
+      details: {
+        conflictLogId: next.id,
+        elapsedMs: now - lastResolverRunAt,
+        minIntervalMs,
+      },
+    })
+    return { status: "rate_limited", conflictLogId: next.id }
+  }
+  lastResolverRunAt = now
+
   try {
+    appendMemoryTrace({
+      op: "resolver.run.start",
+      layer: "L2",
+      status: "ok",
+      l2Id: next.sourceL2Id,
+      ragId: next.sourceRagId,
+      details: {
+        conflictLogId: next.id,
+        resolverPriority: next.resolverPriority,
+        conflictScore: next.conflictScore,
+        resolverAttemptCount: next.resolverAttemptCount ?? 0,
+      },
+    })
     await markResolverProcessing(next.id)
     const payload = await buildResolverPayload(next.id)
     const runner = deps ?? {
@@ -291,10 +353,32 @@ export async function runResolverQueueOnce(deps?: ResolverDeps): Promise<Resolve
       ),
     }
     const resolution = await resolvePayload(payload, runner)
-    await memoryStore.applyResolverResolution(next.id, resolution)
+    const appliedLog = await memoryStore.applyResolverResolution(next.id, resolution)
+    if (appliedLog) await syncResolvedMemoryToRag(appliedLog)
+    appendMemoryTrace({
+      op: "resolver.run.success",
+      layer: "L2",
+      status: "ok",
+      l2Id: next.sourceL2Id,
+      ragId: next.sourceRagId,
+      details: {
+        conflictLogId: next.id,
+        resolutionType: resolution.resolutionType,
+        createdResolvedMemory: resolution.actions.createResolvedMemory === true,
+      },
+    })
     return { status: "resolved", conflictLogId: next.id }
   } catch (err) {
     await markResolverFailed(next.id, err)
+    appendMemoryTrace({
+      op: "resolver.run.failed",
+      layer: "L2",
+      status: "error",
+      l2Id: next.sourceL2Id,
+      ragId: next.sourceRagId,
+      details: { conflictLogId: next.id },
+      error: err instanceof Error ? err.message : String(err),
+    })
     return {
       status: "failed",
       conflictLogId: next.id,
