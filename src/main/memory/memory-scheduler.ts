@@ -3,6 +3,7 @@ import { runReflectionAndCompression } from "./memory-compressor"
 import { entityGraph } from "./entity-graph"
 import { memoryJudge } from "./memory-judge"
 import { memoryManager } from "./memory-manager"
+import { runResolverQueueOnce } from "./memory-resolver"
 import { memoryStore } from "./memory-store"
 import type { L1Profile, MemoryCandidate } from "./memory-types"
 
@@ -14,6 +15,7 @@ export interface MemorySchedulerDeps {
   getL1: () => Promise<L1Profile>
   replaceL1Field: (field: "roundCount", value: number) => Promise<void>
   runReflectionAndCompression: () => Promise<void>
+  runResolverQueueOnce: () => Promise<unknown>
 }
 
 export class MemoryScheduler {
@@ -53,6 +55,14 @@ export class MemoryScheduler {
     const newCount = (l1.roundCount || 0) + 1
     await this.deps.replaceL1Field("roundCount", newCount)
 
+    if (newCount % 5 === 0) {
+      try {
+        await this.deps.runResolverQueueOnce()
+      } catch (err) {
+        console.warn("[Memory] Resolver 队列处理失败，不影响主流程", err)
+      }
+    }
+
     if (newCount % 20 === 0) {
       console.log("[Memory] 达到 20 轮，触发 Reflection + 记忆压缩")
       await this.deps.runReflectionAndCompression()
@@ -68,4 +78,5 @@ export const memoryScheduler = new MemoryScheduler({
   getL1: () => memoryStore.getL1(),
   replaceL1Field: (field, value) => memoryStore.replaceL1Field(field, value),
   runReflectionAndCompression,
+  runResolverQueueOnce,
 })

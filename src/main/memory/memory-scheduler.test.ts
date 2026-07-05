@@ -32,6 +32,9 @@ function createScheduler(overrides: Partial<MemorySchedulerDeps> = {}) {
     runReflectionAndCompression: vi.fn(async () => {
       calls.push("reflection")
     }),
+    runResolverQueueOnce: vi.fn(async () => {
+      calls.push("resolver")
+    }),
     ...overrides,
   }
 
@@ -86,5 +89,22 @@ describe("MemoryScheduler", () => {
     await vi.waitFor(() => expect(deps.runReflectionAndCompression).toHaveBeenCalled())
 
     expect(deps.replaceL1Field).toHaveBeenCalledWith("roundCount", 20)
+  })
+
+  it("runs one resolver queue item every fifth round", async () => {
+    const { scheduler, deps } = createScheduler({
+      getL1: vi.fn(async () => ({
+        recentGoals: "",
+        recentPreferences: "",
+        currentProject: "",
+        generatedAt: 0,
+        roundCount: 4,
+      })),
+    })
+
+    scheduler.scheduleMemoryWrite("user", "assistant")
+    await vi.waitFor(() => expect(deps.runResolverQueueOnce).toHaveBeenCalled())
+
+    expect(deps.replaceL1Field).toHaveBeenCalledWith("roundCount", 5)
   })
 })

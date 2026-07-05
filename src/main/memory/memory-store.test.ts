@@ -346,6 +346,108 @@ describe("memoryStore", () => {
     expect(queue.map((entry) => entry.id)).toEqual([high.id, idle.id])
   })
 
+  it("applies preference evolution by creating resolved memory and marking old entries", async () => {
+    const { memoryStore } = await import("./memory-store")
+    const oldMemory = await memoryStore.addL2Memory({
+      content: "用户喜欢跑步",
+      triggerText: "我喜欢跑步",
+      sourceConversationId: "test",
+      ragId: "rag_old",
+      isPinned: false,
+    })
+    const newMemory = await memoryStore.addL2Memory({
+      content: "用户不喜欢跑步",
+      triggerText: "我现在不喜欢跑步",
+      sourceConversationId: "test",
+      ragId: "rag_new",
+      isPinned: false,
+    })
+    const log = await memoryStore.appendConflictLog({
+      status: "candidate",
+      sourceL2Id: newMemory.id,
+      targetL2Id: oldMemory.id,
+      reason: "test",
+      confidence: 0.8,
+      detector: "local",
+    })
+
+    const applied = await memoryStore.applyResolverResolution(log.id, {
+      resolutionType: "preference_evolution",
+      resolvedSummary: "用户过去喜欢跑步，但现在不喜欢跑步。",
+      reason: "用户表达了当前偏好变化。",
+      confidence: 0.88,
+      actions: {
+        createResolvedMemory: true,
+        oldMemoryStatus: "superseded",
+        newMemoryStatus: "merged",
+        shouldAskUser: false,
+        clarificationNeeded: false,
+      },
+    })
+
+    const allL2 = await memoryStore.getAllL2()
+    const conflictLogs = await memoryStore.getConflictLogs()
+    const resolvedMemory = allL2.find((memory) => memory.id === applied?.resolutionMemoryId)
+
+    expect(resolvedMemory?.content).toBe("用户过去喜欢跑步，但现在不喜欢跑步。")
+    expect(allL2.find((memory) => memory.id === oldMemory.id)?.status).toBe("superseded")
+    expect(allL2.find((memory) => memory.id === newMemory.id)?.status).toBe("merged")
+    expect(conflictLogs[0]).toMatchObject({
+      status: "resolved",
+      resolverStatus: "resolved",
+      resolutionType: "preference_evolution",
+      resolutionConfidence: 0.88,
+    })
+  })
+
+  it("marks direct conflicts as clarification needed without creating resolved memory", async () => {
+    const { memoryStore } = await import("./memory-store")
+    const oldMemory = await memoryStore.addL2Memory({
+      content: "用户喜欢被叫 Playa",
+      triggerText: "叫我 Playa",
+      sourceConversationId: "test",
+      ragId: "rag_old",
+      isPinned: false,
+    })
+    const newMemory = await memoryStore.addL2Memory({
+      content: "用户不喜欢被叫 Playa",
+      triggerText: "别叫我 Playa",
+      sourceConversationId: "test",
+      ragId: "rag_new",
+      isPinned: false,
+    })
+    const log = await memoryStore.appendConflictLog({
+      status: "candidate",
+      sourceL2Id: newMemory.id,
+      targetL2Id: oldMemory.id,
+      reason: "test",
+      confidence: 0.8,
+      detector: "local",
+    })
+
+    await memoryStore.applyResolverResolution(log.id, {
+      resolutionType: "direct_conflict",
+      reason: "称呼偏好直接冲突，需要自然澄清。",
+      confidence: 0.82,
+      actions: {
+        createResolvedMemory: false,
+        shouldAskUser: true,
+        clarificationNeeded: true,
+      },
+    })
+
+    const allL2 = await memoryStore.getAllL2()
+    const conflictLogs = await memoryStore.getConflictLogs()
+
+    expect(allL2).toHaveLength(2)
+    expect(conflictLogs[0]).toMatchObject({
+      status: "clarification_needed",
+      resolverStatus: "resolved",
+      shouldAskUser: true,
+      clarificationNeeded: true,
+    })
+  })
+
   it("caps reflection logs separately from conflict logs", async () => {
     const { memoryStore } = await import("./memory-store")
     await memoryStore.appendConflictLog({

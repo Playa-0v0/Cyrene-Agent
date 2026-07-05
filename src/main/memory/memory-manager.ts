@@ -115,7 +115,7 @@ export class MemoryManager {
   private async detectAndMarkConflicts(content: string, newL2Id: string, newRagId: string, triggerText: string): Promise<void> {
     // 搜索语义相似的现有 L2 条目
     const allL2 = await memoryStore.getAllL2()
-    const activeL2 = allL2.filter((m) => m.status !== "archived" && m.ragId && m.ragId !== newRagId)
+    const activeL2 = allL2.filter((m) => (m.status === "active" || m.status === "aging") && m.ragId && m.ragId !== newRagId)
 
     // 用 RAG entry 做向量相似度匹配，优先读取 metadata.l2Id 精确定位 L2。
     const similarEntries = await searchMemoryEntries(content, "user_memory", 5, { recordRecall: false })

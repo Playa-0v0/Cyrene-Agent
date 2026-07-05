@@ -38,7 +38,7 @@ export interface L2Memory {
   accessCount: number
   weight: number
   isPinned: boolean
-  status: "active" | "aging" | "archived"
+  status: L2MemoryStatus
   syncStatus?: L2SyncStatus
   embedding?: number[]
   ragId?: string
@@ -50,7 +50,11 @@ export interface L2Memory {
   conflictWith?: string[]
   evidenceIds?: string[]
   sourceMessageIds?: string[]
+  supersededBy?: string
+  mergedInto?: string
 }
+
+export type L2MemoryStatus = "active" | "aging" | "archived" | "superseded" | "merged"
 
 export interface ReflectionLog {
   id: string
@@ -63,7 +67,7 @@ export interface ReflectionLog {
 export interface ConflictLog {
   id: string
   createdAt: number
-  status: "candidate" | "pending" | "confirmed" | "dismissed"
+  status: "candidate" | "pending" | "confirmed" | "dismissed" | "resolved" | "clarification_needed"
   sourceL2Id: string
   targetL2Id: string
   sourceRagId?: string
@@ -77,10 +81,36 @@ export interface ConflictLog {
   resolverStatus?: ConflictResolverStatus
   resolverQueuedAt?: number
   resolverAttemptCount?: number
+  resolverStartedAt?: number
+  resolverFinishedAt?: number
+  resolutionType?: MemoryConflictResolutionType
+  resolutionMemoryId?: string
+  resolutionReason?: string
+  resolutionConfidence?: number
+  shouldAskUser?: boolean
+  clarificationNeeded?: boolean
 }
 
 export type ConflictResolverPriority = "none" | "idle" | "normal" | "high"
 export type ConflictResolverStatus = "not_queued" | "queued" | "processing" | "resolved" | "failed"
+export type MemoryConflictResolutionType = "unrelated" | "context_difference" | "preference_evolution" | "direct_conflict" | "uncertain"
+
+export interface MemoryConflictResolution {
+  resolutionType: MemoryConflictResolutionType
+  resolvedSummary?: string
+  currentSummary?: string
+  historicalSummary?: string
+  reason: string
+  confidence: number
+  actions: {
+    createResolvedMemory: boolean
+    oldMemoryStatus?: L2MemoryStatus
+    newMemoryStatus?: L2MemoryStatus
+    shouldUpdateCoreMemory?: boolean
+    shouldAskUser?: boolean
+    clarificationNeeded?: boolean
+  }
+}
 
 export interface ConflictScoringSignals {
   correctionIntent?: boolean

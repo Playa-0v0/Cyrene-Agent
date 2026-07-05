@@ -1,7 +1,7 @@
 import * as fs from "fs"
 import * as path from "path"
 import { app } from "electron"
-import { ConflictLog, L0Profile, L1Profile, L2Memory, L2SyncStatus, MemoryEvidence, MemoryStore, ReflectionLog } from "./memory-types"
+import { ConflictLog, L0Profile, L1Profile, L2Memory, L2SyncStatus, MemoryConflictResolution, MemoryEvidence, MemoryStore, ReflectionLog } from "./memory-types"
 import { appendMemoryTrace } from "./memory-trace"
 
 const CURRENT_SCHEMA_VERSION = 2
@@ -516,6 +516,96 @@ class MemoryStoreManager {
         return (a.resolverQueuedAt ?? a.createdAt) - (b.resolverQueuedAt ?? b.createdAt)
       })
       .slice(0, limit)
+  }
+
+  async applyResolverResolution(conflictLogId: string, resolution: MemoryConflictResolution): Promise<ConflictLog | null> {
+    const store = await this.load()
+    const log = (store.conflictLogs ?? []).find((entry) => entry.id === conflictLogId)
+    if (!log) return null
+    const newMemory = store.l2.find((memory) => memory.id === log.sourceL2Id)
+    const oldMemory = store.l2.find((memory) => memory.id === log.targetL2Id)
+    if (!newMemory || !oldMemory) return null
+
+    let resolutionMemoryId: string | undefined
+    const shouldCreateResolved = resolution.actions.createResolvedMemory && Boolean(resolution.resolvedSummary?.trim())
+    if (shouldCreateResolved) {
+      const resolved: L2Memory = {
+        content: resolution.resolvedSummary!.trim(),
+        triggerText: resolution.reason,
+        sourceConversationId: newMemory.sourceConversationId || oldMemory.sourceConversationId,
+        sourceMessageIds: [
+          ...(oldMemory.sourceMessageIds ?? []),
+          ...(newMemory.sourceMessageIds ?? []),
+        ],
+        isPinned: false,
+        syncStatus: "pending_sync",
+        evidenceIds: [
+          ...(oldMemory.evidenceIds ?? []),
+          ...(newMemory.evidenceIds ?? []),
+        ],
+        id: `l2_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        createdAt: Date.now(),
+        lastAccessedAt: Date.now(),
+        accessCount: 0,
+        weight: 0,
+        status: "active",
+      }
+      store.l2.push(resolved)
+      resolutionMemoryId = resolved.id
+    }
+
+    if (resolution.actions.oldMemoryStatus) {
+      oldMemory.status = resolution.actions.oldMemoryStatus
+      if (resolution.actions.oldMemoryStatus === "superseded" && resolutionMemoryId) {
+        oldMemory.supersededBy = resolutionMemoryId
+      }
+      if (resolution.actions.oldMemoryStatus === "merged" && resolutionMemoryId) {
+        oldMemory.mergedInto = resolutionMemoryId
+      }
+    }
+    if (resolution.actions.newMemoryStatus) {
+      newMemory.status = resolution.actions.newMemoryStatus
+      if (resolution.actions.newMemoryStatus === "superseded" && resolutionMemoryId) {
+        newMemory.supersededBy = resolutionMemoryId
+      }
+      if (resolution.actions.newMemoryStatus === "merged" && resolutionMemoryId) {
+        newMemory.mergedInto = resolutionMemoryId
+      }
+    }
+
+    log.resolverStatus = "resolved"
+    log.resolverFinishedAt = Date.now()
+    log.resolutionType = resolution.resolutionType
+    log.resolutionMemoryId = resolutionMemoryId
+    log.resolutionReason = resolution.reason
+    log.resolutionConfidence = resolution.confidence
+    log.shouldAskUser = resolution.actions.shouldAskUser === true
+    log.clarificationNeeded = resolution.actions.clarificationNeeded === true
+
+    if (resolution.resolutionType === "unrelated") {
+      log.status = "dismissed"
+    } else if (resolution.actions.clarificationNeeded || resolution.actions.shouldAskUser) {
+      log.status = "clarification_needed"
+    } else {
+      log.status = "resolved"
+    }
+
+    await this.save(store)
+    appendMemoryTrace({
+      op: "resolver.resolution.apply",
+      layer: "L2",
+      status: "ok",
+      l2Id: log.sourceL2Id,
+      ragId: log.sourceRagId,
+      details: {
+        conflictLogId: log.id,
+        targetL2Id: log.targetL2Id,
+        resolutionType: log.resolutionType,
+        resolutionMemoryId,
+        conflictStatus: log.status,
+      },
+    })
+    return log
   }
 
   /** 批量更新 L2 条目的 status */
