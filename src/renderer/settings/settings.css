@@ -1184,8 +1184,8 @@ body {
 .memory-record {
   padding: 12px 14px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--rb-bg-2);
+  border: 1px solid var(--rb-border-soft);
 }
 .memory-record + .memory-record {
   margin-top: 10px;
@@ -1198,13 +1198,13 @@ body {
 }
 .memory-record__body {
   margin: 6px 0 0;
-  color: rgba(235, 229, 245, 0.72);
+  color: var(--rb-text-default);
   font: var(--rb-text-small);
   white-space: pre-wrap;
 }
 .memory-record__meta {
   margin: 8px 0 0;
-  color: rgba(235, 229, 245, 0.38);
+  color: var(--rb-text-muted);
   font: var(--rb-text-small);
   font-size: 11px;
 }
@@ -1222,9 +1222,9 @@ body {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(235, 229, 245, 0.55);
+  border: 1px solid var(--rb-border-strong);
+  background: var(--rb-bg-1);
+  color: var(--rb-text-muted);
   font-size: 14px;
   cursor: pointer;
   display: grid;
@@ -1232,9 +1232,9 @@ body {
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .memory-record__delete:hover {
-  background: rgba(239, 68, 68, 0.18);
-  color: rgba(252, 165, 165, 0.9);
-  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+  border-color: rgba(239, 68, 68, 0.4);
 }
 .memory-list__empty {
   display: flex;
