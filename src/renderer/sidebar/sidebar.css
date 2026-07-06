@@ -276,7 +276,7 @@ body {
 
 .indicator__prefix {
   font: var(--rb-text-small);
-  color: rgba(235, 229, 245, 0.58);
+  color: var(--rb-text-muted);
   white-space: nowrap;
 }
 
@@ -307,7 +307,7 @@ body {
 .model-row__key,
 .model-feed {
   font: var(--rb-text-small);
-  color: rgba(235, 229, 245, 0.62);
+  color: var(--rb-text-muted);
 }
 
 .model-row__value,
