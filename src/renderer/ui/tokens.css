@@ -103,4 +103,21 @@
   --rb-shadow-elevated:0 12px 40px rgba(0, 0, 0, 0.55),
                        0 0 0 1px rgba(236, 72, 153, 0.10);
   --rb-shadow-pink:    0 8px 32px rgba(236, 72, 153, 0.35);
+
+  /* ===== Light-mode primitives (neutral defaults; pearl-white overrides these) ===== */
+  --rb-card-bg:        transparent;
+  --rb-divider-light:  rgba(0, 0, 0, 0.08);
+  --rb-hover-light:    rgba(0, 0, 0, 0.04);
+  --rb-active-light:   rgba(0, 0, 0, 0.08);
+  --rb-input-bg:       #ffffff;
+  --rb-input-border:   rgba(236, 72, 153, 0.18);
+  --rb-input-text:     #ebe5f5;
+  --rb-input-placeholder: rgba(235, 229, 245, 0.48);
+  --rb-slider-track:   rgba(255, 255, 255, 0.18);
+  --rb-slider-fill:    #ec4899;
+  --rb-slider-thumb:   #ffffff;
+  --rb-toggle-off:     rgba(255, 255, 255, 0.18);
+  --rb-toggle-on:      #ec4899;
+  --rb-scroll-thumb:   rgba(255, 255, 255, 0.20);
+  --rb-scroll-thumb-hover: rgba(255, 255, 255, 0.32);
 }

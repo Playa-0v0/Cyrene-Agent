@@ -27,15 +27,15 @@ body {
   border-radius: 24px;
   overflow: hidden;
   background:
-    radial-gradient(circle at 18% 8%, #4a1c55 0%, transparent 38%),
-    radial-gradient(circle at 88% 22%, #382468 0%, transparent 38%),
+    radial-gradient(circle at 18% 8%, var(--rb-violet-600) 0%, transparent 38%),
+    radial-gradient(circle at 88% 22%, var(--rb-violet-600) 0%, transparent 38%),
     radial-gradient(circle at 50% 110%, #1c3158 0%, transparent 38%),
-    linear-gradient(155deg, #1d1438 0%, #15102a 60%, #1b102c 100%);
-  border: 1px solid rgba(255, 190, 226, 0.36);
+    linear-gradient(155deg, var(--rb-bg-2) 0%, var(--rb-bg-1) 60%, var(--rb-bg-1) 100%);
+  border: 1px solid var(--rb-border-soft);
   box-shadow:
-    0 0 24px rgba(236, 72, 153, 0.14),
+    var(--rb-glow-soft),
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 0 0 1px rgba(236, 72, 153, 0.08);
+    inset 0 0 0 1px var(--rb-border-faint);
 }
 
 .tasks::before {
@@ -43,7 +43,7 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.10), transparent 30%, rgba(236, 72, 153, 0.06) 70%, rgba(255, 255, 255, 0.04));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.10), transparent 30%, var(--rb-border-faint) 70%, rgba(255, 255, 255, 0.04));
   opacity: 0.58;
 }
 
@@ -57,7 +57,7 @@ body {
   height: 52px;
   padding: 0 14px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.025));
-  border-bottom: 1px solid rgba(255, 182, 220, 0.18);
+  border-bottom: 1px solid var(--rb-border-soft);
   -webkit-app-region: drag;
   user-select: none;
   flex: 0 0 auto;
@@ -73,21 +73,21 @@ body {
 
 .tasks__icon {
   font-size: 16px;
-  filter: drop-shadow(0 0 6px rgba(236, 72, 153, 0.45));
+  filter: drop-shadow(var(--rb-glow-pink));
 }
 
 .tasks__name {
   font: var(--rb-text-body-em);
   color: var(--rb-text-strong);
-  text-shadow: 0 0 14px rgba(236, 72, 153, 0.22);
+  text-shadow: var(--rb-glow-soft);
   white-space: nowrap;
 }
 
 .tasks__hint {
   font: var(--rb-text-micro);
-  color: rgba(235, 229, 245, 0.62);
+  color: var(--rb-text-default);
   padding: 3px 9px;
-  border: 1px solid rgba(255, 182, 220, 0.18);
+  border: 1px solid var(--rb-border-soft);
   border-radius: var(--rb-radius-full);
   background: rgba(255, 255, 255, 0.06);
   white-space: nowrap;
@@ -106,9 +106,9 @@ body {
   width: 28px;
   height: 28px;
   border-radius: var(--rb-radius-full);
-  color: rgba(235, 229, 245, 0.7);
+  color: var(--rb-text-default);
   background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 182, 220, 0.16);
+  border: 1px solid var(--rb-border-soft);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   transition: background 120ms ease, color 120ms ease, transform 120ms ease, border-color 120ms ease, box-shadow 200ms ease;
 }
@@ -116,20 +116,20 @@ body {
 .tasks__winbtn svg { display: block; }
 
 .tasks__winbtn:hover {
-  background: rgba(236, 72, 153, 0.22);
-  border-color: rgba(255, 182, 220, 0.34);
+  background: var(--rb-glow-soft);
+  border-color: var(--rb-border-soft);
   color: var(--rb-text-strong);
   transform: translateY(-1px);
-  box-shadow: 0 0 14px rgba(236, 72, 153, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  box-shadow: var(--rb-glow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.10);
 }
 
 .tasks__winbtn--close {
-  background: rgba(219, 39, 119, 0.16);
-  color: #ffb6dc;
+  background: var(--rb-glow-soft);
+  color: var(--rb-pink-200);
 }
 
 .tasks__winbtn--close:hover {
-  background: linear-gradient(135deg, #ff6ec7, #db2777);
+  background: var(--rb-grad-pink-hot);
   color: var(--rb-text-on-pink);
 }
 
@@ -148,7 +148,7 @@ body {
 .tasks__body::-webkit-scrollbar { width: 4px; }
 .tasks__body::-webkit-scrollbar-track { background: transparent; }
 .tasks__body::-webkit-scrollbar-thumb {
-  background: rgba(236, 72, 153, 0.40);
+  background: var(--rb-border-strong);
   border-radius: 2px;
 }
 
@@ -165,16 +165,16 @@ body {
 
 .usage-bar__fill {
   width: 100% !important;
-  background: linear-gradient(90deg, #ff8ccc, #ec4899, #a855f7, #ff8ccc) !important;
+  background: linear-gradient(90deg, var(--rb-pink-300), var(--rb-pink-500), var(--rb-violet-500), var(--rb-pink-300)) !important;
   background-size: 300% 100% !important;
   animation: currentFlow 3s linear infinite;
-  box-shadow: 0 0 12px rgba(236, 72, 153, 0.55), 0 0 6px rgba(168, 85, 247, 0.4);
+  box-shadow: var(--rb-glow-pink), var(--rb-glow-violet);
 }
 
 @keyframes currentFlow {
-  0%   { background-position: 0% 0;   box-shadow: 0 0 12px rgba(236, 72, 153, 0.55), 0 0 6px rgba(168, 85, 247, 0.40); }
+  0%   { background-position: 0% 0;   box-shadow: var(--rb-glow-pink), var(--rb-glow-violet); }
   50%  { background-position: 150% 0;  box-shadow: 0 0 17px rgba(236, 72, 153, 0.80), 0 0 10px rgba(168, 85, 247, 0.60); }
-  100% { background-position: 300% 0;  box-shadow: 0 0 12px rgba(236, 72, 153, 0.55), 0 0 6px rgba(168, 85, 247, 0.40); }
+  100% { background-position: 300% 0;  box-shadow: var(--rb-glow-pink), var(--rb-glow-violet); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -190,7 +190,7 @@ body {
   text-align: center;
   font-size: 12px;
   font-weight: 600;
-  color: rgba(235, 229, 245, 0.42);
+  color: var(--rb-text-faint);
 }
 
 .schedule-panel {
@@ -198,14 +198,14 @@ body {
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(236, 72, 153, 0.40) transparent;
+  scrollbar-color: var(--rb-border-strong) transparent;
   color: var(--rb-text-default);
 }
 
 .schedule-panel::-webkit-scrollbar { width: 4px; }
 .schedule-panel::-webkit-scrollbar-track { background: transparent; }
 .schedule-panel::-webkit-scrollbar-thumb {
-  background: rgba(236, 72, 153, 0.40);
+  background: var(--rb-border-strong);
   border-radius: 2px;
 }
 
@@ -222,13 +222,13 @@ body {
   line-height: 1;
   letter-spacing: -1px;
   color: var(--rb-text-strong);
-  text-shadow: 0 0 20px rgba(236, 72, 153, 0.25);
+  text-shadow: var(--rb-glow-pink);
 }
 
 .schedule-count__unit {
   font-size: 15px;
   font-weight: 700;
-  color: #ff9fcb;
+  color: var(--rb-pink-200);
 }
 
 .schedule-date {
@@ -239,9 +239,9 @@ body {
   padding: 5px 11px;
   border-radius: var(--rb-radius-full);
   font: var(--rb-text-micro);
-  color: rgba(235, 229, 245, 0.68);
+  color: var(--rb-text-default);
   background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 182, 220, 0.16);
+  border: 1px solid var(--rb-border-soft);
 }
 
 /* 用量区块容器布局（tasks 窗口特有）；柱状图/进度条内部样式见 ../ui/chart.css */
@@ -252,13 +252,13 @@ body {
   margin-bottom: 16px;
   border-radius: 17px;
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 182, 220, 0.16);
+  border: 1px solid var(--rb-border-soft);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .task-section {
   padding-top: 13px;
-  border-top: 1px solid rgba(255, 182, 220, 0.14);
+  border-top: 1px solid var(--rb-border-soft);
 }
 
 .task-section__header {
@@ -281,7 +281,7 @@ body {
   padding: 8px 10px;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.065);
-  border: 1px solid rgba(255, 182, 220, 0.14);
+  border: 1px solid var(--rb-border-soft);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
@@ -291,9 +291,9 @@ body {
   font-size: 10px;
   font-weight: 800;
   text-align: center;
-  color: #ff9fcb;
-  background: rgba(236, 72, 153, 0.13);
-  border: 1px solid rgba(255, 182, 220, 0.14);
+  color: var(--rb-pink-200);
+  background: var(--rb-glow-soft);
+  border: 1px solid var(--rb-border-soft);
   white-space: nowrap;
 }
 
@@ -302,7 +302,7 @@ body {
   font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
-  color: rgba(254, 247, 255, 0.86);
+  color: var(--rb-text-strong);
 }
 
 @media (max-height: 650px) {
@@ -318,7 +318,7 @@ body {
   gap: 10px;
   padding: 12px 0 14px;
   margin-top: 10px;
-  border-top: 1px solid rgba(255, 182, 220, 0.14);
+  border-top: 1px solid var(--rb-border-soft);
 }
 
 .schedule-settings-btn {
@@ -331,24 +331,24 @@ body {
   font: var(--rb-text-small-em);
   color: var(--rb-text-default);
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 182, 220, 0.18);
+  border: 1px solid var(--rb-border-soft);
   border-radius: var(--rb-radius-md);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   transition: background 120ms ease, color 120ms ease, transform 120ms ease, border-color 120ms ease, box-shadow 200ms ease;
 }
 
 .schedule-settings-btn:hover {
-  background: rgba(236, 72, 153, 0.20);
-  border-color: rgba(255, 182, 220, 0.36);
+  background: var(--rb-glow-soft);
+  border-color: var(--rb-border-soft);
   color: var(--rb-text-strong);
   transform: translateY(-1px);
-  box-shadow: 0 0 14px rgba(236, 72, 153, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  box-shadow: var(--rb-glow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.10);
 }
 
 .schedule-settings-btn:active { transform: translateY(0); }
 
 .schedule-settings-btn__icon {
-  filter: drop-shadow(0 0 5px rgba(236, 72, 153, 0.45));
+  filter: drop-shadow(var(--rb-glow-pink));
 }
 
 .schedule-footer__divider {
@@ -358,12 +358,12 @@ body {
   border: none;
   margin: 0;
   padding: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 182, 220, 0.30), transparent);
+  background: linear-gradient(90deg, transparent, var(--rb-border-soft), transparent);
 }
 
 .schedule-footer__version {
   font: var(--rb-text-micro);
-  color: rgba(235, 229, 245, 0.38);
+  color: var(--rb-text-faint);
   text-align: center;
   letter-spacing: 0.4px;
   user-select: none;

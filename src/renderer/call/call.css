@@ -9,8 +9,8 @@ body { overflow: hidden; }
   border-radius: 20px;
   background: radial-gradient(ellipse at 30% 20%, rgba(120, 40, 100, 0.35) 0%, transparent 50%),
               radial-gradient(ellipse at 70% 80%, rgba(80, 30, 120, 0.3) 0%, transparent 50%),
-              linear-gradient(180deg, #0a0815 0%, #14091f 50%, #1a0a28 100%);
-  border: 1px solid rgba(255, 190, 226, 0.42);
+              linear-gradient(180deg, var(--rb-bg-0) 0%, var(--rb-bg-1) 50%, var(--rb-bg-1) 100%);
+  border: 1px solid var(--rb-border-strong);
 }
 
 .call__particles {
@@ -32,23 +32,23 @@ body { overflow: hidden; }
   -webkit-app-region: drag;
 }
 .call__title {
-  font-size: 12px; color: rgba(255, 255, 255, 0.5); letter-spacing: 1px;
+  font-size: 12px; color: var(--rb-text-faint); letter-spacing: 1px;
 }
 .call__close {
   -webkit-app-region: no-drag;
-  background: rgba(255, 255, 255, 0.06); border: none; border-radius: 50%;
-  width: 22px; height: 22px; color: rgba(255, 255, 255, 0.5); cursor: pointer;
+  background: var(--rb-border-faint); border: none; border-radius: 50%;
+  width: 22px; height: 22px; color: var(--rb-text-faint); cursor: pointer;
   font-size: 12px; transition: background 0.15s;
 }
-.call__close:hover { background: rgba(255, 255, 255, 0.12); color: rgba(255, 255, 255, 0.8); }
+.call__close:hover { background: var(--rb-border-soft); color: var(--rb-text-default); }
 
 /* 状态文字 */
 .call__status {
-  color: rgba(255, 255, 255, 0.7); font-size: 14px; letter-spacing: 1px;
+  color: var(--rb-text-default); font-size: 14px; letter-spacing: 1px;
   margin-bottom: 30px; transition: color 0.3s;
 }
 .call__status--error { color: #ff6b6b; }
-.call__status--thinking { color: rgba(180, 160, 255, 0.8); }
+.call__status--thinking { color: var(--rb-violet-400); }
 
 /* 头像区域（和头像同尺寸，环和波形相对它定位） */
 .call__avatar-zone {
@@ -62,14 +62,14 @@ body { overflow: hidden; }
 .call__avatar-ring.is-active { opacity: 1; }
 .call__avatar-ring::before, .call__avatar-ring::after, .call__avatar-ring span {
   content: ''; position: absolute; inset: 0; border-radius: 50%;
-  border: 2px solid rgba(236, 72, 153, 0.5);
+  border: 2px solid var(--rb-pink-500);
   animation: ring-pulse 2s ease-out infinite;
 }
 .call__avatar-ring::after { animation-delay: 0.6s; }
 .call__avatar-ring span { animation-delay: 1.2s; display: block; }
 @keyframes ring-pulse {
-  0% { transform: scale(0.85); opacity: 0.8; border-color: rgba(236, 72, 153, 0.6); }
-  100% { transform: scale(1.35); opacity: 0; border-color: rgba(168, 85, 247, 0.1); }
+  0% { transform: scale(0.85); opacity: 0.8; border-color: var(--rb-pink-500); }
+  100% { transform: scale(1.35); opacity: 0; border-color: var(--rb-violet-600); }
 }
 
 /* 音量波形 canvas（LISTENING/THINKING 时显示，绕头像一圈） */
@@ -85,9 +85,9 @@ body { overflow: hidden; }
   width: 150px; height: 150px; border-radius: 50%;
   z-index: 3; position: relative;
   object-fit: cover;
-  border: 2px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 0 25px rgba(236, 72, 153, 0.3);
-  background: linear-gradient(135deg, #2a1a40, #1a0a28);
+  border: 2px solid var(--rb-border-soft);
+  box-shadow: 0 0 25px var(--rb-pink-500);
+  background: linear-gradient(135deg, var(--rb-bg-elevated), var(--rb-bg-1));
 }
 
 /* 转写区（只显示当前一轮） */
@@ -96,14 +96,14 @@ body { overflow: hidden; }
   padding: 0 12px;
 }
 .call__transcript::-webkit-scrollbar { width: 3px; }
-.call__transcript::-webkit-scrollbar-thumb { background: rgba(236, 72, 153, 0.3); border-radius: 2px; }
+.call__transcript::-webkit-scrollbar-thumb { background: var(--rb-pink-500); border-radius: 2px; }
 
 .call__transcript-user {
-  text-align: right; color: rgba(255, 255, 255, 0.85); font-size: 13px;
+  text-align: right; color: var(--rb-text-default); font-size: 13px;
   margin-bottom: 8px; line-height: 1.6;
 }
 .call__transcript-bot {
-  text-align: left; color: rgba(255, 200, 230, 0.9); font-size: 13px;
+  text-align: left; color: var(--rb-text-on-pink); font-size: 13px;
   margin-bottom: 8px; line-height: 1.6;
 }
 
@@ -121,7 +121,7 @@ body { overflow: hidden; }
 .call__mic-wave.is-active { opacity: 1; }
 .call__mic-wave-bar {
   width: 10px; border-radius: 5px;
-  background: #F7BDD6;
+  background: var(--rb-pink-200);
   height: 6px;
   transition: height 0.08s ease-out;
 }
@@ -136,4 +136,4 @@ body { overflow: hidden; }
 }
 .call__hangup:hover { transform: scale(1.05); box-shadow: 0 8px 25px rgba(239, 68, 68, 0.5); }
 .call__hangup:active { transform: scale(0.95); }
-.call__hangup svg { width: 28px; height: 28px; fill: #fff; }
+.call__hangup svg { width: 28px; height: 28px; fill: var(--rb-text-on-pink); }

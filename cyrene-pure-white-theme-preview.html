@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html data-ui-theme="pearl-white" lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>昔涟 · 纯白主题预览</title>
+<style>
+/* ============ Pure-white tokens (mirrors theme.css pearl-white block) ============ */
+:root,
+[data-ui-theme="pearl-white"] {
+  color-scheme: light;
+
+  --rb-bg-0: #ffffff;
+  --rb-bg-1: #f5f5f7;
+  --rb-bg-2: #fafafc;
+  --rb-bg-3: #ffffff;
+  --rb-bg-elevated: #ffffff;
+
+  --rb-text-strong: #1d1d1f;
+  --rb-text-default: #2c2c2e;
+  --rb-text-muted: #6e6e73;
+  --rb-text-faint: #a1a1a6;
+  --rb-text-on-pink: #ffffff;
+
+  --rb-border-faint: rgba(0, 0, 0, 0.06);
+  --rb-border-soft: #e5e5ea;
+  --rb-border-strong: #d2d2d7;
+  --rb-border-grid: rgba(0, 0, 0, 0.04);
+
+  --rb-glow-pink: rgba(255, 91, 138, 0.18);
+  --rb-glow-soft: rgba(0, 0, 0, 0.06);
+  --rb-glow-violet: rgba(0, 0, 0, 0.04);
+  --rb-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.04);
+  --rb-shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.10);
+  --rb-shadow-pink: 0 4px 16px rgba(255, 91, 138, 0.20);
+
+  --rb-pink-50: #fff1f6;
+  --rb-pink-100: #ffd6e4;
+  --rb-pink-200: #ffb1cb;
+  --rb-pink-300: #ff7da8;
+  --rb-pink-400: #ff6b97;
+  --rb-pink-500: #ff5b8a;
+  --rb-pink-600: #e84a78;
+  --rb-pink-700: #c43a64;
+
+  --rb-card-bg: #ffffff;
+  --rb-divider-light: rgba(0, 0, 0, 0.08);
+  --rb-hover-light: rgba(0, 0, 0, 0.04);
+  --rb-active-light: rgba(0, 0, 0, 0.08);
+  --rb-input-bg: #ffffff;
+  --rb-input-border: #d2d2d7;
+  --rb-input-text: #1d1d1f;
+  --rb-input-placeholder: #a1a1a6;
+  --rb-slider-track: rgba(0, 0, 0, 0.08);
+  --rb-slider-fill: var(--rb-pink-500);
+  --rb-slider-thumb: #ffffff;
+  --rb-toggle-off: #e5e5ea;
+  --rb-toggle-on: var(--rb-pink-500);
+  --rb-scroll-thumb: rgba(0, 0, 0, 0.18);
+  --rb-scroll-thumb-hover: rgba(0, 0, 0, 0.32);
+}
+
+/* ============ Page chrome ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: var(--rb-bg-1);
+  color: var(--rb-text-default);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  padding: 32px;
+}
+.page-header {
+  max-width: 1400px;
+  margin: 0 auto 24px;
+}
+.page-header h1 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  color: var(--rb-text-strong);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.page-header p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--rb-text-muted);
+}
+.page-header .accent {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--rb-pink-500);
+  box-shadow: 0 0 0 4px var(--rb-pink-100);
+}
+.grid {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 24px;
+}
+
+/* ============ Window card chrome ============ */
+.window-card {
+  background: var(--rb-card-bg);
+  border: 1px solid var(--rb-border-soft);
+  border-radius: 12px;
+  box-shadow: var(--rb-shadow-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.window-card__titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--rb-bg-1);
+  border-bottom: 1px solid var(--rb-border-soft);
+  font-size: 12px;
+  color: var(--rb-text-muted);
+}
+.window-card__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--rb-pink-500);
+  box-shadow: 0 0 0 3px var(--rb-pink-100);
+}
+.window-card__title { font-weight: 600; color: var(--rb-text-strong); }
+.window-card__body {
+  padding: 16px;
+  min-height: 220px;
+  background: var(--rb-card-bg);
+  color: var(--rb-text-default);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.window-card__body > h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--rb-text-strong);
+}
+
+/* ============ Chat preview ============ */
+.bubbles { display: flex; flex-direction: column; gap: 8px; }
+.bubble {
+  max-width: 78%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  line-height: 1.5;
+  font-size: 13px;
+}
+.bubble--model {
+  align-self: flex-start;
+  background: var(--rb-bg-1);
+  color: var(--rb-text-default);
+  border: 1px solid var(--rb-border-soft);
+}
+.bubble--user {
+  align-self: flex-end;
+  background: var(--rb-pink-500);
+  color: var(--rb-text-on-pink);
+}
+.composer {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rb-border-soft);
+}
+.composer__input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--rb-input-border);
+  border-radius: 8px;
+  background: var(--rb-input-bg);
+  color: var(--rb-input-text);
+  font: inherit;
+}
+.composer__input::placeholder { color: var(--rb-input-placeholder); }
+.composer__send {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--rb-pink-500);
+  color: var(--rb-text-on-pink);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ============ Sidebar preview ============ */
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--rb-text-default);
+  cursor: pointer;
+}
+.sidebar-item:hover { background: var(--rb-hover-light); }
+.sidebar-item--active {
+  background: var(--rb-pink-50);
+  color: var(--rb-pink-600);
+  font-weight: 600;
+}
+.sidebar-item__icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--rb-border-soft);
+}
+.sidebar-item--active .sidebar-item__icon { background: var(--rb-pink-500); }
+
+/* ============ Settings preview ============ */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.field label {
+  font-size: 12px;
+  color: var(--rb-text-muted);
+  font-weight: 500;
+}
+.field input,
+.field select {
+  padding: 8px 10px;
+  border: 1px solid var(--rb-input-border);
+  border-radius: 8px;
+  background: var(--rb-input-bg);
+  color: var(--rb-input-text);
+  font: inherit;
+}
+.field input::placeholder { color: var(--rb-input-placeholder); }
+
+.option-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--rb-border-soft);
+  border-radius: 10px;
+  background: var(--rb-card-bg);
+  cursor: pointer;
+}
+.option-block--active {
+  border-color: var(--rb-pink-500);
+  box-shadow: 0 0 0 3px var(--rb-pink-100);
+}
+.option-block__swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--rb-border-soft);
+  flex-shrink: 0;
+}
+.option-block__swatch--classic {
+  background: linear-gradient(135deg, #1a1a2e, #2c1f3d);
+}
+.option-block__swatch--pink {
+  background: linear-gradient(135deg, #ff5b8a, #ffb1cb);
+}
+.option-block__swatch--white {
+  background: linear-gradient(135deg, #ffffff, #f5f5f7);
+  border: 1px solid var(--rb-border-strong);
+}
+.option-block__label { font-size: 13px; color: var(--rb-text-default); }
+.option-block__label small { display: block; color: var(--rb-text-muted); font-size: 11px; }
+
+/* slider */
+.slider-row { display: flex; align-items: center; gap: 12px; }
+.slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rb-slider-track);
+  outline: none;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--rb-slider-thumb);
+  border: 2px solid var(--rb-pink-500);
+  box-shadow: var(--rb-shadow-card);
+  cursor: pointer;
+}
+.slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--rb-slider-thumb);
+  border: 2px solid var(--rb-pink-500);
+  box-shadow: var(--rb-shadow-card);
+  cursor: pointer;
+}
+.slider-value {
+  min-width: 36px;
+  text-align: right;
+  color: var(--rb-text-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+/* toggle */
+.toggle {
+  position: relative;
+  width: 40px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--rb-toggle-off);
+  border: 1px solid var(--rb-border-soft);
+  flex-shrink: 0;
+}
+.toggle--on { background: var(--rb-toggle-on); border-color: var(--rb-pink-500); }
+.toggle__thumb {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: var(--rb-shadow-card);
+  transition: transform 0.2s;
+}
+.toggle--on .toggle__thumb { transform: translateX(16px); }
+
+/* buttons */
+.btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--rb-border-strong);
+  background: var(--rb-card-bg);
+  color: var(--rb-text-default);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.btn--primary {
+  background: var(--rb-pink-500);
+  color: var(--rb-text-on-pink);
+  border-color: var(--rb-pink-500);
+}
+
+/* ============ Call preview ============ */
+.call {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+}
+.call__avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--rb-pink-300), var(--rb-pink-500));
+  border: 3px solid var(--rb-pink-100);
+  box-shadow: var(--rb-shadow-pink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rb-text-on-pink);
+  font-size: 28px;
+  font-weight: 600;
+}
+.call__name { font-size: 15px; font-weight: 600; color: var(--rb-text-strong); }
+.call__status { font-size: 12px; color: var(--rb-text-muted); }
+.call__controls { display: flex; gap: 12px; margin-top: 8px; }
+.call__btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--rb-border-soft);
+  background: var(--rb-card-bg);
+  color: var(--rb-text-default);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+}
+.call__btn--end {
+  background: var(--rb-pink-500);
+  border-color: var(--rb-pink-500);
+  color: var(--rb-text-on-pink);
+}
+
+/* ============ Tasks preview ============ */
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--rb-border-soft);
+  border-radius: 8px;
+  background: var(--rb-card-bg);
+}
+.task-row__check {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid var(--rb-border-strong);
+  background: var(--rb-card-bg);
+  flex-shrink: 0;
+  position: relative;
+}
+.task-row__check--done {
+  background: var(--rb-pink-500);
+  border-color: var(--rb-pink-500);
+}
+.task-row__check--done::after {
+  content: "✓";
+  position: absolute;
+  top: -3px;
+  left: 2px;
+  color: var(--rb-text-on-pink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.task-row__title { flex: 1; font-size: 13px; color: var(--rb-text-default); }
+.task-row--done .task-row__title { color: var(--rb-text-faint); text-decoration: line-through; }
+.task-row__badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--rb-pink-50);
+  color: var(--rb-pink-600);
+  font-weight: 500;
+}
+
+/* ============ Sticker manager preview ============ */
+.sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.sticker-card {
+  aspect-ratio: 1;
+  background: var(--rb-bg-1);
+  border: 1px solid var(--rb-border-soft);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+.sticker-card--active {
+  border-color: var(--rb-pink-500);
+  box-shadow: 0 0 0 2px var(--rb-pink-100);
+}
+</style>
+</head>
+<body>
+
+<header class="page-header">
+  <h1><span class="accent"></span>昔涟 · 纯白主题预览</h1>
+  <p>纯白底 + 近黑字 + 品牌粉强调。打开浏览器查看效果，确认后再改实际代码。</p>
+</header>
+
+<main class="grid">
+
+  <!-- Chat -->
+  <section class="window-card" aria-label="chat">
+    <header class="window-card__titlebar">
+      <span class="window-card__dot"></span>
+      <span class="window-card__title">Chat · 聊天窗口</span>
+    </header>
+    <div class="window-card__body">
+      <h3>对话</h3>
+      <div class="bubbles">
+        <div class="bubble bubble--model">早安，今天想去哪里呀？</div>
+        <div class="bubble bubble--user">想喝杯热可可，陪我聊聊天吧。</div>
+        <div class="bubble bubble--model">好呀，给你倒一杯 ♡ 有什么想说的？</div>
+      </div>
+      <div class="composer">
+        <input class="composer__input" placeholder="输入消息…" />
+        <button class="composer__send">发送</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sidebar -->
+  <section class="window-card" aria-label="sidebar">
+    <header class="window-card__titlebar">
+      <span class="window-card__dot"></span>
+      <span class="window-card__title">Sidebar · 侧栏</span>
+    </header>
+    <div class="window-card__body">
+      <h3>导航</h3>
+      <div class="sidebar-item"><span class="sidebar-item__icon"></span>主页</div>
+      <div class="sidebar-item sidebar-item--active"><span class="sidebar-item__icon"></span>对话</div>
+      <div class="sidebar-item"><span class="sidebar-item__icon"></span>任务</div>
+      <div class="sidebar-item"><span class="sidebar-item__icon"></span>表情包</div>
+      <div class="sidebar-item"><span class="sidebar-item__icon"></span>设置</div>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section class="window-card" aria-label="settings">
+    <header class="window-card__titlebar">
+      <span class="window-card__dot"></span>
+      <span class="window-card__title">Settings · 设置</span>
+    </header>
+    <div class="window-card__body">
+      <h3>外观主题</h3>
+      <div class="option-block option-block--active">
+        <span class="option-block__swatch option-block__swatch--white"></span>
+        <span class="option-block__label">纯白 <small>白底黑字 · 粉色点缀（当前）</small></span>
+      </div>
+      <div class="option-block">
+        <span class="option-block__swatch option-block__swatch--pink"></span>
+        <span class="option-block__label">柔粉 <small>粉色主题</small></span>
+      </div>
+      <div class="option-block">
+        <span class="option-block__swatch option-block__swatch--classic"></span>
+        <span class="option-block__label">经典 <small>深色经典</small></span>
+      </div>
+
+      <h3 style="margin-top: 8px;">音量</h3>
+      <div class="slider-row">
+        <input class="slider" type="range" min="0" max="100" value="72" />
+        <span class="slider-value">72</span>
+      </div>
+
+      <h3 style="margin-top: 8px;">通用</h3>
+      <div class="field">
+        <label>角色名称</label>
+        <input value="昔涟" />
+      </div>
+      <div class="field">
+        <label>语言</label>
+        <select><option>简体中文</option><option>English</option></select>
+      </div>
+
+      <div class="slider-row" style="margin-top: 8px;">
+        <span class="slider-value" style="text-align: left; min-width: auto;">开启通知</span>
+        <div style="flex:1"></div>
+        <div class="toggle toggle--on"><span class="toggle__thumb"></span></div>
+      </div>
+
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button class="btn">取消</button>
+        <button class="btn btn--primary">保存</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Call -->
+  <section class="window-card" aria-label="call">
+    <header class="window-card__titlebar">
+      <span class="window-card__dot"></span>
+      <span class="window-card__title">Call · 通话窗口</span>
+    </header>
+    <div class="window-card__body call">
+      <div class="call__avatar">昔</div>
+      <div class="call__name">昔涟</div>
+      <div class="call__status">通话中 · 02:13</div>
+      <div class="call__controls">
+        <button class="call__btn">🎙</button>
+        <button class="call__btn">🔊</button>
+        <button class="call__btn">💬</button>
+        <button class="call__btn call__btn--end">✕</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tasks -->
+  <section class="window-card" aria-label="tasks">
+    <header class="window-card__titlebar">
+      <span class="window-card__dot"></span>
+      <span class="window-card__title">Tasks · 任务</span>
+    </header>
+    <div class="window-card__body">
+      <h3>今日待办</h3>
+      <div class="task-row">
+        <span class="task-row__check task-row__check--done"></span>
+        <span class="task-row__title task-row--done">整理这周的工作日志</span>
+        <span class="task-row__badge">已完成</span>
+      </div>
+      <div class="task-row">
+        <span class="task-row__check"></span>
+        <span class="task-row__title">回复三条未读消息</span>
+        <span class="task-row__badge">今天</span>
+      </div>
+      <div class="task-row">
+        <span class="task-row__check"></span>
+        <span class="task-row__title">明天的生日提醒</span>
+        <span class="task-row__badge">明天</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sticker manager -->
+  <section class="window-card" aria-label="sticker-manager">
+    <header class="window-card__titlebar">
+      <span class="window-card__dot"></span>
+      <span class="window-card__title">Sticker Manager · 表情包</span>
+    </header>
+    <div class="window-card__body">
+      <h3>我的收藏</h3>
+      <div class="sticker-grid">
+        <div class="sticker-card sticker-card--active">♡</div>
+        <div class="sticker-card">✿</div>
+        <div class="sticker-card">☀</div>
+        <div class="sticker-card">☾</div>
+        <div class="sticker-card">☕</div>
+        <div class="sticker-card">♪</div>
+        <div class="sticker-card">✿</div>
+        <div class="sticker-card">☆</div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+</body>
+</html>

@@ -24,15 +24,15 @@ body {
   border-radius: 24px;
   overflow: hidden;
   background:
-    radial-gradient(circle at 18% 8%, #4a1c55 0%, transparent 38%),
-    radial-gradient(circle at 88% 22%, #382468 0%, transparent 38%),
-    radial-gradient(circle at 50% 110%, #1c3158 0%, transparent 38%),
-    linear-gradient(155deg, #1d1438 0%, #15102a 60%, #1b102c 100%);
+    radial-gradient(circle at 18% 8%, var(--rb-bg-elevated) 0%, transparent 38%),
+    radial-gradient(circle at 88% 22%, var(--rb-bg-3) 0%, transparent 38%),
+    radial-gradient(circle at 50% 110%, var(--rb-bg-3) 0%, transparent 38%),
+    linear-gradient(155deg, var(--rb-bg-3) 0%, var(--rb-bg-1) 60%, var(--rb-bg-2) 100%);
   border: 1px solid rgba(255, 190, 226, 0.36);
   box-shadow:
-    0 0 24px rgba(236, 72, 153, 0.14),
+    0 0 24px var(--rb-glow-soft),
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 0 0 1px rgba(236, 72, 153, 0.08);
+    inset 0 0 0 1px var(--rb-border-faint);
   transition: width 200ms ease, height 200ms ease;
 }
 
@@ -41,7 +41,7 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.10), transparent 30%, rgba(236, 72, 153, 0.06) 70%, rgba(255, 255, 255, 0.04));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.10), transparent 30%, var(--rb-border-faint) 70%, rgba(255, 255, 255, 0.04));
   opacity: 0.58;
 }
 
@@ -55,7 +55,7 @@ body {
   height: 52px;
   padding: 0 12px 0 14px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.025));
-  border-bottom: 1px solid rgba(255, 182, 220, 0.18);
+  border-bottom: 1px solid var(--rb-border-soft);
   -webkit-app-region: drag;
   user-select: none;
   flex: 0 0 auto;
@@ -80,7 +80,7 @@ body {
   font: var(--rb-text-micro);
   color: rgba(235, 229, 245, 0.62);
   padding: 3px 9px;
-  border: 1px solid rgba(255, 182, 220, 0.18);
+  border: 1px solid var(--rb-border-soft);
   border-radius: var(--rb-radius-full);
   background: rgba(255, 255, 255, 0.06);
   white-space: nowrap;
@@ -130,7 +130,7 @@ body {
 }
 
 .sidebar__winbtn--close:hover {
-  background: linear-gradient(135deg, #ff6ec7, #db2777);
+  background: linear-gradient(135deg, var(--rb-pink-glow), var(--rb-pink-600));
   color: var(--rb-text-on-pink);
   box-shadow: 0 0 18px rgba(236, 72, 153, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
@@ -146,13 +146,13 @@ body {
   padding: 14px 14px 16px;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(236, 72, 153, 0.4) transparent;
+  scrollbar-color: var(--rb-border-strong) transparent;
 }
 
 .sidebar__body::-webkit-scrollbar { width: 4px; }
 .sidebar__body::-webkit-scrollbar-track { background: transparent; }
 .sidebar__body::-webkit-scrollbar-thumb {
-  background: rgba(236, 72, 153, 0.4);
+  background: var(--rb-border-strong);
   border-radius: 2px;
 }
 
@@ -173,7 +173,7 @@ body {
   display: block;
   border: 2px solid rgba(255, 182, 220, 0.46);
   box-shadow:
-    0 0 22px rgba(236, 72, 153, 0.34),
+    var(--rb-glow-pink),
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
   pointer-events: none;
   -webkit-user-drag: none;
@@ -262,8 +262,8 @@ body {
   font-size: 28px;
   line-height: 1;
   background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 182, 220, 0.18);
-  filter: drop-shadow(0 0 10px rgba(236, 72, 153, 0.35));
+  border: 1px solid var(--rb-border-soft);
+  filter: drop-shadow(var(--rb-glow-pink));
   user-select: none;
 }
 
@@ -336,7 +336,7 @@ body {
   font: var(--rb-text-small-em);
   color: var(--rb-text-default);
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 182, 220, 0.18);
+  border: 1px solid var(--rb-border-soft);
   border-radius: var(--rb-radius-md);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   transition: background 120ms ease, color 120ms ease, transform 120ms ease, border-color 120ms ease, box-shadow 200ms ease;
@@ -380,7 +380,7 @@ body {
 }
 
 .sidebar__icon-btn.is-active {
-  background: linear-gradient(135deg, #ff6ec7, #ec4899 48%, #a855f7);
+  background: var(--rb-grad-pink-hot);
   color: var(--rb-text-on-pink);
   box-shadow: 0 0 18px rgba(236, 72, 153, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
