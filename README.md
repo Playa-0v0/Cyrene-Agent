@@ -1,7 +1,8 @@
 # Cyrene-Agent
 
+[English](./README.en.md) | 中文
+
 > Live2D 桌面智能伴侣 (Electron + TS) — Cyrene from Honkai: Star Rail.
-> Chat, emotional interaction, personalized memory.
 
 基于 Electron + TypeScript 开发的桌面端 Live2D 智能对话 Agent，
 搭载《崩坏：星穹铁道》昔涟（Cyrene）人设，支持日常聊天、情感交互
@@ -9,18 +10,7 @@
 
 ---
 
-## ⚠️ Disclaimer / 免责声明
-
-This is an **unofficial fan-made project**. It is **NOT** affiliated with,
-endorsed by, or sponsored by HoYoverse / miHoYo in any way.
-
-"Honkai: Star Rail", "Cyrene" (昔涟), and all related character designs,
-artwork, story content, and trademarks are the intellectual property of
-**HoYoverse / miHoYo**.
-
-This project is distributed under the MIT License for **personal and
-non-commercial use only**. Any commercial use of this software or its
-assets is **strictly prohibited** under miHoYo's fan-content policy.
+## ⚠️ 免责声明
 
 本项目为**非官方粉丝同人作品**，与 HoYoverse / 米哈游**无任何关联、
 背书或赞助关系**。
@@ -33,60 +23,55 @@ assets is **strictly prohibited** under miHoYo's fan-content policy.
 
 ---
 
-## ✨ Features / 功能
+## ✨ 功能
 
-### 🪟 Desktop Companion / 桌面伴侣
-- **Live2D presence**: Always-on-top desktop pet with the Cyrene model,
-  expressive reactions, and natural idle animations.
-- **Multi-window shells**: Chat, voice call, stickers, tasks, settings —
-  each surfaces its own focused experience.
+### 🪟 桌面伴侣
+- **Live2D 桌宠**：使用昔涟 Live2D 模型的置顶桌面宠物，支持表情反应
+  与自然待机动画。
+- **多窗口架构**：聊天、语音通话、贴纸、任务、设置各自独立窗口，
+  聚焦不同体验。
 
-### 💬 Conversation / 对话
-- **Daily chat**: Natural conversational agent with personality grounded
-  in the Cyrene character.
-- **Voice calls**: Real-time voice interaction with call duration and
-  avatar visual state.
-- **Stickers**: Built-in sticker panel with curated reactions.
+### 💬 对话
+- **日常聊天**：基于昔涟人设的自然对话 Agent。
+- **语音通话**：实时语音交互，含通话时长与头像视觉状态。
+- **表情贴纸**：内置贴纸面板，精选情绪反应。
 
-### 🧠 Memory Engine / 记忆引擎
-- **L0/L1 memory fields**: Editable user-level memory with snapshot
-  and dirty-check semantics.
-- **Personalized recall**: The agent remembers prior context, user
-  preferences, and emotional threads across sessions.
+### 🧠 记忆引擎
+- **L0/L1 记忆字段**：可编辑的用户级记忆，支持快照与脏检查。
+- **个性化召回**：跨会话记住上下文、用户偏好与情感线索。
 
-### 🛠 Tasks & Tools / 任务与工具
-- **Task panel**: Lightweight task tracking in classic mode.
-- **Documents & knowledge import**: Tools to feed the agent curated
-  knowledge.
+### 🛠 任务与工具
+- **任务面板**：经典模式下的轻量任务跟踪。
+- **文档与知识导入**：向 Agent 投喂精选知识。
 
-### 🎨 Themes / 主题
-- Multiple visual themes including **pearl-white**, **classic**, and
-  seasonal variants, with WCAG-AA readable text targets.
+### 🎨 主题
+- 多种视觉主题，包括**珠光白**、**经典**及季节限定变体，
+  文本可读性达 WCAG-AA 标准。
 
 ---
 
-## 🧱 Tech Stack / 技术栈
+## 🧱 技术栈
 
-| Layer / 层 | Tech / 技术 |
+| 层 | 技术 |
 |---|---|
 | Shell | Electron 33 |
-| Renderer | Vite 5 + TypeScript 5 + Pixi.js 7 |
+| 渲染层 | Vite 5 + TypeScript 5 + Pixi.js 7 |
 | Live2D | `pixi-live2d-display` 0.5.0-beta + Cubism Core |
 | AI / MCP | `@modelcontextprotocol/sdk`, `@ag-ui/core`, `@ag-ui/client` |
-| Integrations | 飞书 OpenAPI, 微信 OpenClaw, Nodemailer, PDFKit, docx |
-| Testing | Vitest 4 |
+| 集成 | 飞书 OpenAPI, 微信 OpenClaw, Nodemailer, PDFKit, docx |
+| 测试 | Vitest 4 |
 
-See [`package.json`](./package.json) for the full dependency list.
+完整依赖列表见 [`package.json`](./package.json)。
 
 ---
 
-## 🚀 Quick Start / 快速开始
+## 🚀 快速开始
 
-### Prerequisites / 前置条件
+### 前置条件
 - Node.js 18+
 - npm 9+
 
-### Install & Build / 安装与构建
+### 安装与构建
 
 ```bash
 npm install
@@ -94,15 +79,15 @@ npm run build
 npm start
 ```
 
-### Dev mode / 开发模式
+### 开发模式
 
 ```bash
 npm run dev
 ```
 
-This runs `tsc` for main/preload + `vite` + Electron concurrently.
+同时运行 `tsc`（主进程/preload）+ `vite` + Electron。
 
-### Run tests / 运行测试
+### 运行测试
 
 ```bash
 npm test
@@ -110,57 +95,50 @@ npm test
 
 ---
 
-## 📦 Project Structure / 项目结构
+## 📦 项目结构
 
 ```
 src/
-├── main/         # Electron main process
-├── preload/      # Electron preload bridges
-├── renderer/     # Vite renderer (chat / call / settings / tasks / stickers)
-└── sim/          # Scenario simulation harness
+├── main/         # Electron 主进程
+├── preload/      # Electron preload 桥接
+├── renderer/     # Vite 渲染层（聊天 / 通话 / 设置 / 任务 / 贴纸）
+└── sim/          # 场景模拟工具
 
 dist/renderer/
-├── audio/        # Sound assets (BGM, SFX)
-├── avatars/      # Avatar images
-├── models/       # Live2D models — see MODEL_LICENSE.md
+├── audio/        # 音频资源（BGM、音效）
+├── avatars/      # 头像图片
+├── models/       # Live2D 模型 — 见 MODEL_LICENSE.md
 │   └── cyrene/
-└── stickers/     # Sticker image assets
+└── stickers/     # 贴纸图片资源
 ```
 
-> **Note**: `dist/renderer/assets/`, `dist/renderer/*/index.html`,
-> and other Vite build outputs are **not** tracked in git (see
-> `.gitignore`). Run `npm run build:renderer` to regenerate them.
+> **注意**：`dist/renderer/assets/`、`dist/renderer/*/index.html`
+> 等 Vite 构建产物不在 git 跟踪范围内（见 `.gitignore`）。
+> 运行 `npm run build:renderer` 重新生成。
 
 ---
 
-## 📄 Licensing / 许可证
+## 📄 许可证
 
-- **Source code**: [MIT](./LICENSE) — copyright held by the project authors.
-- **Live2D model assets**: See [MODEL_LICENSE.md](./MODEL_LICENSE.md) —
-  used with permission from the credited B 站 creator. Character IP
-  remains with HoYoverse / miHoYo.
+- **源代码**：[MIT](./LICENSE) — 版权归项目作者所有。
+- **Live2D 模型资源**：见 [MODEL_LICENSE.md](./MODEL_LICENSE.md) —
+  经 B 站创作者授权使用。角色 IP 归 HoYoverse / 米哈游所有。
 
-For personal, non-commercial fan use only.
+仅供个人非商用粉丝向使用。
 
 ---
 
-## 🙏 Credits / 致谢
+## 🙏 致谢
 
-- **Cyrene / 昔涟 character**: © HoYoverse / miHoYo
-- **Live2D model**: Created by [@是依七哒](https://space.bilibili.com/457683484) — see
-  [MODEL_LICENSE.md](./MODEL_LICENSE.md)
-- **Live2D Cubism SDK**: © Live2D Cubism
-
-Special thanks to the original model creator for generously granting
-permission to use, modify, and redistribute their work in this project.
+- **昔涟角色**：© HoYoverse / 米哈游
+- **Live2D 模型**：由 [@是依七哒](https://space.bilibili.com/457683484) 制作 —
+  详见 [MODEL_LICENSE.md](./MODEL_LICENSE.md)
+- **Live2D Cubism SDK**：© Live2D Cubism
 
 特别感谢模型原作者慷慨授权本项目使用、修改并再分发其作品。
 
 ---
 
-## 💌 Contact / 联系
-
-Issues and PRs welcome via GitHub. Please keep all discussions respectful
-and on-topic.
+## 💌 联系
 
 欢迎通过 GitHub Issues / PR 交流。请保持讨论的礼貌与主题相关性。
