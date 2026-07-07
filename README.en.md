@@ -1,6 +1,8 @@
+<div align="center">
+
 # Cyrene-Agent
 
-English | [中文](./README.md)
+**English** | [中文](./README.md)
 
 > Live2D desktop companion (Electron + TS) — Cyrene from Honkai: Star Rail.
 
@@ -10,7 +12,13 @@ chat, emotional interaction, and a personalized memory engine.
 
 ---
 
+</div>
+
+<div align="center">
+
 ## ⚠️ Disclaimer
+
+</div>
 
 This is an **unofficial fan-made project**. It is **NOT** affiliated with,
 endorsed by, or sponsored by HoYoverse / miHoYo in any way.

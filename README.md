@@ -1,6 +1,8 @@
+<div align="center">
+
 # Cyrene-Agent
 
-[English](./README.en.md) | 中文
+[English](./README.en.md) | **中文**
 
 > Live2D 桌面智能伴侣 (Electron + TS) — Cyrene from Honkai: Star Rail.
 
@@ -10,7 +12,13 @@
 
 ---
 
+</div>
+
+<div align="center">
+
 ## ⚠️ 免责声明
+
+</div>
 
 本项目为**非官方粉丝同人作品**，与 HoYoverse / 米哈游**无任何关联、
 背书或赞助关系**。
