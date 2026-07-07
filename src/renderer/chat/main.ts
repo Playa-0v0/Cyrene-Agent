@@ -190,7 +190,7 @@ const FRONTEND_REPLY_TIMEOUT_MS = 35000;
  * User side: 暂留空，等设置页里上传用户头像后再把 user 改成 file:// 或 data: URL。
  */
 const AVATAR_SRC: Record<Role, string> = {
-  model: "/avatars/cyrene-avatar.png",
+  model: resolveAsset("avatars/cyrene-avatar.png"),
   user: "",
 };
 
