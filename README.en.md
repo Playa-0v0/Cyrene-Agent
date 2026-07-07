@@ -28,32 +28,203 @@ assets is **strictly prohibited** under miHoYo's fan-content policy.
 ## ✨ Features
 
 ### 🪟 Desktop Companion
-- **Live2D presence**: Always-on-top desktop pet with the Cyrene model,
-  expressive reactions, and natural idle animations.
-- **Multi-window shells**: Chat, voice call, stickers, tasks, settings —
-  each surfaces its own focused experience.
+- **Live2D pet** — Always-on-top desktop pet powered by `pixi-live2d-display`
+  + Cubism, with expression switching, mouth sync, click interaction, and
+  natural idle animations.
+- **Multi-window architecture** — 7 independent BrowserWindows: main chat,
+  sidebar, tasks, settings, sticker manager, voice call, and the pet itself —
+  each focused on its own experience.
+- **Pet state sync** — Pet displays live status (accompanying / thinking /
+  working / listening / reminding) and emotion (calm / happy / gentle /
+  excited / clingy) that update with the conversation in real time.
+- **Always-on-top / drag / click-through** — Toggle always-on-top, drag
+  anywhere, and click-through to underlying windows without breaking the
+  pet's presence.
+- **Tray menu** — Right-click tray icon for quick access: status panel,
+  settings, show/hide pet, quit.
+- **AG-UI expression broadcast** — Agent uses the `play_live2d_action` tool
+  to push (expression + motion + bubble) events to the pet window, so the
+  pet performs along with the conversation mood.
+- **One-click zoom & visibility** — Adjust pet size and toggle visibility
+  from settings, optionally launch at boot.
 
 ### 💬 Conversation
-- **Daily chat**: Natural conversational agent with personality grounded
-  in the Cyrene character.
-- **Voice calls**: Real-time voice interaction with call duration and
-  avatar visual state.
-- **Stickers**: Built-in sticker panel with curated reactions.
+- **Daily chat** — Natural conversational agent grounded in the Cyrene
+  persona (system.md / identity.md / soul.md / canon_quotes.md), with three
+  switchable personality styles: desktop / phone / call.
+- **AG-UI event stream** — Standardized agent events (RUN_STARTED /
+  TEXT_MESSAGE / TOOL_CALL / RUN_FINISHED) with per-token delta rendering,
+  perceived latency close to real-time replies.
+- **Multi-chat history** — Each chat persisted as its own JSON
+  (`<userData>/cyrene-chats/`), with auto-derived titles, `updatedAt`
+  sorting, double-click rename — leaving the localStorage era behind.
+- **Drag-and-drop file ingestion** — Drop PDF/MD/TXT/DOCX/XLSX/PPTX/CSV/JSON
+  into the chat window; chunks are auto-extracted and injected into the RAG
+  knowledge base with traceability.
+- **TTS read-aloud + one-click copy** — Each message has inline SVG icons
+  for read-aloud and copy.
+- **Chat rail** — Right-side rail lists all chats (new / list / empty
+  states), sorted by time desc, polling refresh every 30 s.
+- **User choice cards** — When the agent encounters ambiguous questions,
+  it pops choice cards via `ask_user_choice`, using AGUI CUSTOM events —
+  no need for users to dictate answers.
+- **Stickers** — Built-in sticker picker with three sizes (small / standard /
+  large); AI can auto-match the best sticker by reply similarity.
+- **TTS early-play optimization** — Pre-synthesize the first audio segment
+  during streaming output, cutting first-word latency.
+- **Voice calls** — State machine `IDLE → LISTENING → THINKING → SPEAKING
+  → ENDED`, 24-turn sliding window context, VAD silence auto-triggers reply.
+- **Call context persistence** — The 24-turn × 2-message sliding window
+  survives call end, so reconnecting resumes context.
 
 ### 🧠 Memory Engine
-- **L0/L1 memory fields**: Editable user-level memory with snapshot
-  and dirty-check semantics.
-- **Personalized recall**: The agent remembers prior context, user
-  preferences, and emotional threads across sessions.
+- **L0 core profile** — Nickname, address, occupation, long-term interests,
+  preferred language, notes; `isPinned` locks fields against AI overwrite.
+- **L1 recent state** — `recentGoals` / `recentPreferences` / `currentProject`
+  short-term profile with periodic refresh.
+- **L2 long-term memory** — Full evidence chain: `weight` (0-100),
+  `accessCount`, `status` (active/aging/archived/superseded/merged),
+  `conflictWith`, `evidenceIds`; per-entry delete / pin / batch archive.
+- **Automatic weight decay** — -1 per turn with quadratic acceleration and
+  `sqrt(intrinsicValue)` resistance; thresholds 60/30/10 auto-flip
+  active/aging/archived.
+- **Conflict detection & resolution** — Local lexical candidates → RAG
+  recall → scoring → queue → resolver; state machine `candidate → pending
+  → confirmed/dismissed/resolved`; resolution types cover unrelated /
+  context_difference / preference_evolution / direct_conflict / uncertain.
+- **Personalized recall** — `recall_history` tool + auto `updateL2RecallStats
+  (+1)` per recall; `recent-injected-memory` prevents repeated injection.
+- **DMAE Worldbook engine** — Markdown entry format (trigger words / pinned /
+  priority / intrinsic value / linked triggers), activation formula
+  `Ru = Bu × (1 + γ·ln(1+U_old))`, Active/Dormant/Archived state machine.
+- **One-shot cascade trigger** — 1-level cap + userHit guard + cascade dedup,
+  so related entries auto-activate via causal chains.
+- **Document & knowledge RAG import** — Supports txt/md/pdf/docx/xlsx/pptx/
+  csv/json; imported docs tagged `source: imported_doc`, bulk-deletable in
+  one click.
+- **Hybrid retrieval** — Vector + BM25 + reranker (three modes: light /
+  standard / none); embedding via local `@xenova/transformers` or
+  cloud OpenAI-compatible.
+- **Entity relationship graph** — jieba dictionary injection prevents
+  "Cyrene / 小鹿" from being split wrong; injects `【人物关系】` section
+  to reinforce character relationships.
+- **Relationship log** — Per-turn mood regex capture (tired/anxious/low/
+  happy) + `nextCareCue` next-care hook; daily summary compression + 90-day
+  rolling window.
 
 ### 🛠 Tasks & Tools
-- **Task panel**: Lightweight task tracking in classic mode.
-- **Documents & knowledge import**: Tools to feed the agent curated
-  knowledge.
+- **Task panel** — Today's date + current token usage + 7-day token
+  histogram (Chart.js) + today's scheduled tasks; 30 s polling + scheduler
+  event-driven refresh.
+- **Scheduled task engine** — Single timer scheduling the next trigger
+  (`maxTimerDelay = 1h`), task types `once` / `daily` / `weekly` /
+  `interval`; missed triggers recomputed via
+  `normalizeOverdueNextFireAt`; triggers inject "I'm a scheduled task"
+  metadata into the agent.
+- **Document generation tools** — `write_excel` (exceljs multi-sheet/
+  formulas/styles), `write_word` (docx paragraphs/tables/headings/lists/
+  headers/footers/TOC), `write_pdf` (pdfkit text/tables/font embedding),
+  `write_markdown`.
+- **File / Shell tools** — `read_file` / `list_dir` / `write_file` /
+  `read_image` (vision captioner to parse image content).
+- **Web fetch / search** — `fetch_url` (turndown HTML→Markdown),
+  `web_search` (search + scrape, playwright fallback).
+- **Life utilities** — `record_expense` / `query_expense` ledger + summary,
+  `exchange_rate`, `translate`, `apply_patch` (unified diff), `plan_trip`
+  multi-day itinerary.
+- **Task delegation & query** — `delegate_task` (sub-agent), `todo_write`
+  checklist + status bar, `ask_user_choice` user choice cards.
+- **Skill system** — Dual-source scan (`prompts/skills/` builtin +
+  `<userData>/skills/` user override, directory-level override); meta tools
+  `invoke_skill` / `read_skill_reference` (with path traversal guard +
+  read replay interceptor + large-text truncation); supports
+  `/skill_id ...` slash commands.
+- **Game Bot automation** — `engine.ts` step interpreter supports
+  `launch / wait / key / click / vlm_click / vlm_select / vlm_check /
+  branch` instructions; GameRecipe format describes automation flows;
+  exposed as the `game_bot_start` tool.
+- **Permission tiers** — `ToolRiskLevel` (safe/caution/dangerous) three-tier
+  approval; dangerous operations trigger a confirmation dialog.
 
-### 🎨 Themes
-- Multiple visual themes including **pearl-white**, **classic**, and
-  seasonal variants, with WCAG-AA readable text targets.
+### 🎨 Themes & UI
+- **Multi-theme system** — Pearl-white, classic, seasonal variants driven
+  by CSS variables; text readability hits WCAG-AA.
+- **Sidebar overview** — 📌 always-on-top toggle, 💬 chat / ⏰ tasks /
+  ⚙️ settings / 🔑 switch model / 📞 call one-click shortcuts; live
+  online/offline + status emoji + emotion emoji + current model
+  displayName.
+- **Chat window** — Message stream, attachment bubbles, sticker embed,
+  todo status bar, weather bubble, ask_user_choice cards, AG-UI streaming
+  delta, copy/read-aloud SVGs, history rail, sticker picker, full
+  min/max/close lifecycle.
+- **Task panel** — Chart.js 7-day histogram with daily average / peak,
+  current date, current token count.
+- **Settings panel** — 14 tabs: 🧠 Memory / 💬 Chat / 👤 User / ⏰ Tasks /
+  💼 Role / ✨ Skills / 🔌 Plugins / 🌐 External MCP / ⚙️ General /
+  🔑 API / 🌸 Cyrene / 📱 Phone / 🎙️ TTS / 🎧 ASR / 📊 Tokens / 📜
+  Disclaimer.
+- **Sticker manager** — Grid view + enable toggle + builtin/custom
+  categorization.
+- **Modal components** — Self-implemented universal confirm dialog
+  (inline modal to avoid Vite tree-shaking), self-implemented input
+  dialog (Electron disables `window.prompt` fallback).
+- **Inline SVG icons** — No emoji font dependency; color follows theme
+  (currentColor).
+
+### 🔌 Integrations
+- **Feishu / Lark long-connection** — Official SDK + WebSocket long-connection
+  (no public domain / no intranet penetration needed); p2p chat only,
+  multi-modal text / image / audio / video / file / sticker; resources
+  auto-downloaded to local cache.
+- **WeChat iLink Bot** — `@tencent-weixin/openclaw-weixin` + CLI; QR-code
+  login → long-poll 35 s `getUpdates` → main reply chain `dispatchInbound
+  → sendText`; `SessionExpiredError` auto-prompts re-scan.
+- **MCP (Model Context Protocol)** — stdio / SSE / HTTP transports;
+  builtin servers auto-synced; `install_mcp_server` tool lets the agent
+  auto-install new servers.
+- **Multi-LLM vendor support** — OpenAI / Anthropic compatible adapters,
+  vendor capability table + transport heuristic detection; per-provider
+  config + test connection.
+- **Multimodal vision** — Settings vision sub-config (`baseUrl / apiKey /
+  model`); `SETTINGS_TEST_VISION` one-click connectivity test.
+- **QR code generate / parse** — `qrcode` generates dataURL, `qr-image`
+  parses QR codes from images, used in channel config QR login flow.
+
+### 🔊 Voice
+- **Multi TTS engines** — MiniMax / GPT-SoVITS / Custom Cloud / MiMo / off
+  five-way switchable; supports streaming synthesis + audio cache.
+- **Multi ASR engines** — Aliyun realtime ASR, auto token acquisition +
+  JSON protocol + raw PCM audio stream handling.
+- **VAD silence detection** — Detects user pause during voice calls and
+  auto-triggers reply, no manual end-turn needed.
+- **Voice call audio pipeline** — Call window `pcm-processor.js` handles
+  audio stream; call duration + avatar state sync in real time.
+
+### 🧪 Simulation & Testing
+- **DMAE scenario simulation** — `npm run sim:coffee` / `sim:mix` /
+  `sim:rescue` / `sim:sweep --rewardGain=3,5,7,10` for Worldbook scoring
+  parameter sweep; output to `sim-result/`.
+- **Vitest unit tests** — `npm test` / `npm run test:watch`, covering
+  asr / tts / channels / chats / game-bot / memory / opener /
+  orchestrator / rag / scheduler / skills core modules.
+- **Build scripts** — `build:main` (tsc) / `build:preload` / `build:renderer`
+  (vite) / `dev` (concurrently tsc + vite + electron with VITE_DEV=1).
+- **Memory trace log** — `memory-trace.ts` records all L0/L1/L2/RAG/
+  conflict operations (ok/error/skip), for debug & audit.
+
+### ⚙️ Developer Experience
+- **Unified IPC bus** — `shared/ipc-channels.ts` defines 90+ channel
+  constants; all main ↔ renderer communication goes through it, no
+  hardcoded strings scattered around.
+- **Runtime state preview** — `SETTINGS_PREVIEW_RUNTIME_SYNC`
+  (off / local / llm) previews emotion / status copy in real time without
+  running the full flow.
+- **Embedding model hot-swap** — `EMBEDDING_SET_MODEL` IPC triggers
+  dimension-mismatch auto-detection and old-store cleanup, no manual
+  migration.
+- **File watching / reload** — Boot-time scan of `rag-data` /
+  `memory.json` / `worldbook` / `skills` directories; runtime
+  `watchWorldbookFile` etc. hot-reloads.
 
 ---
 
