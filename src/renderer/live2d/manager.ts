@@ -1,6 +1,7 @@
 import * as PIXI from "pixi.js";
 import { Live2DModel } from "pixi-live2d-display/cubism4";
 import type { HitAreaDef } from "./interaction";
+import { type Live2DTarget } from "../../shared/live2d-actions";
 
 export type { HitAreaDef } from "./interaction";
 
@@ -55,10 +56,26 @@ function buildHitAreaDefs(json: ModelJsonShape): HitAreaDef[] {
   return out;
 }
 
+function buildMotionIndexMap(json: ModelJsonShape): Map<string, Map<string, number>> {
+  const out = new Map<string, Map<string, number>>();
+  const motions = json.Motions ?? {};
+  for (const [group, list] of Object.entries(motions)) {
+    const inner = new Map<string, number>();
+    list.forEach((entry, i) => {
+      const name = entry?.Name;
+      if (typeof name === "string" && name.length > 0) inner.set(name, i);
+    });
+    out.set(group, inner);
+  }
+  return out;
+}
+
 export class Live2DManager {
   private app: PIXI.Application | null = null;
   private model: Live2DModel | null = null;
   private hitAreaDefs: HitAreaDef[] = [];
+  /** group -> motionName -> index in internalModel.motionManager.definitions[group]. */
+  private motionIndexMap: Map<string, Map<string, number>> = new Map();
   private options: Live2DManagerOptions;
   private disposed = false;
   /** Scale that fits the model into the base window (zoom=1.0). Cached once
@@ -117,6 +134,7 @@ export class Live2DManager {
     }
     this.model = model;
     this.hitAreaDefs = buildHitAreaDefs(json);
+    this.motionIndexMap = buildMotionIndexMap(json);
     this.app.stage.addChild(this.model);
     this.model.anchor.set(0.5, 0.5);
     // baseScale is always computed against the *base* window size, never the
@@ -166,6 +184,39 @@ export class Live2DManager {
 
   getHitAreaDefs(): HitAreaDef[] {
     return this.hitAreaDefs;
+  }
+
+  /**
+   * Play a Live2D motion or expression described by a catalog target.
+   *
+   * - motion target: looks up the motion's index in the group's
+   *   internalModel.motionManager.definitions and calls model.motion().
+   *   Falls back to model.expression(motionName) if the motion isn't
+   *   registered (matches the same fallback the hit-area controller uses).
+   * - expression target: calls model.expression(name) directly.
+   *
+   * Swallows errors so a broken animation never crashes the renderer.
+   * No-op when this.model is null (pet window not yet ready).
+   */
+  async playAction(target: Live2DTarget): Promise<void> {
+    if (!this.model) return;
+    try {
+      if (target.kind === "motion") {
+        const inner = this.motionIndexMap.get(target.group);
+        const index = inner?.get(target.motionName);
+        if (typeof index === "number") {
+          await this.model.motion(target.group, index);
+          return;
+        }
+        // Not registered as a motion — fall back to expression semantics.
+        await this.model.expression(target.motionName);
+        return;
+      }
+      // expression target
+      await this.model.expression(target.name);
+    } catch (err) {
+      console.warn("[Cyrene] playAction failed", target, err);
+    }
   }
 
   resize(width: number, height: number): void {
