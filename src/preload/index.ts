@@ -335,6 +335,15 @@ const live2dSpeechApi = {
 };
 contextBridge.exposeInMainWorld("live2dSpeech", live2dSpeechApi);
 
+const live2dActionApi = {
+  onPlayAction: (callback: (payload: import("../shared/live2d-actions").Live2DTarget) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: import("../shared/live2d-actions").Live2DTarget) => callback(payload);
+    ipcRenderer.on(IPC.LIVE2D_PLAY_ACTION, listener);
+    return () => ipcRenderer.removeListener(IPC.LIVE2D_PLAY_ACTION, listener);
+  },
+};
+contextBridge.exposeInMainWorld("live2dAction", live2dActionApi);
+
 // Opener 主动开口反馈（渲染端 → 主进程）
 const openerApi = {
   feedback: (payload: { type: "clicked"; sceneId: string; itemId: string }) =>
