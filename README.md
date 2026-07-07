@@ -58,7 +58,7 @@
 | 渲染层 | Vite 5 + TypeScript 5 + Pixi.js 7 |
 | Live2D | `pixi-live2d-display` 0.5.0-beta + Cubism Core |
 | AI / MCP | `@modelcontextprotocol/sdk`, `@ag-ui/core`, `@ag-ui/client` |
-| 集成 | 飞书 OpenAPI, 微信 OpenClaw, Nodemailer, PDFKit, docx |
+| 集成 | 飞书 OpenAPI, 微信 iLink, Nodemailer, PDFKit, docx |
 | 测试 | Vitest 4 |
 
 完整依赖列表见 [`package.json`](./package.json)。

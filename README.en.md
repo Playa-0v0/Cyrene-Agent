@@ -65,7 +65,7 @@ assets is **strictly prohibited** under miHoYo's fan-content policy.
 | Renderer | Vite 5 + TypeScript 5 + Pixi.js 7 |
 | Live2D | `pixi-live2d-display` 0.5.0-beta + Cubism Core |
 | AI / MCP | `@modelcontextprotocol/sdk`, `@ag-ui/core`, `@ag-ui/client` |
-| Integrations | Lark OpenAPI, WeChat OpenClaw, Nodemailer, PDFKit, docx |
+| Integrations | Lark OpenAPI, WeChat iLink, Nodemailer, PDFKit, docx |
 | Testing | Vitest 4 |
 
 See [`package.json`](./package.json) for the full dependency list.
