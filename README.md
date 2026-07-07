@@ -41,7 +41,7 @@
 | 🪟 桌宠 / 多窗口 / 表情互动 | ✅ 可用 |
 | 💬 日常聊天 / 语音通话 / 多会话历史 / 贴纸 | ✅ 可用 |
 | 🧠 记忆系统（L0/L1/L2 + 自研 DMAE Worldbook 引擎） | ✅ 可用 |
-| 🔊 TTS / ASR / 文档生成 / 联网搜索 / 文件操作 | ✅ 可用 |
+| 🔊 TTS / ASR / 文档生成 / 联网搜索 / 文件操作 | ✅ 可用（部分需配置） |
 | 💼 飞书 Lark 长连接 | 🧪 实验性 |
 | 💬 微信 iLink Bot | 🧪 实验性 |
 | 🤖 Game Bot 游戏自动化 | 🧪 实验性 |
@@ -80,7 +80,6 @@ npm install
 ### 3. 构建并启动
 
 ```bash
-npm install
 npm run build
 npm start
 ```
@@ -125,7 +124,9 @@ npm run dev
 
 ### Live2D 模型怎么换 / 怎么放？
 
-**当前模型路径是硬编码**（`src/renderer/main.ts` 里写死 `/models/cyrene/Cyrene.model3.json`），**设置面板目前没有"换模型"的 UI**。
+**⚠️ 模型路径当前是硬编码**（`src/renderer/main.ts:55` 里写死
+`/models/cyrene/Cyrene.model3.json`），**设置面板目前没有"换模型"的 UI**。
+所以换模型要走文件系统替换 + 重新构建。
 
 要换模型：
 1. 用你自己的 Live2D Cubism 4 模型替换 `src/renderer/public/models/cyrene/` 下整套文件：

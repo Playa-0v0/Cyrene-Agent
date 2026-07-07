@@ -46,7 +46,7 @@ artwork, story content, and trademarks are the intellectual property of
 | 🪟 Live2D pet / multi-window / expression interaction | ✅ Stable |
 | 💬 Daily chat / voice call / multi-chat history / stickers | ✅ Stable |
 | 🧠 Memory system (L0/L1/L2 + custom DMAE Worldbook engine) | ✅ Stable |
-| 🔊 TTS / ASR / document generation / web search / file ops | ✅ Stable |
+| 🔊 TTS / ASR / document generation / web search / file ops | ✅ Stable (some need config) |
 | 💼 Lark / Feishu long-connection | 🧪 Experimental |
 | 💬 WeChat iLink Bot | 🧪 Experimental |
 | 🤖 Game Bot automation | 🧪 Experimental |
@@ -88,7 +88,6 @@ on network.
 ### 3. Build and start
 
 ```bash
-npm install
 npm run build
 npm start
 ```
@@ -145,9 +144,10 @@ Troubleshooting:
 
 ### How to swap / add a Live2D model
 
-**Model path is currently hardcoded** to `/models/cyrene/Cyrene.model3.json`
-in `src/renderer/main.ts`; **there's no "switch model" UI in the settings
-panel yet**.
+**⚠️ Model path is currently hardcoded** to
+`/models/cyrene/Cyrene.model3.json` (see `src/renderer/main.ts:55`),
+and **there's no "switch model" UI in the settings panel yet**. So
+swapping the model requires filesystem replacement + rebuild.
 
 To swap:
 1. Replace the entire `src/renderer/public/models/cyrene/` directory with
