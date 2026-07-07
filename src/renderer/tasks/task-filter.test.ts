@@ -14,10 +14,10 @@ function task(id: string, nextFireAt: string | null, enabled = true): ScheduledT
 
 describe("getSchedulePanelItems", () => {
   it("shows today's remaining tasks first", () => {
-    const now = new Date("2026-07-06T10:00:00.000+08:00");
+    const now = new Date(2026, 6, 6, 10, 0, 0);
     const result = getSchedulePanelItems([
-      task("tomorrow", "2026-07-07T01:00:00.000+08:00"),
-      task("today", "2026-07-06T12:00:00.000+08:00"),
+      task("tomorrow", new Date(2026, 6, 7, 1, 0, 0).toISOString()),
+      task("today", new Date(2026, 6, 6, 12, 0, 0).toISOString()),
     ], now);
 
     expect(result.mode).toBe("today");
@@ -26,10 +26,10 @@ describe("getSchedulePanelItems", () => {
   });
 
   it("falls back to upcoming tasks when nothing remains today", () => {
-    const now = new Date("2026-07-06T10:00:00.000+08:00");
+    const now = new Date(2026, 6, 6, 10, 0, 0);
     const result = getSchedulePanelItems([
-      task("past-today", "2026-07-06T08:00:00.000+08:00"),
-      task("tomorrow", "2026-07-07T08:00:00.000+08:00"),
+      task("past-today", new Date(2026, 6, 6, 8, 0, 0).toISOString()),
+      task("tomorrow", new Date(2026, 6, 7, 8, 0, 0).toISOString()),
     ], now);
 
     expect(result.mode).toBe("upcoming");
@@ -38,9 +38,9 @@ describe("getSchedulePanelItems", () => {
   });
 
   it("ignores disabled tasks and invalid dates", () => {
-    const now = new Date("2026-07-06T10:00:00.000+08:00");
+    const now = new Date(2026, 6, 6, 10, 0, 0);
     const result = getSchedulePanelItems([
-      task("disabled", "2026-07-06T12:00:00.000+08:00", false),
+      task("disabled", new Date(2026, 6, 6, 12, 0, 0).toISOString(), false),
       task("invalid", "not-a-date"),
     ], now);
 
