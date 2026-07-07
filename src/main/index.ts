@@ -25,6 +25,12 @@ import "./orchestrator/built-in-tools";
 // 触发 fs-tools 的副作用注册（read_file / list_dir / write_file / read_image）
 import "./orchestrator/fs-tools";
 import { initMcpManager, addMcpServer, removeMcpServer, listMcpServers } from "./orchestrator/mcp-manager";
+import {
+  syncPlaywrightMcp,
+  syncFirecrawlHostedMcp,
+  PLAYWRIGHT_MCP_ID,
+  FIRECRAWL_HOSTED_MCP_ID,
+} from "./sync-mcp-builtin";
 import { buildEnvironmentContext } from "./orchestrator/environment";
 import { initPermissionFromDisk, registerPermissionIpc, getCurrentLevel } from "./permission";
 import { registerChoiceIpc, setChoiceCardSender } from "./user-choice";
@@ -2957,6 +2963,14 @@ app.whenReady().then(async () => {
       await syncVolcanoSearchMcp(saved);
     }
 
+    // Playwright / Firecrawl hosted MCP：按 settings 字段自动连接/断开
+    if ("playwrightMcpEnabled" in tts) {
+      await syncPlaywrightMcp(saved);
+    }
+    if ("firecrawlHostedMcpEnabled" in tts) {
+      await syncFirecrawlHostedMcp(saved);
+    }
+
     // Opener 主动开口：档位变化时重启
     if ("openerMode" in tts) {
       stopOpener();
@@ -3455,6 +3469,15 @@ app.whenReady().then(async () => {
   // 邮件发送工具（SMTP 直发，需在设置里配置 SMTP 授权码）
   registerEmailTools();
   syncBuiltInToolToggles(loadGeneralSettings());
+
+  // 内置 MCP 自动连接：Playwright (默认关闭,选项控制) / Firecrawl hosted (默认开启,零配置)
+  const initialSettings = loadGeneralSettings();
+  void syncPlaywrightMcp(initialSettings).catch((e) =>
+    console.error("[Cyrene] playwright MCP sync failed:", e)
+  );
+  void syncFirecrawlHostedMcp(initialSettings).catch((e) =>
+    console.error("[Cyrene] firecrawl hosted MCP sync failed:", e)
+  );
 
   // Skill 系统：扫描双源 skills + 注册 meta-tool
   initSkills();
