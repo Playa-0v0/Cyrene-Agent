@@ -1748,7 +1748,7 @@ function broadcastRuntimeStateChanged(): void {
   broadcastToAuxWindows(IPC.RUNTIME_STATE_CHANGED, runtimeState);
 }
 
-function sendToLive2DWindow(channel: string, payload?: unknown): void {
+export function sendToLive2DWindow(channel: string, payload?: unknown): void {
   const win = mainWindow;
   if (!win || win.isDestroyed()) return;
   if (payload === undefined) win.webContents.send(channel);

@@ -4,6 +4,8 @@
 import { spawn } from "child_process";
 import { toolRegistry } from "./tool-registry";
 import { addMcpServer } from "./mcp-manager";
+import { sendToLive2DWindow } from "../index";
+import { createPlayLive2DActionTool } from "./tools/play-live2d-action";
 
 const LOG_PREFIX = "[BuiltinTools]";
 
@@ -1078,3 +1080,5 @@ toolRegistry.register({
     return `[ask_user_choice] 用户自定义输入：${userChoice}。请按此要求执行。`;
   },
 });
+
+toolRegistry.register(createPlayLive2DActionTool({ sendToLive2DWindow }));
