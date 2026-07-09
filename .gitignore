@@ -65,6 +65,24 @@ Thumbs.db
 # Video/preview render projects (not source code)
 videos/
 
+# Local AI model files (用户下载到 models/，二进制不跟踪 — 见 docs/local-models.md)
+# 模型目录约定：
+#   - models/Xenova/<repo>/         Embedding 模型（bge-m3 等）
+#   - models/<reranker>/            Reranker 模型（bge-reranker-base / ms-marco-MiniLM-L-6-v2）
+# 规则说明：
+#   - models/Xenova/ 完整目录忽略（用户下载的完整 embedding 模型，含 tokenizer + config + onnx）
+#   - 已跟踪的 reranker JSON 元数据保持跟踪（config/tokenizer 等小文件）
+#   - 所有 .onnx / onnx_data / .bin / .safetensors 大模型权重永远忽略
+models/Xenova/
+**/onnx/
+**/*.onnx
+**/*.onnx_data
+**/*.bin
+**/*.safetensors
+
+# Playwright MCP 运行时产物
+.playwright-mcp/
+
 # Private design docs — not published
 docs/
 !docs/
