@@ -287,6 +287,7 @@ export class ChannelDispatcher {
             fs.mkdirSync(audioDir, { recursive: true });
             const audioPath = path.join(audioDir, `${msg.channel}-${Date.now()}.mp3`);
             fs.writeFileSync(audioPath, audioBuf);
+            console.log(LOG, `TTS verify: written path=${audioPath} ext=.mp3 mime=audio/mpeg`);
             parts.push({ kind: "audio", filePath: audioPath, mime: "audio/mpeg" });
             console.log(LOG, `TTS 合成完成: ${audioBuf.length} bytes → ${audioPath}`);
           }

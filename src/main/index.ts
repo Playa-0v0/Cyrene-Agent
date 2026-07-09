@@ -3754,6 +3754,8 @@ app.whenReady().then(async () => {
         stylePrompt: cfg.ttsMimoStylePrompt,
         format: "mp3",
       });
+      const headerHex = result.audio.subarray(0, 4).toString("hex");
+      console.log("[TTS verify] engine=", cfg.ttsEngine, "format=", result.format, "header=", headerHex, "size=", result.audio.length);
       return result.audio;
     } catch (err) {
       console.warn("[Channels] TTS 合成失败:", err instanceof Error ? err.message : err);

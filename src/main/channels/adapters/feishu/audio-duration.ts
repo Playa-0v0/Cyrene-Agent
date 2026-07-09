@@ -186,6 +186,7 @@ export async function getAudioDurationMs(filePath: string): Promise<number | und
     console.log(LOG, `mp3 header 解析: ${fromHeader}ms`);
     return fromHeader;
   }
+  console.log(LOG, `mp3 header 解析失败（可能不是 mp3）: ${filePath}`);
 
   // 3) 兜底估算
   const est = estimateByFileSize(filePath);
