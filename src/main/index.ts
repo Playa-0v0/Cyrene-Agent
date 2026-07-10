@@ -24,6 +24,7 @@ import { loadChannelsSettings } from "./channels/settings-store";
 import "./orchestrator/built-in-tools";
 // 触发 fs-tools 的副作用注册（read_file / list_dir / write_file / read_image）
 import "./orchestrator/fs-tools";
+import "./orchestrator/qq-tools";
 import { initMcpManager, addMcpServer, removeMcpServer, listMcpServers, pruneMcpServersByIds } from "./orchestrator/mcp-manager";
 import { syncPlaywrightMcp, PLAYWRIGHT_MCP_ID, REMOVED_BUILTIN_MCP_IDS } from "./sync-mcp-builtin";
 import { buildEnvironmentContext } from "./orchestrator/environment";
@@ -63,6 +64,8 @@ import { setCallWindow, registerCallIpc, setCallSettings, stopCall } from "./cal
 import { initSkills, skillRegistry, buildSkillCatalog, parseSlashCommand, setSkillEnabled, listSkillsForUi } from "./skills";
 import { initGameBot } from "./game-bot";
 import { initChannels, shutdownChannels } from "./channels/init";
+import { channelManager } from "./channels/manager";
+import { getRecentLog as getRecentChannelLog } from "./channels/message-log";
 import { setDispatcherBuildAndRunAgent, setDispatcherSynthesizeTts, setDispatcherBroadcastChat, setDispatcherLoadRecentHistory } from "./channels/dispatcher";
 import {
   buildAgentRunOptions,
@@ -3858,6 +3861,7 @@ app.whenReady().then(async () => {
     buildAlwaysOnContext: (async (userText, messages) =>
       buildAlwaysOnContext(userText, messages as any)) as BuildOptionsDeps["buildAlwaysOnContext"],
     buildRelationshipContext,
+    buildExternalChannelContext,
     buildSystemPrompt,
     logWorldbookInjection,
     normalizeChatMessages: ((raw: ReadonlyArray<unknown>) =>
@@ -3891,6 +3895,42 @@ app.whenReady().then(async () => {
     recordRelationshipTurn,
     getChatWindow: () => chatWindow,
   };
+
+  function buildExternalChannelContext(): string {
+    const status = channelManager.getAllStatus() as Record<string, { enabled: boolean; phase: string; message?: string; detail?: Record<string, unknown> }>;
+    const lines = Object.entries(status)
+      .filter(([, s]) => s.enabled || s.phase === "running")
+      .map(([id, s]) => {
+        const label = id === "qq" ? "QQ / NapCat" : id === "feishu" ? "Feishu" : id === "wechat" ? "WeChat" : id;
+        const msg = s.message ? ` (${s.message})` : "";
+        return `- ${label}: ${s.phase}${msg}`;
+      });
+    const recentLogs = getRecentChannelLog(12)
+      .filter((entry) => entry.channel === "qq" || entry.channel === "wechat" || entry.channel === "feishu")
+      .slice(0, 8)
+      .reverse()
+      .map((entry) => {
+        const dir = entry.dir === "incoming" ? "收到" : "发出";
+        const who = entry.senderName || entry.senderId || entry.chatId;
+        const text = entry.text.length > 140 ? entry.text.slice(0, 140) + "..." : entry.text;
+        return `- [${entry.channel}] ${dir} ${who}: ${text}`;
+      });
+    if (lines.length === 0 && recentLogs.length === 0) return "";
+    return [
+      "【外部聊天渠道状态】",
+      ...lines,
+      "QQ 渠道通过 NapCat / OneBot WebSocket 接入，不是 MCP server；如果 QQ / NapCat 状态为 running 或已连接，你可以确认自己已经能通过 QQ 收发消息。",
+      "当用户询问是否能接入 QQ 时，请以此处渠道状态为准，不要因为 MCP 列表为空就判断 QQ 不可用。",
+      ...(recentLogs.length > 0
+        ? [
+            "",
+            "【最近外部渠道消息】",
+            ...recentLogs,
+            "当用户询问刚刚 QQ/外部渠道是否收到某条消息时，请优先依据这里的最近消息日志回答；如果日志里没有对应消息，就明确说当前上下文里没看到。",
+          ]
+        : []),
+    ].join("\n");
+  }
   registerAgUiIpc(
     async (input: AguiRunInput) => buildAgentRunOptions(input, buildOptionsDeps),
     async (result, latestUserText) => onAgentRunFinished(result, latestUserText, onRunFinishedDeps),

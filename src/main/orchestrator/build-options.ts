@@ -50,6 +50,7 @@ export interface BuildOptionsDeps {
     messages: ReadonlyArray<{ role: string; content?: string }>,
   ) => Promise<string>;
   buildRelationshipContext: () => Promise<string>;
+  buildExternalChannelContext?: () => string;
   buildSystemPrompt: (styleFile: string) => string;
   logWorldbookInjection: (alwaysOnContext: string, systemContent: string) => void;
   normalizeChatMessages: (raw: ReadonlyArray<unknown>) => ChatMessage[];
@@ -126,6 +127,14 @@ export function buildChannelSystem(channel?: RelationshipChannel): string {
       "必要时可以简短列步骤，不要过度撒娇，不要发太长情绪化回复。",
     ].join("\n");
   }
+  if (channel === "qq") {
+    return [
+      "【渠道回复方式】",
+      "你正在通过 QQ 回复用户。",
+      "回复要像 QQ 聊天消息：短、自然、轻一点，避免长篇说明。",
+      "群聊里只回答当前被触发的问题，不要主动扩散话题或暴露系统/工具细节。",
+    ].join("\n");
+  }
   return "";
 }
 
@@ -183,6 +192,7 @@ export async function buildAgentRunOptions(
   const skillCatalog = deps.buildSkillCatalog(deps.skillRegistry.getEnabled());
   const skillActivation = deps.resolveSlashActivation(slimMessages);
   const channelSystem = buildChannelSystem(input.channel);
+  const externalChannelContext = deps.buildExternalChannelContext?.() ?? "";
 
   let toneInjection = "";
   if (deps.sceneEmbeddingIndex) {
@@ -208,6 +218,7 @@ export async function buildAgentRunOptions(
   const isTalkMode = (input.style || "").startsWith("talk");
   const systemContent =
     (environmentContext ? environmentContext + "\n\n" : "") +
+    (externalChannelContext ? externalChannelContext + "\n\n" : "") +
     (channelSystem ? channelSystem + "\n\n" : "") +
     deps.buildSystemPrompt(input.style || "01_default.md") +
     (skillCatalog ? "\n\n---\n\n" + skillCatalog : "") +
@@ -250,7 +261,7 @@ export async function onAgentRunFinished(
   result: CyreneRunResult,
   latestUserText: string,
   deps: OnRunFinishedDeps,
-  channel?: "wechat" | "feishu",
+  channel?: "wechat" | "feishu" | "qq",
 ): Promise<void> {
   const chatContent = result.reply;
   deps.scheduleMemoryWrite(latestUserText, chatContent);
@@ -299,7 +310,7 @@ export async function onAgentRunFinished(
     deps.broadcastRuntimeStateChanged();
     // 心情观察器在 channels bot (wechat/feishu) 上跳过：节省一次 LLM 调用、加快首条回复
     // 桌面聊天（channel === undefined）照常跑，保持 Live2D 表情/心情跟随对话变化
-    if (channel !== "wechat" && channel !== "feishu") {
+    if (channel !== "wechat" && channel !== "feishu" && channel !== "qq") {
       void deps.observeRuntimeState(settings, [], latestUserText, chatContent);
     }
   }

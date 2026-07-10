@@ -1,5 +1,7 @@
 ﻿node_modules/
 
+models/
+
 # Build outputs (Electron + Vite + tsc)
 dist/main/
 dist/preload/

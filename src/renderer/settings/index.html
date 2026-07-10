@@ -820,6 +820,67 @@
             </div>
           </div>
 
+          <div class="channels-card">
+            <div class="channels-card__header">
+              <h2>QQ / NapCat</h2>
+              <span class="switch"><input id="channels-qq-enabled" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
+            </div>
+            <div class="channels-card__body">
+              <div class="channels-status" id="channels-qq-status">
+                <span class="channels-status__dot channels-status__dot--offline"></span>
+                <span class="channels-status__text">未启用</span>
+              </div>
+              <p class="channels-card__hint">
+                通过 NapCat 的 <strong>OneBot v11 反向 WebSocket</strong>接入 QQ。NapCat 侧连接地址填写为下方监听地址。
+              </p>
+
+              <div class="form-row">
+                <label class="form-label">监听 Host</label>
+                <input type="text" id="channels-qq-host" class="form-input" placeholder="127.0.0.1" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">监听端口</label>
+                <input type="number" min="1" max="65535" id="channels-qq-port" class="form-input" placeholder="3001" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">WebSocket 路径</label>
+                <input type="text" id="channels-qq-path" class="form-input form-input--wide" placeholder="/onebot/v11/ws" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">Access Token</label>
+                <input type="password" id="channels-qq-token" class="form-input form-input--wide" placeholder="可选，需与 NapCat 一致" autocomplete="off" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">机器人 QQ 号</label>
+                <input type="text" id="channels-qq-self-id" class="form-input" placeholder="用于群聊 @ 识别" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">允许用户 QQ</label>
+                <input type="text" id="channels-qq-allowed-users" class="form-input form-input--wide" placeholder="逗号分隔，留空表示不限" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">允许群号</label>
+                <input type="text" id="channels-qq-allowed-groups" class="form-input form-input--wide" placeholder="逗号分隔，留空表示不限" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">群聊触发</label>
+                <select id="channels-qq-group-mode" class="form-input">
+                  <option value="mention">@ 机器人</option>
+                  <option value="prefix">前缀触发</option>
+                  <option value="always">所有消息</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label class="form-label">群聊前缀</label>
+                <input type="text" id="channels-qq-group-prefix" class="form-input" placeholder="/cyrene" />
+              </div>
+              <div class="channels-card__actions">
+                <button type="button" class="btn-secondary" id="channels-qq-save">保存并重启</button>
+              </div>
+              <div class="channels-feedback" id="channels-qq-feedback"></div>
+            </div>
+          </div>
+
           <div class="channels-card channels-card--global">
             <div class="channels-card__header">
               <h2>全局</h2>

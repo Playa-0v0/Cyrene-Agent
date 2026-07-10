@@ -92,6 +92,21 @@ export function loadRecentHistory(sessionId: string, limit: number): HistoryEntr
 }
 
 /** 启动时所有 session 文件预读 (可选, dispatcher 用不到, 给将来 Phase 4 调试 UI 留接口). */
+export function clearHistory(sessionId: string): boolean {
+  if (!sessionId) return false;
+  const fp = filePath(sessionId);
+  try {
+    fs.unlinkSync(fp);
+    return true;
+  } catch (err) {
+    if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+      return true;
+    }
+    console.warn(LOG, "clearHistory 失败:", sessionId, err instanceof Error ? err.message : err);
+    return false;
+  }
+}
+
 export function reloadAllHistory(): Map<string, HistoryEntry[]> {
   const out = new Map<string, HistoryEntry[]>();
   try {

@@ -8,7 +8,7 @@
 import type { WebContents } from "electron";
 
 /** 渠道 id 联合类型。新增渠道时在此扩展。 */
-export type ChannelId = "wechat" | "feishu";
+export type ChannelId = "wechat" | "feishu" | "qq";
 
 /** 渠道能力声明。Dispatcher 按 cap 做降级。 */
 export interface ChannelCapability {

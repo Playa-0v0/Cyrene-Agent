@@ -119,15 +119,47 @@ function removeMetaById(id: string): void {
   persistIndex();
 }
 
+function visibleContent(content: string): string {
+  return content.replace(/\[sticker:[^\]]+\]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function isMeaningfulMessage(message: ChatMessage): boolean {
+  return (
+    (message.role === "user" || message.role === "model") &&
+    typeof message.content === "string" &&
+    visibleContent(message.content).length > 0
+  );
+}
+
 // 从首条用户消息推导标题（前 30 字 / 单行）。
 function deriveTitle(messages: ChatMessage[]): string {
-  const firstUser = messages.find((m) => m.role === "user" && m.content.trim());
+  const firstUser = messages.find((m) => m.role === "user" && visibleContent(m.content));
   if (!firstUser) return "新对话";
-  const cleaned = firstUser.content.replace(/\s+/g, " ").trim();
+  const cleaned = visibleContent(firstUser.content);
   return cleaned.length > 30 ? cleaned.slice(0, 30) + "…" : cleaned;
 }
 
 // ── public API ──────────────────────────────────────────────
+
+function cleanupStickerOnlySessions(): void {
+  const removeIds: string[] = [];
+  for (const meta of indexCache) {
+    const session = readSessionFile(meta.id);
+    if (!session) continue;
+    if (!session.messages.some(isMeaningfulMessage)) removeIds.push(meta.id);
+  }
+  if (removeIds.length === 0) return;
+  for (const id of removeIds) {
+    try {
+      const filePath = sessionPath(id);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    } catch (err) {
+      console.warn("[chats-store] cleanup sticker-only session failed:", id, err);
+    }
+  }
+  indexCache = indexCache.filter((m) => !removeIds.includes(m.id));
+  persistIndex();
+}
 
 export function initialize(): void {
   if (initialized) return;
@@ -136,6 +168,7 @@ export function initialize(): void {
   indexPath = path.join(rootDir, INDEX_FILE);
   ensureDirs();
   indexCache = readIndexFromDisk();
+  cleanupStickerOnlySessions();
   initialized = true;
 }
 
@@ -158,7 +191,7 @@ export function createSession(opts?: {
   initialMessages?: ChatMessage[];
 }): ChatSession {
   const now = Date.now();
-  const messages = opts?.initialMessages ?? [];
+  const messages = (opts?.initialMessages ?? []).filter(isMeaningfulMessage);
   const session: ChatSession = {
     id: randomUUID(),
     title: opts?.title?.trim() || (messages.length > 0 ? deriveTitle(messages) : "新对话"),
@@ -176,6 +209,7 @@ export function createSession(opts?: {
 export function appendMessage(id: string, message: ChatMessage): ChatSession | null {
   const session = readSessionFile(id);
   if (!session) return null;
+  if (!isMeaningfulMessage(message)) return session;
   session.messages.push(message);
   session.updatedAt = Date.now();
   // 用户没手动改名时，根据最新内容重新派生（清空后也会回到"新对话"）
@@ -192,7 +226,7 @@ export function appendMessage(id: string, message: ChatMessage): ChatSession | n
 export function replaceMessages(id: string, messages: ChatMessage[]): ChatSession | null {
   const session = readSessionFile(id);
   if (!session) return null;
-  session.messages = messages;
+  session.messages = messages.filter(isMeaningfulMessage);
   session.updatedAt = Date.now();
   if (!session.titleIsCustom) {
     session.title = deriveTitle(session.messages);
@@ -244,9 +278,7 @@ export function getLatestSessionId(): string | null {
 export function migrateLegacyMessages(messages: ChatMessage[]): ChatSession | null {
   if (!messages || messages.length === 0) return null;
   // 过滤掉无意义条目（空 content / 占位）
-  const cleaned = messages.filter(
-    (m) => m && (m.role === "user" || m.role === "model") && typeof m.content === "string" && m.content.trim(),
-  );
+  const cleaned = messages.filter(isMeaningfulMessage);
   if (cleaned.length === 0) return null;
   return createSession({
     title: "历史对话",

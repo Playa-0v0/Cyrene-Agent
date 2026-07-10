@@ -16,6 +16,7 @@ import { channelDispatcher } from "./dispatcher";
 import { startInboundServer, stopInboundServer } from "./inbound-server";
 import { FeishuAdapter } from "./adapters/feishu";
 import { ILinkBotAdapter, loadCredentials } from "./adapters/wechat/ilink-bot-adapter";
+import { QqNapCatAdapter } from "./adapters/qq-napcat";
 import { getRecentLog, clearLog } from "./message-log";
 
 const LOG = "[ChannelsInit]";
@@ -48,6 +49,9 @@ export async function initChannels(): Promise<void> {
   // 注册 adapter
   const feishuAdapter = new FeishuAdapter();
   channelManager.register(feishuAdapter);
+
+  const qqAdapter = new QqNapCatAdapter();
+  channelManager.register(qqAdapter);
 
   // 注册微信 adapter（iLink 直连微信，不依赖 OpenClaw Gateway）
   // 改为 module-level handle，UI 登录按钮也能拿到

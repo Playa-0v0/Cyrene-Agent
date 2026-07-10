@@ -148,6 +148,18 @@ export interface FeishuChannelConfig extends ChannelRuntimeConfig {
   appSecret?: string;
 }
 
+export interface QqNapCatChannelConfig extends ChannelRuntimeConfig {
+  host?: string;
+  port?: number;
+  path?: string;
+  accessToken?: string;
+  botSelfId?: string;
+  allowedUsers?: string[];
+  allowedGroups?: string[];
+  groupTriggerMode?: "mention" | "prefix" | "always";
+  groupPrefix?: string;
+}
+
 /** 给上层用的明文 AppSecret 读取器 */
 export function decryptFeishuSecret(cfg: FeishuChannelConfig | undefined): string {
   return decryptField(cfg?.appSecret ?? "");
@@ -156,6 +168,7 @@ export function decryptFeishuSecret(cfg: FeishuChannelConfig | undefined): strin
 export interface ChannelsSettings {
   wechat: WechatChannelConfig;
   feishu: FeishuChannelConfig;
+  qq: QqNapCatChannelConfig;
   /** 入站 HTTP server 绑定的端口。0 = 随机空闲。 */
   inboundPort: number;
   /** HMAC 共享密钥。启动时若为空则自动生成。 */
@@ -177,6 +190,18 @@ export interface ChannelsSettings {
 const DEFAULT_SETTINGS: ChannelsSettings = {
   wechat: { enabled: false },
   feishu: { enabled: false },
+  qq: {
+    enabled: false,
+    host: "127.0.0.1",
+    port: 3001,
+    path: "/onebot/v11/ws",
+    accessToken: "",
+    botSelfId: "",
+    allowedUsers: [],
+    allowedGroups: [],
+    groupTriggerMode: "mention",
+    groupPrefix: "/cyrene",
+  },
   inboundPort: 0,
   sharedSecret: "",
   rateLimitPerUser: 10,
@@ -201,9 +226,15 @@ function normalize(input: Partial<ChannelsSettings> | null | undefined): Channel
     typeof v === "boolean" ? v : fallback;
 
   const safeStr = (v: unknown): string => (typeof v === "string" ? v : "");
+  const safeList = (v: unknown): string[] => {
+    if (Array.isArray(v)) return v.map((x) => safeStr(x).trim()).filter(Boolean);
+    if (typeof v === "string") return v.split(/[,\n]/).map((x) => x.trim()).filter(Boolean);
+    return [];
+  };
 
   const w: Partial<WechatChannelConfig> | undefined = input?.wechat;
   const f: Partial<FeishuChannelConfig> | undefined = input?.feishu;
+  const q: Partial<QqNapCatChannelConfig> | undefined = input?.qq;
 
   return {
     wechat: {
@@ -227,6 +258,23 @@ feishu: {
       // load 函数会先 decrypt 再返回；save 函数会自动 encrypt。
       appSecret: typeof f?.appSecret === "string" ? f?.appSecret : undefined,
     },
+    qq: {
+      enabled: safeBool(q?.enabled, false),
+      manualCliPath: typeof q?.manualCliPath === "string" ? q.manualCliPath : undefined,
+      publicWebhookUrl: typeof q?.publicWebhookUrl === "string" ? q.publicWebhookUrl : undefined,
+      host: typeof q?.host === "string" && q.host.trim() ? q.host.trim() : "127.0.0.1",
+      port: safeNum(q?.port, 3001, 1, 65535),
+      path: typeof q?.path === "string" && q.path.trim().startsWith("/") ? q.path.trim() : "/onebot/v11/ws",
+      accessToken: typeof q?.accessToken === "string" ? q.accessToken : "",
+      botSelfId: typeof q?.botSelfId === "string" ? q.botSelfId.trim() : "",
+      allowedUsers: safeList(q?.allowedUsers),
+      allowedGroups: safeList(q?.allowedGroups),
+      groupTriggerMode:
+        q?.groupTriggerMode === "prefix" || q?.groupTriggerMode === "always"
+          ? q.groupTriggerMode
+          : "mention",
+      groupPrefix: typeof q?.groupPrefix === "string" && q.groupPrefix.trim() ? q.groupPrefix.trim() : "/cyrene",
+    },
     inboundPort: safeNum(input?.inboundPort, 0, 0, 65535),
     sharedSecret: typeof input?.sharedSecret === "string" ? input.sharedSecret : "",
     rateLimitPerUser: safeNum(input?.rateLimitPerUser, 10, 1, 1000),
@@ -248,6 +296,9 @@ export function loadChannelsSettings(): ChannelsSettings {
     if (loaded.feishu.appSecret) {
       loaded.feishu.appSecret = decryptField(loaded.feishu.appSecret);
     }
+    if (loaded.qq.accessToken) {
+      loaded.qq.accessToken = decryptField(loaded.qq.accessToken);
+    }
     return loaded;
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -259,6 +310,7 @@ export function saveChannelsSettings(patch: Partial<ChannelsSettings>): Channels
   const merged: Partial<ChannelsSettings> = { ...existing, ...patch };
   if (patch.wechat) merged.wechat = { ...existing.wechat, ...patch.wechat };
   if (patch.feishu) merged.feishu = { ...existing.feishu, ...patch.feishu };
+  if (patch.qq) merged.qq = { ...existing.qq, ...patch.qq };
 
   // 私密字段加密边界：UI 传来的是明文，写盘前要 wrap
   // 避开"密文回传"场景：检测 enc:/obf:/plain: 前缀，避免重复加密。
@@ -266,6 +318,12 @@ export function saveChannelsSettings(patch: Partial<ChannelsSettings>): Channels
     const v = merged.feishu.appSecret;
     if (!v.startsWith(ENC_PREFIX) && !v.startsWith(OBF_PREFIX) && !v.startsWith(PLAIN_PREFIX)) {
       merged.feishu.appSecret = encryptField(v);
+    }
+  }
+  if (typeof merged.qq?.accessToken === "string" && merged.qq.accessToken) {
+    const v = merged.qq.accessToken;
+    if (!v.startsWith(ENC_PREFIX) && !v.startsWith(OBF_PREFIX) && !v.startsWith(PLAIN_PREFIX)) {
+      merged.qq.accessToken = encryptField(v);
     }
   }
 
@@ -282,6 +340,10 @@ export function saveChannelsSettings(patch: Partial<ChannelsSettings>): Channels
       ...final.feishu,
       appSecret: decryptField(final.feishu.appSecret ?? ""),
     },
+    qq: {
+      ...final.qq,
+      accessToken: decryptField(final.qq.accessToken ?? ""),
+    },
   };
   return out;
 }
@@ -290,6 +352,7 @@ export function saveChannelsSettings(patch: Partial<ChannelsSettings>): Channels
 export type ChannelConfigPatch = Partial<{
   wechat: Partial<WechatChannelConfig>;
   feishu: Partial<FeishuChannelConfig>;
+  qq: Partial<QqNapCatChannelConfig>;
   inboundPort: number;
   sharedSecret: string;
   rateLimitPerUser: number;
@@ -304,8 +367,10 @@ export type ChannelConfigPatch = Partial<{
 export function getChannelConfig<K extends ChannelId>(
   settings: ChannelsSettings,
   channel: K,
-): K extends "wechat" ? WechatChannelConfig : FeishuChannelConfig {
+): K extends "wechat" ? WechatChannelConfig : K extends "feishu" ? FeishuChannelConfig : QqNapCatChannelConfig {
   return (settings[channel] as unknown) as K extends "wechat"
     ? WechatChannelConfig
-    : FeishuChannelConfig;
+    : K extends "feishu"
+      ? FeishuChannelConfig
+      : QqNapCatChannelConfig;
 }

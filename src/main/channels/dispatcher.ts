@@ -26,7 +26,7 @@ import type {
 import { channelManager, type ChannelManager } from "./manager";
 import { loadChannelsSettings, type ChannelsSettings } from "./settings-store";
 import { appendLog, reloadLogFromDisk } from "./message-log";
-import { appendHistory as appendChannelHistory } from "./history-log";
+import { appendHistory as appendChannelHistory, clearHistory as clearChannelHistory } from "./history-log";
 
 /** Phase A：用于拼接历史对话的轻量 ChatMessage 形状（与 orchestrator ChatMessage 兼容）。 */
 interface ChatMessage {
@@ -101,6 +101,38 @@ function recordSession(channel: ChannelId, senderId: string, sessionId: string):
 export function lookupOriginalSender(sessionId: string): { channel: ChannelId; senderId: string } | null {
   const entry = sessionIndex.get(sessionId);
   return entry ? { channel: entry.channel, senderId: entry.senderId } : null;
+}
+
+function buildCommandReply(
+  text: string,
+  sessionId: string,
+  channel: ChannelId,
+  manager: ChannelManager,
+): string | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("/")) return null;
+  const [command] = trimmed.split(/\s+/, 1);
+  switch (command.toLowerCase()) {
+    case "/status": {
+      const status = manager.getAdapter(channel)?.getStatus();
+      const phase = status?.phase ?? "unknown";
+      const message = status?.message ? `，${status.message}` : "";
+      return `Cyrene 在线。渠道：${channel}，状态：${phase}${message}`;
+    }
+    case "/reset": {
+      const ok = clearChannelHistory(sessionId);
+      return ok ? "已清空当前会话的短期上下文。" : "清空上下文失败，请稍后再试。";
+    }
+    case "/help":
+      return [
+        "可用命令：",
+        "/status 查看连接状态",
+        "/reset 清空当前会话短期上下文",
+        "/help 查看命令",
+      ].join("\n");
+    default:
+      return null;
+  }
 }
 
 /** Dispatcher 配置（依赖注入）。 */
@@ -192,6 +224,30 @@ export class ChannelDispatcher {
     }
 
     // Phase A2：入站消息落对话历史（下一步 LLM 取的滑窗数据源）
+    const commandReply = buildCommandReply(msg.text, sessionId, msg.channel, this.deps.manager);
+    if (commandReply) {
+      const outgoing: OutgoingMessage = {
+        channel: msg.channel,
+        targetId: msg.chatId,
+        threadId: msg.threadId,
+        parts: [{ kind: "text", text: commandReply }],
+      };
+      try {
+        appendLog({
+          dir: "outgoing",
+          channel: msg.channel,
+          senderId: msg.senderId,
+          senderName: msg.senderName,
+          chatId: msg.chatId,
+          text: commandReply,
+          hasAttachments: false,
+        });
+      } catch (err) {
+        console.warn(LOG, "appendLog (command outgoing) 失败:", err);
+      }
+      return this.downgradeToCapability(outgoing, this.deps.manager.getAdapter(msg.channel)?.capability);
+    }
+
     try {
       appendChannelHistory(sessionId, "user", msg.text);
     } catch (err) {

@@ -363,7 +363,10 @@ function toPersistableMessages(arr: Message[]): Array<{
   id: string; role: Role; content: string; at: number; sticker?: StickerId | null; ttsCacheKey?: string;
 }> {
   return arr
-    .filter((m) => m && (m.role === "user" || m.role === "model") && typeof m.content === "string" && m.content.trim() && !m.thinking)
+    .filter((m) => {
+      if (!m || (m.role !== "user" && m.role !== "model") || typeof m.content !== "string" || m.thinking) return false;
+      return m.content.replace(/\[sticker:[^\]]+\]/g, "").trim().length > 0;
+    })
     .map((m) => ({
       id: m.id,
       role: m.role,
@@ -2009,7 +2012,7 @@ document.addEventListener("keydown", (e) => {
 
 function buildModelMessages(): Array<{ role: "user" | "model"; content: string }> {
   return messages
-    .filter((message) => message.content.trim())
+    .filter((message) => message.content.replace(/\[sticker:[^\]]+\]/g, "").trim())
     .slice(-16)
     .map((message) => ({
       role: message.role,

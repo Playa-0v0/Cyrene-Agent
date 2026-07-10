@@ -49,6 +49,7 @@ artwork, story content, and trademarks are the intellectual property of
 | 🔊 TTS / ASR / document generation / web search / file ops | ✅ Stable (some need config) |
 | 💼 Lark / Feishu long-connection | 🧪 Experimental |
 | 💬 WeChat iLink Bot | 🧪 Experimental |
+| 💬 QQ / NapCat OneBot WebSocket | 🧪 Experimental |
 | 🤖 Game Bot automation | 🧪 Experimental |
 | 🔌 MCP (Model Context Protocol) ecosystem | 🧪 Experimental |
 | ✨ Skill system | ✅ Stable |
@@ -118,9 +119,32 @@ the basics:
    GPT-SoVITS / Custom Cloud / MiMo).
 3. **🎧 ASR Settings**: If you need voice calls, fill in Aliyun realtime
    ASR AppKey / AccessKey.
-4. **📱 Phone connection** (optional): For Lark / WeChat iLink integration.
+4. **📱 External channels** (optional): Configure Lark / WeChat iLink /
+   QQ NapCat integration.
 
 Settings are saved to `<userData>/settings.json` — no restart needed.
+
+### QQ / NapCat Integration
+
+The QQ channel uses NapCat's OneBot v11 WebSocket integration. Cyrene
+starts a local WebSocket server, and NapCat connects to it as a client.
+
+1. Open **Settings → External Channels → QQ NapCat** in Cyrene.
+2. The default listening URL is `ws://127.0.0.1:3001/onebot/v11/ws`.
+3. In NapCatQQ Desktop, add a **WebSocket Client** config:
+   - URL: `ws://127.0.0.1:3001/onebot/v11/ws`
+   - Message format: `array`
+   - Token: leave empty unless you configured an Access Token in Cyrene;
+     both sides must match.
+4. Private chats trigger the agent directly. Group chats default to
+   mention-only, and can be changed to prefix or always-trigger mode in
+   settings.
+5. The desktop agent can proactively send QQ private/group messages via
+   the built-in `send_qq_message` tool.
+
+External channels use the tool sandbox by default. If you want QQ commands
+to run network, file, or shell tools, adjust external-channel tool
+permissions carefully in settings.
 
 ---
 
@@ -180,9 +204,9 @@ stored in plain-text JSON** under `<userData>/`:
 - `<userData>/app-settings.json` — ASR / TTS / Amap / search / email passwords
 - `<userData>/weixin/credentials.json` — WeChat iLink Bot credentials
 
-**The only encrypted field**: Lark / Feishu `appSecret` (via `safeStorage` =
-Windows DPAPI / macOS Keychain / Linux libsecret; falls back to XOR
-obfuscation when no keyring).
+**Encrypted channel-secret fields**: Lark / Feishu `appSecret` and QQ
+NapCat `accessToken` (via `safeStorage` = Windows DPAPI / macOS Keychain /
+Linux libsecret; falls back to XOR obfuscation when no keyring).
 
 **Protection relies on**: OS file permissions (`<userData>` is
 current-user-only by default).
@@ -309,6 +333,9 @@ provided in a future release. For now, the "Off" mode works fine.
   image / audio / video / file / sticker.
 - **WeChat iLink Bot** — iLink Bot HTTP / long-poll 35 s `getUpdates` →
   auto `sendText`.
+- **QQ / NapCat** — OneBot v11 WebSocket client integration, with private /
+  group chat triggers, recent-message context injection, and proactive QQ
+  sending via `send_qq_message`.
 
 #### 🤖 Game Bot Automation
 - `engine.ts` step interpreter supports `launch / wait / key / click /
@@ -383,7 +410,7 @@ src/
 ├── main/             # Electron main process
 │   ├── asr/          # Automatic speech recognition (Aliyun realtime ASR)
 │   ├── call/         # Voice call core logic
-│   ├── channels/     # External channel adapters (Lark / WeChat iLink / ...)
+│   ├── channels/     # External channel adapters (Lark / WeChat iLink / QQ NapCat / ...)
 │   ├── chats/        # Multi-chat history and persistence
 │   ├── embedding-manager.ts  # Local embedding model lifecycle
 │   ├── game-bot/     # Game automation (driven by game-recipes)

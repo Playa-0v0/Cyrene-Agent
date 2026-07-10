@@ -2236,8 +2236,10 @@ void loadGeneralSettings();
 // ===== channels panel (连接手机) =====
 const channelsWechatEnabledEl = document.getElementById("channels-wechat-enabled") as HTMLInputElement | null;
 const channelsFeishuEnabledEl = document.getElementById("channels-feishu-enabled") as HTMLInputElement | null;
+const channelsQqEnabledEl = document.getElementById("channels-qq-enabled") as HTMLInputElement | null;
 const channelsWechatStatusEl = document.getElementById("channels-wechat-status");
 const channelsFeishuStatusEl = document.getElementById("channels-feishu-status");
+const channelsQqStatusEl = document.getElementById("channels-qq-status");
 const channelsRateUserEl = document.getElementById("channels-rate-user") as HTMLInputElement | null;
 const channelsRateChannelEl = document.getElementById("channels-rate-channel") as HTMLInputElement | null;
 const channelsTtsEl = document.getElementById("channels-tts-enabled") as HTMLInputElement | null;
@@ -2249,11 +2251,22 @@ const channelsFeishuAppIdEl = document.getElementById("channels-feishu-app-id") 
 const channelsFeishuAppSecretEl = document.getElementById("channels-feishu-app-secret") as HTMLInputElement | null;
 const channelsFeishuAppSecretRevealBtn = document.getElementById("channels-feishu-app-secret-reveal");
 const channelsFeishuSaveBtn = document.getElementById("channels-feishu-save");
+const channelsQqHostEl = document.getElementById("channels-qq-host") as HTMLInputElement | null;
+const channelsQqPortEl = document.getElementById("channels-qq-port") as HTMLInputElement | null;
+const channelsQqPathEl = document.getElementById("channels-qq-path") as HTMLInputElement | null;
+const channelsQqTokenEl = document.getElementById("channels-qq-token") as HTMLInputElement | null;
+const channelsQqSelfIdEl = document.getElementById("channels-qq-self-id") as HTMLInputElement | null;
+const channelsQqAllowedUsersEl = document.getElementById("channels-qq-allowed-users") as HTMLInputElement | null;
+const channelsQqAllowedGroupsEl = document.getElementById("channels-qq-allowed-groups") as HTMLInputElement | null;
+const channelsQqGroupModeEl = document.getElementById("channels-qq-group-mode") as HTMLSelectElement | null;
+const channelsQqGroupPrefixEl = document.getElementById("channels-qq-group-prefix") as HTMLInputElement | null;
+const channelsQqSaveBtn = document.getElementById("channels-qq-save");
 // 微信按钮
 const channelsWechatLoginBtn = document.getElementById("channels-wechat-login");
 const channelsWechatRestartBtn = document.getElementById("channels-wechat-restart");
 const channelsWechatFeedbackEl = document.getElementById("channels-wechat-feedback");
 const channelsFeishuFeedbackEl = document.getElementById("channels-feishu-feedback");
+const channelsQqFeedbackEl = document.getElementById("channels-qq-feedback");
 
 let channelsInitialized = false;
 let channelsSaveTimer: number | null = null;
@@ -2280,6 +2293,7 @@ async function loadChannelsPanel(): Promise<void> {
     const cfg = await window.settings.channelsGetConfig();
     if (channelsWechatEnabledEl) channelsWechatEnabledEl.checked = !!cfg.wechat.enabled;
     if (channelsFeishuEnabledEl) channelsFeishuEnabledEl.checked = !!cfg.feishu.enabled;
+    if (channelsQqEnabledEl) channelsQqEnabledEl.checked = !!cfg.qq?.enabled;
     if (channelsRateUserEl) channelsRateUserEl.value = String(cfg.rateLimitPerUser ?? 10);
     if (channelsRateChannelEl) channelsRateChannelEl.value = String(cfg.rateLimitPerChannel ?? 100);
     if (channelsTtsEl) channelsTtsEl.checked = cfg.ttsEnabled !== false;
@@ -2295,11 +2309,24 @@ async function loadChannelsPanel(): Promise<void> {
         ? "已保存（输入新值会覆盖）"
         : "点击保存配置时加密保存";
     }
+    if (channelsQqHostEl) channelsQqHostEl.value = cfg.qq?.host ?? "127.0.0.1";
+    if (channelsQqPortEl) channelsQqPortEl.value = String(cfg.qq?.port ?? 3001);
+    if (channelsQqPathEl) channelsQqPathEl.value = cfg.qq?.path ?? "/onebot/v11/ws";
+    if (channelsQqTokenEl) {
+      channelsQqTokenEl.value = "";
+      channelsQqTokenEl.placeholder = cfg.qq?.accessToken ? "已保存（输入新值会覆盖）" : "可选，需与 NapCat 一致";
+    }
+    if (channelsQqSelfIdEl) channelsQqSelfIdEl.value = cfg.qq?.botSelfId ?? "";
+    if (channelsQqAllowedUsersEl) channelsQqAllowedUsersEl.value = (cfg.qq?.allowedUsers ?? []).join(",");
+    if (channelsQqAllowedGroupsEl) channelsQqAllowedGroupsEl.value = (cfg.qq?.allowedGroups ?? []).join(",");
+    if (channelsQqGroupModeEl) channelsQqGroupModeEl.value = cfg.qq?.groupTriggerMode ?? "mention";
+    if (channelsQqGroupPrefixEl) channelsQqGroupPrefixEl.value = cfg.qq?.groupPrefix ?? "/cyrene";
 
     // 拉一次渠道状态
     const status = (await window.settings.channelsGetStatus()) as Record<string, { phase: string; message?: string }>;
     renderChannelStatus(channelsWechatStatusEl, status.wechat?.phase ?? "offline", status.wechat?.message);
     renderChannelStatus(channelsFeishuStatusEl, status.feishu?.phase ?? "offline", status.feishu?.message);
+    renderChannelStatus(channelsQqStatusEl, status.qq?.phase ?? "offline", status.qq?.message);
     // Phase 3.4：拉一次消息日志
     void refreshChannelsLog();
   } catch (err) {
@@ -2313,6 +2340,7 @@ async function loadChannelsPanel(): Promise<void> {
       void window.settings.channelsSaveConfig({
         wechat: { enabled: channelsWechatEnabledEl?.checked ?? false },
         feishu: { enabled: channelsFeishuEnabledEl?.checked ?? false },
+        qq: { enabled: channelsQqEnabledEl?.checked ?? false },
         rateLimitPerUser: Number(channelsRateUserEl?.value) || 10,
         rateLimitPerChannel: Number(channelsRateChannelEl?.value) || 100,
         ttsEnabled: channelsTtsEl?.checked ?? true,
@@ -2325,6 +2353,7 @@ async function loadChannelsPanel(): Promise<void> {
   for (const el of [
     channelsWechatEnabledEl,
     channelsFeishuEnabledEl,
+    channelsQqEnabledEl,
     channelsRateUserEl,
     channelsRateChannelEl,
     channelsTtsEl,
@@ -2337,13 +2366,14 @@ async function loadChannelsPanel(): Promise<void> {
 
   // 监听安装进度（Phase 1+ 才会收到）
   window.settings.onChannelsInstallProgress((progress) => {
-    const target = progress.channel === "wechat" ? channelsWechatStatusEl : progress.channel === "feishu" ? channelsFeishuStatusEl : null;
+    const target = progress.channel === "wechat" ? channelsWechatStatusEl : progress.channel === "feishu" ? channelsFeishuStatusEl : progress.channel === "qq" ? channelsQqStatusEl : null;
     if (target) renderChannelStatus(target, "starting", `${progress.phase} ${progress.pct}%`);
   });
   window.settings.onChannelsStatusChanged((status) => {
     const s = status as Record<string, { phase: string; message?: string }>;
     renderChannelStatus(channelsWechatStatusEl, s.wechat?.phase ?? "offline", s.wechat?.message);
     renderChannelStatus(channelsFeishuStatusEl, s.feishu?.phase ?? "offline", s.feishu?.message);
+    renderChannelStatus(channelsQqStatusEl, s.qq?.phase ?? "offline", s.qq?.message);
   });
 
   // ===== 飞书交互（Phase 2 长连接版） =====
@@ -2380,6 +2410,39 @@ async function loadChannelsPanel(): Promise<void> {
       }
     } catch (err) {
       setFeishuFeedback("err", err instanceof Error ? err.message : String(err));
+    }
+  });
+
+  channelsQqSaveBtn?.addEventListener("click", async () => {
+    setQqFeedback("info", "保存并重启中...");
+    const splitList = (value: string | undefined): string[] =>
+      (value ?? "").split(/[,\n]/).map((x) => x.trim()).filter(Boolean);
+    const patch: Record<string, unknown> = {
+      qq: {
+        enabled: channelsQqEnabledEl?.checked ?? false,
+        host: channelsQqHostEl?.value.trim() || "127.0.0.1",
+        port: Number(channelsQqPortEl?.value) || 3001,
+        path: channelsQqPathEl?.value.trim() || "/onebot/v11/ws",
+        botSelfId: channelsQqSelfIdEl?.value.trim() || "",
+        allowedUsers: splitList(channelsQqAllowedUsersEl?.value),
+        allowedGroups: splitList(channelsQqAllowedGroupsEl?.value),
+        groupTriggerMode: channelsQqGroupModeEl?.value || "mention",
+        groupPrefix: channelsQqGroupPrefixEl?.value.trim() || "/cyrene",
+      },
+    };
+    if (channelsQqTokenEl?.value) {
+      (patch.qq as Record<string, unknown>).accessToken = channelsQqTokenEl.value;
+    }
+    try {
+      await window.settings.channelsSaveConfig(patch);
+      await window.settings.channelsRestart();
+      setQqFeedback("ok", "已保存。请在 NapCat 反向 WebSocket 填入当前监听地址。");
+      if (channelsQqTokenEl) {
+        channelsQqTokenEl.value = "";
+        channelsQqTokenEl.placeholder = "已保存（输入新值会覆盖）";
+      }
+    } catch (err) {
+      setQqFeedback("err", err instanceof Error ? err.message : String(err));
     }
   });
 
@@ -2475,6 +2538,15 @@ function setFeishuFeedback(kind: "info" | "ok" | "err", msg: string): void {
   if (kind === "ok") channelsFeishuFeedbackEl.classList.add("channels-feedback--ok");
   else if (kind === "err") channelsFeishuFeedbackEl.classList.add("channels-feedback--err");
   else channelsFeishuFeedbackEl.classList.add("channels-feedback--info");
+}
+
+function setQqFeedback(kind: "info" | "ok" | "err", msg: string): void {
+  if (!channelsQqFeedbackEl) return;
+  channelsQqFeedbackEl.textContent = msg;
+  channelsQqFeedbackEl.className = "channels-feedback";
+  if (kind === "ok") channelsQqFeedbackEl.classList.add("channels-feedback--ok");
+  else if (kind === "err") channelsQqFeedbackEl.classList.add("channels-feedback--err");
+  else channelsQqFeedbackEl.classList.add("channels-feedback--info");
 }
 
 // ===== Phase 3.4：消息日志 =====
