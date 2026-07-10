@@ -1555,6 +1555,17 @@
                   <span class="tts-engine__name">活泼</span>
                 </button>
               </div>
+              <div class="opener-pack-warning" id="opener-pack-warning" hidden>
+                <div class="opener-pack-warning__body">
+                  <strong>未安装语音包</strong>
+                  <span>主动开口需要在语音包目录放入 manifest.json 和对应 wav 文件。</span>
+                  <code id="opener-pack-path"></code>
+                </div>
+                <div class="opener-pack-warning__actions">
+                  <button type="button" class="ghost-btn" id="opener-open-pack-dir">打开语音包目录</button>
+                  <button type="button" class="ghost-btn" id="opener-show-install-help">查看安装说明</button>
+                </div>
+              </div>
               <button type="button" class="ghost-btn" id="opener-test-fire" style="margin-top: 10px;">🔊 测试气泡</button>
             </div>
           </div>

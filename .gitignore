@@ -80,6 +80,11 @@ models/Xenova/
 **/*.bin
 **/*.safetensors
 
+# Local opener voice pack files. Keep the directory and installation note tracked.
+opener-pack/*
+!opener-pack/.gitkeep
+!opener-pack/README.md
+
 # Playwright MCP 运行时产物
 .playwright-mcp/
 
@@ -87,6 +92,7 @@ models/Xenova/
 docs/
 !docs/
 !docs/local-models.md
+!docs/opener-pack.md
 !docs/electron-33-to-43-upgrade-assessment.md
 PRODUCT.md
 sticker-descriptions/

@@ -5,6 +5,9 @@ import { app } from "electron";
 import type { Manifest, ManifestItem } from "./opener-types";
 
 export function getOpenerPackDir(): string {
+  if (!app.isPackaged) {
+    return path.join(app.getAppPath(), "opener-pack");
+  }
   return path.join(app.getPath("userData"), "cyrene-opener-pack");
 }
 

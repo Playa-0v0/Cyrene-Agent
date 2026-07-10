@@ -369,6 +369,9 @@ const openerApi = {
   feedback: (payload: { type: "clicked"; sceneId: string; itemId: string }) =>
     ipcRenderer.send(IPC.OPENER_FEEDBACK, payload),
   testFire: () => ipcRenderer.invoke(IPC.OPENER_TEST_FIRE),
+  getStatus: () => ipcRenderer.invoke(IPC.OPENER_GET_STATUS),
+  openPackDir: () => ipcRenderer.invoke(IPC.OPENER_OPEN_PACK_DIR),
+  openInstallDocs: () => ipcRenderer.invoke(IPC.OPENER_OPEN_INSTALL_DOCS),
 };
 contextBridge.exposeInMainWorld("openerBridge", openerApi);
 

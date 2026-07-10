@@ -4272,11 +4272,56 @@ document.querySelectorAll<HTMLButtonElement>(".opener-mode").forEach((btn) => {
   });
 });
 
+interface OpenerPackStatus {
+  manifestInstalled: boolean;
+  packDir: string;
+  manifestPath: string;
+}
+
+interface OpenerBridgeApi {
+  testFire?: () => Promise<void>;
+  getStatus?: () => Promise<OpenerPackStatus>;
+  openPackDir?: () => Promise<{ ok: boolean; error?: string }>;
+  openInstallDocs?: () => Promise<{ ok: boolean; error?: string }>;
+}
+
+function getOpenerBridge(): OpenerBridgeApi | undefined {
+  return (window as unknown as { openerBridge?: OpenerBridgeApi }).openerBridge;
+}
+
+let latestOpenerPackStatus: OpenerPackStatus | null = null;
+
+async function refreshOpenerPackStatus(): Promise<void> {
+  const warning = document.getElementById("opener-pack-warning");
+  const pathEl = document.getElementById("opener-pack-path");
+  const status = await getOpenerBridge()?.getStatus?.();
+  if (!warning || !status) return;
+  latestOpenerPackStatus = status;
+  if (pathEl) pathEl.textContent = status.packDir;
+  warning.toggleAttribute("hidden", status.manifestInstalled);
+}
+
+document.getElementById("opener-open-pack-dir")?.addEventListener("click", async () => {
+  const result = await getOpenerBridge()?.openPackDir?.();
+  if (result && !result.ok) {
+    window.alert("打开语音包目录失败：" + (result.error || "未知错误"));
+  }
+  await refreshOpenerPackStatus();
+});
+
+document.getElementById("opener-show-install-help")?.addEventListener("click", async () => {
+  const result = await getOpenerBridge()?.openInstallDocs?.();
+  if (result && !result.ok) {
+    window.alert("打开安装说明失败：" + (result.error || "未知错误"));
+  }
+});
+
 // Opener 测试气泡（手动触发一次，看样式）
 document.getElementById("opener-test-fire")?.addEventListener("click", () => {
-  const win = window as unknown as { openerBridge?: { testFire?: () => Promise<void> } };
-  void win.openerBridge?.testFire?.();
+  void getOpenerBridge()?.testFire?.();
 });
+
+void refreshOpenerPackStatus();
 
 // 自动朗读开关
 ttsEl("tts-auto-read").addEventListener("change", () => {

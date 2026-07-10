@@ -876,6 +876,24 @@
   border-color: var(--rb-border-soft);
 }
 
+[data-ui-theme="pearl-white"] .opener-pack-warning {
+  color: var(--rb-text-default);
+  background: #fff8e6;
+  border-color: rgba(180, 117, 0, 0.28);
+}
+
+[data-ui-theme="pearl-white"] .opener-pack-warning__body {
+  color: var(--rb-text-muted);
+}
+
+[data-ui-theme="pearl-white"] .opener-pack-warning__body strong {
+  color: #6f4600;
+}
+
+[data-ui-theme="pearl-white"] .opener-pack-warning__body code {
+  color: var(--rb-text-strong);
+}
+
 [data-ui-theme="pearl-white"] .plugin-config,
 [data-ui-theme="pearl-white"] .plugin-accordion-body,
 [data-ui-theme="pearl-white"] .vision-config-section,

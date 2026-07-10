@@ -1,5 +1,17 @@
-import { describe, it, expect } from "vitest";
-import { parseManifest, pickItem } from "./opener-pack-store";
+import * as path from "path";
+import { describe, it, expect, vi } from "vitest";
+
+const { mockApp } = vi.hoisted(() => ({
+  mockApp: {
+    isPackaged: false,
+    getAppPath: vi.fn(() => process.cwd()),
+    getPath: vi.fn((_name: string) => path.join("C:", "Users", "tester", "AppData", "Roaming", "live2d-cyrene")),
+  },
+}));
+
+vi.mock("electron", () => ({ app: mockApp }));
+
+import { getOpenerPackDir, parseManifest, pickItem } from "./opener-pack-store";
 
 const MANIFEST = {
   version: 1,
@@ -48,5 +60,19 @@ describe("pickItem", () => {
   it("全部被排除时返回 null", () => {
     const items = MANIFEST.packs.morning.items;
     expect(pickItem(items, 11, ["m01", "m02"])).toBeNull();
+  });
+});
+
+describe("getOpenerPackDir", () => {
+  it("源码运行时读取项目根目录 opener-pack", () => {
+    mockApp.isPackaged = false;
+
+    expect(getOpenerPackDir()).toBe(path.join(process.cwd(), "opener-pack"));
+  });
+
+  it("打包后读取 userData/cyrene-opener-pack", () => {
+    mockApp.isPackaged = true;
+
+    expect(getOpenerPackDir()).toBe(path.join(mockApp.getPath("userData"), "cyrene-opener-pack"));
   });
 });

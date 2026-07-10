@@ -51,6 +51,7 @@ import { synthesize as customCloudSynthesize } from "./tts/custom-cloud-engine";
 import { synthesize as mimoSynthesize } from "./tts/mimo-engine";
 import { synthesizeByEngine } from "./tts/tts-dispatcher";
 import { startOpener, stopOpener, setLive2dWindow, reloadManifest, handleBubbleClick, handleChatWindowOpened, testFire } from "./opener/opener-runner";
+import { getManifestPath, getOpenerPackDir } from "./opener/opener-pack-store";
 import { registerAgUiIpc, type AguiRunInput } from "./agui-bridge";
 import { setWeatherConfig, setSearchConfig, loadTodos, onTodosChange, setDelegateSettings } from "./orchestrator/built-in-tools";
 import { registerRecallHistoryTool } from "./orchestrator/history-tools";
@@ -3150,6 +3151,38 @@ app.whenReady().then(async () => {
 
   // Opener 手动测试气泡
   ipcMain.handle(IPC.OPENER_TEST_FIRE, async () => { await testFire(); });
+
+  ipcMain.handle(IPC.OPENER_GET_STATUS, () => {
+    const packDir = getOpenerPackDir();
+    const manifestPath = getManifestPath();
+    return {
+      manifestInstalled: fs.existsSync(manifestPath),
+      packDir,
+      manifestPath,
+    };
+  });
+
+  ipcMain.handle(IPC.OPENER_OPEN_PACK_DIR, async () => {
+    const packDir = getOpenerPackDir();
+    try {
+      fs.mkdirSync(packDir, { recursive: true });
+      const error = await shell.openPath(packDir);
+      return error ? { ok: false, error } : { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  ipcMain.handle(IPC.OPENER_OPEN_INSTALL_DOCS, async () => {
+    const docPath = path.join(app.getAppPath(), "docs", "opener-pack.md");
+    try {
+      if (!fs.existsSync(docPath)) return { ok: false, error: "安装说明文档不存在：" + docPath };
+      const error = await shell.openPath(docPath);
+      return error ? { ok: false, error } : { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
 
   // 上传音频文件 → file_id
   ipcMain.handle(IPC.TTS_UPLOAD, async (_event, payload: { apiKey: string; filePath: string; purpose: "voice_clone" | "prompt_audio" }) => {

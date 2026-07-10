@@ -2367,6 +2367,47 @@ body {
   line-height: 1.6;
 }
 
+.opener-pack-warning {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(250, 204, 21, 0.36);
+  border-radius: 12px;
+  background: rgba(250, 204, 21, 0.1);
+}
+.opener-pack-warning[hidden] {
+  display: none;
+}
+.opener-pack-warning__body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  color: rgba(254, 247, 255, 0.82);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.opener-pack-warning__body strong {
+  color: rgba(254, 240, 138, 0.96);
+  font-size: 14px;
+}
+.opener-pack-warning__body code {
+  overflow-wrap: anywhere;
+  color: rgba(254, 247, 255, 0.72);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+.opener-pack-warning__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
 /* 音色快速复刻区 */
 .tts-clone-section {
   margin-top: 24px;
