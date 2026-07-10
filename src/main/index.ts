@@ -8,7 +8,7 @@ import { IPC } from "../shared/ipc-channels";
 import { STATUS_KEYWORDS } from "./status-keywords";
 import { initRAG, buildMemoryContext, addMemory, importDocument, switchEmbeddingModel, deleteImportedDoc } from "./rag";
 import { getEmbeddingProvider, getSceneEmbeddingProvider } from "./rag/embedding";
-import { getMimeFromExt, ingestPaths, isImageExt, type Attachment } from "./rag/file-ingest";
+import { describePendingAttachment, ingestPaths, type Attachment } from "./rag/file-ingest";
 import { IMAGE_CAPTION_PROMPT, validateCaptionImagePath } from "./chat/image-caption";
 import { decideImageSendStrategy } from "./chat/image-send-strategy";
 import { buildAlwaysOnContext, buildMemoryInjection, runFunctionCallingLoop, scheduleMemoryWrite } from "./orchestrator";
@@ -2645,29 +2645,45 @@ ipcMain.handle(IPC.CHAT_INGEST_FILES, async (_event, paths: unknown) => {
   const list = Array.isArray(paths) ? paths.filter((p): p is string => typeof p === "string") : [];
   if (list.length === 0) return [];
   try {
-    const imageResults: Attachment[] = [];
-    const otherPaths: string[] = [];
-    for (const filePath of list) {
-      const ext = path.extname(filePath).toLowerCase();
-      if (isImageExt(ext)) {
-        imageResults.push({
-          name: path.basename(filePath),
-          kind: "image",
-          filePath,
-          mime: getMimeFromExt(ext),
-          previewUrl: pathToFileURL(filePath).toString(),
-          status: "pending",
-        });
-      } else {
-        otherPaths.push(filePath);
-      }
-    }
-    const results = otherPaths.length > 0 ? await ingestPaths(otherPaths, importDocument) : [];
-    return [...imageResults, ...results];
+    return list.map((filePath) => describePendingAttachment(filePath));
   } catch (err: any) {
     console.error("[Cyrene] ingestFiles ERROR:", err?.message || err);
     return [];
   }
+});
+
+ipcMain.handle(IPC.CHAT_PROCESS_DOCUMENTS, async (_event, payload: unknown) => {
+  const filePaths = payload && typeof payload === "object" && Array.isArray((payload as { filePaths?: unknown }).filePaths)
+    ? (payload as { filePaths: unknown[] }).filePaths.filter((p): p is string => typeof p === "string")
+    : [];
+  if (filePaths.length === 0) return [];
+
+  const results: Attachment[] = [];
+  for (const filePath of filePaths) {
+    try {
+      const processed = await ingestPaths([filePath], importDocument);
+      if (processed.length === 0) {
+        results.push({
+          name: path.basename(filePath),
+          kind: "unsupported",
+          filePath,
+          status: "error",
+          reason: "文件不存在或无法读取",
+        });
+      } else {
+        results.push(...processed);
+      }
+    } catch (err: any) {
+      results.push({
+        name: path.basename(filePath),
+        kind: "unsupported",
+        filePath,
+        status: "error",
+        reason: err?.message || String(err),
+      });
+    }
+  }
+  return results;
 });
 
 ipcMain.handle(IPC.CHAT_CAPTION_IMAGE, async (_event, payload: unknown) => {

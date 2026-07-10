@@ -37,7 +37,9 @@ export interface ChatMessage {
   ttsCacheKey?: string;
 }
 
-export interface MessageAttachment {
+export type MessageAttachment = ImageMessageAttachment | DocumentMessageAttachment;
+
+export interface ImageMessageAttachment {
   kind: "image";
   name: string;
   filePath: string;
@@ -45,6 +47,16 @@ export interface MessageAttachment {
   previewUrl?: string;
   caption?: string;
   status: "pending" | "done" | "error";
+}
+
+export interface DocumentMessageAttachment {
+  kind: "document";
+  name: string;
+  filePath: string;
+  status: "pending" | "done" | "error";
+  processedKind?: "text" | "indexed" | "empty" | "unsupported";
+  chunks?: number;
+  reason?: string;
 }
 
 export interface ChatSession {

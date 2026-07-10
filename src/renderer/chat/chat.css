@@ -699,6 +699,54 @@ body {
   text-overflow: ellipsis;
 }
 
+.msg__document-card {
+  width: min(280px, 58vw);
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--rb-border-soft);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.msg__document-card--error {
+  border-color: rgba(255, 120, 120, 0.42);
+}
+
+.msg__document-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.10);
+  font-size: 17px;
+}
+
+.msg__document-meta {
+  min-width: 0;
+}
+
+.msg__document-name {
+  color: var(--rb-text-default);
+  font: var(--rb-text-small);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.msg__document-status {
+  margin-top: 2px;
+  color: var(--rb-text-muted);
+  font: var(--rb-text-micro);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .msg__time {
   font: var(--rb-text-micro);
   color: var(--rb-text-faint);

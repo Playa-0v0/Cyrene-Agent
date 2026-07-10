@@ -1,8 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
+import { pathToFileURL } from "url";
 
 // ── Public types ──
-export type AttachmentKind = "text" | "indexed" | "empty" | "unsupported" | "image";
+export type AttachmentKind = "text" | "indexed" | "empty" | "unsupported" | "image" | "document";
 
 export interface Attachment {
   name: string;
@@ -75,6 +76,41 @@ export function getMimeFromExt(ext: string): string {
 
 export function isUnsupportedExt(ext: string): boolean {
   return UNSUPPORTED_EXTS.has(ext.toLowerCase());
+}
+
+export function isDocumentExt(ext: string): boolean {
+  const normalized = ext.toLowerCase();
+  return normalized === "" || isTextExt(normalized);
+}
+
+export function describePendingAttachment(filePath: string): Attachment {
+  const ext = path.extname(filePath).toLowerCase();
+  const name = path.basename(filePath);
+  if (isImageExt(ext)) {
+    return {
+      name,
+      kind: "image",
+      filePath,
+      mime: getMimeFromExt(ext),
+      previewUrl: pathToFileURL(filePath).toString(),
+      status: "pending",
+    };
+  }
+  if (isDocumentExt(ext)) {
+    return {
+      name,
+      kind: "document",
+      filePath,
+      status: "pending",
+    };
+  }
+  return {
+    name,
+    kind: "unsupported",
+    filePath,
+    status: "error",
+    reason: `暂不支持的文件格式 ${ext || "（无扩展名）"}`,
+  };
 }
 
 /**
@@ -249,7 +285,7 @@ export async function ingestPaths(
   for (const { absPath, displayName } of unique) {
     const att = await ingestOneFile(absPath, importFn);
     // 用保留相对路径的显示名覆盖 basename
-    results.push({ ...att, name: displayName });
+    results.push({ ...att, name: displayName, filePath: absPath });
   }
   return results;
 }

@@ -6,6 +6,7 @@ import {
   ingestOneFile,
   walkDir,
   ingestPaths,
+  describePendingAttachment,
   isBinary,
   isImageExt,
   isTextExt,
@@ -88,6 +89,41 @@ describe("扩展名判断", () => {
     expect(getMimeFromExt(".png")).toBe("image/png");
     expect(getMimeFromExt(".jpg")).toBe("image/jpeg");
     expect(getMimeFromExt(".unknown")).toBe("application/octet-stream");
+  });
+});
+
+describe("describePendingAttachment", () => {
+  it("拖入阶段只按扩展名登记 pending，不读取或索引文档", () => {
+    const text = describePendingAttachment(fixture("notes.md"));
+    expect(text).toMatchObject({
+      name: "notes.md",
+      kind: "document",
+      filePath: fixture("notes.md"),
+      status: "pending",
+    });
+    expect(text).not.toHaveProperty("text");
+    expect(text).not.toHaveProperty("chunks");
+  });
+
+  it("拖入阶段把明确不支持的二进制或媒体格式标记为 unsupported", () => {
+    expect(describePendingAttachment(fixture("setup.exe"))).toMatchObject({
+      name: "setup.exe",
+      kind: "unsupported",
+      reason: "暂不支持的文件格式 .exe",
+    });
+    expect(describePendingAttachment(fixture("voice.wav"))).toMatchObject({
+      name: "voice.wav",
+      kind: "unsupported",
+      reason: "暂不支持的文件格式 .wav",
+    });
+  });
+
+  it("拖入阶段仍然为图片返回安全 previewUrl", () => {
+    const image = describePendingAttachment(fixture("screen shot.png"));
+    expect(image.kind).toBe("image");
+    expect(image.mime).toBe("image/png");
+    expect(image.previewUrl).toMatch(/^file:\/\//);
+    expect(image.status).toBe("pending");
   });
 });
 
