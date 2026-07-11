@@ -66,6 +66,8 @@ export type OutgoingPart =
   | { kind: "text"; text: string }
   | { kind: "image"; url?: string; filePath?: string; caption?: string }
   | { kind: "audio"; filePath: string; mime: string }
+  | { kind: "file"; filePath: string; name?: string; mime?: string }
+  | { kind: "video"; filePath: string; name?: string; mime?: string }
   | {
       kind: "card";
       title: string;

@@ -42,8 +42,8 @@ const CAPABILITY: ChannelCapability = {
   text: true,
   image: true,
   audio: false,    // iLink 支持 voice_item，先不上传，等用到再加
-  file: false,
-  video: false,
+  file: true,
+  video: true,
   markdown: false,
   card: false,
   sticker: true,
@@ -124,7 +124,7 @@ export class ILinkBotAdapter implements ChannelAdapter {
     const contextToken = this.replyContextByTarget.get(msg.targetId);
     if (!contextToken) return { ok: false, error: "缺少微信 context_token，无法回复" };
 
-    const hasMedia = msg.parts.some((p) => p.kind === "image" || p.kind === "sticker");
+    const hasMedia = msg.parts.some((p) => p.kind === "image" || p.kind === "sticker" || p.kind === "file" || p.kind === "video");
     if (!hasMedia) {
       const text = msg.parts
         .filter((p) => p.kind === "text")
@@ -147,6 +147,12 @@ export class ILinkBotAdapter implements ChannelAdapter {
       } else if (part.kind === "sticker") {
         const media = await this.uploadMedia(this.client, msg.targetId, part.imagePath, MediaType.IMAGE);
         items.push(buildImageItem(media));
+      } else if (part.kind === "file") {
+        const media = await this.uploadMedia(this.client, msg.targetId, part.filePath, MediaType.FILE);
+        items.push(buildFileItem(media, path.basename(part.name ?? part.filePath)));
+      } else if (part.kind === "video") {
+        const media = await this.uploadMedia(this.client, msg.targetId, part.filePath, MediaType.VIDEO);
+        items.push(buildVideoItem(media));
       }
     }
     if (items.length === 0) return { ok: true };
@@ -267,6 +273,25 @@ function buildImageItem(media: CDNMedia): SendMessageItem {
   return {
     type: 2,
     image_item: { media },
+  };
+}
+
+function buildFileItem(media: CDNMedia, fileName: string): SendMessageItem {
+  return {
+    type: 4,
+    file_item: {
+      file_name: fileName,
+      media,
+    },
+  };
+}
+
+function buildVideoItem(media: CDNMedia): SendMessageItem {
+  return {
+    type: 5,
+    video_item: {
+      media,
+    },
   };
 }
 

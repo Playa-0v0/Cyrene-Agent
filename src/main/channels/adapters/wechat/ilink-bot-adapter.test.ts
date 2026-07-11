@@ -75,4 +75,49 @@ describe("ILinkBotAdapter.send", () => {
       },
     ], "ctx-1");
   });
+
+  it("uploads file and video parts as file and video items", async () => {
+    const adapter = new ILinkBotAdapter();
+    const sendMessage = vi.fn(async () => ({ ok: true }));
+    const uploadMedia = vi.fn(async (_client, _userId, filePath: string) => ({
+      encrypt_query_param: `encrypted:${filePath}`,
+      aes_key: "encoded-key",
+      encrypt_type: 1,
+    }));
+    (adapter as any).client = { sendMessage };
+    (adapter as any).uploadMedia = uploadMedia;
+    (adapter as any).replyContextByTarget.set("wx-user-1", "ctx-1");
+
+    const result = await adapter.send(message([
+      { kind: "file", filePath: "C:/tmp/report.pdf", name: "report.pdf", mime: "application/pdf" },
+      { kind: "video", filePath: "C:/tmp/demo.mp4", name: "demo.mp4", mime: "video/mp4" },
+    ]));
+
+    expect(result).toEqual({ ok: true });
+    expect(uploadMedia).toHaveBeenNthCalledWith(1, expect.anything(), "wx-user-1", "C:/tmp/report.pdf", 3);
+    expect(uploadMedia).toHaveBeenNthCalledWith(2, expect.anything(), "wx-user-1", "C:/tmp/demo.mp4", 2);
+    expect(sendMessage).toHaveBeenCalledWith("wx-user-1", [
+      {
+        type: 4,
+        file_item: {
+          file_name: "report.pdf",
+          media: {
+            encrypt_query_param: "encrypted:C:/tmp/report.pdf",
+            aes_key: "encoded-key",
+            encrypt_type: 1,
+          },
+        },
+      },
+      {
+        type: 5,
+        video_item: {
+          media: {
+            encrypt_query_param: "encrypted:C:/tmp/demo.mp4",
+            aes_key: "encoded-key",
+            encrypt_type: 1,
+          },
+        },
+      },
+    ], "ctx-1");
+  });
 });

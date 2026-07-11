@@ -378,6 +378,10 @@ export class ChannelDispatcher {
         parts.push({ kind: "text", text: `[图片] ${p.caption ?? p.url ?? p.filePath ?? ""}` });
       } else if (p.kind === "audio" && !cap.audio) {
         parts.push({ kind: "text", text: `[语音消息 ${p.mime}, 见桌面端]` });
+      } else if (p.kind === "file" && !cap.file) {
+        parts.push({ kind: "text", text: `[文件] ${p.name ?? p.filePath}` });
+      } else if (p.kind === "video" && !cap.video) {
+        parts.push({ kind: "text", text: `[视频] ${p.name ?? p.filePath}` });
       } else if (p.kind === "card" && !cap.card) {
         const lines: string[] = [p.title];
         if (p.markdown) lines.push(p.markdown);

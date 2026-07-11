@@ -108,6 +108,39 @@ describe("downgradeToCapability", () => {
     });
   });
 
+  describe("file and video parts", () => {
+    it("cap.file=false → 降级为文字描述 [文件]", () => {
+      const msg = makeMsg([{ kind: "file", filePath: "/tmp/report.pdf", name: "report.pdf", mime: "application/pdf" }]);
+      const out = stubDispatcher.downgradeToCapability(msg, makeCap({ file: false }));
+      const p = out.parts[0];
+      expect(p.kind).toBe("text");
+      if (p.kind === "text") {
+        expect(p.text).toContain("[文件]");
+        expect(p.text).toContain("report.pdf");
+      }
+    });
+
+    it("cap.video=false → 降级为文字描述 [视频]", () => {
+      const msg = makeMsg([{ kind: "video", filePath: "/tmp/demo.mp4", name: "demo.mp4", mime: "video/mp4" }]);
+      const out = stubDispatcher.downgradeToCapability(msg, makeCap({ video: false }));
+      const p = out.parts[0];
+      expect(p.kind).toBe("text");
+      if (p.kind === "text") {
+        expect(p.text).toContain("[视频]");
+        expect(p.text).toContain("demo.mp4");
+      }
+    });
+
+    it("cap.file/video=true → 原样保留", () => {
+      const msg = makeMsg([
+        { kind: "file", filePath: "/tmp/report.pdf", name: "report.pdf" },
+        { kind: "video", filePath: "/tmp/demo.mp4", name: "demo.mp4" },
+      ]);
+      const out = stubDispatcher.downgradeToCapability(msg, makeCap({ file: true, video: true }));
+      expect(out.parts).toEqual(msg.parts);
+    });
+  });
+
   describe("card part", () => {
     it("cap.card=true, markdown=true → 原样保留 card", () => {
       const msg = makeMsg([{ kind: "card", title: "T", markdown: "**hi**", fields: [{ key: "k", value: "v" }] }]);
