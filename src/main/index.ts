@@ -2035,6 +2035,13 @@ function createWindow(): void {
     mainWindow.setIgnoreMouseEvents(true, { forward: true });
   }
 
+  mainWindow.on("hide", () => {
+    mainWindow?.webContents.send(IPC.PET_VISIBILITY_CHANGED, false);
+  });
+  mainWindow.on("show", () => {
+    mainWindow?.webContents.send(IPC.PET_VISIBILITY_CHANGED, true);
+  });
+
   applyGeneralSettings(loadGeneralSettings());
 
   // Opener 主动开口：注入桌宠窗口 + 启动 tick

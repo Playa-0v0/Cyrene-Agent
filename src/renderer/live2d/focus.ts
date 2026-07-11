@@ -35,12 +35,14 @@ export class MouseFocusController {
   pause(reset = false): void {
     this.paused = true;
     this.cancelPending();
+    this.stopPolling();
     if (reset) this.focusCenter();
   }
 
   resume(): void {
+    if (this.disposed) return;
     this.paused = false;
-    void this.pollGlobalCursor();
+    this.startPolling();
   }
 
   focusCenter(instant = false): void {

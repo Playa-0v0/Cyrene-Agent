@@ -10,6 +10,7 @@ export const IPC = {
   WINDOW_SET_DRAGGING: "window:set-dragging",
   WINDOW_CAPTURE_FRAME: "window:capture-frame",
   WINDOW_GET_CURSOR_POSITION: "window:get-cursor-position",
+  PET_VISIBILITY_CHANGED: "pet:visibility-changed",
   APP_QUIT: "app:quit",
 
   // chat window

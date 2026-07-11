@@ -40,6 +40,26 @@ describe("Live2DManager.playAction", () => {
     // No assertion needed beyond "did not throw"
   });
 
+  it("deduplicates concurrent initialization so only one model is loaded", async () => {
+    vi.clearAllMocks();
+    vi.stubGlobal("window", { devicePixelRatio: 1, innerWidth: 100, innerHeight: 100 });
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({}) })));
+    const { Live2DModel } = await import("pixi-live2d-display/cubism4");
+    const model = {
+      anchor: { set: vi.fn() }, scale: { set: vi.fn() }, width: 100, height: 100,
+      destroy: vi.fn(), motion: vi.fn(), expression: vi.fn(), internalModel: { motionManager: { definitions: {} } },
+    };
+    vi.mocked(Live2DModel.from).mockResolvedValue(model as never);
+    const { Live2DManager } = await import("./manager");
+    const mgr = new Live2DManager({ canvas: fakeCanvas, width: 100, height: 100, modelPath: "/x" });
+
+    await Promise.all([mgr.init(), mgr.init()]);
+
+    expect(Live2DModel.from).toHaveBeenCalledTimes(1);
+    mgr.dispose();
+    vi.unstubAllGlobals();
+  });
+
   it("calls model.expression for an expression target", async () => {
     const { Live2DManager } = await import("./manager");
     const mgr = new Live2DManager({ canvas: fakeCanvas, width: 100, height: 100, modelPath: "/x" });

@@ -413,14 +413,13 @@ declare global {
 
 // 把渲染端 Message 数组归一化为后端能持久化的形态：
 // - 过滤空 content / 渲染中的 thinking 占位（thinking=true 时通常 content 为空，但保险起见双重过滤）
-// - 丢弃 thinking 字段（持久化层不存这种瞬态状态）
+// - 丢弃仅用于本轮模型调用的 modelContext 与 thinking 等瞬态字段
 function toPersistableMessages(arr: Message[]): Array<{
-  id: string; role: Role; content: string; at: number; modelContext?: string; attachments?: MessageAttachment[]; sticker?: StickerId | null; ttsCacheKey?: string;
+  id: string; role: Role; content: string; at: number; attachments?: MessageAttachment[]; sticker?: StickerId | null; ttsCacheKey?: string;
 }> {
   return arr
     .filter((m) => m && (m.role === "user" || m.role === "model") && !m.thinking && !m.transient && (
       typeof m.content === "string" && m.content.trim()
-      || Boolean(m.modelContext?.trim())
       || ((m.attachments?.length ?? 0) > 0)
       || Boolean(m.sticker)
     ))
@@ -429,7 +428,6 @@ function toPersistableMessages(arr: Message[]): Array<{
       role: m.role,
       content: m.content,
       at: m.at,
-      modelContext: m.modelContext,
       attachments: m.attachments,
       sticker: m.sticker ?? null,
       ttsCacheKey: m.ttsCacheKey,
@@ -455,7 +453,6 @@ function loadSessionIntoUI(session: ChatStoreSession): void {
       role: m.role,
       content: m.content,
       at: m.at,
-      modelContext: m.modelContext,
       attachments: m.attachments,
       sticker: m.sticker ?? null,
       ttsCacheKey: m.ttsCacheKey,
@@ -1439,6 +1436,7 @@ declare global {
 
 // 当前正在播放的 TTS 音频实例（全局唯一）。点新朗读前先停这个，避免重叠。
 let currentTtsAudio: HTMLAudioElement | null = null;
+let currentTtsObjectUrl: string | null = null;
 // 当前正在朗读的消息 ID，用于给对应消息 row 加 .is-speaking class 并切换喇叭图标。
 // null 表示没有正在播放。
 let currentSpeakingMsgId: string | null = null;
@@ -1519,11 +1517,21 @@ function startTextModeMouth(): void {
 /** 停止当前正在播放的 TTS 音频（如果有）。只停 audio，UI 复位由调用方决定。 */
 function stopCurrentTts(): void {
   if (currentTtsAudio) {
-    currentTtsAudio.pause();
-    currentTtsAudio.currentTime = 0;
-    currentTtsAudio = null;
+    releaseCurrentTtsAudio(currentTtsAudio);
   }
   stopLive2dMouth();
+}
+
+function releaseCurrentTtsAudio(audio: HTMLAudioElement): void {
+  if (currentTtsAudio !== audio) return;
+  currentTtsAudio = null;
+  const url = currentTtsObjectUrl;
+  currentTtsObjectUrl = null;
+  audio.pause();
+  audio.currentTime = 0;
+  audio.removeAttribute("src");
+  audio.load();
+  if (url) URL.revokeObjectURL(url);
 }
 
 async function loadTtsSettings(): Promise<TtsSettings | null> {
@@ -1601,12 +1609,12 @@ function playTtsBase64(
   audio.preload = "auto";
   audio.load();
   currentTtsAudio = audio;
+  currentTtsObjectUrl = url;
   // 标记喇叭 UI 进入播放态（即使没传 msgId 也清掉旧的）
   setSpeakingMsgId(msgId ?? null);
 
   audio.onended = () => {
-    URL.revokeObjectURL(url);
-    if (currentTtsAudio === audio) currentTtsAudio = null;
+    releaseCurrentTtsAudio(audio);
     if (speechToken === token) stopLive2dMouth();
     // 复位喇叭 UI：仅当当前记录的就是这条消息才清，避免覆盖后启动的
     if (msgId === undefined || currentSpeakingMsgId === msgId) {
@@ -1620,8 +1628,7 @@ function playTtsBase64(
       await audio.play();
     } catch (err) {
       console.warn("[TTS] 播放失败:", err);
-      URL.revokeObjectURL(url);
-      if (currentTtsAudio === audio) currentTtsAudio = null;
+      releaseCurrentTtsAudio(audio);
       if (speechToken === token) stopLive2dMouth();
       if (msgId === undefined || currentSpeakingMsgId === msgId) {
         setSpeakingMsgId(null);
@@ -1779,12 +1786,12 @@ async function streamAndPlayCached(
     const url = URL.createObjectURL(mediaSource);
     audioEl = new Audio(url);
     currentTtsAudio = audioEl;
+    currentTtsObjectUrl = url;
 
     window.live2dSpeech?.prepare();  // stopLive2dMouth 已在开头 stopCurrentTts 里调过
 
     audioEl.onended = () => {
-      URL.revokeObjectURL(url);
-      if (currentTtsAudio === audioEl) currentTtsAudio = null;
+      releaseCurrentTtsAudio(audioEl!);
       if (speechToken === token) stopLive2dMouth();
       markPlaybackEnded();
     };
@@ -2213,6 +2220,18 @@ function buildModelMessages(): Array<{ role: "user" | "model"; content: string }
     }));
 }
 
+/** 文档全文、RAG 片段和图片 caption 只服务于当前请求，不能随历史常驻。 */
+function clearModelContexts(): boolean {
+  let changed = false;
+  for (const message of messages) {
+    if (message.modelContext !== undefined) {
+      message.modelContext = undefined;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
@@ -2238,11 +2257,13 @@ async function getModelReply(): Promise<ChatReplyPayload> {
   if (!window.chat?.sendMessage) {
     throw new Error("聊天 IPC 尚未就绪，请重启应用后再试。");
   }
+  const modelMessages = buildModelMessages();
   const payload = await withTimeout(
-    window.chat.sendMessage(buildModelMessages(), getCurrentStyle()),
+    window.chat.sendMessage(modelMessages, getCurrentStyle()),
     FRONTEND_REPLY_TIMEOUT_MS,
     "模型响应超时，请稍后重试。",
   );
+  if (clearModelContexts()) void saveSession();
   return normalizeChatReplyPayload(payload);
 }
 
@@ -2964,8 +2985,9 @@ async function send(): Promise<void> {
 
     // invoke 只确认"已发起"，不等 Observable 结束。
     // 真正的完成由事件流 RUN_FINISHED/RUN_ERROR 驱动（await runDone）。
+    const modelMessages = buildModelMessages();
     const ack = await window.agui!.run({
-      messages: buildModelMessages(),
+      messages: modelMessages,
       style: getCurrentStyle(),
       sessionId: currentSessionId || undefined,
       imageAttachments: directImageAttachments.length > 0 ? directImageAttachments : undefined,
@@ -2974,6 +2996,7 @@ async function send(): Promise<void> {
       offEvent();
       throw new Error(ack.error || "模型请求发起失败");
     }
+    if (clearModelContexts()) void saveSession();
 
     // 等事件流终态
     await runDone;

@@ -21,6 +21,11 @@ const cyreneApi = {
     ipcRenderer.on(IPC.PET_ZOOM, listener);
     return () => ipcRenderer.off(IPC.PET_ZOOM, listener);
   },
+  onPetVisibilityChanged: (callback: (visible: boolean) => void) => {
+    const listener = (_e: unknown, visible: boolean) => callback(visible);
+    ipcRenderer.on(IPC.PET_VISIBILITY_CHANGED, listener);
+    return () => ipcRenderer.off(IPC.PET_VISIBILITY_CHANGED, listener);
+  },
 };
 
 const chatApi = {

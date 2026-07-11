@@ -13,6 +13,7 @@ declare global {
       captureFrame: () => Promise<string | null>;
       getCursorPosition: () => Promise<{ x: number; y: number } | null>;
       onPetZoom: (callback: (zoom: number) => void) => () => void;
+      onPetVisibilityChanged: (callback: (visible: boolean) => void) => () => void;
     };
   }
 }

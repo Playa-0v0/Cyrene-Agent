@@ -78,6 +78,7 @@ export class Live2DManager {
   private motionIndexMap: Map<string, Map<string, number>> = new Map();
   private options: Live2DManagerOptions;
   private disposed = false;
+  private initPromise: Promise<void> | null = null;
   /** Scale that fits the model into the base window (zoom=1.0). Cached once
    *  at load so applyZoom can multiply it by the user's zoom factor. */
   private baseScale = 1;
@@ -91,6 +92,16 @@ export class Live2DManager {
 
   async init(): Promise<void> {
     if (this.disposed) return;
+    if (this.initPromise) return this.initPromise;
+    this.initPromise = this.initialize();
+    try {
+      await this.initPromise;
+    } finally {
+      this.initPromise = null;
+    }
+  }
+
+  private async initialize(): Promise<void> {
     const { canvas, width, height } = this.options;
     this.app = new PIXI.Application({
       view: canvas,
@@ -111,6 +122,10 @@ export class Live2DManager {
       await this.loadModel();
     } catch (err) {
       this.options.onError?.(err instanceof Error ? err : new Error(String(err)));
+      if (this.app) {
+        this.app.destroy(false, { children: true, texture: true });
+        this.app = null;
+      }
     }
   }
 
@@ -127,7 +142,18 @@ export class Live2DManager {
       if (!r.ok) throw new Error("Failed to fetch " + modelPath + ": " + r.status);
       return r.json() as Promise<ModelJsonShape>;
     });
-    const [model, json] = await Promise.all([modelPromise, jsonPromise]);
+    let model: Live2DModel;
+    let json: ModelJsonShape;
+    try {
+      [model, json] = await Promise.all([modelPromise, jsonPromise]);
+    } catch (err) {
+      // A JSON fetch failure can race with a successful Cubism load. Wait for
+      // that model and destroy it before propagating the error so its textures
+      // never survive an unsuccessful initialization attempt.
+      const loadedModel = await modelPromise.catch(() => null);
+      loadedModel?.destroy();
+      throw err;
+    }
     if (!this.app || this.disposed) {
       model.destroy();
       return;

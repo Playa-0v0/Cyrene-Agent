@@ -24,6 +24,7 @@ if (!window.cyrene) {
     captureFrame: () => Promise.resolve(null),
     getCursorPosition: () => Promise.resolve(null),
     onPetZoom: (_cb: (zoom: number) => void) => () => {},
+    onPetVisibilityChanged: (_cb: (visible: boolean) => void) => () => {},
   };
 }
 
@@ -46,7 +47,10 @@ let expressionReset: ExpressionResetController | null = null;
 let mouthSync: MouthSyncController | null = null;
 let speakingMotion: SpeakingMotionController | null = null;
 let clickThrough: ClickThroughController | null = null;
+let openerBubble: OpenerBubbleController | null = null;
 let petZoomOff: (() => void) | null = null;
+let petVisibilityOff: (() => void) | null = null;
+let petVisible = true;
 let live2dSpeechOffs: Array<() => void> = [];
 
 const manager = new Live2DManager({
@@ -63,12 +67,13 @@ const manager = new Live2DManager({
     mouthSync = new MouthSyncController(model);
     speakingMotion = new SpeakingMotionController(model);
     // Opener 主动开口气泡
+    const speechOffs: Array<() => void> = [];
     const openerBubbleEl = document.getElementById("opener-bubble");
     if (openerBubbleEl) {
-      const openerBubble = new OpenerBubbleController(openerBubbleEl);
-      live2dSpeechOffs.push(openerBubble.attach());
+      openerBubble = new OpenerBubbleController(openerBubbleEl);
+      speechOffs.push(openerBubble.attach());
     }
-    live2dSpeechOffs = [
+    speechOffs.push(
       window.live2dSpeech?.onPrepare(() => {
         void expressionReset?.resetNow();
         mouthSync?.stop();
@@ -82,13 +87,14 @@ const manager = new Live2DManager({
         mouthSync?.stop();
         speakingMotion?.stop();
       }) ?? (() => {}),
-    ];
+    );
     // LLM-driven action bridge: when Main sends a resolved Live2DTarget, play it.
-    live2dSpeechOffs.push(
+    speechOffs.push(
       window.live2dAction?.onPlayAction((target) => {
         void manager.playAction(target);
       }) ?? (() => {}),
     );
+    live2dSpeechOffs = speechOffs;
     interaction = new InteractionController(canvas, model, manager.getHitAreaDefs(), {
       onTrigger: (area) => {
         expressionReset?.restart();
@@ -109,6 +115,20 @@ const manager = new Live2DManager({
     // process has already resized the window to base × zoom; this rescales
     // the model to match.
     petZoomOff = window.cyrene.onPetZoom((zoom) => manager.applyZoom(zoom));
+    petVisibilityOff = window.cyrene.onPetVisibilityChanged((visible) => {
+      petVisible = visible;
+      if (!visible) {
+        clickThrough?.pause();
+        focus?.pause();
+        manager.pause();
+        return;
+      }
+      if (!isDragging) {
+        manager.resume();
+        focus?.resume();
+        clickThrough?.resume();
+      }
+    });
 
     // 启动竞态修复：主进程在渲染进程就绪前发的 PET_ZOOM 事件会被丢弃。
     // 注册监听后主动从磁盘读一次 petZoom 并应用，确保重启后模型大小生效。
@@ -143,6 +163,8 @@ window.addEventListener("beforeunload", () => {
   expressionReset = null;
   for (const off of live2dSpeechOffs) off();
   live2dSpeechOffs = [];
+  openerBubble?.dispose();
+  openerBubble = null;
   mouthSync?.dispose();
   mouthSync = null;
   speakingMotion?.dispose();
@@ -153,6 +175,8 @@ window.addEventListener("beforeunload", () => {
   clickThrough = null;
   petZoomOff?.();
   petZoomOff = null;
+  petVisibilityOff?.();
+  petVisibilityOff = null;
   interaction?.dispose();
   interaction = null;
   manager.dispose();
@@ -228,10 +252,12 @@ function finishDrag(): void {
   dragToken += 1;
   cancelPendingMove();
   clearDragOverlay();
-  manager.resume();
-  focus?.resume();
+  if (petVisible) {
+    manager.resume();
+    focus?.resume();
+  }
   window.cyrene.setDragging(false);
-  clickThrough?.resume();
+  if (petVisible) clickThrough?.resume();
 }
 
 // Click-through is driven per-pixel by ClickThroughController on pointermove.
