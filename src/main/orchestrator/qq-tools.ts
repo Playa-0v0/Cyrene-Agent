@@ -1,5 +1,6 @@
 import { channelManager } from "../channels/manager";
 import { appendLog, getRecentLog } from "../channels/message-log";
+import { loadChannelsSettings } from "../channels/settings-store";
 import type { OutgoingMessage } from "../channels/types";
 import { toolRegistry } from "./tool-registry";
 
@@ -42,7 +43,13 @@ async function executeSendQqMessage(args: Record<string, unknown>): Promise<stri
   let targetType: QqTargetType = preferredType === "auto" ? "private" : preferredType;
   let targetLabel = str(args.targetName) || targetId;
 
-  if (!targetId || targetId === "recent" || targetId === "latest" || targetId === "me") {
+  if (targetId === "me" || targetId === "owner") {
+    const ownerQq = loadChannelsSettings().qq.ownerQq?.trim();
+    if (!ownerQq) return "[error] Owner QQ is not configured in settings.";
+    targetId = ownerQq;
+    targetType = "private";
+    targetLabel = "主人";
+  } else if (!targetId || targetId === "recent" || targetId === "latest") {
     const recent = resolveRecentTarget(preferredType);
     if (!recent) {
       return "[error] No recent QQ contact found. Ask the user for targetId, or receive a QQ message first.";
@@ -115,4 +122,3 @@ toolRegistry.register({
   },
   execute: executeSendQqMessage,
 });
-

@@ -2834,6 +2834,20 @@ body {
   color: rgba(254, 247, 255, 0.92);
   font-size: 13px;
 }
+.channels-card__body select.form-input {
+  color-scheme: dark;
+}
+.channels-card__body select.form-input option {
+  color: #fef7ff;
+  background: #241a35;
+}
+[data-ui-theme="pearl-white"] .channels-card__body select.form-input {
+  color-scheme: light;
+}
+[data-ui-theme="pearl-white"] .channels-card__body select.form-input option {
+  color: #1d1d1f;
+  background: #ffffff;
+}
 .btn-secondary {
   padding: 5px 12px;
   border-radius: 999px;

@@ -178,26 +178,13 @@
             <div class="panel-heading__icon">⚙️</div>
             <div>
               <h1>设置</h1>
-              <p>控制桌宠窗口、状态栏、日程栏和基础音频偏好。</p>
+              <p>控制桌宠窗口和基础音频偏好。陪伴状态与日程现已整合到主窗口右栏。</p>
             </div>
           </div>
 
           <div class="settings-list">
-            <div class="setting-row">
-              <div>
-                <strong>状态栏窗口</strong>
-                <span>不小心关闭后可以从这里重新打开。</span>
-              </div>
-              <span class="switch"><input id="sidebar-visible" type="checkbox" checked /><span class="switch__track"><span class="switch__thumb"></span></span></span>
-            </div>
-
-            <div class="setting-row">
-              <div>
-                <strong>日程栏窗口</strong>
-                <span>控制右侧日程/任务展示窗口。</span>
-              </div>
-              <span class="switch"><input id="tasks-visible" type="checkbox" checked /><span class="switch__track"><span class="switch__thumb"></span></span></span>
-            </div>
+            <input id="sidebar-visible" type="checkbox" hidden />
+            <input id="tasks-visible" type="checkbox" hidden />
 
             <label class="setting-row">
               <div>
@@ -855,6 +842,10 @@
                 <input type="text" id="channels-qq-self-id" class="form-input" placeholder="用于群聊 @ 识别" />
               </div>
               <div class="form-row">
+                <label class="form-label">主人 QQ 号</label>
+                <input type="text" id="channels-qq-owner-id" class="form-input" placeholder="用于主人识别和主动私聊" />
+              </div>
+              <div class="form-row">
                 <label class="form-label">允许用户 QQ</label>
                 <input type="text" id="channels-qq-allowed-users" class="form-input form-input--wide" placeholder="逗号分隔，留空表示不限" />
               </div>
@@ -867,12 +858,58 @@
                 <select id="channels-qq-group-mode" class="form-input">
                   <option value="mention">@ 机器人</option>
                   <option value="prefix">前缀触发</option>
+                  <option value="keyword">关键词触发</option>
                   <option value="always">所有消息</option>
                 </select>
               </div>
               <div class="form-row">
                 <label class="form-label">群聊前缀</label>
                 <input type="text" id="channels-qq-group-prefix" class="form-input" placeholder="/cyrene" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">群聊关键词</label>
+                <input type="text" id="channels-qq-group-keywords" class="form-input form-input--wide" placeholder="昔涟, Cyrene（逗号或换行分隔）" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">主动参与群聊</label>
+                <input type="checkbox" id="channels-qq-proactive-enabled" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">主动回复概率</label>
+                <input type="number" id="channels-qq-proactive-probability" class="form-input" min="0" max="100" step="1" placeholder="8" />
+                <span class="field-note">%</span>
+              </div>
+              <div class="form-row">
+                <label class="form-label">主动回复冷却</label>
+                <input type="number" id="channels-qq-proactive-cooldown" class="form-input" min="5" max="86400" step="5" placeholder="120" />
+                <span class="field-note">秒</span>
+              </div>
+              <div class="form-row">
+                <label class="form-label">真人式按句分段</label>
+                <input type="checkbox" id="channels-qq-segmented-replies" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">分段内容上限</label>
+                <input type="number" id="channels-qq-segment-threshold" class="form-input" min="40" max="2000" step="10" placeholder="200" />
+                <span class="field-note">超过后保持整段</span>
+              </div>
+              <div class="form-row">
+                <label class="form-label">长句字数 / 最大段数</label>
+                <input type="number" id="channels-qq-segment-max-chars" class="form-input" min="40" max="1000" step="10" placeholder="180" />
+                <input type="number" id="channels-qq-segment-max-parts" class="form-input" min="1" max="10" step="1" placeholder="4" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">间隔方式</label>
+                <select id="channels-qq-segment-interval-mode" class="form-input">
+                  <option value="length">按内容长度</option>
+                  <option value="random">随机间隔</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label class="form-label">分段间隔</label>
+                <input type="number" id="channels-qq-segment-delay-min" class="form-input" min="0" max="10000" step="50" placeholder="350" />
+                <input type="number" id="channels-qq-segment-delay-max" class="form-input" min="0" max="10000" step="50" placeholder="900" />
+                <span class="field-note">毫秒</span>
               </div>
               <div class="channels-card__actions">
                 <button type="button" class="btn-secondary" id="channels-qq-save">保存并重启</button>

@@ -10,6 +10,9 @@ import type {
   OutgoingPart,
 } from "../../types";
 import { loadChannelsSettings, type QqNapCatChannelConfig } from "../../settings-store";
+import { calculateSmartSegmentDelay, splitSmartReply } from "../../../../shared/smart-segmentation";
+
+export { calculateSmartSegmentDelay as calculateSegmentDelay } from "../../../../shared/smart-segmentation";
 
 const LOG = "[QqNapCatAdapter]";
 
@@ -53,6 +56,19 @@ type PendingAction = {
   echo: string;
 };
 
+type OneBotActionResponse = {
+  status?: string;
+  retcode?: number;
+  message?: string;
+  wording?: string;
+  echo?: unknown;
+};
+
+type PendingActionResult = {
+  resolve: (result: { ok: boolean; error?: string }) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
+
 export type NormalizedOneBotPayload = {
   text: string;
   attachments?: IncomingMessage["attachments"];
@@ -61,6 +77,31 @@ export type NormalizedOneBotPayload = {
 function toId(value: unknown): string {
   if (value === null || value === undefined) return "";
   return String(value);
+}
+
+export class RecentMessageIds {
+  private readonly ids = new Set<string>();
+  private readonly order: string[] = [];
+
+  constructor(private readonly capacity = 1000) {}
+
+  seen(id: unknown): boolean {
+    const key = toId(id);
+    if (!key) return false;
+    if (this.ids.has(key)) return true;
+    this.ids.add(key);
+    this.order.push(key);
+    while (this.order.length > this.capacity) {
+      const oldest = this.order.shift();
+      if (oldest) this.ids.delete(oldest);
+    }
+    return false;
+  }
+
+  clear(): void {
+    this.ids.clear();
+    this.order.length = 0;
+  }
 }
 
 function parseList(values: string[] | undefined): Set<string> {
@@ -136,6 +177,7 @@ function stripAt(text: string, selfId: string): { text: string; mentioned: boole
 }
 
 function shouldAcceptPrivate(config: QqNapCatChannelConfig, userId: string): boolean {
+  if (config.ownerQq && config.ownerQq === userId) return true;
   const allowedUsers = parseList(config.allowedUsers);
   return allowedUsers.size === 0 || allowedUsers.has(userId);
 }
@@ -144,8 +186,49 @@ function shouldAcceptGroup(config: QqNapCatChannelConfig, groupId: string, userI
   const allowedGroups = parseList(config.allowedGroups);
   const allowedUsers = parseList(config.allowedUsers);
   if (allowedGroups.size > 0 && !allowedGroups.has(groupId)) return false;
-  if (allowedUsers.size > 0 && !allowedUsers.has(userId)) return false;
+  if (allowedUsers.size > 0 && !allowedUsers.has(userId) && config.ownerQq !== userId) return false;
   return true;
+}
+
+export function applyGroupTrigger(config: QqNapCatChannelConfig, sourceText: string, selfId: string): string | null {
+  const stripped = stripAt(sourceText, selfId);
+  const mode = config.groupTriggerMode ?? "mention";
+  if (mode === "mention") return stripped.mentioned && stripped.text ? stripped.text : null;
+  if (mode === "prefix") {
+    const prefix = config.groupPrefix || "/cyrene";
+    if (!stripped.text.startsWith(prefix)) return null;
+    return stripped.text.slice(prefix.length).trim() || null;
+  }
+  if (mode === "keyword") {
+    const textLower = stripped.text.toLocaleLowerCase();
+    const matched = (config.groupKeywords ?? [])
+      .map((keyword) => keyword.trim())
+      .filter(Boolean)
+      .some((keyword) => textLower.includes(keyword.toLocaleLowerCase()));
+    return matched && stripped.text ? stripped.text : null;
+  }
+  return stripped.text || null;
+}
+
+export function shouldProactivelyReply(
+  config: QqNapCatChannelConfig,
+  lastReplyAt: number,
+  now = Date.now(),
+  random = Math.random,
+): boolean {
+  if (!config.proactiveGroupEnabled) return false;
+  const cooldownMs = Math.max(5, config.proactiveGroupCooldownSeconds ?? 120) * 1000;
+  if (now - lastReplyAt < cooldownMs) return false;
+  const probability = Math.min(1, Math.max(0, config.proactiveGroupProbability ?? 0.08));
+  return random() < probability;
+}
+
+export function splitQqText(text: string, maxChars = 180, maxParts = 4, contentThreshold = 200): string[] {
+  return splitSmartReply(text, { maxChars, maxParts, contentThreshold, sentenceFallback: true });
+}
+
+function wait(ms: number): Promise<void> {
+  return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve();
 }
 
 export class QqNapCatAdapter implements ChannelAdapter {
@@ -158,6 +241,9 @@ export class QqNapCatAdapter implements ChannelAdapter {
   private clients = new Set<WebSocket>();
   private status: ChannelStatus = { enabled: false, phase: "offline" };
   private actionSeq = 0;
+  private readonly recentMessageIds = new RecentMessageIds();
+  private readonly pendingActions = new Map<string, PendingActionResult>();
+  private readonly proactiveGroupReplyAt = new Map<string, number>();
 
   async start(): Promise<void> {
     const config = loadChannelsSettings().qq;
@@ -190,6 +276,13 @@ export class QqNapCatAdapter implements ChannelAdapter {
   }
 
   async stop(): Promise<void> {
+    for (const [echo, pending] of this.pendingActions) {
+      clearTimeout(pending.timer);
+      pending.resolve({ ok: false, error: `NapCat connection closed before response (${echo})` });
+    }
+    this.pendingActions.clear();
+    this.recentMessageIds.clear();
+    this.proactiveGroupReplyAt.clear();
     for (const ws of this.clients) {
       try {
         ws.close();
@@ -225,11 +318,25 @@ export class QqNapCatAdapter implements ChannelAdapter {
     const text = msg.parts.map((p) => this.partToText(p)).filter(Boolean).join("\n").trim();
     if (!text) return { ok: false, error: "没有可发送的文本内容" };
 
+    const config = loadChannelsSettings().qq;
+    const segments = config.segmentedReplies
+      ? splitQqText(text, config.segmentMaxChars, config.segmentMaxParts, config.segmentContentThreshold)
+      : [text];
     const action = msg.threadId ? "send_group_msg" : "send_private_msg";
-    const params = msg.threadId
-      ? { group_id: Number(msg.targetId) || msg.targetId, message: text }
-      : { user_id: Number(msg.targetId) || msg.targetId, message: text };
-    return this.sendAction({ action, params, echo: `cyrene-${Date.now()}-${++this.actionSeq}` });
+    for (let index = 0; index < segments.length; index += 1) {
+      const segment = segments[index];
+      const params = msg.threadId
+        ? { group_id: Number(msg.targetId) || msg.targetId, message: segment }
+        : { user_id: Number(msg.targetId) || msg.targetId, message: segment };
+      const result = await this.sendAction({ action, params, echo: `cyrene-${Date.now()}-${++this.actionSeq}` });
+      if (!result.ok) return result;
+      if (index < segments.length - 1) {
+        const minDelay = Math.max(0, config.segmentDelayMinMs ?? 350);
+        const maxDelay = Math.max(minDelay, config.segmentDelayMaxMs ?? 900);
+        await wait(calculateSmartSegmentDelay(segment.length, config.segmentIntervalMode ?? "length", minDelay, maxDelay));
+      }
+    }
+    return { ok: true };
   }
 
   private handleConnection(ws: WebSocket, request: HttpIncomingMessage): void {
@@ -263,12 +370,27 @@ export class QqNapCatAdapter implements ChannelAdapter {
   }
 
   private async handleRawMessage(raw: string): Promise<void> {
-    let event: OneBotMessageEvent;
+    let payload: OneBotMessageEvent & OneBotActionResponse;
     try {
-      event = JSON.parse(raw) as OneBotMessageEvent;
+      payload = JSON.parse(raw) as OneBotMessageEvent & OneBotActionResponse;
     } catch {
       return;
     }
+    const echo = toId(payload.echo);
+    if (echo) {
+      const pending = this.pendingActions.get(echo);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pendingActions.delete(echo);
+        const ok = payload.status === "ok" && (payload.retcode === undefined || payload.retcode === 0);
+        pending.resolve({
+          ok,
+          error: ok ? undefined : payload.wording || payload.message || `OneBot retcode ${payload.retcode ?? "unknown"}`,
+        });
+      }
+      return;
+    }
+    const event = payload;
     if (event.post_type !== "message") return;
     if (event.message_type !== "private" && event.message_type !== "group") return;
     if (!this.onMessage) return;
@@ -278,6 +400,8 @@ export class QqNapCatAdapter implements ChannelAdapter {
     const groupId = toId(event.group_id);
     const selfId = toId(config.botSelfId || event.self_id);
     if (!userId) return;
+    if (selfId && userId === selfId) return;
+    if (this.recentMessageIds.seen(event.message_id)) return;
 
     const normalized = normalizeOneBotPayload(event.message, event.raw_message);
     let text = normalized.text;
@@ -289,16 +413,16 @@ export class QqNapCatAdapter implements ChannelAdapter {
 
     if (event.message_type === "group") {
       if (!groupId || !shouldAcceptGroup(config, groupId, userId)) return;
-      const stripped = stripAt(text, selfId);
-      text = stripped.text;
-      const mode = config.groupTriggerMode ?? "mention";
-      const prefix = config.groupPrefix || "/cyrene";
-      if (mode === "mention" && !stripped.mentioned) return;
-      if (mode === "prefix") {
-        if (!text.startsWith(prefix)) return;
-        text = text.slice(prefix.length).trim();
+      const triggeredText = applyGroupTrigger(config, text, selfId);
+      if (triggeredText) {
+        text = triggeredText;
+      } else {
+        const lastReplyAt = this.proactiveGroupReplyAt.get(groupId) ?? 0;
+        if (!shouldProactivelyReply(config, lastReplyAt)) return;
+        this.proactiveGroupReplyAt.set(groupId, Date.now());
+        text = stripAt(text, selfId).text;
+        if (!text) return;
       }
-      if (!text) return;
       chatId = groupId;
       senderId = `group:${groupId}:user:${userId}`;
       threadId = userId;
@@ -320,15 +444,26 @@ export class QqNapCatAdapter implements ChannelAdapter {
     await this.onMessage(incoming);
   }
 
-  private sendAction(action: PendingAction): { ok: boolean; error?: string } {
+  private async sendAction(action: PendingAction): Promise<{ ok: boolean; error?: string }> {
     const payload = JSON.stringify(action);
-    let sent = false;
-    for (const ws of this.clients) {
-      if (ws.readyState !== WebSocket.OPEN) continue;
-      ws.send(payload);
-      sent = true;
-    }
-    return sent ? { ok: true } : { ok: false, error: "没有可用的 NapCat WebSocket 连接" };
+    const ws = Array.from(this.clients).find((client) => client.readyState === WebSocket.OPEN);
+    if (!ws) return { ok: false, error: "没有可用的 NapCat WebSocket 连接" };
+
+    return await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingActions.delete(action.echo);
+        resolve({ ok: false, error: "NapCat 响应超时" });
+      }, 10_000);
+      this.pendingActions.set(action.echo, { resolve, timer });
+      ws.send(payload, (err) => {
+        if (!err) return;
+        const pending = this.pendingActions.get(action.echo);
+        if (!pending) return;
+        clearTimeout(pending.timer);
+        this.pendingActions.delete(action.echo);
+        pending.resolve({ ok: false, error: err.message });
+      });
+    });
   }
 
   private partToText(part: OutgoingPart): string {

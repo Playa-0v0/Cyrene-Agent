@@ -198,6 +198,8 @@ async function showDragOverlay(token: number): Promise<void> {
 }
 
 function scheduleMoveTo(screenX: number, screenY: number): void {
+  if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) return;
+  if (!Number.isFinite(dragOffsetX) || !Number.isFinite(dragOffsetY)) return;
   pendingPosition = {
     x: screenX - dragOffsetX,
     y: screenY - dragOffsetY,
@@ -252,6 +254,8 @@ canvas.addEventListener("pointerleave", () => {
 });
 
 canvas.addEventListener("pointerdown", (e) => {
+  if (isDragging) return;
+  if (!Number.isFinite(e.screenX) || !Number.isFinite(e.screenY)) return;
   isDragging = true;
   dragToken += 1;
   const token = dragToken;

@@ -75,6 +75,7 @@ import {
 } from "./orchestrator/build-options";
 import { buildRelationshipContext, recordRelationshipTurn } from "./relationship/relationship-log";
 import { createFeelingScores, smoothFeeling } from "./orchestrator/runtime-state-smoother";
+import { normalizeWindowPosition } from "./window-position";
 import { getSchedulerStore } from "./scheduler/scheduler-store";
 import { SchedulerEngine } from "./scheduler/scheduler-engine";
 import { createSchedulerRunner } from "./scheduler/scheduler-runner";
@@ -522,8 +523,8 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   petAlwaysOnTop: true,
   petVisible: true,
   petZoom: 1,
-  sidebarVisible: true,
-  tasksVisible: true,
+  sidebarVisible: false,
+  tasksVisible: false,
   launchAtLogin: false,
   language: "zh-CN",
   uiTheme: "classic",
@@ -2154,10 +2155,10 @@ function createChatWindow(sessionId?: string): void {
   chatWindow = new BrowserWindow({
     x: layout.chat.x,
     y: layout.chat.y,
-    width: 1280,
-    height: 760,
-    minWidth: 960,
-    minHeight: 540,
+    width: 1440,
+    height: 900,
+    minWidth: 1000,
+    minHeight: 700,
     title: "Cyrene · 聊天",
     icon: APP_ICON_PATH,
     backgroundColor: "#00000000",
@@ -2521,19 +2522,41 @@ ipcMain.handle(IPC.WINDOW_SET_INTERACTIVE, (_event, interactive: boolean) => {
 });
 
 ipcMain.on(IPC.WINDOW_MOVE, (_event, dx: number, dy: number) => {
-  if (mainWindow) {
-    const [x, y] = mainWindow.getPosition();
-    mainWindow.setPosition(x + dx, y + dy);
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const delta = normalizeWindowPosition(dx, dy);
+  if (!delta) return;
+  const [x, y] = mainWindow.getPosition();
+  const next = normalizeWindowPosition(x + delta.x, y + delta.y);
+  if (!next) return;
+  try {
+    mainWindow.setPosition(next.x, next.y, false);
+  } catch (err) {
+    console.warn("[Cyrene] ignored invalid relative window move:", err);
   }
 });
 
+let pendingPetWindowPosition: { x: number; y: number } | null = null;
+let petWindowMoveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function flushPetWindowMove(): void {
+  petWindowMoveTimer = null;
+  const next = pendingPetWindowPosition;
+  pendingPetWindowPosition = null;
+  if (!next || !mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    const [currentX, currentY] = mainWindow.getPosition();
+    if (currentX !== next.x || currentY !== next.y) mainWindow.setPosition(next.x, next.y, false);
+  } catch (err) {
+    console.warn("[Cyrene] ignored invalid absolute window move:", err);
+  }
+}
+
 ipcMain.on(IPC.WINDOW_MOVE_TO, (_event, x: number, y: number) => {
-  if (!mainWindow) return;
-  const rx = Math.round(x);
-  const ry = Math.round(y);
-  mainWindow.setPosition(rx, ry, false);
-  // 拖拽结束或 setPosition 时保存位置
-  void saveGeneralSettings({ petWindowX: rx, petWindowY: ry });
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const next = normalizeWindowPosition(x, y);
+  if (!next) return;
+  pendingPetWindowPosition = next;
+  if (petWindowMoveTimer === null) petWindowMoveTimer = setTimeout(flushPetWindowMove, 16);
 });
 
 /**
@@ -2562,8 +2585,23 @@ ipcMain.on(IPC.WINDOW_MOVE_TO, (_event, x: number, y: number) => {
  * translucent during the drag.
  */
 ipcMain.on(IPC.WINDOW_SET_DRAGGING, (_event, isDragging: boolean) => {
-  if (!mainWindow) return;
-  mainWindow.setOpacity(isDragging ? 0.99 : 1.0);
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    mainWindow.setOpacity(isDragging ? 0.99 : 1.0);
+  } catch (err) {
+    console.warn("[Cyrene] failed to update drag opacity:", err);
+    return;
+  }
+  if (!isDragging) {
+    if (petWindowMoveTimer !== null) {
+      clearTimeout(petWindowMoveTimer);
+      petWindowMoveTimer = null;
+    }
+    flushPetWindowMove();
+    const [x, y] = mainWindow.getPosition();
+    const current = normalizeWindowPosition(x, y);
+    if (current) void saveGeneralSettings({ petWindowX: current.x, petWindowY: current.y });
+  }
 });
 
 /**
@@ -3672,10 +3710,19 @@ app.whenReady().then(async () => {
         content: m.content,
       }));
 
+    const qqConfig = msg.channel === "qq" ? loadChannelsSettings().qq : null;
+    const qqSenderId = msg.senderId.startsWith("group:")
+      ? msg.senderId.split(":user:")[1] ?? ""
+      : msg.senderId;
+    const isQqOwner = !!qqConfig?.ownerQq && qqSenderId === qqConfig.ownerQq;
+
     // 把 IncomingMessage 转成 AguiRunInput，调 CyreneAgent
     const { options } = await buildAgentRunOptions(
       {
         messages: [
+          ...(isQqOwner
+            ? [{ role: "system" as const, content: "当前 QQ 消息来自设置中配置的主人。可以按主人关系自然回应，但仍需遵守权限与安全确认规则。" }]
+            : []),
           ...historyMessages,
           { role: "user", content: msg.text },
         ],
@@ -3953,11 +4000,8 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle(IPC.CHATS_GET_ACTIVE_SESSION, () => activeChatSessionId);
 
-  const generalSettings = loadGeneralSettings();
   createWindow();
   createChatWindow();
-  if (generalSettings.sidebarVisible) createSidebarWindow();
-  if (generalSettings.tasksVisible) createTasksWindow();
   createTray();
   // 权限模块初始化：必须在 createWindow 之后但任意工具调用之前
   initPermissionFromDisk();

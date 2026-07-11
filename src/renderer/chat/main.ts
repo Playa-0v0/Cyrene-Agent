@@ -9,6 +9,8 @@ import {
 import { canUseMinimaxStreamingEarly, extractEarlyTtsSegment } from "../../shared/tts-early-playback";
 import { getStickerSrcForId } from "./sticker-src";
 import { resolveAsset } from "../../shared/renderer-base";
+import { getSchedulePanelItems, type ScheduledTask } from "../tasks/task-filter";
+import { splitSmartReply } from "../../shared/smart-segmentation";
 
 type Role = "user" | "model";
 
@@ -49,6 +51,27 @@ interface ModelConfig {
   model: string;
   connected: boolean;
   stickerSize: "small" | "standard" | "large";
+}
+
+function splitDesktopReply(text: string): string[] {
+  return splitSmartReply(text, {
+    contentThreshold: 400,
+    maxChars: 240,
+    maxParts: 4,
+    sentenceFallback: false,
+  });
+}
+
+interface TokenDayData {
+  date: string;
+  weekday: string;
+  input: number;
+  output: number;
+}
+
+interface InspectorRuntimeState {
+  status: string;
+  feeling: string;
 }
 
 interface ModelConfigApi {
@@ -173,10 +196,30 @@ const maxBtn = document.getElementById("max-btn") as HTMLButtonElement;
 const closeBtn = document.getElementById("close-btn") as HTMLButtonElement;
 const chatHintEl = document.getElementById("chat-hint") as HTMLElement;
 const chatStatusBtn = document.getElementById("chat-status-btn") as HTMLButtonElement;
+const chatShell = document.querySelector(".chat__shell") as HTMLElement | null;
 const chatRail = document.getElementById("chat-rail") as HTMLElement | null;
 const chatRailNew = document.getElementById("chat-rail-new") as HTMLButtonElement | null;
 const chatRailList = document.getElementById("chat-rail-list") as HTMLElement | null;
 const chatRailEmpty = document.getElementById("chat-rail-empty") as HTMLElement | null;
+const conversationTitleEl = document.getElementById("conversation-title") as HTMLElement | null;
+const sessionCountEl = document.getElementById("session-count") as HTMLElement | null;
+const inspectorMessageCountEl = document.getElementById("inspector-message-count") as HTMLElement | null;
+const inspectorUserCountEl = document.getElementById("inspector-user-count") as HTMLElement | null;
+const inspectorModelStatusEl = document.getElementById("inspector-model-status") as HTMLElement | null;
+const inspectorModelPillEl = document.getElementById("inspector-model-pill") as HTMLElement | null;
+const inspectorQqDetailEl = document.getElementById("inspector-qq-detail") as HTMLElement | null;
+const inspectorQqStatusEl = document.getElementById("inspector-qq-status") as HTMLElement | null;
+const inspectorTokenShortEl = document.getElementById("inspector-token-short") as HTMLElement | null;
+const inspectorTokenTotalEl = document.getElementById("inspector-token-total") as HTMLElement | null;
+const inspectorTokenFillEl = document.getElementById("inspector-token-fill") as HTMLElement | null;
+const inspectorTokenChartEl = document.getElementById("inspector-token-chart") as HTMLElement | null;
+const inspectorUpcomingListEl = document.getElementById("inspector-upcoming-list") as HTMLElement | null;
+const inspectorTaskListEl = document.getElementById("inspector-task-list") as HTMLElement | null;
+const inspectorProfileSummaryEl = document.getElementById("inspector-profile-summary") as HTMLElement | null;
+const inspectorRuntimeStatusEl = document.getElementById("inspector-runtime-status") as HTMLElement | null;
+const inspectorRuntimeFeelingEl = document.getElementById("inspector-runtime-feeling") as HTMLElement | null;
+const inspectorStatusModelEl = document.getElementById("inspector-status-model") as HTMLElement | null;
+const inspectorStatusModelPillEl = document.getElementById("inspector-status-model-pill") as HTMLElement | null;
 
 // 旧版 localStorage key——首次启动时检测到老数据会迁移到主进程 chats 存储再清掉。
 const LEGACY_STORAGE_KEY = "cyrene.chat.history.v1";
@@ -287,6 +330,18 @@ function applyModelConfig(config: ModelConfig | null): void {
   currentModelConfig = config;
   chatHintEl.textContent = formatModelHint(config);
   document.documentElement.dataset.stickerSize = config?.stickerSize ?? "standard";
+  if (inspectorModelStatusEl) {
+    inspectorModelStatusEl.textContent = config?.connected ? config.model : "模型未连接";
+  }
+  if (inspectorModelPillEl) {
+    inspectorModelPillEl.textContent = config?.connected ? "已连接" : "离线";
+    inspectorModelPillEl.classList.toggle("is-online", Boolean(config?.connected));
+  }
+  if (inspectorStatusModelEl) inspectorStatusModelEl.textContent = config?.connected ? config.model : "模型未连接";
+  if (inspectorStatusModelPillEl) {
+    inspectorStatusModelPillEl.textContent = config?.connected ? "已连接" : "离线";
+    inspectorStatusModelPillEl.classList.toggle("is-online", Boolean(config?.connected));
+  }
 }
 
 async function refreshModelConfig(): Promise<boolean> {
@@ -389,6 +444,7 @@ async function saveSession(): Promise<void> {
 // 把 store 里的 ChatStoreSession 装载到当前窗口（替换 messages 数组并 render）。
 function loadSessionIntoUI(session: ChatStoreSession): void {
   currentSessionId = session.id;
+  if (conversationTitleEl) conversationTitleEl.textContent = session.title || "新对话";
   messages.length = 0;
   for (const m of session.messages) {
     messages.push({
@@ -423,17 +479,173 @@ async function renderRailList(): Promise<void> {
   }
 
   chatRailList.innerHTML = "";
+  if (sessionCountEl) sessionCountEl.textContent = `${sessions.length} 个会话`;
   if (sessions.length === 0) {
     if (chatRailEmpty) chatRailEmpty.classList.remove("is-hidden");
     return;
   }
   if (chatRailEmpty) chatRailEmpty.classList.add("is-hidden");
 
-  for (const session of sessions) {
+  for (const session of sessions.slice(0, 6)) {
     const item = buildRailItem(session);
     chatRailList.appendChild(item);
   }
 }
+
+function renderInspectorStats(): void {
+  const visibleMessages = messages.filter((message) => !message.thinking && message.content.trim());
+  const userMessages = visibleMessages.filter((message) => message.role === "user");
+  if (inspectorMessageCountEl) inspectorMessageCountEl.textContent = String(visibleMessages.length);
+  if (inspectorUserCountEl) inspectorUserCountEl.textContent = String(userMessages.length);
+}
+
+async function refreshExternalChannelStatus(): Promise<void> {
+  try {
+    const statuses = await window.settings?.channelsGetStatus?.();
+    const qq = statuses?.qq;
+    const connected = qq?.phase === "online" || qq?.phase === "connected";
+    if (inspectorQqDetailEl) inspectorQqDetailEl.textContent = qq?.message || (connected ? "NapCat 已连接" : "等待 NapCat 连接");
+    if (inspectorQqStatusEl) {
+      inspectorQqStatusEl.textContent = connected ? "已连接" : qq?.phase === "starting" ? "启动中" : "离线";
+      inspectorQqStatusEl.classList.toggle("is-online", connected);
+    }
+  } catch {
+    if (inspectorQqDetailEl) inspectorQqDetailEl.textContent = "状态暂不可用";
+    if (inspectorQqStatusEl) inspectorQqStatusEl.textContent = "未知";
+  }
+}
+
+const inspectorBridge = window as unknown as {
+  tokenUsage?: { get: (days: number) => Promise<TokenDayData[]> };
+  cyreneScheduler?: { list: () => Promise<{ ok: boolean; value?: ScheduledTask[]; error?: string }> };
+  runtimeState?: {
+    get: () => Promise<InspectorRuntimeState>;
+    onChanged: (callback: (state: InspectorRuntimeState) => void) => () => void;
+  };
+  sidebar?: { openCall: () => void; openSettings: (section?: string) => void };
+};
+
+function selectInspectorTab(name: "overview" | "schedule" | "status"): void {
+  document.querySelectorAll<HTMLElement>("[data-inspector-tab]").forEach((tab) => {
+    const active = tab.dataset.inspectorTab === name;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-selected", String(active));
+  });
+  document.querySelectorAll<HTMLElement>("[data-inspector-panel]").forEach((panel) => {
+    panel.classList.toggle("is-active", panel.dataset.inspectorPanel === name);
+  });
+}
+
+function formatInspectorToken(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1000) return `${Math.round(value / 1000)}K`;
+  return String(Math.round(value));
+}
+
+function renderInspectorTokenUsage(data: TokenDayData[]): void {
+  const now = new Date();
+  const todayKey = `${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const today = data.find((day) => day.date === todayKey);
+  const todayTotal = (today?.input ?? 0) + (today?.output ?? 0);
+  if (inspectorTokenShortEl) inspectorTokenShortEl.textContent = formatInspectorToken(todayTotal);
+  if (inspectorTokenTotalEl) inspectorTokenTotalEl.textContent = todayTotal.toLocaleString("en-US");
+
+  const totals = data.slice(-7).map((day) => day.input + day.output);
+  while (totals.length < 7) totals.unshift(0);
+  const max = Math.max(...totals, 1);
+  if (inspectorTokenFillEl) inspectorTokenFillEl.style.width = `${Math.max(4, Math.round((todayTotal / max) * 100))}%`;
+  if (inspectorTokenChartEl) {
+    inspectorTokenChartEl.replaceChildren(...totals.map((total) => {
+      const bar = document.createElement("span");
+      bar.style.height = `${Math.max(5, Math.round((total / max) * 88))}px`;
+      bar.title = total.toLocaleString("en-US");
+      return bar;
+    }));
+  }
+}
+
+function buildInspectorScheduleItem(task: ScheduledTask): HTMLElement {
+  const item = document.createElement("div");
+  item.className = "inspector-schedule-item";
+  const fireAt = task.nextFireAt ? new Date(task.nextFireAt) : null;
+  const validDate = fireAt && !Number.isNaN(fireAt.getTime());
+  const timeText = validDate
+    ? `${String(fireAt.getHours()).padStart(2, "0")}:${String(fireAt.getMinutes()).padStart(2, "0")}`
+    : "--:--";
+  const dateText = validDate
+    ? `${String(fireAt.getMonth() + 1).padStart(2, "0")}-${String(fireAt.getDate()).padStart(2, "0")}`
+    : "等待排期";
+  item.innerHTML = `<span class="inspector-schedule-time"></span><div class="inspector-schedule-copy"><strong></strong><span></span></div><span class="inspector-schedule-state">${task.enabled ? "待执行" : "已停用"}</span>`;
+  (item.querySelector(".inspector-schedule-time") as HTMLElement).textContent = timeText;
+  (item.querySelector(".inspector-schedule-copy strong") as HTMLElement).textContent = task.title;
+  (item.querySelector(".inspector-schedule-copy span") as HTMLElement).textContent = dateText;
+  return item;
+}
+
+function renderInspectorTasks(tasks: ScheduledTask[]): void {
+  const upcoming = getSchedulePanelItems(tasks, new Date(), 6).items;
+  const renderInto = (container: HTMLElement | null, items: ScheduledTask[], limit: number): void => {
+    if (!container) return;
+    const visible = items.slice(0, limit);
+    if (visible.length === 0) {
+      container.innerHTML = '<div class="inspector-empty">暂无已启用定时任务</div>';
+      return;
+    }
+    container.replaceChildren(...visible.map(buildInspectorScheduleItem));
+  };
+  renderInto(inspectorUpcomingListEl, upcoming, 2);
+  renderInto(inspectorTaskListEl, upcoming, 6);
+}
+
+function applyInspectorRuntimeState(state: InspectorRuntimeState | null): void {
+  const status = state?.status || "陪伴中";
+  const feeling = state?.feeling || "平静";
+  if (inspectorRuntimeStatusEl) inspectorRuntimeStatusEl.textContent = status;
+  if (inspectorRuntimeFeelingEl) inspectorRuntimeFeelingEl.textContent = feeling;
+  if (inspectorProfileSummaryEl) inspectorProfileSummaryEl.textContent = `${status} · 心情${feeling}`;
+}
+
+async function refreshInspectorData(): Promise<void> {
+  const [tokenResult, taskResult, runtimeResult] = await Promise.allSettled([
+    inspectorBridge.tokenUsage?.get(7) ?? Promise.resolve([]),
+    inspectorBridge.cyreneScheduler?.list() ?? Promise.resolve({ ok: false }),
+    inspectorBridge.runtimeState?.get() ?? Promise.resolve(null),
+  ]);
+  if (tokenResult.status === "fulfilled") renderInspectorTokenUsage(tokenResult.value as TokenDayData[]);
+  if (taskResult.status === "fulfilled") {
+    const result = taskResult.value as { ok: boolean; value?: ScheduledTask[] };
+    renderInspectorTasks(result.ok && Array.isArray(result.value) ? result.value : []);
+  }
+  if (runtimeResult.status === "fulfilled") applyInspectorRuntimeState(runtimeResult.value as InspectorRuntimeState | null);
+}
+
+document.querySelectorAll<HTMLElement>("[data-inspector-tab]").forEach((tab) => {
+  tab.addEventListener("click", () => selectInspectorTab((tab.dataset.inspectorTab || "overview") as "overview" | "schedule" | "status"));
+});
+
+document.querySelectorAll<HTMLElement>("[data-inspector-open]").forEach((button) => {
+  button.addEventListener("click", () => selectInspectorTab((button.dataset.inspectorOpen || "overview") as "overview" | "schedule" | "status"));
+});
+
+document.querySelectorAll<HTMLElement>("[data-inspector-action=\"call\"]").forEach((button) => {
+  button.addEventListener("click", () => inspectorBridge.sidebar?.openCall());
+});
+
+document.querySelectorAll<HTMLElement>("[data-shell-action]").forEach((element) => {
+  element.addEventListener("click", () => {
+    const action = element.dataset.shellAction;
+    if (action === "chat") selectInspectorTab("overview");
+    if (action === "tasks") selectInspectorTab("schedule");
+    if (action === "memory") window.sidebar?.openSettings("memory");
+    if (action === "channels") window.sidebar?.openSettings("channels");
+    if (action === "settings") window.sidebar?.openSettings("general");
+    if (action === "task-settings") window.sidebar?.openSettings("tasks");
+    if (action === "api") window.sidebar?.openSettings("api");
+    if (action === "cyrene") window.sidebar?.openSettings("cyrene");
+  });
+});
+
+document.querySelector<HTMLElement>("[data-clear-alias]")?.addEventListener("click", () => clearBtn.click());
 
 function buildRailItem(session: ChatSessionMetaUI): HTMLLIElement {
   const li = document.createElement("li");
@@ -471,12 +683,13 @@ function buildRailItem(session: ChatSessionMetaUI): HTMLLIElement {
   return li;
 }
 
-// loader 按钮 toggle 侧栏显隐
+// 侧栏在完整和图标模式之间切换。保留 Grid 节点，避免 Electron 在 display:none
+// 后按最小内容宽度错误重排主工作区。
 chatStatusBtn?.addEventListener("click", () => {
-  if (!chatRail) return;
-  chatRail.toggleAttribute("hidden");
-  // 首次展开时拉一次列表（后续由 onChanged 持续刷新）
-  if (!chatRail.hidden) void renderRailList();
+  if (!chatShell) return;
+  const compact = chatShell.classList.toggle("is-compact");
+  chatStatusBtn.setAttribute("aria-expanded", String(!compact));
+  chatStatusBtn.title = compact ? "展开侧栏" : "收起侧栏";
 });
 
 // +新对话
@@ -941,6 +1154,7 @@ function render(): void {
   const emptyEl = document.getElementById("chat-empty");
   const hasMessages = messages.some((m) => m.content.trim() || m.thinking);
   if (emptyEl) emptyEl.toggleAttribute("hidden", hasMessages);
+  renderInspectorStats();
 
   messagesEl.replaceChildren();
   for (const m of messages) {
@@ -957,6 +1171,7 @@ function render(): void {
     body.className = "msg__body";
 
     const bubble = document.createElement("div");
+    const continuationBubbles: HTMLElement[] = [];
     bubble.className = "msg__bubble";
     bubble.hidden = false;
     if (m.thinking) {
@@ -976,14 +1191,24 @@ function render(): void {
       if (cleanText) bubble.textContent = cleanText;
       else bubble.hidden = true; // 纯表情包消息不显示气泡
     } else {
-      bubble.textContent = m.content;
+      const parts = splitDesktopReply(m.content);
+      bubble.textContent = parts[0] ?? m.content;
+      for (const part of parts.slice(1)) {
+        const nextBubble = document.createElement("div");
+        nextBubble.className = "msg__bubble msg__bubble--continuation";
+        nextBubble.textContent = part;
+        continuationBubbles.push(nextBubble);
+      }
     }
 
     const time = document.createElement("div");
     time.className = "msg__time";
     time.textContent = formatTime(m.at);
 
-    if (!bubble.hidden) body.appendChild(bubble);
+    if (!bubble.hidden) {
+      body.appendChild(bubble);
+      for (const continuation of continuationBubbles) body.appendChild(continuation);
+    }
 
     if (m.sticker) {
       const stickerSrc = getStickerSrc(m.sticker);
@@ -2159,7 +2384,8 @@ async function triggerCyreneGreeting(): Promise<void> {
     let runFinishedArrived = false;
     const getStreamingBubble = (): HTMLElement | null => {
       const row = messagesEl.querySelector(`[data-msg-id="${streamMsgId}"]`);
-      return row ? row.querySelector(".msg__bubble") as HTMLElement : null;
+      const bubbles = row?.querySelectorAll<HTMLElement>(".msg__bubble");
+      return bubbles && bubbles.length > 0 ? bubbles[bubbles.length - 1] : null;
     };
     const tryFinish = (): void => {
       if (runFinishedArrived && deltaQueue.length === 0 && playbackTimer === null) {
@@ -2171,7 +2397,15 @@ async function triggerCyreneGreeting(): Promise<void> {
       playbackTimer = window.setInterval(() => {
         const next = deltaQueue.shift();
         if (next !== undefined) {
+          const previousPartCount = splitDesktopReply(streamContent).length;
           streamContent += next;
+          const nextPartCount = splitDesktopReply(streamContent).length;
+          const streamMessage = messages.find((message) => message.id === streamMsgId);
+          if (streamMessage && previousPartCount > 0 && nextPartCount > previousPartCount) {
+            streamMessage.content = streamContent;
+            render();
+            return;
+          }
           const bubble = getStreamingBubble();
           if (bubble) {
             const span = document.createElement("span");
@@ -2444,7 +2678,8 @@ async function send(): Promise<void> {
     /** 找到当前流式消息的气泡 DOM（TEXT_MESSAGE_START 时 render 过一次，带 data-msg-id）。 */
     const getStreamingBubble = (): HTMLElement | null => {
       const row = messagesEl.querySelector(`[data-msg-id="${streamMsgId}"]`);
-      return row ? row.querySelector(".msg__bubble") as HTMLElement : null;
+      const bubbles = row?.querySelectorAll<HTMLElement>(".msg__bubble");
+      return bubbles && bubbles.length > 0 ? bubbles[bubbles.length - 1] : null;
     };
     // 终态条件：RUN_FINISHED 到达 AND 回放队列空。两者都满足才 finishRun。
     const tryFinish = (): void => {
@@ -2457,7 +2692,15 @@ async function send(): Promise<void> {
       playbackTimer = window.setInterval(() => {
         const next = deltaQueue.shift();
         if (next !== undefined) {
+          const previousPartCount = splitDesktopReply(streamContent).length;
           streamContent += next;
+          const nextPartCount = splitDesktopReply(streamContent).length;
+          const streamMessage = messages.find((message) => message.id === streamMsgId);
+          if (streamMessage && previousPartCount > 0 && nextPartCount > previousPartCount) {
+            streamMessage.content = streamContent;
+            render();
+            return;
+          }
           // 增量追加 span 到气泡，CSS 渐显。不调 render()，避免全量重建卡顿。
           const bubble = getStreamingBubble();
           if (bubble) {
@@ -2954,9 +3197,15 @@ if (particlesCtx) {
 void (async () => {
   await loadEnabledStickers();
   await bootstrap();
+  await renderRailList();
   buildQuickPresets();
   installSchedulerEventListener();
   void initModelConfig();
+  void refreshExternalChannelStatus();
+  void refreshInspectorData();
+  inspectorBridge.runtimeState?.onChanged((state) => applyInspectorRuntimeState(state));
+  window.setInterval(() => void refreshExternalChannelStatus(), 15_000);
+  window.setInterval(() => void refreshInspectorData(), 30_000);
 })();
 
 // main → renderer：权限审批请求（per-action 档位下工具调用前）
@@ -2982,7 +3231,7 @@ window.chatStore?.onSwitchSession(async (sessionId) => {
 // 2. 侧栏展开时刷新列表（别的窗口新建/改名/删除都会触发）
 window.chatStore?.onChanged(async () => {
   // 侧栏展开时刷新列表（收起时不浪费 DOM 写入）
-  if (chatRail && !chatRail.hidden) void renderRailList();
+  if (chatRail) void renderRailList();
 
   if (!window.chatStore || !currentSessionId) return;
   const stillExists = await window.chatStore.get(currentSessionId);

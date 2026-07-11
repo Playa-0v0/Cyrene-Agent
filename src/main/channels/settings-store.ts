@@ -154,10 +154,22 @@ export interface QqNapCatChannelConfig extends ChannelRuntimeConfig {
   path?: string;
   accessToken?: string;
   botSelfId?: string;
+  ownerQq?: string;
   allowedUsers?: string[];
   allowedGroups?: string[];
-  groupTriggerMode?: "mention" | "prefix" | "always";
+  groupTriggerMode?: "mention" | "prefix" | "keyword" | "always";
   groupPrefix?: string;
+  groupKeywords?: string[];
+  proactiveGroupEnabled?: boolean;
+  proactiveGroupProbability?: number;
+  proactiveGroupCooldownSeconds?: number;
+  segmentedReplies?: boolean;
+  segmentContentThreshold?: number;
+  segmentIntervalMode?: "random" | "length";
+  segmentMaxChars?: number;
+  segmentMaxParts?: number;
+  segmentDelayMinMs?: number;
+  segmentDelayMaxMs?: number;
 }
 
 /** 给上层用的明文 AppSecret 读取器 */
@@ -197,10 +209,22 @@ const DEFAULT_SETTINGS: ChannelsSettings = {
     path: "/onebot/v11/ws",
     accessToken: "",
     botSelfId: "",
+    ownerQq: "",
     allowedUsers: [],
     allowedGroups: [],
     groupTriggerMode: "mention",
     groupPrefix: "/cyrene",
+    groupKeywords: ["昔涟", "Cyrene"],
+    proactiveGroupEnabled: false,
+    proactiveGroupProbability: 0.08,
+    proactiveGroupCooldownSeconds: 120,
+    segmentedReplies: true,
+    segmentContentThreshold: 200,
+    segmentIntervalMode: "length",
+    segmentMaxChars: 180,
+    segmentMaxParts: 4,
+    segmentDelayMinMs: 350,
+    segmentDelayMaxMs: 900,
   },
   inboundPort: 0,
   sharedSecret: "",
@@ -224,6 +248,10 @@ function normalize(input: Partial<ChannelsSettings> | null | undefined): Channel
   };
   const safeBool = (v: unknown, fallback: boolean): boolean =>
     typeof v === "boolean" ? v : fallback;
+  const safeProbability = (v: unknown, fallback: number): number => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : fallback;
+  };
 
   const safeStr = (v: unknown): string => (typeof v === "string" ? v : "");
   const safeList = (v: unknown): string[] => {
@@ -267,13 +295,25 @@ feishu: {
       path: typeof q?.path === "string" && q.path.trim().startsWith("/") ? q.path.trim() : "/onebot/v11/ws",
       accessToken: typeof q?.accessToken === "string" ? q.accessToken : "",
       botSelfId: typeof q?.botSelfId === "string" ? q.botSelfId.trim() : "",
+      ownerQq: typeof q?.ownerQq === "string" ? q.ownerQq.trim() : "",
       allowedUsers: safeList(q?.allowedUsers),
       allowedGroups: safeList(q?.allowedGroups),
       groupTriggerMode:
-        q?.groupTriggerMode === "prefix" || q?.groupTriggerMode === "always"
+        q?.groupTriggerMode === "prefix" || q?.groupTriggerMode === "keyword" || q?.groupTriggerMode === "always"
           ? q.groupTriggerMode
           : "mention",
       groupPrefix: typeof q?.groupPrefix === "string" && q.groupPrefix.trim() ? q.groupPrefix.trim() : "/cyrene",
+      groupKeywords: safeList(q?.groupKeywords).length > 0 ? safeList(q?.groupKeywords) : ["昔涟", "Cyrene"],
+      proactiveGroupEnabled: safeBool(q?.proactiveGroupEnabled, false),
+      proactiveGroupProbability: safeProbability(q?.proactiveGroupProbability, 0.08),
+      proactiveGroupCooldownSeconds: safeNum(q?.proactiveGroupCooldownSeconds, 120, 5, 86400),
+      segmentedReplies: safeBool(q?.segmentedReplies, true),
+      segmentContentThreshold: safeNum(q?.segmentContentThreshold, 200, 40, 2000),
+      segmentIntervalMode: q?.segmentIntervalMode === "random" ? "random" : "length",
+      segmentMaxChars: safeNum(q?.segmentMaxChars, 180, 40, 1000),
+      segmentMaxParts: safeNum(q?.segmentMaxParts, 4, 1, 10),
+      segmentDelayMinMs: safeNum(q?.segmentDelayMinMs, 350, 0, 10000),
+      segmentDelayMaxMs: safeNum(q?.segmentDelayMaxMs, 900, 0, 10000),
     },
     inboundPort: safeNum(input?.inboundPort, 0, 0, 65535),
     sharedSecret: typeof input?.sharedSecret === "string" ? input.sharedSecret : "",

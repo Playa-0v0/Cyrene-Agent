@@ -92,4 +92,29 @@ describe("channels/settings-store", () => {
     const loaded = loadChannelsSettings();
     expect(loaded.feishu.appSecret).toBe("new");
   });
+
+  it("保存 QQ 主人、群聊触发和分段配置", () => {
+    saveChannelsSettings({
+      qq: {
+        enabled: true,
+        ownerQq: "3068238601",
+        groupTriggerMode: "keyword",
+        groupKeywords: ["昔涟", "Cyrene"],
+        proactiveGroupEnabled: true,
+        proactiveGroupProbability: 0,
+        segmentedReplies: true,
+        segmentContentThreshold: 240,
+        segmentIntervalMode: "length",
+        segmentMaxParts: 3,
+      },
+    });
+    const loaded = loadChannelsSettings().qq;
+    expect(loaded.ownerQq).toBe("3068238601");
+    expect(loaded.groupTriggerMode).toBe("keyword");
+    expect(loaded.groupKeywords).toEqual(["昔涟", "Cyrene"]);
+    expect(loaded.proactiveGroupProbability).toBe(0);
+    expect(loaded.segmentMaxParts).toBe(3);
+    expect(loaded.segmentContentThreshold).toBe(240);
+    expect(loaded.segmentIntervalMode).toBe("length");
+  });
 });

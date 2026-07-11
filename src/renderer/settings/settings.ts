@@ -352,6 +352,7 @@ interface SettingsApi {
   setPermissionLevel?: (level: string) => Promise<{ ok: boolean; level?: string; error?: string }>;
   testConnection?: (config: { provider: string; baseUrl: string; model: string; apiKey: string }) => Promise<{ ok: boolean; latency: number; sample?: string; error?: string }>;
   testVision?: (config: { baseUrl: string; apiKey: string; model: string }) => Promise<{ ok: boolean; latency: number; sample?: string; error?: string }>;
+  channelsGetStatus?: () => Promise<Record<string, { phase: string; message?: string }>>;
   // main → settings：要求切到指定标签（窗口已打开时由 main 发这个事件）
   onSwitchSection?: (callback: (section: string) => void) => (() => void) | void;
 }
@@ -923,8 +924,11 @@ async function loadGeneralSettings(): Promise<void> {
     petVisibleInput.checked = cfg.petVisible;
     petZoomInput.value = String(cfg.petZoom ?? 1);
     petZoomVal.textContent = Math.round((cfg.petZoom ?? 1) * 100) + "%";
-    sidebarVisibleInput.checked = cfg.sidebarVisible ?? true;
-    tasksVisibleInput.checked = cfg.tasksVisible ?? true;
+    sidebarVisibleInput.checked = false;
+    tasksVisibleInput.checked = false;
+    if (cfg.sidebarVisible || cfg.tasksVisible) {
+      void window.settings?.saveGeneral({ sidebarVisible: false, tasksVisible: false });
+    }
     launchAtLoginInput.checked = cfg.launchAtLogin;
     applyUiThemeSelection(normalizeUiTheme(cfg.uiTheme));
     applyLanguageSelection("zh-CN");
@@ -958,18 +962,6 @@ stickerSizeSelect.querySelectorAll<HTMLButtonElement>(".option-block").forEach((
 stickerThresholdInput.addEventListener("input", () => {
   stickerThresholdVal.textContent = parseFloat(stickerThresholdInput.value).toFixed(2);
   setCyreneSaveStatus("有未保存的更改");
-});
-
-sidebarVisibleInput.addEventListener("change", () => {
-  if (sidebarVisibleInput.checked) window.settings?.openSidebar();
-  else window.settings?.closeSidebar();
-  void window.settings?.saveGeneral({ sidebarVisible: sidebarVisibleInput.checked });
-});
-
-tasksVisibleInput.addEventListener("change", () => {
-  if (tasksVisibleInput.checked) window.settings?.openTasks();
-  else window.settings?.closeTasks();
-  void window.settings?.saveGeneral({ tasksVisible: tasksVisibleInput.checked });
 });
 
 musicEnabledInput.addEventListener("change", () => {
@@ -2256,10 +2248,22 @@ const channelsQqPortEl = document.getElementById("channels-qq-port") as HTMLInpu
 const channelsQqPathEl = document.getElementById("channels-qq-path") as HTMLInputElement | null;
 const channelsQqTokenEl = document.getElementById("channels-qq-token") as HTMLInputElement | null;
 const channelsQqSelfIdEl = document.getElementById("channels-qq-self-id") as HTMLInputElement | null;
+const channelsQqOwnerIdEl = document.getElementById("channels-qq-owner-id") as HTMLInputElement | null;
 const channelsQqAllowedUsersEl = document.getElementById("channels-qq-allowed-users") as HTMLInputElement | null;
 const channelsQqAllowedGroupsEl = document.getElementById("channels-qq-allowed-groups") as HTMLInputElement | null;
 const channelsQqGroupModeEl = document.getElementById("channels-qq-group-mode") as HTMLSelectElement | null;
 const channelsQqGroupPrefixEl = document.getElementById("channels-qq-group-prefix") as HTMLInputElement | null;
+const channelsQqGroupKeywordsEl = document.getElementById("channels-qq-group-keywords") as HTMLInputElement | null;
+const channelsQqProactiveEnabledEl = document.getElementById("channels-qq-proactive-enabled") as HTMLInputElement | null;
+const channelsQqProactiveProbabilityEl = document.getElementById("channels-qq-proactive-probability") as HTMLInputElement | null;
+const channelsQqProactiveCooldownEl = document.getElementById("channels-qq-proactive-cooldown") as HTMLInputElement | null;
+const channelsQqSegmentedRepliesEl = document.getElementById("channels-qq-segmented-replies") as HTMLInputElement | null;
+const channelsQqSegmentThresholdEl = document.getElementById("channels-qq-segment-threshold") as HTMLInputElement | null;
+const channelsQqSegmentIntervalModeEl = document.getElementById("channels-qq-segment-interval-mode") as HTMLSelectElement | null;
+const channelsQqSegmentMaxCharsEl = document.getElementById("channels-qq-segment-max-chars") as HTMLInputElement | null;
+const channelsQqSegmentMaxPartsEl = document.getElementById("channels-qq-segment-max-parts") as HTMLInputElement | null;
+const channelsQqSegmentDelayMinEl = document.getElementById("channels-qq-segment-delay-min") as HTMLInputElement | null;
+const channelsQqSegmentDelayMaxEl = document.getElementById("channels-qq-segment-delay-max") as HTMLInputElement | null;
 const channelsQqSaveBtn = document.getElementById("channels-qq-save");
 // 微信按钮
 const channelsWechatLoginBtn = document.getElementById("channels-wechat-login");
@@ -2317,10 +2321,22 @@ async function loadChannelsPanel(): Promise<void> {
       channelsQqTokenEl.placeholder = cfg.qq?.accessToken ? "已保存（输入新值会覆盖）" : "可选，需与 NapCat 一致";
     }
     if (channelsQqSelfIdEl) channelsQqSelfIdEl.value = cfg.qq?.botSelfId ?? "";
+    if (channelsQqOwnerIdEl) channelsQqOwnerIdEl.value = cfg.qq?.ownerQq ?? "";
     if (channelsQqAllowedUsersEl) channelsQqAllowedUsersEl.value = (cfg.qq?.allowedUsers ?? []).join(",");
     if (channelsQqAllowedGroupsEl) channelsQqAllowedGroupsEl.value = (cfg.qq?.allowedGroups ?? []).join(",");
     if (channelsQqGroupModeEl) channelsQqGroupModeEl.value = cfg.qq?.groupTriggerMode ?? "mention";
     if (channelsQqGroupPrefixEl) channelsQqGroupPrefixEl.value = cfg.qq?.groupPrefix ?? "/cyrene";
+    if (channelsQqGroupKeywordsEl) channelsQqGroupKeywordsEl.value = (cfg.qq?.groupKeywords ?? ["昔涟", "Cyrene"]).join(",");
+    if (channelsQqProactiveEnabledEl) channelsQqProactiveEnabledEl.checked = cfg.qq?.proactiveGroupEnabled === true;
+    if (channelsQqProactiveProbabilityEl) channelsQqProactiveProbabilityEl.value = String(Math.round((cfg.qq?.proactiveGroupProbability ?? 0.08) * 100));
+    if (channelsQqProactiveCooldownEl) channelsQqProactiveCooldownEl.value = String(cfg.qq?.proactiveGroupCooldownSeconds ?? 120);
+    if (channelsQqSegmentedRepliesEl) channelsQqSegmentedRepliesEl.checked = cfg.qq?.segmentedReplies !== false;
+    if (channelsQqSegmentThresholdEl) channelsQqSegmentThresholdEl.value = String(cfg.qq?.segmentContentThreshold ?? 200);
+    if (channelsQqSegmentIntervalModeEl) channelsQqSegmentIntervalModeEl.value = cfg.qq?.segmentIntervalMode ?? "length";
+    if (channelsQqSegmentMaxCharsEl) channelsQqSegmentMaxCharsEl.value = String(cfg.qq?.segmentMaxChars ?? 180);
+    if (channelsQqSegmentMaxPartsEl) channelsQqSegmentMaxPartsEl.value = String(cfg.qq?.segmentMaxParts ?? 4);
+    if (channelsQqSegmentDelayMinEl) channelsQqSegmentDelayMinEl.value = String(cfg.qq?.segmentDelayMinMs ?? 350);
+    if (channelsQqSegmentDelayMaxEl) channelsQqSegmentDelayMaxEl.value = String(cfg.qq?.segmentDelayMaxMs ?? 900);
 
     // 拉一次渠道状态
     const status = (await window.settings.channelsGetStatus()) as Record<string, { phase: string; message?: string }>;
@@ -2424,10 +2440,22 @@ async function loadChannelsPanel(): Promise<void> {
         port: Number(channelsQqPortEl?.value) || 3001,
         path: channelsQqPathEl?.value.trim() || "/onebot/v11/ws",
         botSelfId: channelsQqSelfIdEl?.value.trim() || "",
+        ownerQq: channelsQqOwnerIdEl?.value.trim() || "",
         allowedUsers: splitList(channelsQqAllowedUsersEl?.value),
         allowedGroups: splitList(channelsQqAllowedGroupsEl?.value),
         groupTriggerMode: channelsQqGroupModeEl?.value || "mention",
         groupPrefix: channelsQqGroupPrefixEl?.value.trim() || "/cyrene",
+        groupKeywords: splitList(channelsQqGroupKeywordsEl?.value),
+        proactiveGroupEnabled: channelsQqProactiveEnabledEl?.checked ?? false,
+        proactiveGroupProbability: Math.min(100, Math.max(0, Number(channelsQqProactiveProbabilityEl?.value) || 0)) / 100,
+        proactiveGroupCooldownSeconds: Number(channelsQqProactiveCooldownEl?.value) || 120,
+        segmentedReplies: channelsQqSegmentedRepliesEl?.checked ?? true,
+        segmentContentThreshold: Number(channelsQqSegmentThresholdEl?.value) || 200,
+        segmentIntervalMode: channelsQqSegmentIntervalModeEl?.value || "length",
+        segmentMaxChars: Number(channelsQqSegmentMaxCharsEl?.value) || 180,
+        segmentMaxParts: Number(channelsQqSegmentMaxPartsEl?.value) || 4,
+        segmentDelayMinMs: Number(channelsQqSegmentDelayMinEl?.value) || 0,
+        segmentDelayMaxMs: Number(channelsQqSegmentDelayMaxEl?.value) || 900,
       },
     };
     if (channelsQqTokenEl?.value) {

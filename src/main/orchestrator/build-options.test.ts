@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import {
   buildAgentRunOptions,
   buildChannelSystem,
+  buildMessageRhythmSystem,
   onAgentRunFinished,
   type BuildOptionsDeps,
   type OnRunFinishedDeps,
@@ -55,6 +56,13 @@ describe("build-options", () => {
   it("has distinct system text for Feishu work chat", () => {
     expect(buildChannelSystem("feishu")).toContain("你正在通过飞书回复用户")
     expect(buildChannelSystem("feishu")).toContain("工作上下文")
+  })
+
+  it("lets the persona choose natural message boundaries without splitting structured content", () => {
+    const system = buildMessageRhythmSystem()
+    expect(system).toContain("人格、情绪和内容")
+    expect(system).toContain("代码、列表、步骤")
+    expect(system).toContain("不要为了分段而分段")
   })
 
   it("records relationship turn after agent run finishes", async () => {

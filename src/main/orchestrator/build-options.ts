@@ -138,6 +138,14 @@ export function buildChannelSystem(channel?: RelationshipChannel): string {
   return "";
 }
 
+export function buildMessageRhythmSystem(): string {
+  return [
+    "【消息节奏】",
+    "请根据当前人格、情绪和内容决定消息节奏。自然闲聊中，只有当语气确实像连续发送的两条消息时，才用空行分开。",
+    "不要为了分段而分段；一个完整意思尽量放在一起。代码、列表、步骤、任务结果、严肃说明和长篇内容保持结构完整。",
+  ].join("\n");
+}
+
 /**
  * 构造 CyreneAgent.runWithEvents 所需的 options + 提取 latestUserText。
  * 与 index.ts 原 AG-UI bridge 的 buildOptions 行为完全一致。
@@ -192,6 +200,7 @@ export async function buildAgentRunOptions(
   const skillCatalog = deps.buildSkillCatalog(deps.skillRegistry.getEnabled());
   const skillActivation = deps.resolveSlashActivation(slimMessages);
   const channelSystem = buildChannelSystem(input.channel);
+  const messageRhythmSystem = buildMessageRhythmSystem();
   const externalChannelContext = deps.buildExternalChannelContext?.() ?? "";
 
   let toneInjection = "";
@@ -220,6 +229,7 @@ export async function buildAgentRunOptions(
     (environmentContext ? environmentContext + "\n\n" : "") +
     (externalChannelContext ? externalChannelContext + "\n\n" : "") +
     (channelSystem ? channelSystem + "\n\n" : "") +
+    messageRhythmSystem + "\n\n" +
     deps.buildSystemPrompt(input.style || "01_default.md") +
     (skillCatalog ? "\n\n---\n\n" + skillCatalog : "") +
     skillActivation +

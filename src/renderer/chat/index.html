@@ -12,41 +12,40 @@
 <body>
   <div class="chat">
     <canvas class="chat__particles" id="particles" aria-hidden="true"></canvas>
-    <div class="chat__body">
-      <aside class="chat__rail" id="chat-rail" hidden>
-        <button type="button" class="chat__rail-new" id="chat-rail-new">
-          <span class="chat__rail-new-icon" aria-hidden="true">＋</span>
-          <span>新对话</span>
-        </button>
+    <div class="chat__shell">
+      <aside class="chat__rail" id="chat-rail">
+        <div class="chat__brand">
+          <div class="chat__status-btn" aria-hidden="true">
+            <img class="chat__brand-avatar" src="/avatars/cyrene-avatar.png" alt="" draggable="false" />
+          </div>
+          <div class="chat__brand-copy"><strong>昔涟</strong><span>Cyrene Agent</span></div>
+        </div>
+        <nav class="chat__primary-nav" aria-label="主要功能">
+          <button type="button" class="chat__nav-item is-active" data-shell-action="chat"><span class="chat__nav-icon" aria-hidden="true">✦</span><span>闲聊</span></button>
+          <button type="button" class="chat__nav-item" data-shell-action="tasks"><span class="chat__nav-icon" aria-hidden="true">✓</span><span>任务</span></button>
+          <button type="button" class="chat__nav-item" data-shell-action="memory"><span class="chat__nav-icon" aria-hidden="true">◈</span><span>记忆与知识</span></button>
+          <button type="button" class="chat__nav-item" data-shell-action="channels"><span class="chat__nav-icon" aria-hidden="true">◎</span><span>外部应用</span></button>
+          <button type="button" class="chat__nav-item" data-shell-action="settings"><span class="chat__nav-icon" aria-hidden="true">⚙</span><span>设置</span></button>
+        </nav>
+        <div class="chat__rail-section-head">
+          <span>最近对话</span>
+          <button type="button" class="chat__rail-new" id="chat-rail-new" title="新建对话" aria-label="新建对话"><span aria-hidden="true">＋</span></button>
+        </div>
         <ul class="chat__rail-list" id="chat-rail-list" role="list"></ul>
-        <div class="chat__rail-empty is-hidden" id="chat-rail-empty">
-          <span aria-hidden="true">📭</span>
-          <p>还没有对话</p>
+        <div class="chat__rail-empty is-hidden" id="chat-rail-empty"><span aria-hidden="true">◇</span><p>还没有对话</p></div>
+        <div class="chat__rail-footer">
+          <span class="chat__online-dot" aria-hidden="true"></span>
+          <div><strong>Agent Core</strong><span>运行中</span></div>
+          <span id="session-count">0 个会话</span>
         </div>
       </aside>
-      <div class="chat__main">
+
+      <section class="chat__workspace">
         <header class="chat__titlebar">
           <div class="chat__titlebar-drag">
-            <button type="button" class="chat__status-btn" id="chat-status-btn" aria-label="会话列表" title="会话列表">
-              <div class="loader">
-                <svg width="100" height="100" viewBox="0 0 100 100">
-                  <defs>
-                    <mask id="clipping">
-                      <polygon points="0,0 100,0 100,100 0,100" fill="black"></polygon>
-                      <polygon points="25,25 75,25 50,75" fill="white"></polygon>
-                      <polygon points="50,25 75,75 25,75" fill="white"></polygon>
-                      <polygon points="35,35 65,35 50,65" fill="white"></polygon>
-                      <polygon points="35,35 65,35 50,65" fill="white"></polygon>
-                      <polygon points="35,35 65,35 50,65" fill="white"></polygon>
-                      <polygon points="35,35 65,35 50,65" fill="white"></polygon>
-                    </mask>
-                  </defs>
-                </svg>
-                <div class="box"></div>
-              </div>
-            </button>
+            <button type="button" class="chat__shell-toggle" id="chat-status-btn" aria-label="切换侧栏" title="切换侧栏">☰</button>
             <span class="chat__title-meta">
-              <span class="chat__name">昔涟</span>
+              <span class="chat__name">陪伴模式</span>
               <span class="chat__name-sep" aria-hidden="true">·</span>
               <span class="chat__hint" id="chat-hint">模型未连接</span>
             </span>
@@ -82,30 +81,96 @@
             </button>
           </div>
         </header>
-        <main class="chat__messages" id="messages" aria-live="polite"></main>
-        <div class="chat__empty-state" id="chat-empty" hidden>
-          <div class="chat__empty-icon">💬</div>
-          <p class="chat__empty-text">昔涟期待与你聊天哦 ✨</p>
-          <div class="chat__quick-presets" id="quick-presets"></div>
+
+        <div class="chat__body">
+          <div class="chat__main">
+            <div class="chat__conversation-head">
+              <div><span class="chat__conversation-kicker">当前对话</span><h1 id="conversation-title">新对话</h1></div>
+              <button type="button" class="chat__conversation-menu" title="清空当前对话" aria-label="清空当前对话" data-clear-alias>•••</button>
+            </div>
+            <main class="chat__messages" id="messages" aria-live="polite"></main>
+            <div class="chat__empty-state" id="chat-empty" hidden>
+              <img src="/avatars/cyrene-avatar.png" class="chat__empty-avatar" alt="" draggable="false" />
+              <p class="chat__empty-title">今天想从哪里开始？</p>
+              <p class="chat__empty-text">可以聊聊近况，也可以直接交给我一件事。</p>
+              <div class="chat__quick-presets" id="quick-presets"></div>
+            </div>
+            <div class="chat__composer-wrap">
+              <div class="chat__file-tags" id="file-tags"></div>
+              <form class="chat__input" id="composer">
+                <input type="file" id="file-input" accept=".txt,.md,.json,.csv,.log" multiple style="display:none" />
+                <button type="button" class="chat__attach" id="attach-btn" aria-label="上传文件" title="上传文件">＋</button>
+                <button type="button" class="chat__sticker-btn" id="sticker-picker-btn" aria-label="表情包" title="表情包">☺</button>
+                <textarea id="input" rows="1" placeholder="输入消息，也可以直接告诉昔涟要做什么…" autocomplete="off" spellcheck="false"></textarea>
+                <button type="submit" class="chat__send" id="send" aria-label="发送">↗</button>
+              </form>
+            </div>
+            <div class="sticker-picker" id="sticker-picker" hidden><div class="sticker-picker__grid" id="sticker-picker-grid"></div></div>
+          </div>
+
+          <aside class="chat__inspector" aria-label="陪伴信息">
+            <div class="inspector-shell-head">
+              <div class="inspector-shell-title"><strong>陪伴信息</strong><span><i class="inspector-card__dot"></i>在线</span></div>
+              <div class="inspector-tabs" role="tablist" aria-label="陪伴信息视图">
+                <button type="button" class="inspector-tab is-active" data-inspector-tab="overview" role="tab" aria-selected="true">概览</button>
+                <button type="button" class="inspector-tab" data-inspector-tab="schedule" role="tab" aria-selected="false">日程</button>
+                <button type="button" class="inspector-tab" data-inspector-tab="status" role="tab" aria-selected="false">状态</button>
+              </div>
+            </div>
+
+            <div class="inspector-panel is-active" data-inspector-panel="overview">
+              <section class="inspector-card inspector-profile">
+                <img src="/avatars/cyrene-avatar.png" alt="" draggable="false" />
+                <div><strong>昔涟</strong><span id="inspector-profile-summary">陪伴中 · 心情平静</span></div>
+                <span class="inspector-status-pill is-online">在线</span>
+              </section>
+              <section class="inspector-card inspector-card--overview">
+                <div class="inspector-card__head"><span>今日概览</span><button type="button" data-inspector-open="schedule">查看日程</button></div>
+                <div class="inspector-overview inspector-overview--three"><div><strong id="inspector-message-count">0</strong><span>条消息</span></div><div><strong id="inspector-user-count">0</strong><span>次互动</span></div><div><strong id="inspector-token-short">0</strong><span>Token</span></div></div>
+              </section>
+              <section class="inspector-card">
+                <div class="inspector-card__head"><span>接下来</span><button type="button" data-inspector-open="schedule">日程</button></div>
+                <div class="inspector-schedule-list" id="inspector-upcoming-list"><div class="inspector-empty">暂无已启用定时任务</div></div>
+              </section>
+              <section class="inspector-card">
+                <div class="inspector-card__head"><span>连接状态</span><button type="button" data-shell-action="channels">管理</button></div>
+                <div class="inspector-status-row"><span class="inspector-status-icon">AI</span><div><strong>对话模型</strong><span id="inspector-model-status">正在检测</span></div><span class="inspector-status-pill" id="inspector-model-pill">检查中</span></div>
+                <div class="inspector-status-row"><span class="inspector-status-icon">QQ</span><div><strong>NapCat</strong><span id="inspector-qq-detail">读取连接状态</span></div><span class="inspector-status-pill" id="inspector-qq-status">检查中</span></div>
+              </section>
+              <section class="inspector-card"><div class="inspector-actions"><button type="button" data-inspector-action="call"><span>☎</span>语音通话</button><button type="button" data-shell-action="settings"><span>⚙</span>全部设置</button></div></section>
+            </div>
+
+            <div class="inspector-panel" data-inspector-panel="schedule">
+              <section class="inspector-card">
+                <div class="inspector-card__head"><span>Token 用量</span><strong id="inspector-token-total">0</strong></div>
+                <div class="inspector-token-track"><span id="inspector-token-fill"></span></div>
+                <div class="inspector-chart" id="inspector-token-chart" aria-label="最近七天 Token 用量"></div>
+                <div class="inspector-chart-labels"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+              </section>
+              <section class="inspector-card">
+                <div class="inspector-card__head"><span>定时任务</span><button type="button" data-shell-action="task-settings">管理</button></div>
+                <div class="inspector-schedule-list" id="inspector-task-list"><div class="inspector-empty">暂无已启用定时任务</div></div>
+              </section>
+            </div>
+
+            <div class="inspector-panel" data-inspector-panel="status">
+              <section class="inspector-card inspector-status-hero">
+                <img src="/avatars/cyrene-avatar.png" alt="" draggable="false" />
+                <strong>昔涟</strong><span class="inspector-status-pill is-online">● 在线</span>
+              </section>
+              <section class="inspector-card">
+                <div class="inspector-status-row"><span class="inspector-status-icon">✿</span><div><strong>当前状态</strong><span id="inspector-runtime-status">陪伴中</span></div><span class="inspector-status-pill">稳定</span></div>
+                <div class="inspector-status-row"><span class="inspector-status-icon">叶</span><div><strong>当前心情</strong><span id="inspector-runtime-feeling">平静</span></div><span class="inspector-status-pill">温柔</span></div>
+                <div class="inspector-status-row"><span class="inspector-status-icon">AI</span><div><strong>正在使用</strong><span id="inspector-status-model">模型未连接</span></div><span class="inspector-status-pill" id="inspector-status-model-pill">离线</span></div>
+              </section>
+              <section class="inspector-card">
+                <div class="inspector-card__head"><span>陪伴操作</span></div>
+                <div class="inspector-actions"><button type="button" data-inspector-action="call"><span>☎</span>语音通话</button><button type="button" data-shell-action="api"><span>↔</span>切换模型</button><button type="button" data-shell-action="cyrene"><span>✿</span>角色设置</button><button type="button" data-shell-action="settings"><span>⚙</span>全部设置</button></div>
+              </section>
+            </div>
+          </aside>
         </div>
-      </div>
-    </div>
-    <div class="chat__file-tags" id="file-tags"></div>
-    <form class="chat__input" id="composer">
-      <input type="file" id="file-input" accept=".txt,.md,.json,.csv,.log" multiple style="display:none" />
-      <button type="button" class="chat__attach" id="attach-btn" aria-label="上传文件" title="上传文件">📎</button>
-      <button type="button" class="chat__sticker-btn" id="sticker-picker-btn" aria-label="表情包" title="表情包">😀</button>
-      <textarea
-        id="input"
-        rows="1"
-        placeholder="说点什么…  Enter 发送 / Shift+Enter 换行"
-        autocomplete="off"
-        spellcheck="false"
-      ></textarea>
-      <button type="submit" class="chat__send" id="send" aria-label="发送">↵</button>
-    </form>
-    <div class="sticker-picker" id="sticker-picker" hidden>
-      <div class="sticker-picker__grid" id="sticker-picker-grid"></div>
+      </section>
     </div>
   </div>
   <script type="module" src="./main.ts"></script>
