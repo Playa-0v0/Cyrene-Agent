@@ -57,3 +57,30 @@ describe("buildMemoryInjection", () => {
     expect(ragMock.searchMemoryEntries).toHaveBeenCalledWith("跑步", "user_memory", 5)
   })
 })
+
+describe("buildAlwaysOnContext", () => {
+  beforeEach(() => {
+    ragMock.updateWorldbookActivation.mockReset()
+    ragMock.getPermanentWorldbookEntries.mockReset()
+    ragMock.getActiveWorldbookEntries.mockReset()
+    ragMock.getCascadeWorldbookEntries.mockReset()
+    ragMock.getPermanentWorldbookEntries.mockReturnValue([])
+    ragMock.getActiveWorldbookEntries.mockReturnValue([])
+    ragMock.getCascadeWorldbookEntries.mockReturnValue([])
+    memoryStoreMock.getL0.mockReset()
+    memoryStoreMock.getL1.mockReset()
+    memoryStoreMock.getL0.mockResolvedValue({})
+    memoryStoreMock.getL1.mockResolvedValue({})
+  })
+
+  it("does not let document modelContext trigger worldbook activation", async () => {
+    const { buildAlwaysOnContext } = await import("./index")
+
+    await buildAlwaysOnContext(
+      "请总结这个文档\n\n【文档内容】\n文档里写着 迷迷 和 PHILIA093。",
+      [],
+    )
+
+    expect(ragMock.updateWorldbookActivation).toHaveBeenCalledWith("请总结这个文档", "")
+  })
+})

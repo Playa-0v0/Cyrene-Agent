@@ -68,6 +68,20 @@ export async function buildMemoryInjection(
   return parts.join("\n\n");
 }
 
+function getWorldbookTriggerText(userInput: string): string {
+  const contextMarkers = [
+    "【本轮文件】",
+    "【文档内容】",
+    "【图片视觉信息】",
+    "【图片附件】",
+  ];
+  const firstContextIndex = contextMarkers
+    .map((marker) => userInput.indexOf(marker))
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b)[0];
+  return (typeof firstContextIndex === "number" ? userInput.slice(0, firstContextIndex) : userInput).trim();
+}
+
 /**
  * 构建 always-on 上下文：世界书 + L0/L1 画像。
  * 不涉及工具选择和执行——那些由 function calling 处理。
@@ -90,7 +104,7 @@ export async function buildAlwaysOnContext(
     const lastAssistant = recentMessages
       .filter(m => m.role === "assistant")
       .slice(-1)[0]?.content ?? "";
-    updateWorldbookActivation(userInput, lastAssistant);  // 打分（本轮用户 + 上轮模型）
+    updateWorldbookActivation(getWorldbookTriggerText(userInput), lastAssistant);  // 打分（本轮用户 + 上轮模型）
     const active = getActiveWorldbookEntries();           // 阈值门控 + 注入
     // One-Shot cascade：用户命中后连带触发的条目（不入 DMAE 状态表，只本轮有效）
     const cascade = getCascadeWorldbookEntries();
