@@ -60,6 +60,34 @@ describe("document index queue", () => {
     expect(controlled.startedJobs()).toEqual(["first.md"]);
   });
 
+  it("reports active, pending, and listener counts for memory diagnostics", async () => {
+    const controlled = createControlledDocumentRunner();
+    const queue = createDocumentIndexQueue({ runner: controlled.runner });
+
+    const first = queue.enqueue({ filePath: "first.md", query: "first", onProgress: vi.fn() });
+    const second = queue.enqueue({ filePath: "second.md", query: "second", onProgress: vi.fn() });
+
+    expect(queue.getStats()).toMatchObject({
+      activeJobId: first.jobId,
+      pendingJobs: 1,
+      cancellationListeners: 0,
+    });
+
+    queue.cancel(first.jobId);
+    expect(queue.getStats()).toMatchObject({
+      activeJobId: first.jobId,
+      pendingJobs: 1,
+      cancellationListeners: 0,
+    });
+
+    controlled.finishCurrent({ kind: "indexed", name: "first.md", chunks: 2, importId: "import-first" });
+    await first.promise;
+    expect(queue.getStats()).toMatchObject({
+      activeJobId: second.jobId,
+      pendingJobs: 0,
+    });
+  });
+
   it("marks an active job cancelled after its runner finishes", async () => {
     const controlled = createControlledDocumentRunner();
     const queue = createDocumentIndexQueue({ runner: controlled.runner });

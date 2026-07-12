@@ -43,6 +43,7 @@ const DEFAULT_MODEL_KEY = "minilm";
 const localPipelines: Map<string, any> = new Map();
 const localPipelineLoads: Map<string, Promise<any>> = new Map();
 let currentModelKey: string = DEFAULT_MODEL_KEY;
+let localPipelineInitCount = 0;
 
 const importEsm = new Function("moduleName", "return import(moduleName)") as (moduleName: string) => Promise<any>;
 
@@ -57,6 +58,7 @@ async function getLocalPipeline(modelKey?: string): Promise<any> {
   if (loading) return loading;
 
   const load = (async () => {
+    localPipelineInitCount += 1;
     const { pipeline, env } = await importEsm("@xenova/transformers");
     env.allowLocalModels = true;
     env.allowRemoteModels = false;
@@ -269,6 +271,21 @@ export function resetEmbeddingProvider(): void {
   localPipelines.clear();
   localPipelineLoads.clear();
   currentModelKey = DEFAULT_MODEL_KEY;
+  localPipelineInitCount = 0;
+}
+
+export function getEmbeddingDiagnostics(): {
+  currentModelKey: string;
+  cachedPipelineKeys: string[];
+  loadingPipelineKeys: string[];
+  localPipelineInitCount: number;
+} {
+  return {
+    currentModelKey,
+    cachedPipelineKeys: Array.from(localPipelines.keys()),
+    loadingPipelineKeys: Array.from(localPipelineLoads.keys()),
+    localPipelineInitCount,
+  };
 }
 
 // ── 场景识别专用 provider（固定 bge-m3，不受 RAG 模型切换影响）──

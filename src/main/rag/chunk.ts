@@ -51,21 +51,21 @@ function findNextSentenceBoundary(text: string, pos: number): number {
   return -1;
 }
 
-/** 按 token 估算比例将文本切分成滑动窗口，并在句子边界处对齐 */
-function slidingWindowChars(
+function* iterateSlidingWindowChars(
   text: string,
   chunkSize: number,
   overlap: number,
-): CharSpan[] {
-  if (!text || !text.trim()) return [];
+): Generator<CharSpan> {
+  if (!text || !text.trim()) return;
 
   const totalChars = text.length;
   // 如果总 token 数 <= chunkSize，不需要切
   if (estimateTokens(text) <= chunkSize) {
-    return [{ start: 0, end: totalChars, text }];
+    yield { start: 0, end: totalChars, text };
+    return;
   }
 
-  const spans: CharSpan[] = [];
+  let previousSpan: CharSpan | null = null;
   const step = chunkSize - overlap;  // 每步前进的 token 数
   const totalTokens = estimateTokens(text);
   // 每个 token 对应的平均字符数
@@ -83,9 +83,10 @@ function slidingWindowChars(
     // 如果剩余内容不足 chunkSize 的 1/3，合并到上一个 chunk
     if (chunkIndex > 0 && (totalChars - posStart) < chunkSize * tokensPerChar * 0.33) {
       // 把剩余内容追加到上一个 chunk
-      const lastSpan = spans[spans.length - 1];
-      lastSpan.text = text.slice(lastSpan.start);
-      lastSpan.end = totalChars;
+      if (previousSpan) {
+        previousSpan.text = text.slice(previousSpan.start);
+        previousSpan.end = totalChars;
+      }
       break;
     }
 
@@ -98,17 +99,18 @@ function slidingWindowChars(
       posEndChar = boundary;
     }
 
-    spans.push({
+    if (previousSpan) yield previousSpan;
+    previousSpan = {
       start: Math.round(posStart),
       end: posEndChar,
       text: text.slice(Math.round(posStart), posEndChar),
-    });
+    };
 
     chunkIndex++;
     posStart += step / tokensPerChar;
   }
 
-  return spans;
+  if (previousSpan) yield previousSpan;
 }
 
 // ── 标题前缀提取 ──
@@ -162,16 +164,22 @@ export function chunkText(
   chunkSize = DOCUMENT_CHUNK_SIZE,
   overlap = DOCUMENT_CHUNK_OVERLAP,
 ): Chunk[] {
+  return Array.from(iterateDocumentChunks(text, source, chunkSize, overlap));
+}
+
+export function* iterateDocumentChunks(
+  text: string,
+  source: string,
+  chunkSize = DOCUMENT_CHUNK_SIZE,
+  overlap = DOCUMENT_CHUNK_OVERLAP,
+): Generator<Chunk> {
   // 预提取标题（只需扫描一次全文）
   const titles = extractTitles(text);
   const hasTitles = titles.length > 0;
 
   // 滑动窗口切分
-  const spans = slidingWindowChars(text, chunkSize, overlap);
-  const result: Chunk[] = [];
-
-  for (let i = 0; i < spans.length; i++) {
-    const span = spans[i];
+  let i = 0;
+  for (const span of iterateSlidingWindowChars(text, chunkSize, overlap)) {
     let chunkTextContent = span.text.trim();
     if (!chunkTextContent) continue;
 
@@ -185,13 +193,12 @@ export function chunkText(
       }
     }
 
-    result.push({
+    yield {
       id: `${source}_${i}`,
       text: chunkTextContent,
       source,
       index: i,
-    });
+    };
+    i += 1;
   }
-
-  return result;
 }

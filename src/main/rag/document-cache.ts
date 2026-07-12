@@ -43,9 +43,13 @@ export function createDocumentCacheKey(identity: DocumentCacheIdentity): string 
 }
 
 export async function buildDocumentCacheIdentity(text: string): Promise<DocumentCacheIdentity> {
+  return buildDocumentCacheIdentityFromTextSha(sha256(normalizeDocumentTextForCache(text)));
+}
+
+export async function buildDocumentCacheIdentityFromTextSha(textSha256: string): Promise<DocumentCacheIdentity> {
   const provider = await getEmbeddingProviderIdentity();
   return {
-    textSha256: sha256(normalizeDocumentTextForCache(text)),
+    textSha256,
     embeddingProvider: provider.provider,
     embeddingModel: provider.model,
     embeddingEndpoint: provider.endpoint,

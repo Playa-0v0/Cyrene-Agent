@@ -1,7 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
+import crypto from "node:crypto";
 import { Worker, isMainThread, parentPort } from "worker_threads";
-import { chunkText } from "./chunk";
+import { iterateDocumentChunks } from "./chunk";
 import {
   createLocalEmbeddingProvider,
   createOpenAIEmbeddingProvider,
@@ -13,8 +14,13 @@ import type { DocumentIndexJobResult, QueuedDocumentIndexJob } from "./document-
 export type PreparedDocumentChunk = { text: string; index: number };
 
 export type PreparedDocumentIndexResult =
-  | { kind: "prepared-indexed"; name: string; text: string; chunks: PreparedDocumentChunk[] }
+  | { kind: "prepared-indexed"; name: string; textSha256: string; totalChunks: number }
   | Exclude<DocumentIndexJobResult, { kind: "indexed" }>;
+
+type WorkerPreparedDocument = Extract<PreparedDocumentIndexResult, { kind: "prepared-indexed" }> & {
+  text: string;
+};
+type WorkerPrepareFileResult = WorkerPreparedDocument | Exclude<PreparedDocumentIndexResult, { kind: "prepared-indexed" }>;
 
 type WorkerStartMessage = { type: "start"; filePath: string; cancellationBuffer: SharedArrayBuffer };
 type WorkerEmbedMessage = { type: "embed"; embedding: EmbeddingWorkerConfig };
@@ -39,7 +45,7 @@ export interface DocumentIndexWorkerPort {
 
 export type DocumentIndexWorkerRunnerDependencies = {
   createWorker: () => DocumentIndexWorkerPort;
-  getCachedImport: (text: string) => Promise<{ importId: string; chunkCount: number } | null>;
+  getCachedImport: (textSha256: string) => Promise<{ importId: string; chunkCount: number } | null>;
   getEmbeddingConfig: () => EmbeddingWorkerConfig;
   createImportId: () => string;
   persistPreparedBatch: (input: {
@@ -47,7 +53,7 @@ export type DocumentIndexWorkerRunnerDependencies = {
     importId: string;
     chunks: Array<PreparedDocumentChunk & { embedding: number[] }>;
   }) => Promise<void>;
-  putCache: (input: { text: string; fileName: string; importId: string; chunkCount: number }) => Promise<void>;
+  putCache: (input: { textSha256: string; fileName: string; importId: string; chunkCount: number }) => Promise<void>;
 };
 
 function cancelledResult(filePath: string): DocumentIndexJobResult {
@@ -72,6 +78,7 @@ export function createDocumentIndexWorkerRunner(deps: DocumentIndexWorkerRunnerD
     const finish = (result: DocumentIndexJobResult) => {
       if (settled) return;
       settled = true;
+      prepared = null;
       unsubscribeCancellation();
       void worker.terminate();
       resolve(result);
@@ -125,7 +132,7 @@ export function createDocumentIndexWorkerRunner(deps: DocumentIndexWorkerRunnerD
           }
           let cached: { importId: string; chunkCount: number } | null = null;
           try {
-            cached = await deps.getCachedImport(prepared.text);
+            cached = await deps.getCachedImport(prepared.textSha256);
           } catch (error) {
             console.warn("[RAG] document cache lookup failed:", error);
           }
@@ -139,7 +146,7 @@ export function createDocumentIndexWorkerRunner(deps: DocumentIndexWorkerRunnerD
             finish({ kind: "indexed", name: prepared.name, chunks: cached.chunkCount, importId: cached.importId, cached: true });
             return;
           }
-          job.reportProgress({ status: "embedding", completedChunks: 0, totalChunks: prepared.chunks.length });
+          job.reportProgress({ status: "embedding", completedChunks: 0, totalChunks: prepared.totalChunks });
           worker.postMessage({ type: "embed", embedding: deps.getEmbeddingConfig() });
           return;
         }
@@ -164,7 +171,7 @@ export function createDocumentIndexWorkerRunner(deps: DocumentIndexWorkerRunnerD
           }
           try {
             await deps.putCache({
-              text: prepared.text,
+              textSha256: prepared.textSha256,
               fileName: prepared.name,
               importId,
               chunkCount: persistedChunks,
@@ -192,10 +199,10 @@ export function createDocumentIndexWorkerRunner(deps: DocumentIndexWorkerRunnerD
 function createDefaultRunnerDependencies(): DocumentIndexWorkerRunnerDependencies {
   return {
     createWorker: () => new Worker(__filename),
-    getCachedImport: async (text) => {
+    getCachedImport: async (textSha256) => {
       const cache = require("./document-cache") as typeof import("./document-cache");
       const rag = require("./index") as typeof import("./index");
-      const identity = await cache.buildDocumentCacheIdentity(text);
+      const identity = await cache.buildDocumentCacheIdentityFromTextSha(textSha256);
       return cache.getValidDocumentCacheRecord(cache.createDocumentCacheKey(identity), rag.hasImportedDocumentChunks);
     },
     getEmbeddingConfig: () => {
@@ -216,9 +223,9 @@ function createDefaultRunnerDependencies(): DocumentIndexWorkerRunnerDependencie
         embedding: chunk.embedding,
       })));
     },
-    putCache: async ({ text, fileName, importId, chunkCount }) => {
+    putCache: async ({ textSha256, fileName, importId, chunkCount }) => {
       const cache = require("./document-cache") as typeof import("./document-cache");
-      const identity = await cache.buildDocumentCacheIdentity(text);
+      const identity = await cache.buildDocumentCacheIdentityFromTextSha(textSha256);
       await cache.putDocumentCacheRecord({
         key: cache.createDocumentCacheKey(identity),
         importId,
@@ -241,7 +248,15 @@ export async function retrieveQueuedDocumentChunks(
   return rag.searchImportedDocumentChunksForImportIds(query, [result.importId]);
 }
 
-function prepareFile(filePath: string): PreparedDocumentIndexResult {
+function countDocumentChunks(text: string, source: string): number {
+  let count = 0;
+  for (const chunk of iterateDocumentChunks(text, source)) {
+    count = chunk.index + 1;
+  }
+  return count;
+}
+
+function prepareFile(filePath: string): WorkerPrepareFileResult {
   const name = path.basename(filePath);
   let stat: fs.Stats;
   try {
@@ -267,8 +282,9 @@ function prepareFile(filePath: string): PreparedDocumentIndexResult {
   return {
     kind: "prepared-indexed",
     name,
+    textSha256: crypto.createHash("sha256").update(text.replace(/\r\n/g, "\n").replace(/\r/g, "\n"), "utf8").digest("hex"),
+    totalChunks: countDocumentChunks(text, "doc_" + name),
     text,
-    chunks: chunkText(text, "doc_" + name).map((chunk) => ({ text: chunk.text, index: chunk.index })),
   };
 }
 
@@ -286,7 +302,7 @@ function createWorkerEmbeddingProvider(config: EmbeddingWorkerConfig) {
 async function runWorkerThread(): Promise<void> {
   const port = parentPort;
   if (!port) return;
-  let prepared: Extract<PreparedDocumentIndexResult, { kind: "prepared-indexed" }> | null = null;
+  let prepared: WorkerPreparedDocument | null = null;
   let cancellation: Int32Array | null = null;
 
   port.on("message", (message: WorkerInboundMessage) => {
@@ -300,13 +316,19 @@ async function runWorkerThread(): Promise<void> {
           port.postMessage({ type: "cancelled" } satisfies WorkerOutboundMessage);
         } else if (result.kind === "prepared-indexed") {
           prepared = result;
+          const preparedResult: Extract<PreparedDocumentIndexResult, { kind: "prepared-indexed" }> = {
+            kind: "prepared-indexed",
+            name: result.name,
+            textSha256: result.textSha256,
+            totalChunks: result.totalChunks,
+          };
           port.postMessage({
             type: "stage",
             status: "chunking",
-            completedChunks: result.chunks.length,
-            totalChunks: result.chunks.length,
+            completedChunks: result.totalChunks,
+            totalChunks: result.totalChunks,
           } satisfies WorkerOutboundMessage);
-          port.postMessage({ type: "prepared", result } satisfies WorkerOutboundMessage);
+          port.postMessage({ type: "prepared", result: preparedResult } satisfies WorkerOutboundMessage);
         } else {
           port.postMessage({ type: "result", result } satisfies WorkerOutboundMessage);
         }
@@ -318,28 +340,31 @@ async function runWorkerThread(): Promise<void> {
       const batchSize = 16;
       let completedChunks = 0;
       let batch: Array<PreparedDocumentChunk & { embedding: number[] }> = [];
-      for (const chunk of prepared.chunks) {
+      for (const chunk of iterateDocumentChunks(prepared.text, "doc_" + prepared.name)) {
         if (isCancelled(cancellation)) {
+          prepared = null;
           port.postMessage({ type: "cancelled" } satisfies WorkerOutboundMessage);
           return;
         }
         const embedding = await provider.embed(chunk.text);
         if (isCancelled(cancellation)) {
+          prepared = null;
           port.postMessage({ type: "cancelled" } satisfies WorkerOutboundMessage);
           return;
         }
-        batch.push({ ...chunk, embedding });
+        batch.push({ text: chunk.text, index: chunk.index, embedding });
         completedChunks += 1;
-        if (batch.length === batchSize || completedChunks === prepared.chunks.length) {
+        if (batch.length === batchSize || completedChunks === prepared.totalChunks) {
           port.postMessage({ type: "embedded-batch", chunks: batch } satisfies WorkerOutboundMessage);
           batch = [];
         }
         port.postMessage({
           type: "progress",
           completedChunks,
-          totalChunks: prepared.chunks.length,
+          totalChunks: prepared.totalChunks,
         } satisfies WorkerOutboundMessage);
       }
+      prepared = null;
       port.postMessage({ type: "completed" } satisfies WorkerOutboundMessage);
     })().catch((error) => {
       port.postMessage({

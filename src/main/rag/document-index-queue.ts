@@ -49,6 +49,12 @@ export type DocumentIndexJobHandle = {
   promise: Promise<DocumentIndexJobResult>;
 };
 
+export type DocumentIndexQueueStats = {
+  activeJobId: string | null;
+  pendingJobs: number;
+  cancellationListeners: number;
+};
+
 type QueueJob = QueuedDocumentIndexJob & {
   resolve: (result: DocumentIndexJobResult) => void;
   cancellationListeners: Set<() => void>;
@@ -138,6 +144,13 @@ export function createDocumentIndexQueue({ runner }: { runner: DocumentIndexRunn
       }
       return false;
     },
+    getStats: (): DocumentIndexQueueStats => ({
+      activeJobId: active?.id ?? null,
+      pendingJobs: pending.length,
+      cancellationListeners:
+        (active?.cancellationListeners.size ?? 0) +
+        pending.reduce((total, job) => total + job.cancellationListeners.size, 0),
+    }),
   };
 }
 
@@ -159,4 +172,8 @@ export function enqueueDocumentIndexJob(input: EnqueueDocumentIndexJobInput): Pr
 
 export function cancelDocumentIndexJob(jobId: string): boolean {
   return defaultQueue.cancel(jobId);
+}
+
+export function getDocumentIndexQueueStats(): DocumentIndexQueueStats {
+  return defaultQueue.getStats();
 }

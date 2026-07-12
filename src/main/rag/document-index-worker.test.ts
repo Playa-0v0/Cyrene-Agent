@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createDocumentIndexWorkerRunner,
   type DocumentIndexWorkerPort,
-  type PreparedDocumentIndexResult,
 } from "./document-index-worker";
 import type { QueuedDocumentIndexJob } from "./document-index-queue";
 
@@ -63,8 +62,8 @@ describe("document index worker runner", () => {
     const job = createJob();
     const running = runner(job);
     controlled.emit({ type: "prepared", result: {
-      kind: "prepared-indexed", name: "large.md", text: "document text",
-      chunks: [{ text: "first", index: 0 }, { text: "second", index: 1 }, { text: "third", index: 2 }],
+      kind: "prepared-indexed", name: "large.md", textSha256: "hash",
+      totalChunks: 3,
     } });
     await new Promise((resolve) => setTimeout(resolve, 0));
     controlled.emit({ type: "embedded-batch", chunks: [{ text: "first", index: 0, embedding: [1, 0] }] });
@@ -75,7 +74,7 @@ describe("document index worker runner", () => {
     expect(persistPreparedBatch).toHaveBeenCalledTimes(2);
     expect(persistPreparedBatch).toHaveBeenNthCalledWith(1, expect.objectContaining({ importId: "import-batched", chunks: [{ text: "first", index: 0, embedding: [1, 0] }] }));
     expect(persistPreparedBatch).toHaveBeenNthCalledWith(2, expect.objectContaining({ importId: "import-batched" }));
-    expect(putCache).toHaveBeenCalledWith({ text: "document text", fileName: "large.md", importId: "import-batched", chunkCount: 3 });
+    expect(putCache).toHaveBeenCalledWith({ textSha256: "hash", fileName: "large.md", importId: "import-batched", chunkCount: 3 });
   });
 
   it("cancels active preparation before vector or cache persistence", async () => {
@@ -93,11 +92,11 @@ describe("document index worker runner", () => {
     const job = createJob();
 
     const running = runner(job);
-    const prepared: PreparedDocumentIndexResult = {
+    const prepared = {
       kind: "prepared-indexed",
       name: "large.md",
-      text: "document text",
-      chunks: [{ text: "first", index: 0 }, { text: "second", index: 1 }],
+      textSha256: "hash",
+      totalChunks: 2,
     };
     controlled.emit({ type: "prepared", result: prepared });
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -118,5 +117,30 @@ describe("document index worker runner", () => {
     await expect(running).resolves.toMatchObject({ kind: "error", reason: "cancelled" });
     expect(persistPreparedBatch).not.toHaveBeenCalled();
     expect(putCache).not.toHaveBeenCalled();
+  });
+
+  it("does not require prepared worker messages to carry chunk text into main", async () => {
+    const controlled = createControlledWorker();
+    const runner = createDocumentIndexWorkerRunner({
+      createWorker: () => controlled.worker,
+      getCachedImport: vi.fn().mockResolvedValue(null),
+      getEmbeddingConfig: () => ({ provider: "local", modelKey: "minilm" }),
+      createImportId: () => "import-lightweight",
+      persistPreparedBatch: vi.fn().mockResolvedValue(undefined),
+      putCache: vi.fn().mockResolvedValue(undefined),
+    });
+    const job = createJob();
+    const running = runner(job);
+
+    controlled.emit({ type: "prepared", result: { kind: "prepared-indexed", name: "huge.md", textSha256: "hash", totalChunks: 42 } });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(job.reportProgress).toHaveBeenCalledWith({ status: "embedding", completedChunks: 0, totalChunks: 42 });
+    expect(controlled.posted).toContainEqual({ type: "embed", embedding: { provider: "local", modelKey: "minilm" } });
+
+    controlled.emit({ type: "embedded-batch", chunks: [{ text: "only batch payload crosses to main", index: 0, embedding: [1] }] });
+    controlled.emit({ type: "completed" });
+
+    await expect(running).resolves.toEqual({ kind: "indexed", name: "huge.md", chunks: 1, importId: "import-lightweight" });
   });
 });
