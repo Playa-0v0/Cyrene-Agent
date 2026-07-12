@@ -29,6 +29,10 @@ export function registerChatsIpc(): void {
   ipcMain.handle(IPC.CHATS_LIST, () => chatsStore.listSessions());
 
   ipcMain.handle(IPC.CHATS_GET, (_event, id: string) => chatsStore.getSession(id));
+  ipcMain.handle(IPC.CHATS_GET_PAGE, (_event, payload: { id: string; before?: number | null; limit?: number }) => {
+    if (!payload?.id) return null;
+    return chatsStore.getSessionPage(payload.id, payload.before ?? null, payload.limit ?? 80);
+  });
 
   ipcMain.handle(
     IPC.CHATS_CREATE,
