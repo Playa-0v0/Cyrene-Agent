@@ -27,6 +27,11 @@ import type { AguiRunInput } from "../agui-bridge";
 import { IPC } from "../../shared/ipc-channels";
 import type { RelationshipChannel, RelationshipTurnInput } from "../relationship/relationship-log";
 import { validateCaptionImagePath } from "../chat/image-caption";
+import {
+  buildConversationTimeContext,
+  resolveChatContextTimezone,
+  type ChatContextMessage,
+} from "../chat-time-context";
 
 /** index.ts 模块级符号的最小可注入子集。
  *  类型故意用宽签名（unknown / 任意 shape）—— 因为 build-options 是纯消费者，
@@ -257,6 +262,13 @@ export async function buildAgentRunOptions(
   // slim view for downstream helpers that only need { role, content }
   const slimMessages = messages as unknown as Array<{ role: string; content?: string }>;
   const latestUserText = contentToText(messages.filter((m) => m.role === "user").at(-1)?.content) ?? "";
+  const skillActivation = deps.resolveSlashActivation(slimMessages);
+  const profile = deps.loadUserProfile();
+  const { messages: llmMessages, timeContext: conversationTimeContext } = buildConversationTimeContext(
+    messages as unknown as ChatContextMessage[],
+    resolveChatContextTimezone(profile.timezone),
+  );
+  const slimLlmMessages = llmMessages as Array<{ role: string; content?: string }>;
 
   let alwaysOnContext = "";
   try {
@@ -274,7 +286,6 @@ export async function buildAgentRunOptions(
 
   let environmentContext = "";
   try {
-    const profile = deps.loadUserProfile();
     environmentContext = deps.buildEnvironmentContext(
       { provider: settings.provider, model: settings.model },
       {
@@ -290,7 +301,6 @@ export async function buildAgentRunOptions(
   }
 
   const skillCatalog = deps.buildSkillCatalog(deps.skillRegistry.getEnabled());
-  const skillActivation = deps.resolveSlashActivation(slimMessages);
   const channelSystem = buildChannelSystem(input.channel);
 
   let toneInjection = "";
@@ -298,7 +308,7 @@ export async function buildAgentRunOptions(
     try {
       toneInjection = await deps.buildToneInjection(
         latestUserText,
-        slimMessages,
+        slimLlmMessages,
         deps.getSceneEmbeddingProvider(),
         deps.sceneEmbeddingIndex,
       );
@@ -321,6 +331,7 @@ export async function buildAgentRunOptions(
   // 同时新增 toolSystemContent / soulSystemBaseContent 两套。
   const systemContent =
     (environmentContext ? environmentContext + "\n\n" : "") +
+    (conversationTimeContext ? conversationTimeContext + "\n\n---\n\n" : "") +
     (channelSystem ? channelSystem + "\n\n" : "") +
     deps.buildSystemPrompt(styleFile) +
     (skillCatalog ? "\n\n---\n\n" + skillCatalog : "") +
@@ -338,6 +349,7 @@ export async function buildAgentRunOptions(
   // FC 循环 Soul 阶段执行前会按需动态追加 soulToolResultsSummary。
   const soulSystemBaseContent =
     (environmentContext ? environmentContext + "\n\n" : "") +
+    (conversationTimeContext ? conversationTimeContext + "\n\n---\n\n" : "") +
     (channelSystem ? channelSystem + "\n\n" : "") +
     deps.buildSoulSystemBasePrompt(styleFile) +
     (skillCatalog ? "\n\n---\n\n" + skillCatalog : "") +
@@ -350,8 +362,8 @@ export async function buildAgentRunOptions(
   deps.logWorldbookInjection(alwaysOnContext, systemContent);
 
   // 第一期：原始 messages 不再携带 system。FC 循环按阶段动态注入。
-  const fcMessages: ChatMessage[] = withDirectImageAttachments(messages, input);
-  const imageCaptionFallback = buildImageCaptionFallbackMessages(toolSystemContent + "\n\n---\n\n" + soulSystemBaseContent, messages, input, deps);
+  const fcMessages: ChatMessage[] = withDirectImageAttachments(llmMessages as unknown as ChatMessage[], input);
+  const imageCaptionFallback = buildImageCaptionFallbackMessages(toolSystemContent + "\n\n---\n\n" + soulSystemBaseContent, llmMessages as unknown as ChatMessage[], input, deps);
 
   return {
     options: {

@@ -66,6 +66,12 @@ import { registerDocumentTools } from "./orchestrator/document-tools";
 import { registerLifeTools, setTranslateConfig } from "./orchestrator/life-tools";
 import { registerTravelTools, setTravelConfig } from "./orchestrator/travel-tools";
 import { registerEmailTools, setEmailConfig } from "./orchestrator/email-tools";
+import {
+  buildConversationTimeContext,
+  normalizeChatMessagesWithTime,
+  resolveChatContextTimezone,
+  type ChatContextMessage,
+} from "./chat-time-context";
 import { setAsrConfig } from "./asr/volcano-asr-engine";
 import { setCallWindow, registerCallIpc, setCallSettings, stopCall } from "./call/call-manager";
 import { initSkills, skillRegistry, buildSkillCatalog, parseSlashCommand, setSkillEnabled, listSkillsForUi } from "./skills";
@@ -1311,6 +1317,7 @@ function computeLayout(): {
 interface ChatRequestMessage {
   role: "user" | "model" | "assistant" | "system";
   content: string;
+  at?: number;
 }
 
 interface ChatCompletionChoice {
@@ -1460,18 +1467,8 @@ function buildChatCompletionsUrl(baseUrl: string): string {
   return `${trimmed}/chat/completions`;
 }
 
-function normalizeChatMessages(input: unknown): Array<{ role: "system" | "user" | "assistant"; content: string }> {
-  if (!Array.isArray(input)) return [];
-  return input
-    .map((item): { role: "system" | "user" | "assistant"; content: string } | null => {
-      if (!item || typeof item !== "object") return null;
-      const record = item as Partial<ChatRequestMessage>;
-      if (typeof record.content !== "string" || !record.content.trim()) return null;
-      const role = record.role === "user" || record.role === "system" ? record.role : "assistant";
-      return { role, content: stripThinkBlocks(record.content).trim() };
-    })
-    .filter((item): item is { role: "system" | "user" | "assistant"; content: string } => item !== null)
-    .slice(-24);
+function normalizeChatMessages(input: unknown): ChatContextMessage[] {
+  return normalizeChatMessagesWithTime(input);
 }
 
 function getApiLogPath(): string {
@@ -1792,6 +1789,10 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
   if (messages.length === 0) {
     throw new Error("没有可发送的聊天内容。");
   }
+  const profile = loadUserProfile();
+  const chatContextTimezone = resolveChatContextTimezone(profile.timezone);
+  const skillActivation = resolveSlashActivation(messages);
+  const { messages: llmMessages, timeContext: conversationTimeContext } = buildConversationTimeContext(messages, chatContextTimezone);
   const latestUserText = messages.filter((message) => message.role === "user").at(-1)?.content ?? "";
 
   // 1. 构建 always-on 上下文（世界书 + L0/L1 画像）
@@ -1815,7 +1816,6 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
   // 降低"桌面在哪"这类低级幻觉。失败不影响主流程。
   let environmentContext = "";
   try {
-    const profile = loadUserProfile();
     environmentContext = buildEnvironmentContext(
       { provider: settings.provider, model: settings.model },
       { nickname: profile.nickname, callPreference: profile.callPreference, birthday: profile.birthday, defaultCity: profile.defaultCity, timezone: profile.timezone },
@@ -1827,13 +1827,12 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
   // system prompt 拼装顺序：事实层在前，人格层在后，skill 清单 + /命令激活放最后。
   // /命令拦截：命中 /skill-id 则当轮 system 注入 skill 正文（user message 原样，不污染 memory）
   const skillCatalog = buildSkillCatalog(skillRegistry.getEnabled());
-  const skillActivation = resolveSlashActivation(messages);
   // 语气硬注入：embedding 匹配场景，强制注入语气规则 + 场景参考样本（必须遵守，优先级最高）
   let toneInjection = "";
   const sceneProvider = getSceneEmbeddingProvider();
   if (sceneProvider && sceneEmbeddingIndex) {
     try {
-      toneInjection = await buildToneInjection(latestUserText, messages, sceneProvider, sceneEmbeddingIndex);
+      toneInjection = await buildToneInjection(latestUserText, llmMessages, sceneProvider, sceneEmbeddingIndex);
     } catch (err) {
       console.error("[Cyrene] tone injection failed:", err);
     }
@@ -1842,6 +1841,7 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
   // 世界知识放最后：LLM 对靠近 user 的信息权重更高；且避免被 system.md 的"不知道不要编"规则覆盖
   const systemContent =
     (environmentContext ? environmentContext + "\n\n" : "") +
+    (conversationTimeContext ? conversationTimeContext + "\n\n---\n\n" : "") +
     buildSystemPrompt(styleFile) +
     (skillCatalog ? "\n\n---\n\n" + skillCatalog : "") +
     skillActivation +
@@ -1855,7 +1855,7 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
   // 2. Function Calling 循环：模型自己决定调不调工具、调哪个
   const fcMessages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }> = [
     { role: "system", content: systemContent },
-    ...messages,
+    ...llmMessages,
   ];
 
   let chatContent = "";
@@ -1916,7 +1916,7 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
     broadcastRuntimeStateChanged();
   } else if (settings.runtimeSync === "llm") {
     broadcastRuntimeStateChanged();
-    void observeRuntimeState(settings, messages, latestUserText, chatContent);
+    void observeRuntimeState(settings, llmMessages, latestUserText, chatContent);
   }
 
 

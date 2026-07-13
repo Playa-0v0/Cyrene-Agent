@@ -2269,12 +2269,13 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !stickerPicker.hidden) hideStickerPicker();
 });
 
-function buildModelMessages(): Array<{ role: "user" | "model"; content: string }> {
+function buildModelMessages(): Array<{ role: "user" | "model"; content: string; at?: number }> {
   return messages
     .filter((message) => !message.transient && (message.content.trim() || message.modelContext?.trim() || message.sticker))
     .slice(-16)
     .map((message) => ({
       role: message.role,
+      at: Number.isFinite(message.at) ? message.at : undefined,
       content: (message.content + (message.modelContext ? "\n\n" + message.modelContext : "")).replace(/\[sticker:([^\]]+)\]/g, (_match, id) => {
         const desc = getStickerDescription(id);
         return `（用户发送表情包：${desc}）`;

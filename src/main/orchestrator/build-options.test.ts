@@ -67,6 +67,27 @@ describe("build-options", () => {
     expect(result.options.messages.some((m) => m.role === "system")).toBe(false)
   })
 
+  it("adds message timestamps and one gap notice to AG-UI chat context", async () => {
+    const deps = createBuildDeps()
+    deps.loadUserProfile = () => ({ timezone: "Asia/Taipei" })
+
+    const result = await buildAgentRunOptions({
+      messages: [
+        { role: "user", content: "今天有点累", at: Date.UTC(2026, 6, 12, 12, 0) },
+        { role: "assistant", content: "早点休息", at: Date.UTC(2026, 6, 12, 12, 2) },
+        { role: "user", content: "我回来啦", at: Date.UTC(2026, 6, 13, 3, 0) },
+      ],
+      style: "01_default.md",
+    }, deps)
+
+    expect(result.options.messages[0].content).toBe("[2026-07-12 20:00, Asia/Taipei]\n今天有点累")
+    expect(result.options.messages[2].content).toBe("[2026-07-13 11:00, Asia/Taipei]\n我回来啦")
+    expect(result.options.soulSystemBaseContent).toContain("[对话时间信息]")
+    expect(result.options.soulSystemBaseContent).toContain("距离上一条有效聊天消息：约 14 小时 58 分钟")
+    expect(result.options.soulSystemBaseContent.match(/距离上一条有效聊天消息/g)).toHaveLength(1)
+    expect(result.options.toolSystemContent).not.toContain("[对话时间信息]")
+  })
+
   it("toolSystemContent / soulSystemBaseContent 是分开的两套字符串", async () => {
     const result = await buildAgentRunOptions({
       messages: [{ role: "user", content: "你好" }],
