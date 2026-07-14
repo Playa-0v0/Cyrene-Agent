@@ -1564,8 +1564,12 @@ function logWorldbookInjection(alwaysOnContext: string, systemContent: string): 
 function buildSystemPrompt(styleFile: string): string {
   const parts: string[] = [];
 
-  // styleFile 以 "talk" 开头时走纯聊天模式：用 talk_system.md 替换 system.md（不调工具）
+  // styleFile 以 "talk" 开头时走纯聊天模式：用 talk_system.md 替换 system.md。
+  // "talk:03_healing.md" 这类值来自前端，表示日常聊天也保留当前选择的风格文件。
   const isTalkMode = styleFile.startsWith("talk");
+  const selectedStyleFile = isTalkMode
+    ? (styleFile.split(":")[1] || "01_default.md")
+    : styleFile;
   const system = loadPromptFile(isTalkMode ? "talk_system.md" : "system.md");
   if (system) parts.push(system);
   
@@ -1578,11 +1582,8 @@ function buildSystemPrompt(styleFile: string): string {
   const canon = loadPromptFile("canon_quotes.md");
   if (canon) parts.push(canon);
   
-  // 纯聊天模式不加载 style 文件（talk_system.md 已包含完整规则）
-  if (!isTalkMode) {
-    const style = loadPromptFile("styles/" + styleFile);
-    if (style) parts.push(style);
-  }
+  const style = loadPromptFile("styles/" + selectedStyleFile);
+  if (style) parts.push(style);
   
   return parts.join("\n\n---\n\n");
 }
@@ -3857,6 +3858,7 @@ app.whenReady().then(async () => {
     getSceneEmbeddingProvider: () => getSceneEmbeddingProvider() as unknown,
     buildAlwaysOnContext: (async (userText, messages) =>
       buildAlwaysOnContext(userText, messages as any)) as BuildOptionsDeps["buildAlwaysOnContext"],
+    buildMemoryInjection,
     buildRelationshipContext,
     buildSystemPrompt,
     logWorldbookInjection,
