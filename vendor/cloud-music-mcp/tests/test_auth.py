@@ -155,17 +155,17 @@ def test_cancel_login_is_idempotent(monkeypatch):
     assert out["status"] in ("expired", "cancelled")
 
 
-def test_validate_session_three_state_reads_runtime_dir(tmp_storage):
+def test_validate_session_three_state_reads_runtime_dir(monkeypatch, tmp_storage):
     """Startup validation must read cookies from the env-controlled
     runtime dir, not the legacy package-local file."""
     cookies_file = _cookies_file(tmp_storage)
     with open(cookies_file, "w", encoding="utf-8") as f:
         json.dump({"MUSIC_U": "x", "__csrf": "y"}, f)
 
-    auth.apis.login.GetCurrentLoginStatus = lambda: {
+    monkeypatch.setattr(auth.apis.login, "GetCurrentLoginStatus", lambda: {
         "code": 200,
         "profile": {"nickname": "alice", "userId": 42},
-    }
+    })
     out = auth.validate_session_three_state()
     assert out["state"] == "valid"
     assert out["profile"]["nickname"] == "alice"
@@ -200,21 +200,22 @@ def test_validate_session_three_state_does_not_leak_exception_text(
     assert out["reason"] in {"api_unreachable", "storage_read_failed"}
 
 
-def test_check_login_atomicity_cancel_after_803_cannot_run(tmp_storage):
+def test_check_login_atomicity_cancel_after_803_cannot_run(monkeypatch, tmp_storage):
     """cancel_login must not be able to interleave with check_login once
     the 803 lock is held. We simulate by making cancel_login a no-op
     while the lock is implicitly held by check_login; since the lock is
     re-entrant only on the same thread, the realistic guarantee is that
     by the time 803 returns, the pending entry is gone — prove it via
     state inspection."""
-    auth.apis.login.LoginQrcodeUnikey = lambda dtype=1: {"code": 200, "unikey": "u6"}
+    monkeypatch.setattr(auth.apis.login, "LoginQrcodeUnikey", lambda dtype=1: {"code": 200, "unikey": "u6"})
     begin = auth.begin_login()
     sid = begin["loginSessionId"]
-    auth.apis.login.LoginQrcodeCheck = lambda unikey, type=1: {"code": 803, "cookie": "x=1"}
-    auth.apis.login.WriteLoginInfo = lambda c: None
+    monkeypatch.setattr(auth.apis.login, "LoginQrcodeCheck", lambda unikey, type=1: {"code": 803, "cookie": "x=1"})
+    monkeypatch.setattr(auth.apis.login, "WriteLoginInfo", lambda c: None)
     sess = auth.GetCurrentSession()
     sess.cookies.set("MUSIC_U", "x")
-    auth.apis.login.GetCurrentLoginStatus = lambda: {"code": 200, "profile": {"nickname": "x"}}
+    monkeypatch.setattr(auth.apis.login, "GetCurrentLoginStatus", lambda: {"code": 200, "profile": {"nickname": "x"}})
     auth.check_login(sid)
     # After 803, the pending session must have been popped.
-    auth.cancel_login(sid)  # would raise / no-op otherwise; should be no_op
+    cancel_out = auth.cancel_login(sid)
+    assert cancel_out["status"] == "no_op"
