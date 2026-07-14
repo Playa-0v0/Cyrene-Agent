@@ -1,0 +1,25 @@
+[project]
+name = "cloud-music-mcp"
+version = "0.1.0"
+description = "网易云音乐 MCP Server"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp[cli]>=1.2.0",
+    "fastmcp>=0.2.0",
+    "pyncm @ git+https://github.com/Code-MonkeyZhang/pyncm.git@26fda90ba874b652885458b89b92045ff88a8eef",
+    "qrcode>=7.4.0",
+    "Pillow>=10.0.0",
+    "requests>=2.31.0",
+]
+
+[project.scripts]
+cloud-music-mcp = "cloud_music_mcp:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["cloud_music_mcp*"]
