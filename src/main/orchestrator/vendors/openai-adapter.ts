@@ -90,7 +90,7 @@ export class OpenAICompatAdapter implements ChatVendorAdapter {
     const jsonStr = event.data.trim();
     if (!jsonStr) return null;
     if (jsonStr === "[DONE]") return { done: true };
-    let parsed: { choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown; tool_calls?: unknown } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+    let parsed: { choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown; thinking?: unknown; reasoning?: unknown; tool_calls?: unknown } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
     try {
       parsed = JSON.parse(jsonStr);
     } catch {
@@ -112,6 +112,8 @@ export class OpenAICompatAdapter implements ChatVendorAdapter {
     const chunk: StreamChunk = {};
     if (typeof delta.content === "string") chunk.deltaText = delta.content;
     if (typeof delta.reasoning_content === "string") chunk.deltaThinking = delta.reasoning_content;
+    if (typeof delta.thinking === "string") chunk.deltaThinking = delta.thinking;
+    if (typeof delta.reasoning === "string") chunk.deltaThinking = delta.reasoning;
     // 暂不实现：if (Array.isArray(delta.tool_calls)) chunk.deltaToolCalls = ...
     // 当前三个调用点（MemoryJudge / memory-compressor / 心情观察器）都不带 tools，
     // 未来若需要流式 tool_call 增量，单独实现 + 加测试即可。
@@ -127,6 +129,7 @@ export class OpenAICompatAdapter implements ChatVendorAdapter {
           tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }>;
           reasoning_content?: string;
           thinking?: string;
+          reasoning?: string;
         };
         finish_reason?: string;
       }>;
@@ -135,7 +138,7 @@ export class OpenAICompatAdapter implements ChatVendorAdapter {
     const choice = data.choices?.[0];
     const msg = choice?.message;
     const text = msg?.content ?? "";
-    const thinking = msg?.reasoning_content || msg?.thinking || undefined;
+    const thinking = msg?.reasoning_content || msg?.thinking || msg?.reasoning || undefined;
 
     const toolCalls: ToolCall[] = (msg?.tool_calls ?? []).map(tc => ({
       id: tc.id,

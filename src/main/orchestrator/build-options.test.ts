@@ -19,6 +19,7 @@ function createBuildDeps(): BuildOptionsDeps {
     sceneEmbeddingIndex: null,
     getSceneEmbeddingProvider: () => null,
     buildAlwaysOnContext: async () => "ALWAYS",
+    buildMemoryInjection: async () => "MEMORY",
     buildRelationshipContext: async () => "RELATIONSHIP",
     buildSystemPrompt: () => "BASE_SYSTEM",
     logWorldbookInjection: () => {},

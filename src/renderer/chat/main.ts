@@ -2038,8 +2038,8 @@ function isTalkMode(): boolean {
 function getCurrentStyle(): string {
   const active = document.querySelector("#style-dropdown .dm-opt.is-active") as HTMLElement | null;
   const style = (active && active.dataset && active.dataset.value) || "01_default.md";
-  // 日常聊天模式：前缀 "talk" 触发后端走 talk_system.md + tools:[]
-  return isTalkMode() ? "talk" : style;
+  // 日常聊天模式：前缀 "talk:" 触发后端走 talk_system.md，同时保留当前选择的风格文件。
+  return isTalkMode() ? `talk:${style}` : style;
 }
 async function getModelReply(): Promise<ChatReplyPayload> {
   if (!window.chat?.sendMessage) {

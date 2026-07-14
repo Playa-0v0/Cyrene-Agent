@@ -14,6 +14,7 @@
 //   buildToneInjection / sceneEmbeddingIndex / getSceneEmbeddingProvider
 //   buildSystemPrompt / logWorldbookInjection / CHAT_REQUEST_TIMEOUT_MS
 //   normalizeChatMessages / buildAlwaysOnContext / ToolDefinition
+//   buildMemoryInjection
 //   scheduleMemoryWrite / inferRuntimeState / runtimeState / feelingToExpression
 //   matchSticker / stickerEmbeddingIndex / getEmbeddingProvider / loadStickerSettings
 //   broadcastRuntimeStateChanged / observeRuntimeState
@@ -49,6 +50,7 @@ export interface BuildOptionsDeps {
     userText: string,
     messages: ReadonlyArray<{ role: string; content?: string }>,
   ) => Promise<string>;
+  buildMemoryInjection: (userText: string) => Promise<string>;
   buildRelationshipContext: () => Promise<string>;
   buildSystemPrompt: (styleFile: string) => string;
   logWorldbookInjection: (alwaysOnContext: string, systemContent: string) => void;
@@ -156,6 +158,13 @@ export async function buildAgentRunOptions(
     console.warn("[Cyrene] always-on context build failed:", err);
   }
 
+  let memoryInjection = "";
+  try {
+    memoryInjection = await deps.buildMemoryInjection(latestUserText);
+  } catch (err) {
+    console.warn("[Cyrene] memory injection failed:", err);
+  }
+
   let relationshipContext = "";
   try {
     relationshipContext = await deps.buildRelationshipContext();
@@ -212,6 +221,7 @@ export async function buildAgentRunOptions(
     deps.buildSystemPrompt(input.style || "01_default.md") +
     (skillCatalog ? "\n\n---\n\n" + skillCatalog : "") +
     skillActivation +
+    (memoryInjection ? "\n\n" + memoryInjection + "\n\n" : "") +
     toneInjection +
     (alwaysOnContext ? "\n\n" + alwaysOnContext + "\n\n" : "") +
     (relationshipContext ? "\n\n" + relationshipContext + "\n\n" : "") +
