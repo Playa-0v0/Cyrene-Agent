@@ -6,7 +6,7 @@ import { resolveMusicPaths } from "./paths";
 import { bootstrapMusicService } from "./bootstrap";
 import { sanitizeLogLine } from "./log-sanitizer";
 import {
-  SMOKE_OK, SMOKE_MCP_START_FAILED, SMOKE_MCP_INCOMPATIBLE,
+  SMOKE_OK, SMOKE_ELECTRON_INIT_FAILED, SMOKE_MCP_START_FAILED, SMOKE_MCP_INCOMPATIBLE,
   SMOKE_SEARCH_FAILED, SMOKE_PLAYBACK_FAILED, SMOKE_SHUTDOWN_FAILED,
 } from "./smoke-codes";
 import type { PlaybackDispatchResult } from "./types";
@@ -28,15 +28,16 @@ async function main(): Promise<number> {
     try { await fs.rm(smokeUserDataDir, { recursive: true, force: true }); } catch { /* ignore */ }
   };
 
+  let code = SMOKE_OK;
   try {
-    const code = await runPhases(smokeUserDataDir);
-    await cleanup();
-    return code;
+    code = await runPhases(smokeUserDataDir);
   } catch (err) {
     console.error("[music-smoke] fatal", sanitizeLogLine(String(err)));
+    code = SMOKE_SHUTDOWN_FAILED;
+  } finally {
     await cleanup();
-    return SMOKE_SHUTDOWN_FAILED;
   }
+  return code;
 }
 
 async function runPhases(smokeUserDataDir: string): Promise<number> {
@@ -119,21 +120,42 @@ async function runPhases(smokeUserDataDir: string): Promise<number> {
 
 async function shutdown(bootstrap: ReturnType<typeof bootstrapMusicService>): Promise<number> {
   const report = await bootstrap.shutdown();
-  log(`shutdown_ok rootProcessPid=${report.rootProcessPid ?? "?"} transportClosed=${report.transportClosed} processTreeExited=${report.processTreeExited} runtimeRemoved=${report.runtimeRemoved}`);
+  log(`shutdown report rootProcessPid=${report.rootProcessPid ?? "?"} transportClosed=${report.transportClosed} processTreeExited=${report.processTreeExited} runtimeRemoved=${report.runtimeRemoved}`);
 
-  // 7. Exact PID-based process tree verification
+  // Independent PID-precise re-verification in the smoke entry itself
+  let pidAliveAfterShutdown = false;
   if (report.rootProcessPid !== undefined) {
-    if (report.processTreeExited) {
-      log("process_tree_clean");
-    } else {
-      log(`process_tree_dirty root_pid=${report.rootProcessPid}`);
-      return SMOKE_SHUTDOWN_FAILED;
+    try {
+      process.kill(report.rootProcessPid, 0);
+      pidAliveAfterShutdown = true;  // kill 0 succeeded → process still alive
+    } catch {
+      pidAliveAfterShutdown = false;  // ESRCH or EPERM → process has exited
     }
-  } else {
-    log("process_tree_clean no_pid");
   }
 
-  return SMOKE_OK;
+  // Build the success/failure verdict from ALL the report fields
+  const allGood =
+    report.transportClosed &&
+    report.runtimeRemoved &&
+    !pidAliveAfterShutdown;
+
+  if (allGood) {
+    if (report.rootProcessPid !== undefined) {
+      log("process_tree_clean");
+    } else {
+      log("process_tree_clean no_pid");
+    }
+    return SMOKE_OK;
+  } else {
+    if (pidAliveAfterShutdown) {
+      log(`process_tree_dirty root_pid=${report.rootProcessPid}`);
+    } else if (!report.transportClosed) {
+      log("shutdown_failed reason=transport_not_closed");
+    } else if (!report.runtimeRemoved) {
+      log("shutdown_failed reason=runtime_not_removed");
+    }
+    return SMOKE_SHUTDOWN_FAILED;
+  }
 }
 
 async function runLoginPhase(
@@ -184,4 +206,10 @@ async function runLoginPhase(
   await fs.rm(qrTxtPath, { force: true }).catch(() => {});
 }
 
-void main().then((code) => app.exit(code));
+void main()
+  .then((code) => app.exit(code))
+  .catch((err) => {
+    // Synchronous init failure (e.g. setPath throws, whenReady rejects, etc.)
+    console.error("[music-smoke] init_failed", sanitizeLogLine(String(err)));
+    app.exit(SMOKE_ELECTRON_INIT_FAILED);
+  });
