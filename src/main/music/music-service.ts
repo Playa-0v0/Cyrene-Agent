@@ -18,6 +18,7 @@ import type {
   MusicPlayerState,
   LoginFlowState,
   MusicProfile,
+  MusicShutdownReport,
 } from "./types";
 
 const SET_TTL_MS = 30 * 60_000;
@@ -32,6 +33,7 @@ export class MusicService {
   private backendState: MusicBackendState = "stopped";
   private playerState: MusicPlayerState = "unknown";
   private activeProfile: MusicProfile | null = null;
+  private shuttingDown = false;
 
   private readonly client: MusicMcpClient;
   private readonly detector: ProtocolDetector;
@@ -122,12 +124,41 @@ export class MusicService {
     }
   }
 
-  async shutdown(): Promise<void> {
-    try { await this.orchestrator.shutdown(); } catch { /* ignore */ }
-    try { await this.client.close(); } catch { /* ignore */ }
-    try { await fs.rm(this.paths.runtimeDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  async shutdown(): Promise<MusicShutdownReport> {
+    if (this.shuttingDown) {
+      return {
+        rootProcessPid: undefined,
+        transportClosed: true,
+        processTreeExited: true,
+        runtimeRemoved: true,
+      };
+    }
+    this.shuttingDown = true;
+    const rootProcessPid = this.client.getRootPid();
+    let transportClosed = true;
+    try {
+      await this.client.close();
+    } catch {
+      transportClosed = false;
+    }
+    let processTreeExited = true;
+    if (rootProcessPid !== undefined) {
+      try {
+        process.kill(rootProcessPid, 0);
+        processTreeExited = false;
+      } catch {
+        processTreeExited = true;
+      }
+    }
+    let runtimeRemoved = true;
+    try {
+      await fs.rm(this.paths.runtimeDir, { recursive: true, force: true });
+    } catch {
+      runtimeRemoved = false;
+    }
     this.backendState = "stopped";
     this.emitBackendChange("stopped");
+    return { rootProcessPid, transportClosed, processTreeExited, runtimeRemoved };
   }
 
   // ── State accessors ────────────────────────────────────────

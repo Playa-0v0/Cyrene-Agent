@@ -16,6 +16,7 @@ vi.mock("./music-mcp-client", () => ({
       connect: vi.fn(),
       verifyContractOnConnect: vi.fn().mockResolvedValue({ ok: true, missing: [], schemaMismatch: [] }),
       close: vi.fn(),
+      getRootPid: vi.fn().mockReturnValue(undefined),
       callDataTool: (name: string, args: unknown) => name === "cloud_music_search" ? searchTool(args) : dailyTool(args),
       callAuthTool: (name: string, args: unknown) => name === "cyrene_music_login_begin" ? beginTool(args) : name === "cyrene_music_login_check" ? checkTool(args) : cancelTool(args),
     };
@@ -168,5 +169,23 @@ describe("MusicService", () => {
     unsub();
     // No assertion needed — just verifying no throw
     expect(true).toBe(true);
+  });
+
+  it("shutdown returns a MusicShutdownReport", async () => {
+    const s = new MusicService(PATHS);
+    const report = await s.shutdown();
+    expect(report).toEqual({
+      rootProcessPid: undefined,
+      transportClosed: true,
+      processTreeExited: true,  // no live PID to check
+      runtimeRemoved: true,
+    });
+  });
+
+  it("shutdown is idempotent", async () => {
+    const s = new MusicService(PATHS);
+    const r1 = await s.shutdown();
+    const r2 = await s.shutdown();
+    expect(r1).toEqual(r2);
   });
 });

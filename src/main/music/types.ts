@@ -53,3 +53,10 @@ export class MusicInputError extends Error {
     this.name = "MusicInputError";
   }
 }
+
+export interface MusicShutdownReport {
+  rootProcessPid?: number;
+  transportClosed: boolean;
+  processTreeExited: boolean;
+  runtimeRemoved: boolean;
+}
