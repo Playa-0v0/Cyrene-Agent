@@ -27,6 +27,7 @@ import {
 } from "./types";
 import { normalizeMusicCardData, type MusicCardData } from "../../shared/music-card";
 import { requestTrackPlayback } from "../settings/music-playback";
+import { renderMarkdown } from "./markdown-renderer";
 
 type Role = "user" | "model";
 
@@ -1114,7 +1115,7 @@ function createMessageBubble(text?: string): HTMLElement {
   const item = document.createElement("div");
   item.className = "msg__bubble";
   item.hidden = false;
-  if (text) item.textContent = text;
+  if (text) item.innerHTML = renderMarkdown(text);
   return item;
 }
 
@@ -1321,9 +1322,9 @@ function render(preserveScroll = false): void {
       bubble.appendChild(dot3);
       bubbles.push(bubble);
     } else if (m.role === "user") {
-      // 用户消息：去掉 [sticker:xxx] 标记后显示纯文字
+      // 用户消息：去掉 [sticker:xxx] 标记后显示（支持 Markdown）
       const cleanText = m.content.replace(/\[sticker:[^\]]+\]/g, "").trim();
-      if (cleanText) bubble.textContent = cleanText;
+      if (cleanText) bubble.innerHTML = renderMarkdown(cleanText);
       else bubble.hidden = true; // 纯表情包消息不显示气泡
       if (!bubble.hidden) bubbles.push(bubble);
     } else {
