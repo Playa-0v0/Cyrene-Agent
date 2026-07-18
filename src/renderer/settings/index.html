@@ -362,14 +362,6 @@
           <div class="settings-list">
             <div class="setting-row">
               <div>
-                <strong>禁用界面的 GPU 渲染</strong>
-                <span>向 Electron 添加 --disable-gpu 参数以使用软件渲染，降低 GPU 负载，但会增加 CPU 负载．<br />可以通过查看 <a id="open-chrome-gpu" href="javascript:;">chrome://gpu</a> 得知当前是否使用 GPU 渲染．<br />修改后 <b>完全退出并重启客户端</b> 才可生效．</span>
-              </div>
-              <span class="switch"><input id="disable-gpu-electron" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
-            </div>
-
-            <div class="setting-row">
-              <div>
                 <strong>状态栏窗口</strong>
                 <span>不小心关闭后可以从这里重新打开。</span>
               </div>
@@ -435,6 +427,13 @@
               </div>
             </label>
 
+            <div class="setting-row">
+              <div>
+                <strong>禁用客户端 GPU 渲染</strong>
+                <span>向 Electron 添加 --disable-gpu 参数以使用软件渲染，降低客户端 GPU 负载，但会增加 CPU 负载．<br />可以通过查看 <a id="open-chrome-gpu" href="javascript:;">GPU Internals 页面</a> 得知当前是否使用 GPU 渲染．<br />修改后 <b>完全退出并重启客户端</b> 才可生效．</span>
+              </div>
+              <span class="switch"><input id="disable-gpu-electron" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
+            </div>
 
             <div class="setting-row setting-row--about">
               <div>

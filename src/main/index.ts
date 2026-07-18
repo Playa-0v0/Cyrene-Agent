@@ -3791,6 +3791,7 @@ protocol.registerSchemesAsPrivileged([
 
 if (loadGeneralSettings().disableGpuElectron) {
   app.commandLine.appendSwitch("disable-gpu");
+  app.commandLine.appendSwitch("enable-unsafe-swiftshader");
 }
 
 app.whenReady().then(async () => {
