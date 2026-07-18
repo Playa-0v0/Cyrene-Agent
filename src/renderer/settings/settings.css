@@ -78,6 +78,9 @@ body {
   gap: 5px;
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rb-border-strong) transparent;
 }
 
 .nav-item {
