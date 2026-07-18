@@ -474,9 +474,9 @@ describe("runTwoPhaseFcLoop", () => {
     expect(lastUserContent).toContain("不要再尝试调用任何工具");
   });
 
-  it("纯聊天 no_tool 不会注入\"停止调工具\" user 消息（避免模型误以为达上限）", async () => {
+  it("纯聊天 0 次工具调用不会注入\"停止调工具\" user 消息", async () => {
     const adapter = new FakeAdapter();
-    adapter.enqueueText("");  // tool 阶段
+    adapter.enqueueText("");  // tool 阶段：模型不调工具
     adapter.enqueueText("hi"); // soul 阶段
 
     await runTwoPhaseFcLoop({
@@ -494,8 +494,36 @@ describe("runTwoPhaseFcLoop", () => {
     });
 
     const soulReq = adapter.requests[adapter.requests.length - 1];
-    // no_tool 时不应有注入的 user 消息：原始 conversation 只有 1 条 user 消息
     const userMessages = soulReq.messages.filter((m) => m.role === "user");
     expect(userMessages).toHaveLength(1);
+  });
+
+  it("调过工具后 no_tool 也会注入\"停止调工具\" user 消息", async () => {
+    const adapter = new FakeAdapter();
+    // 先调一次工具
+    adapter.enqueueToolCalls([
+      { id: "tc-1", name: "weather", arguments: "{}" },
+    ]);
+    // 第二轮不调 → no_tool
+    adapter.enqueueText("");
+    // soul 阶段
+    adapter.enqueueText("基于天气结果回复");
+
+    await runTwoPhaseFcLoop({
+      ...baseOptions,
+      settings: {
+        provider: "test",
+        baseUrl: "https://test",
+        model: "m",
+        apiKey: "k",
+      },
+      adapter,
+      executeTool: async () => "晴 25°C",
+    });
+
+    const soulReq = adapter.requests[adapter.requests.length - 1];
+    const userMessages = soulReq.messages.filter((m) => m.role === "user");
+    const lastUserContent = String(userMessages[userMessages.length - 1].content);
+    expect(lastUserContent).toContain("不要再尝试调用任何工具");
   });
 });

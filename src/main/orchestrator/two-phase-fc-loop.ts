@@ -504,8 +504,10 @@ async function runSoulPhase(args: {
     : soulSystemBaseContent;
 
   // 注入明确的"停止调工具"指令（参考 Hermes：role=user 比 system prompt 对 LLM 的约束力更强）
-  // no_tool 时模型已自行决定不调工具，无需注入——否则模型会误以为"系统通知我已达上限"
-  const soulConversation = reason !== "no_tool"
+  // 条件：本轮至少调用过一次工具时才注入。纯聊天（0次工具调用）无需注入，
+  // 否则模型会误以为"系统通知我已达上限"。
+  const injectStopHint = allToolResults.length > 0;
+  const soulConversation = injectStopHint
     ? [
         ...conversation,
         {
