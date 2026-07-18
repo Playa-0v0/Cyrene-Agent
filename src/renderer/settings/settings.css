@@ -29,10 +29,6 @@ body {
     radial-gradient(circle at 86% 18%, rgba(168, 85, 247, 0.24) 0%, transparent 40%),
     linear-gradient(145deg, var(--rb-bg-2) 0%, var(--rb-bg-1) 64%, var(--rb-bg-2) 100%);
   border: 1px solid rgba(255, 190, 226, 0.36);
-  box-shadow:
-    0 0 28px rgba(236, 72, 153, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 0 0 1px var(--rb-border-faint);
 }
 
 .settings-shell::before {

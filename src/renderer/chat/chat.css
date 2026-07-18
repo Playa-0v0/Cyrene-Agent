@@ -33,10 +33,6 @@ body {
     radial-gradient(circle at 50% 112%, var(--rb-bg-2) 0%, transparent 36%),
     linear-gradient(135deg, var(--rb-bg-3) 0%, var(--rb-bg-1) 68%, var(--rb-bg-2) 100%);
   border: 1px solid var(--rb-border-strong);
-  box-shadow:
-    0 0 26px rgba(236, 72, 153, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15),
-    inset 0 0 0 1px rgba(236, 72, 153, 0.11);
 }
 
 .chat::before {

@@ -29,10 +29,6 @@ body {
     radial-gradient(circle at 50% 110%, var(--rb-bg-3) 0%, transparent 38%),
     linear-gradient(155deg, var(--rb-bg-3) 0%, var(--rb-bg-1) 60%, var(--rb-bg-2) 100%);
   border: 1px solid rgba(255, 190, 226, 0.36);
-  box-shadow:
-    0 0 24px var(--rb-glow-soft),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 0 0 1px var(--rb-border-faint);
   transition: background 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
 }
 
