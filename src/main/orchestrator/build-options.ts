@@ -59,7 +59,7 @@ export interface BuildOptionsDeps {
   buildRelationshipContext: () => Promise<string>;
   buildSystemPrompt: (styleFile: string) => string;
   /** 第一期：工具阶段 system prompt。仅含工具调度规则 + 自动生成的工具目录。 */
-  buildToolSystemPrompt: (enabledTools: ReadonlyArray<unknown>) => string;
+  buildToolSystemPrompt: (enabledTools: ReadonlyArray<unknown>, isOptimizedFirstRound?: boolean) => string;
   /** 第一期：Soul 阶段使用的基础 system prompt。工具结果在 FC 循环 Soul 阶段执行前动态追加。 */
   buildSoulSystemBasePrompt: (styleFile: string) => string;
   /** 第一期：注入 toolRegistry（用于 buildToolSystemPrompt 自动生成目录）。 */
@@ -378,6 +378,10 @@ export async function buildAgentRunOptions(
     + (skillCatalog ? "\n\n---\n\n" + skillCatalog : "")
     + (autoInjectedSkillContext ? "\n\n---\n\n" + autoInjectedSkillContext : "")
     + (musicCompanionContext ? "\n\n" + musicCompanionContext : "");
+  const toolSystemContentOptimizedForFirstRound = deps.buildToolSystemPrompt(runTools, true)
+    + (skillCatalog ? "\n\n---\n\n" + skillCatalog : "")
+    + (autoInjectedSkillContext ? "\n\n---\n\n" + autoInjectedSkillContext : "")
+    + (musicCompanionContext ? "\n\n" + musicCompanionContext : "");
 
   // Soul 阶段基础 system：人设 + 环境/记忆/关系/附件/渠道（这些是"表达"所需）。
   // 工具结果（role: tool 消息）已在 conversation 中携带，本字段不重复注入；
@@ -416,9 +420,11 @@ export async function buildAgentRunOptions(
       requiredToolName,
       timeoutMs: deps.chatRequestTimeoutMs,
       toolSystemContent,
+      toolSystemContentOptimizedForFirstRound,
       soulSystemBaseContent,
       ...(imageCaptionFallback ? { imageCaptionFallback } : {}),
       ...(isTalkMode ? { tools: runTools as ToolDefinition[] } : {}),
+      optimizeFirstRound: true,
     },
     latestUserText,
   };

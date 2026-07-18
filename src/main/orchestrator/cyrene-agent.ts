@@ -49,8 +49,10 @@ export interface CyreneRunOptions {
   imageCaptionFallback?: () => Promise<ChatMessage[]>;
   /** 工具阶段使用的 system prompt（仅含工具调度规则 + 自动生成的工具目录）。 */
   toolSystemContent: string;
+  toolSystemContentOptimizedForFirstRound?: string;
   /** Soul 阶段使用的基础 system prompt（人设 + 环境/记忆/关系/附件）。 */
   soulSystemBaseContent: string;
+  optimizeFirstRound?: boolean;
 }
 
 /** FC 循环最终结果（供桥层做副作用用）。 */
@@ -186,6 +188,7 @@ export class CyreneAgent extends AbstractAgent {
             tools: options.tools ?? toolRegistry.getEnabledTools(),
             requiredToolName: options.requiredToolName,
             toolSystemContent: options.toolSystemContent,
+            toolSystemContentOptimizedForFirstRound: options.toolSystemContentOptimizedForFirstRound,
             soulSystemBaseContent: options.soulSystemBaseContent,
             timeoutMs: options.timeoutMs,
             perRoundTimeoutMs: timeoutSettings.perRoundTimeout,
@@ -200,6 +203,7 @@ export class CyreneAgent extends AbstractAgent {
               subscriber.next(toAguiEvent(event));
             },
             signal: abortController.signal,
+            optimizeFirstRound: options.optimizeFirstRound,
           });
 
           this.lastResult = {

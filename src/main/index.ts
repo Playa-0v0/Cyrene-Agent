@@ -2088,8 +2088,8 @@ function initializeProactiveChatService(): void {
  * 第一期：固定 tools_system.md 规则 + 运行时生成的工具目录。
  * 不放任何人格 / 环境 / 记忆，避免人设污染工具决策。
  */
-function buildToolSystemPrompt(enabledTools: ReadonlyArray<ToolDefinition>): string {
-  const base = loadPromptFile("tools_system.md");
+function buildToolSystemPrompt(enabledTools: ReadonlyArray<ToolDefinition>, isOptimizedFirstRound?: boolean): string {
+  const base = loadPromptFile(isOptimizedFirstRound ? "tools_system_optimized_first.md" : "tools_system.md");
   const catalog = buildToolCatalog(enabledTools as ToolDefinition[]);
   return [
     base,
@@ -4711,7 +4711,7 @@ app.whenReady().then(async () => {
       buildAlwaysOnContext(userText, messages as any)) as BuildOptionsDeps["buildAlwaysOnContext"],
     buildRelationshipContext,
     buildSystemPrompt,
-    buildToolSystemPrompt: (enabledTools) => buildToolSystemPrompt(enabledTools as ToolDefinition[]),
+    buildToolSystemPrompt: (enabledTools, isOptimizedFirstRound) => buildToolSystemPrompt(enabledTools as ToolDefinition[], isOptimizedFirstRound),
     buildSoulSystemBasePrompt,
     toolRegistry: { getEnabled: () => toolRegistry.getEnabledTools() },
     logWorldbookInjection,
