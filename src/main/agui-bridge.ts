@@ -159,6 +159,22 @@ export function registerAgUiIpc(
         } catch (err) {
           console.warn("[AgUiBridge] 副作用失败（不影响结果）:", err);
         }
+        // 发送调试录制数据（LLM 交互 + 工具调用），供渲染端存盘
+        if (agent.lastResult) {
+          send({
+            type: "CUSTOM",
+            name: "cyrene.recording",
+            value: {
+              toolCalls: agent.lastResult.toolResults.map((tr) => ({
+                name: tr.toolId,
+                arguments: tr.args,
+                output: tr.output,
+                outputTruncated: 0,
+              })),
+              llmRequests: agent.lastResult.llmInteractions ?? [],
+            },
+          });
+        }
         if (pendingRunFinishedEvent) {
           send(pendingRunFinishedEvent);
         }

@@ -78,6 +78,6 @@ describe("agui-bridge sticker event ordering", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const eventTypes = sent.map((event) => (event as { type?: string; name?: string }).name ?? (event as { type?: string }).type);
-    expect(eventTypes).toEqual(["RUN_STARTED", "cyrene.sticker", "RUN_FINISHED"]);
+    expect(eventTypes).toEqual(["RUN_STARTED", "cyrene.sticker", "cyrene.recording", "RUN_FINISHED"]);
   });
 });

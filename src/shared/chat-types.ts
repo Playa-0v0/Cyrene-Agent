@@ -41,6 +41,39 @@ export interface ChatMessage {
   ttsCacheKey?: string;
   /** 已实际展示的音乐候选卡片；持久化展示不延长 Skill 候选状态 TTL。 */
   musicCard?: MusicCardData;
+  /** 本轮模型回复前的工具调用记录（用于调试复盘）。 */
+  toolCalls?: RecordedToolCall[];
+  /** 本轮 LLM 请求/响应原始记录（用于调试复盘）。 */
+  llmRequests?: RecordedLlmRequest[];
+}
+
+/** 单次工具调用的持久化记录。 */
+export interface RecordedToolCall {
+  name: string;
+  arguments: Record<string, unknown>;
+  output: string;
+  /** 工具输出的截断字节数（0 = 未截断）。 */
+  outputTruncated: number;
+}
+
+/** 单次 LLM 请求/响应的持久化记录。 */
+export interface RecordedLlmRequest {
+  phase: string;
+  /** 请求体（不含 apiKey 等敏感字段）。 */
+  request: {
+    model: string;
+    messageCount: number;
+    toolCount: number;
+    /** 请求的 system prompt 前 500 字符。 */
+    systemPreview: string;
+  };
+  /** 响应摘要。 */
+  response: {
+    finishReason: string;
+    toolCallCount: number;
+    /** 响应文本前 500 字符。 */
+    textPreview: string;
+  };
 }
 
 export type MessageAttachment = ImageMessageAttachment | DocumentMessageAttachment;

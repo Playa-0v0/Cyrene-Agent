@@ -46,6 +46,7 @@ import type {
 } from "./vendors/types";
 import type { ToolDefinition } from "./tool-registry";
 import type { ToolCallResult } from "./types";
+import type { LlmInteraction } from "./types";
 
 export interface AgentLoopSettings {
   provider: string;
@@ -107,6 +108,8 @@ export interface TwoPhaseFcResult {
   toolResults: ToolCallResult[];
   totalUsage?: { input: number; output: number };
   soulPhaseReason: SoulPhaseReason;
+  /** 所有轮次的 LLM 交互记录（调试复盘用）。 */
+  llmInteractions: LlmInteraction[];
 }
 
 const LOG_PREFIX = "[TwoPhaseFcLoop]";
@@ -260,6 +263,7 @@ export async function runTwoPhaseFcLoop(options: TwoPhaseFcOptions): Promise<Two
   const toolSpecs = buildToolSpecs(tools);
   const runnableToolIds = new Set(tools.filter((t) => t.enabled).map((t) => t.id));
   const allToolResults: ToolCallResult[] = [];
+  const llmInteractions: LlmInteraction[] = [];
 
   console.log(LOG_PREFIX, `可用工具: ${toolSpecs.map((t) => t.name).join(", ") || "(无)"}`);
   console.log(LOG_PREFIX, "原始消息数:", messages.length, "最后一角色:", messages[messages.length - 1]?.role);
@@ -341,6 +345,22 @@ export async function runTwoPhaseFcLoop(options: TwoPhaseFcOptions): Promise<Two
     // 请求成功，重置连续超时计数
     consecutiveTimeouts = 0;
 
+    // 记录本轮 LLM 交互（调试复盘用）
+    llmInteractions.push({
+      phase: `tool-round-${round + 1}`,
+      request: {
+        model: req.model,
+        messageCount: req.messages.length,
+        toolCount: (req.tools ?? []).length,
+        systemPreview: String(req.messages[0]?.content ?? "").slice(0, 500),
+      },
+      response: {
+        finishReason: chat.finishReason,
+        toolCallCount: chat.toolCalls.length,
+        textPreview: (chat.text ?? "").slice(0, 500),
+      },
+    });
+
     // 情况 1：模型要调工具 → 把 assistant 消息加入 conversation（带 tool_calls）
     if (chat.toolCalls.length > 0) {
       conversation.push(chat.assistantMessage);
@@ -411,6 +431,7 @@ export async function runTwoPhaseFcLoop(options: TwoPhaseFcOptions): Promise<Two
       signal,
       onEvent,
       recordUsageFn,
+      llmInteractions,
     });
   }
 
@@ -433,6 +454,7 @@ export async function runTwoPhaseFcLoop(options: TwoPhaseFcOptions): Promise<Two
     signal,
     onEvent,
     recordUsageFn,
+    llmInteractions,
   });
 }
 
@@ -453,6 +475,7 @@ async function runSoulPhase(args: {
   signal: AbortSignal | undefined;
   onEvent: ((e: TwoPhaseEvent) => void) | undefined;
   recordUsageFn: (input: number, output: number, calls: number) => void;
+  llmInteractions: LlmInteraction[];
 }): Promise<TwoPhaseFcResult> {
   const {
     adapter,
@@ -468,6 +491,7 @@ async function runSoulPhase(args: {
     signal,
     onEvent,
     recordUsageFn,
+    llmInteractions,
   } = args;
 
   onEvent?.({ type: "step_started", stepName: `soul-phase-${reason}` });
@@ -479,10 +503,24 @@ async function runSoulPhase(args: {
     ? soulSystemBaseContent + "\n\n" + soulResultsSummary
     : soulSystemBaseContent;
 
+  // 注入明确的"停止调工具"指令（参考 Hermes：role=user 比 system prompt 对 LLM 的约束力更强）
+  // 条件：本轮至少调用过一次工具时才注入。纯聊天（0次工具调用）无需注入，
+  // 否则模型会误以为"系统通知我已达上限"。
+  const injectStopHint = allToolResults.length > 0;
+  const soulConversation = injectStopHint
+    ? [
+        ...conversation,
+        {
+          role: "user" as const,
+          content: "已进入最终回复阶段，请基于以上对话直接回复用户，不要再尝试调用任何工具。",
+        },
+      ]
+    : conversation;
+
   // Soul 请求**不带 tools** 字段
   let req: ChatRequest = {
     model: cfg.model,
-    messages: withSystem(conversation, finalSystemContent),
+    messages: withSystem(soulConversation, finalSystemContent),
     stream: false,
   };
   if (adapter.applyCacheHints) req = adapter.applyCacheHints(req, cfg);
@@ -496,6 +534,23 @@ async function runSoulPhase(args: {
   try {
     const data = await callAdapter(adapter, req, cfg, forceSummaryTimeoutMs);
     const chat = adapter.parseResponse(data);
+
+    // 记录 SOUL_PHASE 的 LLM 交互（调试复盘用）
+    llmInteractions.push({
+      phase: `soul-phase-${reason}`,
+      request: {
+        model: req.model,
+        messageCount: req.messages.length,
+        toolCount: 0,
+        systemPreview: String(req.messages[0]?.content ?? "").slice(0, 500),
+      },
+      response: {
+        finishReason: chat.finishReason,
+        toolCallCount: chat.toolCalls.length,
+        textPreview: (chat.text ?? "").slice(0, 500),
+      },
+    });
+
     const reply = stripLeakedChatTimeContext(chat.text);
     if (chat.usage) {
       const finalInput = accInput + chat.usage.input;
@@ -511,6 +566,7 @@ async function runSoulPhase(args: {
         toolResults: allToolResults,
         totalUsage: { input: finalInput, output: finalOutput },
         soulPhaseReason: reason,
+        llmInteractions,
       };
     }
 
@@ -523,6 +579,7 @@ async function runSoulPhase(args: {
       toolResults: allToolResults,
       totalUsage: accInput > 0 || accOutput > 0 ? { input: accInput, output: accOutput } : undefined,
       soulPhaseReason: reason,
+      llmInteractions,
     };
   } catch (err) {
     // 兜底再失败也别让整个 run 崩掉。用已收集的工具结果拼一个"任务中断"文案降级返回。
@@ -539,6 +596,7 @@ async function runSoulPhase(args: {
       toolResults: allToolResults,
       totalUsage: accInput > 0 || accOutput > 0 ? { input: accInput, output: accOutput } : undefined,
       soulPhaseReason: reason,
+      llmInteractions,
     };
   } finally {
     clearTimeout(timer);

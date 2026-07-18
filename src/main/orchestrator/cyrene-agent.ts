@@ -16,6 +16,7 @@ import { EventType, type BaseEvent } from "@ag-ui/core";
 import { Observable } from "rxjs";
 import { toolRegistry, type ToolDefinition } from "./tool-registry";
 import { type ToolCallResult } from "./types";
+import type { LlmInteraction } from "./types";
 import { checkPermission, type ToolRiskLevel } from "../permission";
 import { getAdapterForConfig, type ChatMessage } from "./vendors";
 import { extractLastUserQuery, type ToolContext } from "./tool-context";
@@ -58,6 +59,8 @@ export interface CyreneRunResult {
   toolResults: ToolCallResult[];
   totalUsage?: { input: number; output: number };
   soulPhaseReason?: "no_tool" | "max_rounds" | "timeout" | "tool_error";
+  /** LLM 交互记录（调试复盘用）。 */
+  llmInteractions?: LlmInteraction[];
 }
 
 const LOG_PREFIX = "[CyreneAgent]";
@@ -203,6 +206,7 @@ export class CyreneAgent extends AbstractAgent {
             toolResults: result.toolResults,
             totalUsage: result.totalUsage,
             soulPhaseReason: result.soulPhaseReason,
+            llmInteractions: result.llmInteractions,
           };
 
           if (cancelled) return;
