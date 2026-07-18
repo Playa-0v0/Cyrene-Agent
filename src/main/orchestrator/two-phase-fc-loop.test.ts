@@ -442,4 +442,60 @@ describe("runTwoPhaseFcLoop", () => {
     expect(result.reply).toBe("怎么啦，看起来不太高兴的样子…");
     expect(streamed).toBe("怎么啦，看起来不太高兴的样子…");
   });
+
+  it("SOUL_PHASE 注入\"停止调工具\" user 消息（参考 Hermes 做法）", async () => {
+    const adapter = new FakeAdapter();
+    // 一直调工具直到 max_rounds
+    for (let i = 0; i < 3; i++) {
+      adapter.enqueueToolCalls([
+        { id: `tc-${i}`, name: "weather", arguments: "{}" },
+      ]);
+    }
+    // soul 阶段
+    adapter.enqueueText("总结回复");
+
+    await runTwoPhaseFcLoop({
+      ...baseOptions,
+      settings: {
+        provider: "test",
+        baseUrl: "https://test",
+        model: "m",
+        apiKey: "k",
+      },
+      adapter,
+      maxToolRounds: 3,
+      executeTool: async () => "tool output",
+    });
+
+    const soulReq = adapter.requests[adapter.requests.length - 1];
+    // 最后一条 user 消息应该是注入的"停止调工具"指令
+    const userMessages = soulReq.messages.filter((m) => m.role === "user");
+    const lastUserContent = String(userMessages[userMessages.length - 1].content);
+    expect(lastUserContent).toContain("不要再尝试调用任何工具");
+  });
+
+  it("纯聊天 no_tool 不会注入\"停止调工具\" user 消息（避免模型误以为达上限）", async () => {
+    const adapter = new FakeAdapter();
+    adapter.enqueueText("");  // tool 阶段
+    adapter.enqueueText("hi"); // soul 阶段
+
+    await runTwoPhaseFcLoop({
+      ...baseOptions,
+      settings: {
+        provider: "test",
+        baseUrl: "https://test",
+        model: "m",
+        apiKey: "k",
+      },
+      adapter,
+      executeTool: async () => {
+        throw new Error("不应调用");
+      },
+    });
+
+    const soulReq = adapter.requests[adapter.requests.length - 1];
+    // no_tool 时不应有注入的 user 消息：原始 conversation 只有 1 条 user 消息
+    const userMessages = soulReq.messages.filter((m) => m.role === "user");
+    expect(userMessages).toHaveLength(1);
+  });
 });

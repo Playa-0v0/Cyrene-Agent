@@ -43,6 +43,10 @@ interface Message {
   transient?: boolean;
   ttsCacheKey?: string;
   musicCard?: MusicCardData;
+  /** 本轮模型回复前的工具调用记录（调试复盘用）。 */
+  toolCalls?: unknown[];
+  /** 本轮 LLM 请求/响应原始记录（调试复盘用）。 */
+  llmRequests?: unknown[];
 }
 
 type MessageAttachment = ImageMessageAttachment | DocumentMessageAttachment;
@@ -444,7 +448,7 @@ declare global {
 // - 过滤空 content / 渲染中的 thinking 占位（thinking=true 时通常 content 为空，但保险起见双重过滤）
 // - 丢弃仅用于本轮模型调用的 modelContext 与 thinking 等瞬态字段
 function toPersistableMessages(arr: Message[]): Array<{
-  id: string; role: Role; content: string; at: number; attachments?: MessageAttachment[]; sticker?: StickerId | null; ttsCacheKey?: string; musicCard?: MusicCardData;
+  id: string; role: Role; content: string; at: number; attachments?: MessageAttachment[]; sticker?: StickerId | null; ttsCacheKey?: string; musicCard?: MusicCardData; toolCalls?: unknown[]; llmRequests?: unknown[];
 }> {
   return arr
     .filter((m) => m && (m.role === "user" || m.role === "model") && !m.thinking && !m.transient && (
@@ -462,6 +466,8 @@ function toPersistableMessages(arr: Message[]): Array<{
       sticker: m.sticker ?? null,
       ttsCacheKey: m.ttsCacheKey,
       musicCard: m.musicCard,
+      toolCalls: m.toolCalls,
+      llmRequests: m.llmRequests,
     }));
 }
 
@@ -2566,6 +2572,7 @@ async function triggerCyreneGreeting(): Promise<void> {
     let sticker: string | null = null;
     let pendingWeatherCard: Record<string, unknown> | null = null;
     let pendingMusicCard: MusicCardData | null = null;
+    let pendingRecording: { toolCalls?: unknown[]; llmRequests?: unknown[] } | null = null;
 
     let finishRun!: () => void;
     let failRun!: (err: Error) => void;
@@ -2692,6 +2699,8 @@ async function triggerCyreneGreeting(): Promise<void> {
               const card = buildChoiceCardEl(choiceData);
               messagesEl.appendChild(card);
               messagesEl.scrollTop = messagesEl.scrollHeight;
+            } else if (event.name === "cyrene.recording") {
+              pendingRecording = event.value as { toolCalls?: unknown[]; llmRequests?: unknown[] };
             }
             break;
           case "RUN_FINISHED":
@@ -2730,6 +2739,10 @@ async function triggerCyreneGreeting(): Promise<void> {
       msg.content = streamContent;
       msg.sticker = sticker;
       msg.musicCard = pendingMusicCard ?? undefined;
+      if (pendingRecording) {
+        msg.toolCalls = pendingRecording.toolCalls as Message["toolCalls"];
+        msg.llmRequests = pendingRecording.llmRequests as Message["llmRequests"];
+      }
     }
     void saveSession();
     const finishedMsgId = streamMsgId;
@@ -3056,6 +3069,7 @@ async function send(): Promise<void> {
     let sticker: string | null = null;
     let pendingWeatherCard: Record<string, unknown> | null = null;
     let pendingMusicCard: MusicCardData | null = null;
+    let pendingRecording: { toolCalls?: unknown[]; llmRequests?: unknown[] } | null = null;
 
     // 终态信号：由事件流的 RUN_FINISHED/RUN_ERROR 触发 resolve，
     // 不依赖 invoke 的 resolve（invoke 只做 ack，可能与事件投递存在顺序竞争）。
@@ -3201,6 +3215,8 @@ async function send(): Promise<void> {
               const card = buildChoiceCardEl(choiceData);
               messagesEl.appendChild(card);
               messagesEl.scrollTop = messagesEl.scrollHeight;
+            } else if (event.name === "cyrene.recording") {
+              pendingRecording = event.value as { toolCalls?: unknown[]; llmRequests?: unknown[] };
             }
             break;
           case "RUN_FINISHED":
@@ -3246,6 +3262,10 @@ async function send(): Promise<void> {
       msg.content = streamContent;
       msg.sticker = sticker;
       msg.musicCard = pendingMusicCard ?? undefined;
+      if (pendingRecording) {
+        msg.toolCalls = pendingRecording.toolCalls as Message["toolCalls"];
+        msg.llmRequests = pendingRecording.llmRequests as Message["llmRequests"];
+      }
     }
     void saveSession();
     const finishedMsgId = streamMsgId;
