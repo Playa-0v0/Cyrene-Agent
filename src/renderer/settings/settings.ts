@@ -1245,7 +1245,7 @@ async function loadTimeoutSettings() {
     timeoutVisionInput.value = String(cfg.visionTimeout);
     timeoutUserChoiceInput.value = String(cfg.userChoiceTimeout);
     timeoutTestInput.value = String(cfg.testTimeout);
-    setTimeoutSaveStatus("此页需要保存才能生效");
+    setTimeoutSaveStatus("此页需要保存才可生效．");
   } catch {
     setTimeoutSaveStatus("读取偏好失败", "is-error");
   }
@@ -2320,7 +2320,7 @@ async function renderSchedulerList(): Promise<void> {
 
 apiTimeoutForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  setAppearanceSaveStatus("保存中…");
+  setTimeoutSaveStatus("保存中…");
   saveTimeoutSettings(false);
 });
 
