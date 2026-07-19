@@ -1891,26 +1891,31 @@ const searchEngineSelect = document.getElementById("search-engine") as HTMLSelec
 const searchBochaKeyInput = document.getElementById("search-bocha-key") as HTMLInputElement | null;
 const searchTavilyKeyInput = document.getElementById("search-tavily-key") as HTMLInputElement | null;
 const searchMinimaxKeyInput = document.getElementById("search-minimax-key") as HTMLInputElement | null;
+const searchAnySearchKeyInput = document.getElementById("search-anysearch-key") as HTMLInputElement | null;
 const searchBochaRow = document.getElementById("search-bocha-row");
 const searchTavilyRow = document.getElementById("search-tavily-row");
 const searchMinimaxRow = document.getElementById("search-minimax-row");
+const searchAnySearchRow = document.getElementById("search-anysearch-row");
 
 const SEARCH_ROW_MAP: Record<string, HTMLElement | null> = {
   bocha: searchBochaRow,
   tavily: searchTavilyRow,
   minimax: searchMinimaxRow,
+  anySearch: searchAnySearchRow,
 };
 
 const SEARCH_KEY_INPUT_MAP: Record<string, HTMLInputElement | null> = {
   bocha: searchBochaKeyInput,
   tavily: searchTavilyKeyInput,
   minimax: searchMinimaxKeyInput,
+  anySearch: searchAnySearchKeyInput,
 };
 
 const SEARCH_KEY_FIELD_MAP: Record<string, string> = {
   bocha: "searchBochaKey",
   tavily: "searchTavilyKey",
   minimax: "searchMinimaxKey",
+  anySearch: "searchAnySearchKey",
 };
 
 function syncSearchConfigVisibility(): void {
@@ -1976,6 +1981,7 @@ async function loadSearchConfig(): Promise<void> {
     if (searchBochaKeyInput) searchBochaKeyInput.value = String(cfg.searchBochaKey ?? "");
     if (searchTavilyKeyInput) searchTavilyKeyInput.value = String(cfg.searchTavilyKey ?? "");
     if (searchMinimaxKeyInput) searchMinimaxKeyInput.value = String(cfg.searchMinimaxKey ?? "");
+    if (searchAnySearchKeyInput) searchAnySearchKeyInput.value = String(cfg.searchAnySearchKey ?? "");
     // 开关状态：engine 不是 off 就算启用
     if (searchEnabledCheckbox) searchEnabledCheckbox.checked = engine !== "off";
     syncSearchConfigVisibility();

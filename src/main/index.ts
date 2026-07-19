@@ -540,9 +540,10 @@ interface GeneralSettings {
   /** 🖥️ 浏览器自动化（Playwright MCP）是否启用。默认 false，需用户手动开启。 */
   playwrightMcpEnabled: boolean;
   // 联网搜索：选哪个搜索源 + 对应 key
-  searchEngine: "off" | "bocha" | "tavily" | "minimax";
+  searchEngine: "off" | "bocha" | "tavily" | "minimax" | "anySearch";
   searchBochaKey: string;
   searchTavilyKey: string;
+  searchAnySearchKey: string;
   searchMinimaxKey: string;
   /** ✉️邮件发送插件是否启用 */
   emailEnabled: boolean;
@@ -758,6 +759,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   searchBochaKey: "",
   searchTavilyKey: "",
   searchMinimaxKey: "",
+  searchAnySearchKey: "",
   emailEnabled: false,
   emailSmtpHost: "",
   emailSmtpPort: 465,
@@ -1173,12 +1175,13 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
     amapKey: typeof input?.amapKey === "string" ? input.amapKey : "",
     travelEnabled: Boolean(input?.travelEnabled),
     playwrightMcpEnabled: Boolean(input?.playwrightMcpEnabled),
-    searchEngine: ["off", "bocha", "tavily", "minimax"].includes(String(input?.searchEngine))
-      ? (input!.searchEngine as "off" | "bocha" | "tavily" | "minimax")
+    searchEngine: ["off", "bocha", "tavily", "minimax", "anySearch"].includes(String(input?.searchEngine))
+      ? (input!.searchEngine as "off" | "bocha" | "tavily" | "minimax" | "anySearch")
       : "off",
     searchBochaKey: typeof input?.searchBochaKey === "string" ? input.searchBochaKey : "",
     searchTavilyKey: typeof input?.searchTavilyKey === "string" ? input.searchTavilyKey : "",
     searchMinimaxKey: typeof input?.searchMinimaxKey === "string" ? input.searchMinimaxKey : "",
+    searchAnySearchKey: typeof input?.searchAnySearchKey === "string" ? input.searchAnySearchKey : "",
     // 邮件（SMTP）配置
     emailEnabled: Boolean(input?.emailEnabled),
     emailSmtpHost: typeof input?.emailSmtpHost === "string" ? input.emailSmtpHost : "",
@@ -2578,6 +2581,7 @@ function createWindow(): void {
     () => loadGeneralSettings().searchEngine,
     () => loadGeneralSettings().searchBochaKey,
     () => loadGeneralSettings().searchTavilyKey,
+    () => loadGeneralSettings().searchAnySearchKey,
   );
 
   // 注入出行工具 amapKey 获取器（复用 GeneralSettings 中的 amapKey）
