@@ -203,6 +203,7 @@ interface ModelSettings {
     apiKey: string;
     model: string;
   };
+  optimizeFirstRound?: boolean;
 }
 
 type ScheduleConfig =
@@ -303,6 +304,7 @@ interface GeneralSettings {
   petAlwaysOnTop: boolean;
   petVisible: boolean;
   petZoom: number;
+  disableGpuElectron?: boolean;
   sidebarVisible: boolean;
   tasksVisible: boolean;
   launchAtLogin: boolean;
@@ -373,6 +375,8 @@ interface SettingsApi {
   saveConfig: (config: Partial<ModelSettings>) => Promise<ModelSettings>;
   getGeneral: () => Promise<GeneralSettings>;
   saveGeneral: (config: Partial<GeneralSettings>) => Promise<GeneralSettings>;
+  getTimeoutSettings: () => Promise<TimeoutSettings>;
+  saveTimeoutSettings: (config: Partial<TimeoutSettings>) => Promise<TimeoutSettings>;
   pickUiFont: () => Promise<string | null>;
   importUiFont: (sourcePath: string) => Promise<UiFont>;
   resetUiFont: () => Promise<UiFont>;
@@ -380,6 +384,7 @@ interface SettingsApi {
   closeSidebar: () => void;
   openTasks: () => void;
   closeTasks: () => void;
+  openChromeGpu: () => void;
   setPetAlwaysOnTop: (value: boolean) => void;
   setPetVisible: (value: boolean) => void;
   setPetZoom: (value: number) => void;
@@ -560,6 +565,7 @@ if (!window.settings) {
     closeSidebar: () => {},
     openTasks: () => {},
     closeTasks: () => {},
+    openChromeGpu: () => {},
     setPetAlwaysOnTop: () => {},
     setPetVisible: () => {},
     setPetZoom: () => {},
@@ -573,6 +579,8 @@ if (!window.settings) {
     addMcpServer: async () => ({ ok: false, error: "settings api unavailable" }),
     removeMcpServer: async () => ({ ok: false, error: "settings api unavailable" }),
     listMcpServers: async () => [],
+    getTimeoutSettings: async () => DEFAULT_TIMEOUT_SETTINGS,
+    saveTimeoutSettings: async c => (c as TimeoutSettings),
   };
 }
 
@@ -598,6 +606,8 @@ const bgmAudio = new Audio("/audio/bgm.mp3");
 bgmAudio.preload = "auto";
 bgmAudio.loop = true;
 const apiForm = document.getElementById("api-form") as HTMLFormElement;
+const apiTimeoutForm = document.getElementById("api-timeout-form") as HTMLFormElement;
+const apiFcModeForm = document.getElementById("api-fc-mode-form") as HTMLFormElement;
 const appearanceForm = document.getElementById("appearance-form") as HTMLFormElement;
 const generalForm = document.getElementById("general-form") as HTMLFormElement;
 const preferencesForm = document.getElementById("preferences-form") as HTMLFormElement;
@@ -616,6 +626,7 @@ const placeholderCopy = document.getElementById("placeholder-copy") as HTMLEleme
 const saveStatus = document.getElementById("save-status") as HTMLElement;
 const appearanceSaveStatus = document.getElementById("appearance-save-status") as HTMLElement;
 const generalSaveStatus = document.getElementById("general-save-status") as HTMLElement;
+const timeoutSaveStatus = document.getElementById("timeout-save-status") as HTMLElement;
 const preferencesSaveStatus = document.getElementById("preferences-save-status") as HTMLElement;
 const cyreneSaveStatus = document.getElementById("cyrene-save-status") as HTMLElement;
 
@@ -703,6 +714,8 @@ const mobileMessageSegmentationSelect = document.getElementById("mobile-message-
 const proactiveChatSelect = document.getElementById("proactive-chat-select") as HTMLElement;
 const proactiveDeliveryRow = document.getElementById("proactive-delivery-row") as HTMLElement;
 const proactiveDeliverySelect = document.getElementById("proactive-delivery-select") as HTMLElement;
+const openChromeGpu = document.getElementById("open-chrome-gpu") as HTMLElement;
+const disableGpuInput = document.getElementById("disable-gpu-electron") as HTMLInputElement;
 const sidebarVisibleInput = document.getElementById("sidebar-visible") as HTMLInputElement;
 const tasksVisibleInput = document.getElementById("tasks-visible") as HTMLInputElement;
 const clearChatHistoryBtn = document.getElementById("clear-chat-history-btn") as HTMLButtonElement;
@@ -710,6 +723,22 @@ const openStickerManagerBtn = document.getElementById("open-sticker-manager-btn"
 const addStickerBtn = document.getElementById("add-sticker-btn") as HTMLButtonElement;
 const stickerThresholdInput = document.getElementById("sticker-threshold") as HTMLInputElement;
 const stickerThresholdVal = document.getElementById("sticker-threshold-val") as HTMLElement;
+const timeoutChatRequestInput = document.getElementById("timeout-chat-request") as HTMLInputElement;
+const timeoutChatRequestReset = document.getElementById("timeout-chat-request-reset-btn") as HTMLButtonElement;
+const timeoutPerRoundInput = document.getElementById("timeout-per-round") as HTMLInputElement;
+const timeoutPerRoundReset = document.getElementById("timeout-per-round-reset-btn") as HTMLButtonElement;
+const timeoutSummaryInput = document.getElementById("timeout-summary") as HTMLInputElement;
+const timeoutSummaryReset = document.getElementById("timeout-summary-reset-btn") as HTMLButtonElement;
+const timeoutVisionInput = document.getElementById("timeout-vision") as HTMLInputElement;
+const timeoutVisionReset = document.getElementById("timeout-vision-reset-btn") as HTMLButtonElement;
+const timeoutUserChoiceInput = document.getElementById("timeout-user-choice") as HTMLInputElement;
+const timeoutUserChoiceReset = document.getElementById("timeout-user-choice-reset-btn") as HTMLButtonElement;
+const timeoutTestInput = document.getElementById("timeout-test") as HTMLInputElement;
+const timeoutTestReset = document.getElementById("timeout-test-reset-btn") as HTMLButtonElement;
+const timeoutMemoryJudgeInput = document.getElementById("timeout-memory-judge") as HTMLInputElement;
+const timeoutMemoryJudgeReset = document.getElementById("timeout-memory-judge-reset-btn") as HTMLButtonElement;
+const fcModeEnableOptimizationButton = document.getElementById("fc-mode-enable-optimization") as HTMLButtonElement;
+const fcModeDisableOptimizationButton = document.getElementById("fc-mode-disable-optimization") as HTMLButtonElement;
 
 const NAV_LABELS: Record<string, { emoji: string; title: string; hint: string }> = {
   memory: { emoji: "🧠", title: "记忆", hint: "管理长期记忆与画像" },
@@ -723,6 +752,7 @@ const NAV_LABELS: Record<string, { emoji: string; title: string; hint: string }>
   appearance: { emoji: "🎨", title: "外观设置", hint: "调整窗口布局、界面主题与昔涟桌宠" },
   general: { emoji: "⚙️", title: "通用设置", hint: "管理窗口、音频和系统行为" },
   api: { emoji: "🔑", title: "API 设置", hint: "选择预设后只需要填写 API Key。" },
+  "api-advanced": { emoji: "", title: "API 高级设置", hint: "配置 API 超时时间、调用模式．" },
   cyrene: { emoji: "🌸", title: "昔涟设置", hint: "管理 Agent 行为、记忆、RAG 与权限" },
   tts: { emoji: "🎙️", title: "TTS 设置", hint: "语音合成与朗读偏好" },
   asr: { emoji: "🎧", title: "ASR 设置", hint: "语音识别与通话配置" },
@@ -898,6 +928,11 @@ function applyUiThemeSelection(theme: GeneralSettings["uiTheme"]): void {
   document.documentElement.dataset.uiTheme = theme;
 }
 
+function applyFcOptimizeSelection(optimizeFirstRound?: boolean) {
+  fcModeEnableOptimizationButton.className = optimizeFirstRound ? "fc-mode-option is-active" : "fc-mode-option";
+  fcModeDisableOptimizationButton.className = !optimizeFirstRound ? "fc-mode-option is-active" : "fc-mode-option";
+}
+
 function renderUiFont(font: UiFont): void {
   uiFontCurrent.textContent = font.kind === "custom" ? font.displayName : "思源黑体（默认）";
   uiFontResetButton.hidden = font.kind !== "custom";
@@ -919,6 +954,12 @@ function setGeneralSaveStatus(text: string, cls?: string): void {
   generalSaveStatus.textContent = text;
   generalSaveStatus.className = "save-status";
   if (cls) generalSaveStatus.classList.add(cls);
+}
+
+function setTimeoutSaveStatus(text: string, cls?: string): void {
+  timeoutSaveStatus.textContent = text;
+  timeoutSaveStatus.className = "save-status";
+  if (cls) timeoutSaveStatus.classList.add(cls);
 }
 
 function fillPresetOptions(): void {
@@ -1153,6 +1194,7 @@ async function loadConfig(): Promise<void> {
     const threshold = cfg.stickerSimilarityThreshold ?? 0.55;
     stickerThresholdInput.value = String(threshold);
     stickerThresholdVal.textContent = threshold.toFixed(2);
+    applyFcOptimizeSelection(cfg.optimizeFirstRound);
 
     // 视觉模型配置已并入 applyPreset（preferredVision 参数）。
 
@@ -1179,6 +1221,7 @@ async function loadGeneralSettings(): Promise<void> {
     petVisibleInput.checked = cfg.petVisible;
     petZoomInput.value = String(cfg.petZoom ?? 1);
     petZoomVal.textContent = Math.round((cfg.petZoom ?? 1) * 100) + "%";
+    disableGpuInput.checked = cfg.disableGpuElectron ?? false;
     sidebarVisibleInput.checked = cfg.sidebarVisible ?? true;
     tasksVisibleInput.checked = cfg.tasksVisible ?? true;
     launchAtLoginInput.checked = cfg.launchAtLogin;
@@ -1205,6 +1248,96 @@ async function loadGeneralSettings(): Promise<void> {
   }
 }
 
+async function loadTimeoutSettings() {
+  try {
+    const cfg = await window.settings!.getTimeoutSettings();
+    timeoutChatRequestInput.value = String(cfg.chatRequestTimeout);
+    timeoutPerRoundInput.value = String(cfg.perRoundTimeout);
+    timeoutSummaryInput.value = String(cfg.forceSummaryTimeout);
+    timeoutVisionInput.value = String(cfg.visionTimeout);
+    timeoutUserChoiceInput.value = String(cfg.userChoiceTimeout / 1000);
+    timeoutTestInput.value = String(cfg.testTimeout);
+    timeoutMemoryJudgeInput.value = String(cfg.memoryJudgeTimeout);
+    setTimeoutSaveStatus("时间设置保存后，对后续请求生效．");
+  } catch {
+    setTimeoutSaveStatus("读取偏好失败", "is-error");
+  }
+}
+
+function parsePositiveIntOrThrow(input: string, th: any) {
+  if (!/^[0-9]+$/.test(input)){
+    throw th;
+  }
+  if (isNaN(input as any)){
+    throw th;
+  }
+  const result = parseInt(input);
+  if (Number.isNaN(result) || result <= 0) {
+    throw th;
+  }
+  return result;
+}
+
+async function saveTimeoutSettings(saveTestTimeout: boolean) {
+  let settings: Partial<TimeoutSettings>;
+  try {
+    if (!saveTestTimeout) {
+      settings = {
+        perRoundTimeout: parsePositiveIntOrThrow(timeoutPerRoundInput.value, "工具阶段每轮 API 超时"),
+        forceSummaryTimeout: parsePositiveIntOrThrow(timeoutSummaryInput.value, "工具总结阶段 API 超时"),
+        chatRequestTimeout: parsePositiveIntOrThrow(timeoutChatRequestInput.value, "单次回复总时间限制"),
+        visionTimeout: parsePositiveIntOrThrow(timeoutVisionInput.value, "视觉模型单次 API 超时"),
+        userChoiceTimeout: 1000 * parsePositiveIntOrThrow(timeoutUserChoiceInput.value, "工具请求确认时间限制"),
+        memoryJudgeTimeout: parsePositiveIntOrThrow(timeoutMemoryJudgeInput.value, "记忆总结阶段 API 超时"),
+      };
+    } else {
+      settings = {
+        testTimeout: parsePositiveIntOrThrow(timeoutTestInput.value, "测试超时"),
+      };
+    }
+  } catch (e) {
+    if (saveTestTimeout) {
+      setSaveStatus("无效输入：" + e, "is-error");
+    } else {
+      setTimeoutSaveStatus("无效输入：" + e, "is-error");
+    }
+    return false;
+  }
+  try {
+    await window.settings!.saveTimeoutSettings(settings);
+    if (saveTestTimeout) {
+      setSaveStatus("已保存", "is-ok");
+    } else {
+      setTimeoutSaveStatus("已保存", "is-ok");
+    }
+    return true;
+  } catch {
+    if (saveTestTimeout) {
+      setSaveStatus("保存失败", "is-error");
+    } else {
+      setTimeoutSaveStatus("保存失败", "is-error");
+    }
+  }
+  return false;
+}
+
+timeoutTestReset.addEventListener("click", () => { timeoutTestInput.value = "15000" });
+timeoutChatRequestReset.addEventListener("click", () => { timeoutChatRequestInput.value = String(DEFAULT_CHAT_REQUEST_TIMEOUT_MS) });
+timeoutPerRoundReset.addEventListener("click", () => { timeoutPerRoundInput.value = String(DEFAULT_PER_ROUND_TIMEOUT_MS) });
+timeoutSummaryReset.addEventListener("click", () => { timeoutSummaryInput.value = String(DEFAULT_FORCE_SUMMARY_TIMEOUT_MS) });
+timeoutVisionReset.addEventListener("click", () => { timeoutVisionInput.value = String(DEFAULT_VISION_TIMEOUT_MS) });
+timeoutMemoryJudgeReset.addEventListener("click", () => { timeoutMemoryJudgeInput.value = String(DEFAULT_MEMORY_JUDGE_MS) });
+timeoutUserChoiceReset.addEventListener("click", () => { timeoutUserChoiceInput.value = "60" });
+
+fcModeEnableOptimizationButton.addEventListener("click", async () => {
+  await window.settings!.saveConfig({ optimizeFirstRound: true });
+  applyFcOptimizeSelection(true);
+});
+fcModeDisableOptimizationButton.addEventListener("click", async () => {
+  await window.settings!.saveConfig({ optimizeFirstRound: false });
+  applyFcOptimizeSelection(false);
+});
+
 runtimeSyncSelect.querySelectorAll<HTMLButtonElement>(".option-block").forEach((button) => {
   button.addEventListener("click", () => {
     const value = button.dataset.value as "off" | "local" | "llm";
@@ -1229,6 +1362,14 @@ stickerSizeSelect.querySelectorAll<HTMLButtonElement>(".option-block").forEach((
 stickerThresholdInput.addEventListener("input", () => {
   stickerThresholdVal.textContent = parseFloat(stickerThresholdInput.value).toFixed(2);
   setCyreneSaveStatus("有未保存的更改");
+});
+
+openChromeGpu.addEventListener("click", () => {
+  window.settings?.openChromeGpu();
+});
+
+disableGpuInput.addEventListener("change", () => {
+  void window.settings?.saveGeneral({ disableGpuElectron: disableGpuInput.checked });
 });
 
 sidebarVisibleInput.addEventListener("change", () => {
@@ -1750,26 +1891,31 @@ const searchEngineSelect = document.getElementById("search-engine") as HTMLSelec
 const searchBochaKeyInput = document.getElementById("search-bocha-key") as HTMLInputElement | null;
 const searchTavilyKeyInput = document.getElementById("search-tavily-key") as HTMLInputElement | null;
 const searchMinimaxKeyInput = document.getElementById("search-minimax-key") as HTMLInputElement | null;
+const searchAnySearchKeyInput = document.getElementById("search-anysearch-key") as HTMLInputElement | null;
 const searchBochaRow = document.getElementById("search-bocha-row");
 const searchTavilyRow = document.getElementById("search-tavily-row");
 const searchMinimaxRow = document.getElementById("search-minimax-row");
+const searchAnySearchRow = document.getElementById("search-anysearch-row");
 
 const SEARCH_ROW_MAP: Record<string, HTMLElement | null> = {
   bocha: searchBochaRow,
   tavily: searchTavilyRow,
   minimax: searchMinimaxRow,
+  anySearch: searchAnySearchRow,
 };
 
 const SEARCH_KEY_INPUT_MAP: Record<string, HTMLInputElement | null> = {
   bocha: searchBochaKeyInput,
   tavily: searchTavilyKeyInput,
   minimax: searchMinimaxKeyInput,
+  anySearch: searchAnySearchKeyInput,
 };
 
 const SEARCH_KEY_FIELD_MAP: Record<string, string> = {
   bocha: "searchBochaKey",
   tavily: "searchTavilyKey",
   minimax: "searchMinimaxKey",
+  anySearch: "searchAnySearchKey",
 };
 
 function syncSearchConfigVisibility(): void {
@@ -1835,6 +1981,7 @@ async function loadSearchConfig(): Promise<void> {
     if (searchBochaKeyInput) searchBochaKeyInput.value = String(cfg.searchBochaKey ?? "");
     if (searchTavilyKeyInput) searchTavilyKeyInput.value = String(cfg.searchTavilyKey ?? "");
     if (searchMinimaxKeyInput) searchMinimaxKeyInput.value = String(cfg.searchMinimaxKey ?? "");
+    if (searchAnySearchKeyInput) searchAnySearchKeyInput.value = String(cfg.searchAnySearchKey ?? "");
     // 开关状态：engine 不是 off 就算启用
     if (searchEnabledCheckbox) searchEnabledCheckbox.checked = engine !== "off";
     syncSearchConfigVisibility();
@@ -2014,8 +2161,11 @@ if (testConnectionBtn) {
     const baseUrl = baseUrlInput.value;
     const model = getCurrentModelValue().trim();
     const apiKey = apiKeyInput.value;
-    if (!apiKey) { setSaveStatus("请先填写 API Key 再测试", "is-error"); return; }
+    if (!baseUrl) { setSaveStatus("请先填写 API URL 再测试", "is-error"); return; }
     if (!model) { setSaveStatus("请先选择/填写模型再测试", "is-error"); return; }
+    if (!await saveTimeoutSettings(true)) {
+      return;
+    }
     setSaveStatus("测试连接中…");
     testConnectionBtn.disabled = true;
     try {
@@ -2074,7 +2224,7 @@ testVisionBtn.addEventListener("click", async () => {
   const baseUrl = synced ? baseUrlInput.value : visionBaseUrlInput.value;
   const apiKey = synced ? apiKeyInput.value : visionApiKeyInput.value;
   const model = synced ? getCurrentModelValue() : visionModelInput.value;
-  if (!apiKey) { visionTestStatus.textContent = "请先填写 API Key"; return; }
+  if (!baseUrl) { visionTestStatus.textContent = "请先填写 API URL"; return; }
   if (!model) { visionTestStatus.textContent = "请先填写视觉型号"; return; }
   visionTestStatus.textContent = "测试中…";
   testVisionBtn.disabled = true;
@@ -2200,6 +2350,12 @@ async function renderSchedulerList(): Promise<void> {
   }
 }
 
+apiTimeoutForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  setTimeoutSaveStatus("保存中…");
+  saveTimeoutSettings(false);
+});
+
 appearanceForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   setAppearanceSaveStatus("保存中…");
@@ -2226,6 +2382,7 @@ generalForm.addEventListener("submit", async (e) => {
       musicVolume: Number(musicVolumeInput.value),
       soundEnabled: soundEnabledInput.checked,
       soundVolume: Number(soundVolumeInput.value),
+      disableGpuElectron: disableGpuInput.checked,
       sidebarVisible: sidebarVisibleInput.checked,
       tasksVisible: tasksVisibleInput.checked,
       launchAtLogin: launchAtLoginInput.checked,
@@ -2252,6 +2409,9 @@ apiForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   setSaveStatus("保存中…");
   try {
+    if (!await saveTimeoutSettings(true)) {
+      return;
+    }
     // 保存前把当前输入快照进 perProvider 缓存（main 进程也会做一次，但渲染端先做一遍，
     // 是为了下一次切厂商再切回来不依赖磁盘往返）
     captureActiveProviderProfile();
@@ -2447,6 +2607,7 @@ function switchSection(section: string): void {
   sectionHint.textContent = label.hint;
 
   const isApi = section === "api";
+  const isApiAdvanced = section === "api-advanced";
   const isAppearance = section === "appearance";
   const isGeneral = section === "general";
   const isPreferences = section === "preferences";
@@ -2465,6 +2626,8 @@ function switchSection(section: string): void {
   const isAsr = section === "asr";
   const isMusic = section === "music";
   apiForm.classList.toggle("is-hidden", !isApi);
+  apiTimeoutForm.classList.toggle("is-hidden", !isApiAdvanced);
+  apiFcModeForm.classList.toggle("is-hidden", !isApiAdvanced);
   appearanceForm.classList.toggle("is-hidden", !isAppearance);
   generalForm.classList.toggle("is-hidden", !isGeneral);
   preferencesForm.classList.toggle("is-hidden", !isPreferences);
@@ -2502,11 +2665,12 @@ function switchSection(section: string): void {
   else disposeMusicPanel();
   placeholderPanel.classList.toggle(
     "is-hidden",
-    isApi || isAppearance || isGeneral || isPreferences || isCyrene || isDisclaimer || isMemory || isUser || isChat || isTasks || isIdentity || isPlugins || isSkills || isTokens || isChannels || isTts || isAsr || isMusic,
+    isApi || isApiAdvanced || isAppearance || isGeneral || isPreferences || isCyrene || isDisclaimer || isMemory || isUser || isChat || isTasks || isIdentity || isPlugins || isSkills || isTokens || isChannels || isTts || isAsr || isMusic,
   );
 
   if (
     !isApi &&
+    !isApiAdvanced &&
     !isAppearance &&
     !isGeneral &&
     !isPreferences &&
@@ -2650,6 +2814,7 @@ function initGameBotPluginCard(): void {
 initGameBotPluginCard();
 void loadConfig();
 void loadGeneralSettings();
+void loadTimeoutSettings();
 window.settings?.onChannelsStatusChanged((status) => {
   renderProactiveDeliveryAvailability(status as Record<string, { phase?: string }>);
 });
@@ -4608,6 +4773,7 @@ window.chatStore?.onActiveSessionChanged((sessionId) => {
    ============================================================ */
 
 import { Chart, registerables, type ChartConfiguration } from "chart.js";
+import { DEFAULT_CHAT_REQUEST_TIMEOUT_MS, DEFAULT_FORCE_SUMMARY_TIMEOUT_MS, DEFAULT_MEMORY_JUDGE_MS, DEFAULT_PER_ROUND_TIMEOUT_MS, DEFAULT_TIMEOUT_SETTINGS, DEFAULT_VISION_TIMEOUT_MS, TimeoutSettings } from "../../shared/timeout-types";
 
 Chart.register(...registerables);
 

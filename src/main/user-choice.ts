@@ -12,6 +12,7 @@
 
 import { ipcMain } from "electron";
 import { IPC } from "../shared/ipc-channels";
+import { getTimeoutSettings } from "./timeout-manager";
 
 const LOG_PREFIX = "[UserChoice]";
 const CHOICE_TIMEOUT_MS = 120_000; // 2 分钟超时，给用户足够思考时间
@@ -58,12 +59,13 @@ export function requestUserChoice(
 ): Promise<string> {
   return new Promise<string>((resolve) => {
     const id = "choice-" + (++choiceCounter) + "-" + Date.now();
+    const choiceTimeout = getTimeoutSettings().userChoiceTimeout;
 
     const timer = setTimeout(() => {
       pendingChoices.delete(id);
-      console.warn(LOG_PREFIX, "选择超时（" + CHOICE_TIMEOUT_MS + "ms），使用默认值:", defaultValue ?? "(空)");
+      console.warn(LOG_PREFIX, "选择超时（" + choiceTimeout + "ms），使用默认值:", defaultValue ?? "(空)");
       resolve(defaultValue ?? "");
-    }, CHOICE_TIMEOUT_MS);
+    }, choiceTimeout);
 
     pendingChoices.set(id, { resolve, timer });
 

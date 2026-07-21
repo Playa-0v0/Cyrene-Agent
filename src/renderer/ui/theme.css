@@ -83,7 +83,6 @@
 [data-ui-theme="pearl-white"] .tasks {
   background: var(--rb-card-bg);
   border-color: var(--rb-border-soft);
-  box-shadow: var(--rb-shadow-card);
 }
 
 /* Subtle ambient gradient layer — keep very faint on white */

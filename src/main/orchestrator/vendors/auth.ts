@@ -15,6 +15,7 @@ export function authHeaderFor(
   cap: ProviderCapability,
   apiKey: string,
 ): Record<string, string> {
+  if (!apiKey) return {};
   switch (cap.authStyle) {
     case "x-api-key":
       return { "x-api-key": apiKey };

@@ -15,11 +15,12 @@ import { extractLastUserQuery, type ToolContext } from "./tool-context";
 import { recordUsage } from "../token-usage-store";
 import { resetReadRefs } from "../skills/skill-tools";
 import { truncateToolResult, compressConversation } from "./context-manager";
+import { getTimeoutSettings } from "../timeout-manager";
 
 const LOG_PREFIX = "[FunctionCalling]";
 const MAX_TOOL_ROUNDS = 20; // 多步任务（写 Excel 多 sheet、生成图片等）可能耗多轮；到顶强制无工具总结兜底
-const PER_ROUND_TIMEOUT_MS = 75000; // 推理模型带 thinking，30s 偏紧，放宽到 75s
-const FORCE_SUMMARY_TIMEOUT_MS = 90000; // 强制总结兜底：对话历史此时已很长，30s 不够，放宽到 90s
+const DEFAULT_PER_ROUND_TIMEOUT_MS = 75000; // 推理模型带 thinking，30s 偏紧，放宽到 75s
+const DEFAULT_FORCE_SUMMARY_TIMEOUT_MS = 90000; // 强制总结兜底：对话历史此时已很长，30s 不够，放宽到 90s
 // 连续超时即退出：超时后重试只会让上下文更长更慢，形成"超时→加消息→更慢→再超时"死循环。
 // 连续 MAX_CONSECUTIVE_TIMEOUTS 次超时直接跳出走强制总结，不再空转浪费时间。
 const MAX_CONSECUTIVE_TIMEOUTS = 2;
@@ -128,7 +129,8 @@ export async function runFunctionCallingLoop(
     console.log(LOG_PREFIX, "请求:", http.url);
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), PER_ROUND_TIMEOUT_MS);
+    const timeout = getTimeoutSettings().perRoundTimeout;
+    const timer = setTimeout(() => controller.abort(), timeout);
     let response: Response;
     try {
       response = await fetch(http.url, {
@@ -140,7 +142,7 @@ export async function runFunctionCallingLoop(
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         consecutiveTimeouts++;
-        console.warn(LOG_PREFIX, "第 " + (round + 1) + " 轮 LLM 请求超时（" + PER_ROUND_TIMEOUT_MS + "ms），连续第 " + consecutiveTimeouts + " 次");
+        console.warn(LOG_PREFIX, "第 " + (round + 1) + " 轮 LLM 请求超时（" + timeout + "ms），连续第 " + consecutiveTimeouts + " 次");
         clearTimeout(timer);
         // 连续超时即退出：再重试只会让上下文更长更慢，注定超时。
         // 不再往 conversation 塞"超时提示"消息（雪上加霜），直接跳出走强制总结。
@@ -281,7 +283,7 @@ export async function runFunctionCallingLoop(
   const controller = new AbortController();
   // 强制总结是最后兜底：对话历史此时往往已很长，30s 不够模型生成完会被 abort，
   // 导致整个 run 抛错用户彻底没回复。放宽到 90s，且失败时降级返回已有工具结果。
-  const timer = setTimeout(() => controller.abort(), FORCE_SUMMARY_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), getTimeoutSettings().forceSummaryTimeout);
   try {
     const response = await fetch(http.url, {
       method: "POST",

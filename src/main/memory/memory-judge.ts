@@ -5,6 +5,7 @@ import type { VendorConfig, ChatMessage } from "../orchestrator/vendors"
 import { app } from "electron"
 import { MemoryCandidate, L0_FIELD_DESCRIPTIONS, MemoryJudgeTurn } from "./memory-types"
 import { recordUsage } from "../token-usage-store"
+import { getTimeoutSettings } from "../timeout-manager"
 
 interface ModelSettings {
   provider: string
@@ -347,7 +348,7 @@ export class MemoryJudge {
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        30000,
+        getTimeoutSettings().memoryJudgeTimeout,
         "MemoryJudge",
       )
 

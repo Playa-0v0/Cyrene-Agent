@@ -6,6 +6,8 @@
 // 判断全交给视觉模型：不本地判断"具体vs泛泛"，把用户原话+图片一起发，
 // 配框架指令让视觉模型自己理解任务。
 
+import { getTimeoutSettings } from "../timeout-manager";
+
 /** 视觉模型配置（OpenAI 兼容）。 */
 export interface VisionConfig {
   baseUrl: string;  // 如 https://api.openai.com/v1
@@ -19,7 +21,7 @@ export interface VisionImage {
   mime: string;  // 如 "image/png"
 }
 
-const VISION_TIMEOUT_MS = 30_000;
+const DEFAULT_VISION_TIMEOUT_MS = 30_000;
 
 /**
  * 构造框架指令。判断全交给视觉模型——它本身是语言模型，
@@ -84,7 +86,7 @@ export async function captionImage(
   const startMs = Date.now();
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), VISION_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), getTimeoutSettings().visionTimeout);
   try {
     const resp = await fetch(url, {
       method: "POST",

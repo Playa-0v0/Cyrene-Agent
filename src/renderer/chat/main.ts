@@ -854,6 +854,7 @@ function buildApprovalCardEl(req: {
   toolDescription: string;
   args: Record<string, unknown>;
   risk: string;
+  timeoutMs: number;
 }): HTMLElement {
   const card = document.createElement("div");
   card.className = "approval-card";
@@ -923,14 +924,15 @@ function buildApprovalCardEl(req: {
   actions.appendChild(allowBtn);
   card.appendChild(actions);
 
-  // 提示行（60 秒超时）
+  // 提示行（timeoutMs/1000 秒超时）
+  const timeoutSecond = Math.floor(req.timeoutMs / 1000);
   const note = document.createElement("div");
   note.className = "approval-card__note";
-  note.textContent = "60 秒未操作自动拒绝";
+  note.textContent = `${timeoutSecond} 秒未操作自动拒绝`;
   card.appendChild(note);
 
   // 倒计时更新（每秒刷新）
-  let remaining = 60;
+  let remaining = timeoutSecond;
   const tick = setInterval(() => {
     remaining -= 1;
     if (remaining <= 0) {

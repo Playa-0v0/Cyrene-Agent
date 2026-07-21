@@ -148,6 +148,8 @@ import { buildProactiveMessages, type ProactiveHistoryTurn } from "./proactive/p
 import { runProactiveModel } from "./proactive/proactive-model";
 import type { ProactiveCandidate, ProactiveRuntimeSnapshot } from "./proactive/proactive-types";
 import { canCommitProactiveMessage } from "./proactive/proactive-policy";
+import { getTimeoutSettings, saveTimeoutSettings } from "./timeout-manager";
+import { TimeoutSettings } from "../shared/timeout-types";
 
 configureDocumentIndexQueue(runDocumentIndexJob);
 
@@ -447,6 +449,7 @@ interface ModelSettings {
   embeddingModel: "minilm" | "bgem3";
   // 视觉模型配置（可选）。undefined 或未启用 = 不支持看图，read_image 诚实拒绝。
   vision?: VisionModelConfig;
+  optimizeFirstRound?: boolean;
 }
 
 /** 视觉模型配置。syncWithMain=true 时三字段不落盘，运行时强制从主配置读。 */
@@ -481,6 +484,7 @@ interface GeneralSettings {
   petWindowX?: number;
   /** 桌宠窗口 Y 坐标，未保存时为 undefined */
   petWindowY?: number;
+  disableGpuElectron?: boolean;
   sidebarVisible: boolean;
   tasksVisible: boolean;
   launchAtLogin: boolean;
@@ -536,9 +540,10 @@ interface GeneralSettings {
   /** 🖥️ 浏览器自动化（Playwright MCP）是否启用。默认 false，需用户手动开启。 */
   playwrightMcpEnabled: boolean;
   // 联网搜索：选哪个搜索源 + 对应 key
-  searchEngine: "off" | "bocha" | "tavily" | "minimax";
+  searchEngine: "off" | "bocha" | "tavily" | "minimax" | "anySearch";
   searchBochaKey: string;
   searchTavilyKey: string;
+  searchAnySearchKey: string;
   searchMinimaxKey: string;
   /** ✉️邮件发送插件是否启用 */
   emailEnabled: boolean;
@@ -607,7 +612,7 @@ interface ChatReplyPayload {
 
 const RUNTIME_STATUSES: RuntimeStatus[] = ["陪伴中", "思考中", "工作中", "聆听中", "提醒中", "离线"];
 const RUNTIME_FEELINGS: RuntimeFeeling[] = ["平静", "开心", "温柔", "激动", "撒娇", "担心", "难过", "感动", "害羞"];
-const CHAT_REQUEST_TIMEOUT_MS = 300000; // FC 总预算：20 轮 × 推理模型 ~10-15s 需 300s 余量
+const DEFAULT_CHAT_REQUEST_TIMEOUT_MS = 300000; // FC 总预算：20 轮 × 推理模型 ~10-15s 需 300s 余量
 
 /** 桌宠窗口的基础尺寸（zoom=1.0 时）。缩放因子改变窗口与模型尺寸，二者同步。 */
 const PET_WINDOW_BASE_WIDTH = 400;
@@ -754,6 +759,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   searchBochaKey: "",
   searchTavilyKey: "",
   searchMinimaxKey: "",
+  searchAnySearchKey: "",
   emailEnabled: false,
   emailSmtpHost: "",
   emailSmtpPort: 465,
@@ -988,19 +994,27 @@ function normalizeModelSettings(input: Partial<ModelSettings> | null | undefined
     rerankerMode: input?.rerankerMode === "standard" || input?.rerankerMode === "none" ? input.rerankerMode : "light",
     embeddingModel: input?.embeddingModel === "bgem3" ? "bgem3" : "minilm",
     vision: normalizeVisionConfig(input?.vision),
+    optimizeFirstRound: input?.optimizeFirstRound,
   };
 }
 
-function loadModelSettings(): ModelSettings {
+let modelSettingsCache: ModelSettings | null = null;
+
+function loadModelSettings0(): ModelSettings {
   try {
     const filePath = getSettingsPath();
-    if (!fs.existsSync(filePath)) return DEFAULT_MODEL_SETTINGS;
+    if (!fs.existsSync(filePath)) return { ...DEFAULT_MODEL_SETTINGS };
     const raw = fs.readFileSync(filePath, "utf8");
     return normalizeModelSettings(JSON.parse(raw) as Partial<ModelSettings>);
   } catch (err) {
     console.error("[Cyrene] load settings failed:", err);
-    return DEFAULT_MODEL_SETTINGS;
+    return { ...DEFAULT_MODEL_SETTINGS };
   }
+}
+
+function loadModelSettings(): ModelSettings {
+  if (modelSettingsCache !== null) return modelSettingsCache;
+  return modelSettingsCache = loadModelSettings0();
 }
 
 /**
@@ -1102,6 +1116,7 @@ function saveModelSettings(settings: Partial<ModelSettings>): ModelSettings {
   const filePath = getSettingsPath();
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, JSON.stringify(final, null, 2), "utf8");
+  Object.assign(existing, final);
   return final;
 }
 
@@ -1131,6 +1146,7 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
       ? Math.round(input.petWindowX) : undefined,
     petWindowY: typeof input?.petWindowY === "number" && isFinite(input.petWindowY)
       ? Math.round(input.petWindowY) : undefined,
+    disableGpuElectron: input?.disableGpuElectron,
     sidebarVisible: windowVisibility.sidebarVisible,
     tasksVisible: windowVisibility.tasksVisible,
     launchAtLogin: Boolean(input?.launchAtLogin),
@@ -1159,12 +1175,13 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
     amapKey: typeof input?.amapKey === "string" ? input.amapKey : "",
     travelEnabled: Boolean(input?.travelEnabled),
     playwrightMcpEnabled: Boolean(input?.playwrightMcpEnabled),
-    searchEngine: ["off", "bocha", "tavily", "minimax"].includes(String(input?.searchEngine))
-      ? (input!.searchEngine as "off" | "bocha" | "tavily" | "minimax")
+    searchEngine: ["off", "bocha", "tavily", "minimax", "anySearch"].includes(String(input?.searchEngine))
+      ? (input!.searchEngine as "off" | "bocha" | "tavily" | "minimax" | "anySearch")
       : "off",
     searchBochaKey: typeof input?.searchBochaKey === "string" ? input.searchBochaKey : "",
     searchTavilyKey: typeof input?.searchTavilyKey === "string" ? input.searchTavilyKey : "",
     searchMinimaxKey: typeof input?.searchMinimaxKey === "string" ? input.searchMinimaxKey : "",
+    searchAnySearchKey: typeof input?.searchAnySearchKey === "string" ? input.searchAnySearchKey : "",
     // 邮件（SMTP）配置
     emailEnabled: Boolean(input?.emailEnabled),
     emailSmtpHost: typeof input?.emailSmtpHost === "string" ? input.emailSmtpHost : "",
@@ -1210,15 +1227,22 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
   };
 }
 
-function loadGeneralSettings(): GeneralSettings {
+let generalSettingsCache: GeneralSettings | null = null;
+
+function loadGeneralSettings0(): GeneralSettings {
   try {
     const filePath = getGeneralSettingsPath();
-    if (!fs.existsSync(filePath)) return DEFAULT_GENERAL_SETTINGS;
+    if (!fs.existsSync(filePath)) return { ...DEFAULT_GENERAL_SETTINGS };
     return normalizeGeneralSettings(JSON.parse(fs.readFileSync(filePath, "utf8")) as Partial<GeneralSettings>);
   } catch (err) {
     console.error("[Cyrene] load general settings failed:", err);
-    return DEFAULT_GENERAL_SETTINGS;
+    return { ...DEFAULT_GENERAL_SETTINGS };
   }
+}
+
+function loadGeneralSettings(): GeneralSettings {
+  if (generalSettingsCache !== null) return generalSettingsCache;
+  return generalSettingsCache = loadGeneralSettings0();
 }
 
 function applyGeneralSettings(settings: GeneralSettings): void {
@@ -1258,6 +1282,7 @@ function saveGeneralSettings(settings: Partial<GeneralSettings>): GeneralSetting
   if (before.uiIcon !== normalized.uiIcon) {
     applyUiIcon(normalized.uiIcon);
   }
+  Object.assign(before, normalized);
   return normalized;
 }
 
@@ -1317,7 +1342,9 @@ async function syncVolcanoSearchMcp(settings: GeneralSettings): Promise<void> {
   }
 }
 
-function loadStickerSettings(): Record<string, boolean> {
+let stickerSettingsCache: Record<string, boolean> | null = null;
+
+function loadStickerSettings0(): Record<string, boolean> {
   let raw: Record<string, unknown> = {};
   try {
     const filePath = getStickerSettingsPath();
@@ -1336,10 +1363,16 @@ function loadStickerSettings(): Record<string, boolean> {
   return result;
 }
 
+function loadStickerSettings(): Record<string, boolean> {
+  if (stickerSettingsCache !== null) return stickerSettingsCache;
+  return stickerSettingsCache = loadStickerSettings0();
+}
+
 function saveStickerSettings(settings: Record<string, boolean>): Record<string, boolean> {
   const filePath = getStickerSettingsPath();
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, JSON.stringify(settings, null, 2), "utf8");
+  Object.assign(loadStickerSettings(), settings);
   return settings;
 }
 
@@ -2084,8 +2117,8 @@ function initializeProactiveChatService(): void {
  * 第一期：固定 tools_system.md 规则 + 运行时生成的工具目录。
  * 不放任何人格 / 环境 / 记忆，避免人设污染工具决策。
  */
-function buildToolSystemPrompt(enabledTools: ReadonlyArray<ToolDefinition>): string {
-  const base = loadPromptFile("tools_system.md");
+function buildToolSystemPrompt(enabledTools: ReadonlyArray<ToolDefinition>, isOptimizedFirstRound?: boolean): string {
+  const base = loadPromptFile(isOptimizedFirstRound ? "tools_system_optimized_first.md" : "tools_system.md");
   const catalog = buildToolCatalog(enabledTools as ToolDefinition[]);
   return [
     base,
@@ -2196,8 +2229,8 @@ async function observeRuntimeState(
 
 async function requestModelReply(inputMessages: unknown, styleFile = "01_default.md"): Promise<ChatReplyPayload> {
   const settings = loadModelSettings();
-  if (!settings.apiKey) {
-    throw new Error("还没有填写 API Key，请先在设置里保存 API 配置。");
+  if (!settings.baseUrl) {
+    throw new Error("还没有填写 API URL，请先在设置里保存 API 配置。");
   }
 
   const messages = normalizeChatMessages(inputMessages);
@@ -2279,7 +2312,7 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
     const fcResult = await runFunctionCallingLoop(
       settings,
       fcMessages,
-      CHAT_REQUEST_TIMEOUT_MS,
+      getTimeoutSettings().chatRequestTimeout,
     );
     chatContent = fcResult.reply;
 
@@ -2295,7 +2328,7 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
       settings,
       fcMessages as Array<{ role: "system" | "user" | "assistant"; content: string }>,
       undefined,
-      CHAT_REQUEST_TIMEOUT_MS,
+      getTimeoutSettings().chatRequestTimeout,
       "主聊天（降级）",
     );
   }
@@ -2548,6 +2581,7 @@ function createWindow(): void {
     () => loadGeneralSettings().searchEngine,
     () => loadGeneralSettings().searchBochaKey,
     () => loadGeneralSettings().searchTavilyKey,
+    () => loadGeneralSettings().searchAnySearchKey,
   );
 
   // 注入出行工具 amapKey 获取器（复用 GeneralSettings 中的 amapKey）
@@ -3346,6 +3380,14 @@ ipcMain.handle(IPC.SETTINGS_GET_GENERAL, () => {
   return loadGeneralSettings();
 });
 
+ipcMain.handle(IPC.SETTINGS_GET_TIMEOUT_SETTINGS, () => {
+  return getTimeoutSettings();
+});
+
+ipcMain.handle(IPC.SETTINGS_SAVE_TIMEOUT_SETTINGS, (_event, settings: Partial<TimeoutSettings>) => {
+  return saveTimeoutSettings(settings);
+});
+
 ipcMain.handle(IPC.UI_THEME_GET, () => {
   return loadGeneralSettings().uiTheme;
 });
@@ -3774,12 +3816,23 @@ ipcMain.handle(IPC.EMBEDDING_DELETE, async (_event, payload: unknown) => {
   }
 });
 
+ipcMain.on(IPC.SETTINGS_OPEN_CHROME_GPU, async () => {
+  const win = new BrowserWindow({ width: 1024, height: 768 });
+  win.loadURL("chrome://gpu");
+  win.show();
+});
+
 // 注册本地用户资源协议（表情包图片与用户导入的字体）
 // 必须在 app.ready 之前调用
 protocol.registerSchemesAsPrivileged([
   { scheme: "local-sticker", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
   { scheme: "local-font", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
 ]);
+
+if (loadGeneralSettings().disableGpuElectron) {
+  app.commandLine.appendSwitch("disable-gpu");
+  app.commandLine.appendSwitch("enable-unsafe-swiftshader");
+}
 
 app.whenReady().then(async () => {
   // 注册 local-sticker:// 协议处理器：将请求映射到 userData/stickers/ 下的文件
@@ -4622,7 +4675,7 @@ app.whenReady().then(async () => {
   const schedulerRunner = createSchedulerRunner({
     buildOptions: async (task: ScheduledTask) => {
       const settings = loadModelSettings();
-      if (!settings.apiKey) throw new Error("还没有填写 API Key，请先在设置里保存 API 配置。");
+      if (!settings.baseUrl) throw new Error("还没有填写 API URL，请先在设置里保存 API 配置。");
       const messages = [{ role: "user" as const, content: task.prompt }];
       let alwaysOnContext = "";
       try {
@@ -4649,7 +4702,7 @@ app.whenReady().then(async () => {
       return {
         settings: { provider: settings.provider, baseUrl: settings.baseUrl, model: settings.model, apiKey: settings.apiKey },
         messages: [{ role: "system", content: systemContent }, ...messages],
-        timeoutMs: CHAT_REQUEST_TIMEOUT_MS,
+        timeoutMs: getTimeoutSettings().chatRequestTimeout,
       };
     },
     getChatWebContents: () => (chatWindow && !chatWindow.isDestroyed() ? chatWindow.webContents : null),
@@ -4688,13 +4741,13 @@ app.whenReady().then(async () => {
       buildAlwaysOnContext(userText, messages as any)) as BuildOptionsDeps["buildAlwaysOnContext"],
     buildRelationshipContext,
     buildSystemPrompt,
-    buildToolSystemPrompt: (enabledTools) => buildToolSystemPrompt(enabledTools as ToolDefinition[]),
+    buildToolSystemPrompt: (enabledTools, isOptimizedFirstRound) => buildToolSystemPrompt(enabledTools as ToolDefinition[], isOptimizedFirstRound),
     buildSoulSystemBasePrompt,
     toolRegistry: { getEnabled: () => toolRegistry.getEnabledTools() },
     logWorldbookInjection,
     normalizeChatMessages: ((raw: ReadonlyArray<unknown>) =>
       normalizeChatMessages(raw as any)) as BuildOptionsDeps["normalizeChatMessages"],
-    chatRequestTimeoutMs: CHAT_REQUEST_TIMEOUT_MS,
+    chatRequestTimeoutMs: getTimeoutSettings().chatRequestTimeout,
     captionImageForFallback: async (filePath: string) => {
       const validated = validateCaptionImagePath(filePath);
       if (!validated.ok) return { ok: false, error: validated.error };

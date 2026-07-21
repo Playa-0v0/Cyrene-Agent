@@ -703,12 +703,13 @@ toolRegistry.register({
 // 联网搜索：给关键词，返回搜索结果（标题/链接/摘要）。博查 API 返回 AI 友好的结构化数据。
 // key 通过 setSearchConfig 注入（避免 import index.ts 造成循环依赖）。
 
-const SEARCH_TIMEOUT_MS = 20_000;
+const DEFAULT_SEARCH_TIMEOUT_MS = 20_000;
 
 /** 注入的搜索配置获取器。 */
 let searchEngineGetter: (() => string) | null = null;
 let searchBochaKeyGetter: (() => string) | null = null;
 let searchTavilyKeyGetter: (() => string) | null = null;
+let searchAnySearchKeyGetter: (() => string) | null = null;
 
 /**
  * index.ts 启动时调用，注入搜索引擎/各源key 的读取器。
@@ -718,10 +719,12 @@ export function setSearchConfig(
   engineGetter: () => string,
   bochaKeyGetter: () => string,
   tavilyKeyGetter: () => string,
+  anySearchKeyGetter: () => string,
 ): void {
   searchEngineGetter = engineGetter;
   searchBochaKeyGetter = bochaKeyGetter;
   searchTavilyKeyGetter = tavilyKeyGetter;
+  searchAnySearchKeyGetter = anySearchKeyGetter;
 }
 
 interface BochaResult {
@@ -736,7 +739,7 @@ interface BochaResult {
 async function bochaSearch(query: string, key: string): Promise<string> {
   const url = "https://api.bochaai.com/v1/web-search";
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), getTimeoutSettings().searchTimeout);
   try {
     const resp = await fetch(url, {
       method: "POST",
@@ -787,7 +790,7 @@ async function bochaSearch(query: string, key: string): Promise<string> {
 async function tavilySearch(query: string, key: string): Promise<string> {
   const url = "https://api.tavily.com/search";
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), getTimeoutSettings().searchTimeout);
   try {
     const resp = await fetch(url, {
       method: "POST",
@@ -831,6 +834,49 @@ async function tavilySearch(query: string, key: string): Promise<string> {
   }
 }
 
+async function anySearchSearch(query: string, key: string): Promise<string> {
+  const url = "https://api.anysearch.com/v1/search";
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), getTimeoutSettings().searchTimeout);
+  const headers: any = { "Content-Type": "application/json" };
+  if (key) headers.Authorization = `Bearer ${key}`;
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: headers,
+      body: JSON.stringify({
+        query,
+        max_results: 8,
+      }),
+    });
+    if (!resp.ok) {
+      return `[错误] 搜索失败：HTTP ${resp.status}`;
+    }
+    const data = await resp.json() as {
+      data: { results?: Array<{ title: string; url: string; content: string; snippet: string }> };
+    };
+    const results = data.data.results ?? [];
+    if (results.length === 0) {
+      return `[提示] 搜索"${query}"没有找到结果。`;
+    }
+    const lines: string[] = [`搜索"${query}"的结果（共 ${results.length} 条）：`, ""];
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      lines.push(`【${i + 1}】${r.title}`);
+      lines.push(`  链接：${r.url}`);
+      lines.push(`  摘要：${r.content || r.snippet || "（无摘要）"}`);
+      lines.push("");
+    }
+    return lines.join("\n");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return "[错误] 搜索失败：" + msg;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function executeWebSearch(args: Record<string, unknown>): Promise<string> {
   const engine = searchEngineGetter?.() ?? "off";
   if (engine === "off") {
@@ -858,8 +904,13 @@ async function executeWebSearch(args: Record<string, unknown>): Promise<string> 
     return tavilySearch(query, key);
   }
 
+  if (engine === "anySearch") {
+    const key = searchAnySearchKeyGetter?.() ?? "";
+    return anySearchSearch(query, key);
+  }
+
   // 其他搜索引擎暂未接入
-  return `[提示] 搜索引擎"${engine}"暂未接入，目前支持 bocha 和 tavily。`;
+  return `[提示] 搜索引擎"${engine}"暂未接入，目前支持 bocha，anySearch 和 tavily。`;
 }
 
 toolRegistry.register({
@@ -967,6 +1018,7 @@ export { loadTodos, onTodosChange, getTodos as getCurrentTodos } from "./todo-st
 
 import { requestUserChoice, type ChoiceOption } from "../user-choice";
 import { runSubAgent, setDelegateSettings } from "./sub-agent";
+import { getTimeoutSettings } from "../timeout-manager";
 
 export { setDelegateSettings };
 // 把重任务委托给独立 FC 循环执行，子代理有自己的 conversation（用完即弃）。

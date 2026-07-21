@@ -31,6 +31,7 @@
         <button type="button" class="nav-item" data-section="appearance"><span>🎨</span>外观设置</button>
         <button type="button" class="nav-item is-active" data-section="general"><span>⚙️</span>通用设置</button>
         <button type="button" class="nav-item" data-section="api"><span>🔑</span>API 设置</button>
+        <button type="button" class="nav-item" data-section="api-advanced">API 高级设置</button>
         <button type="button" class="nav-item" data-section="cyrene"><span>🌸</span>昔涟设置</button>
         <button type="button" class="nav-item" data-section="channels"><span>📱</span>连接手机</button>
         <button type="button" class="nav-item" data-section="tts"><span>🎙️</span>TTS 设置</button>
@@ -125,6 +126,16 @@
 
           <hr class="api-section-divider" />
 
+          <div class="form-grid">
+            <label class="field field--full">
+              <span>测试超时（ms，1s=1000ms）</span>
+              <div class="timeout-row">
+                <input id="timeout-test" type="number" placeholder="单位ms（1s=1000ms）" autocomplete="off" />
+                <button type="button" class="timeout-reset" id="timeout-test-reset-btn" title="重置为默认（15s）">↻</button>
+              </div>
+            </label>
+          </div>
+
           <!-- 视觉模型配置区（可选） -->
           <div class="vision-config-section">
             <div class="vision-config-heading">
@@ -172,6 +183,98 @@
             -->
             <button type="button" class="save-btn save-btn--ghost" id="test-connection-btn">测试连接</button>
             <button type="submit" class="save-btn">保存 API 设置</button>
+          </div>
+        </form>
+
+
+        <form class="settings-panel is-hidden" id="api-fc-mode-form" data-panel="api-advanced">
+          <div class="panel-heading">
+            <div>
+              <h1>API 调用模式</h1>
+              <p>注：在调用工具时，两种模式 API 调用次数相同，且均会丢弃倒数第二次回复．</p>
+            </div>
+          </div>
+          <div class="settings-list">
+            <button type="button" class="fc-mode-option" id="fc-mode-enable-optimization">
+              <span class="fc-mode-option__icon"></span>
+              <span class="fc-mode-option__copy"><strong>极速问答模式</strong><small>首轮带完整人设；无工具时直接回复，节省一次 API 轮次，调用工具时后续轮次回到双阶段模式．适合无工具/低频调用工具．<br />首次 API 请求 Token 输入量较大，不调用工具时进行一次 API 请求，调用工具时 Token 总消耗较大．</small></span>
+            </button>
+            <button type="button" class="fc-mode-option" id="fc-mode-disable-optimization">
+              <span class="fc-mode-option__icon"></span>
+              <span class="fc-mode-option__copy"><strong>双阶段模式</strong><small>首轮先精简探查，最后带人设总结；无工具时丢弃第一次回复，调用工具时输入上下文更轻量．适合高频调用工具的复杂任务．<br />首次 API 请求 Token 输入量较小，不调用工具时进行两次 API 请求，调用工具时 Token 总消耗较小．</small></span>
+            </button>
+          </div>
+        </form>
+
+
+        <form class="settings-panel is-hidden" id="api-timeout-form" data-panel="api-advanced">
+          <div class="panel-heading">
+            <div>
+              <h1>超时时间设置</h1>
+            </div>
+          </div>
+          <hr class="api-section-divider" />
+          <div class="panel-heading">
+            <div>
+              <h1>API 超时时间设置</h1>
+              <p>配置超时时间．单位ms（1s=1000ms）．</p>
+            </div>
+          </div>
+          <div class="settings-list">
+            <label class="field field--full">
+              <span>单次回复总时间限制（ms）</span>
+              <div class="timeout-row">
+                <input id="timeout-chat-request" type="number" placeholder="单位ms（1s=1000ms）" autocomplete="off" />
+                <button type="button" class="timeout-reset" id="timeout-chat-request-reset-btn" title="重置为默认（300s）">↻</button>
+              </div>
+            </label>
+            <label class="field field--full">
+              <span>工具阶段每轮 API 超时（ms）</span>
+              <div class="timeout-row">
+                <input id="timeout-per-round" type="number" placeholder="单位ms（1s=1000ms）" autocomplete="off" />
+                <button type="button" class="timeout-reset" id="timeout-per-round-reset-btn" title="重置为默认（75s）">↻</button>
+              </div>
+            </label>
+            <label class="field field--full">
+              <span>工具总结阶段 API 超时（ms）</span>
+              <div class="timeout-row">
+                <input id="timeout-summary" type="number" placeholder="单位ms（1s=1000ms）" autocomplete="off" />
+                <button type="button" class="timeout-reset" id="timeout-summary-reset-btn" title="重置为默认（90s）">↻</button>
+              </div>
+            </label>
+            <label class="field field--full">
+              <span>记忆总结阶段 API 超时（ms）</span>
+              <div class="timeout-row">
+                <input id="timeout-memory-judge" type="number" placeholder="单位ms（1s=1000ms）" autocomplete="off" />
+                <button type="button" class="timeout-reset" id="timeout-memory-judge-reset-btn" title="重置为默认（30s）">↻</button>
+              </div>
+            </label>
+            <label class="field field--full">
+              <span>视觉模型单次 API 超时（ms）</span>
+              <div class="timeout-row">
+                <input id="timeout-vision" type="number" placeholder="单位ms（1s=1000ms）" autocomplete="off" />
+                <button type="button" class="timeout-reset" id="timeout-vision-reset-btn" title="重置为默认（30s）">↻</button>
+              </div>
+            </label>
+          </div>
+          <hr class="api-section-divider" />
+          <div class="panel-heading">
+            <div>
+              <h1>其它时间设置</h1>
+            </div>
+          </div>
+          <div class="settings-list">
+            <label class="field field--full">
+              <span>工具请求确认时间限制（s）</span>
+              <div class="timeout-row">
+                <input id="timeout-user-choice" type="number" placeholder="单位s" autocomplete="off" />
+                <button type="button" class="timeout-reset" id="timeout-user-choice-reset-btn" title="重置为默认（60s）">↻</button>
+              </div>
+            </label>
+          </div>
+          <div class="form-actions">
+            <div class="save-status" id="timeout-save-status">等待保存</div>
+            <button type="submit" class="save-btn">保存设置</button>
           </div>
         </form>
 
@@ -427,6 +530,13 @@
               </div>
             </label>
 
+            <div class="setting-row">
+              <div>
+                <strong>禁用客户端 GPU 渲染</strong>
+                <span>向 Electron 添加 --disable-gpu 参数以使用软件渲染，降低客户端 GPU 负载，但会增加 CPU 负载．<br />可以通过查看 <a id="open-chrome-gpu" href="javascript:;">GPU Internals 页面</a> 得知当前是否使用 GPU 渲染．<br />修改后 <b>完全退出并重启客户端</b> 才可生效．</span>
+              </div>
+              <span class="switch"><input id="disable-gpu-electron" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
+            </div>
 
             <div class="setting-row setting-row--about">
               <div>
@@ -1108,6 +1218,7 @@
                       <option value="bocha">博查 Bocha（国内，AI 友好）</option>
                       <option value="tavily">Tavily（海外，AI 友好）</option>
                       <option value="minimax">MiniMax（需 uvx）</option>
+                      <option value="anySearch">AnySearch</option>
                     </select>
                   </div>
                   <div class="tts-field" id="search-bocha-row" style="display:none">
@@ -1121,6 +1232,10 @@
                   <div class="tts-field" id="search-minimax-row" style="display:none">
                     <label for="search-minimax-key">MiniMax Key</label>
                     <input type="password" id="search-minimax-key" placeholder="MiniMax 平台 API Key" autocomplete="off" />
+                  </div>
+                  <div class="tts-field" id="search-anysearch-row" style="display:none">
+                    <label for="search-anysearch-key">AnySearch Key</label>
+                    <input type="password" id="search-anysearch-key" placeholder="anysearch.com 注册获取" autocomplete="off" />
                   </div>
                   <p class="user-field-hint" id="search-engine-hint">选择搜索源后填入对应 Key。MiniMax 需先安装 uvx（Python）。</p>
                 </div>

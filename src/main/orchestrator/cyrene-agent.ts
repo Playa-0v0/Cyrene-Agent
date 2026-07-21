@@ -24,6 +24,7 @@ import {
   type TwoPhaseEvent,
   type TwoPhaseFcResult,
 } from "./two-phase-fc-loop";
+import { getTimeoutSettings } from "../timeout-manager";
 
 export interface AgentLoopSettings {
   provider: string;
@@ -48,8 +49,10 @@ export interface CyreneRunOptions {
   imageCaptionFallback?: () => Promise<ChatMessage[]>;
   /** 工具阶段使用的 system prompt（仅含工具调度规则 + 自动生成的工具目录）。 */
   toolSystemContent: string;
+  toolSystemContentOptimizedForFirstRound?: string;
   /** Soul 阶段使用的基础 system prompt（人设 + 环境/记忆/关系/附件）。 */
   soulSystemBaseContent: string;
+  optimizeFirstRound?: boolean;
 }
 
 /** FC 循环最终结果（供桥层做副作用用）。 */
@@ -176,6 +179,7 @@ export class CyreneAgent extends AbstractAgent {
           subscriber.next({ type: EventType.RUN_STARTED, threadId, runId });
 
           const adapter = getAdapterForConfig(options.settings);
+          const timeoutSettings = getTimeoutSettings();
 
           const result: TwoPhaseFcResult = await runTwoPhaseFcLoop({
             settings: options.settings,
@@ -184,8 +188,11 @@ export class CyreneAgent extends AbstractAgent {
             tools: options.tools ?? toolRegistry.getEnabledTools(),
             requiredToolName: options.requiredToolName,
             toolSystemContent: options.toolSystemContent,
+            toolSystemContentOptimizedForFirstRound: options.toolSystemContentOptimizedForFirstRound,
             soulSystemBaseContent: options.soulSystemBaseContent,
             timeoutMs: options.timeoutMs,
+            perRoundTimeoutMs: timeoutSettings.perRoundTimeout,
+            forceSummaryTimeoutMs: timeoutSettings.forceSummaryTimeout,
             imageCaptionFallback: options.imageCaptionFallback,
             executeTool: (tc, runnableToolIds) => executeToolCall(tc, runnableToolIds, {
               userQuery: extractLastUserQuery(options.messages),
@@ -196,6 +203,7 @@ export class CyreneAgent extends AbstractAgent {
               subscriber.next(toAguiEvent(event));
             },
             signal: abortController.signal,
+            optimizeFirstRound: options.optimizeFirstRound,
           });
 
           this.lastResult = {

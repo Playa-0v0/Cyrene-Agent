@@ -8,6 +8,7 @@ import {
 import { authHeaderFor } from "./auth";
 import { resolveReasoningCapability } from "../../../shared/reasoning";
 import { applyReasoningPreference } from "./reasoning";
+import { getTimeoutSettings } from "../../timeout-manager";
 
 function buildUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim().replace(/\/+$/, "");
@@ -208,7 +209,7 @@ export class OpenAICompatAdapter implements ChatVendorAdapter {
   async testConnection(cfg: VendorConfig): Promise<TestConnectionResult> {
     const start = Date.now();
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
+    const timer = setTimeout(() => controller.abort(), getTimeoutSettings().testTimeout);
     try {
       const req: ChatRequest = {
         model: cfg.model,
