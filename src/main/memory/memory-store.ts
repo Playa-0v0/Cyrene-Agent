@@ -133,7 +133,7 @@ class MemoryStoreManager {
       try {
         backupMemoryFile(filePath)
       } catch {
-        // 如果连备份也失败，仍然生成干净默认文件，避免主流程被记忆文件阻塞。
+        // 如果連備份也失敗，仍然生成乾淨默認文件，避免主流程被記憶文件阻塞。
       }
       this.cache = cloneDefaultStore()
       await this.save(this.cache)
@@ -314,6 +314,8 @@ class MemoryStoreManager {
   async deleteL2(id: string): Promise<void> {
     const store = await this.load()
     store.l2 = store.l2.filter((m) => m.id !== id)
+    store.evidence = (store.evidence ?? []).filter((evidence) => evidence.memoryId !== id)
+    store.conflictLogs = (store.conflictLogs ?? []).filter((log) => log.sourceL2Id !== id && log.targetL2Id !== id)
     await this.save(store)
     appendMemoryTrace({
       op: "l2.delete",
@@ -389,7 +391,7 @@ class MemoryStoreManager {
     }
     if (!store.reflectionLogs) store.reflectionLogs = []
     store.reflectionLogs.push(entry)
-    // 最多保留 50 条日志，防止文件膨胀
+    // 最多保留 50 條日誌，防止文件膨脹
     if (store.reflectionLogs.length > 50) {
       store.reflectionLogs = store.reflectionLogs.slice(-50)
     }
@@ -608,7 +610,7 @@ class MemoryStoreManager {
     return log
   }
 
-  /** 批量更新 L2 条目的 status */
+  /** 批量更新 L2 條目的 status */
   async updateL2Status(ids: string[], status: L2Memory["status"]): Promise<void> {
     const store = await this.load()
     for (const mem of store.l2) {
@@ -659,7 +661,7 @@ class MemoryStoreManager {
     return changed
   }
 
-  /** 批量插入新的 L2 条目（压缩总结用） */
+  /** 批量插入新的 L2 條目（壓縮總結用） */
   async addL2Batch(inputs: L2Input[]): Promise<L2Memory[]> {
     const store = await this.load()
     const results: L2Memory[] = []

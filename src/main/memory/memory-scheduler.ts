@@ -38,13 +38,13 @@ export class MemoryScheduler {
       this.deps.ingestEntity(userInput)
       this.deps.ingestEntity(assistantReply)
     } catch (err) {
-      console.warn("[Memory] 实体图谱提取失败:", err)
+      console.warn("[Memory] 實體圖譜提取失敗:", err)
     }
 
     this.deps.enqueueTask("MemoryMaintenance", async () => {
       await this.runQueuedMemoryWrite(seq)
     }).catch((e) => {
-      console.error("[Memory] 记忆写入失败，不影响主流程", e)
+      console.error("[Memory] 記憶寫入失敗，不影響主流程", e)
     })
   }
 
@@ -64,7 +64,7 @@ export class MemoryScheduler {
           await this.deps.writeMemory(candidates)
         }
       } catch (err) {
-        console.error("[Memory] MemoryJudge/Manager 执行失败，本轮仍会计数", err)
+        console.error("[Memory] MemoryJudge/Manager 執行失敗，本輪仍會計數", err)
       }
     }
 
@@ -74,12 +74,12 @@ export class MemoryScheduler {
       try {
         await this.deps.runResolverQueueOnce()
       } catch (err) {
-        console.warn("[Memory] Resolver 队列处理失败，不影响主流程", err)
+        console.warn("[Memory] Resolver 隊列處理失敗，不影響主流程", err)
       }
     }
 
     if (newCount % 20 === 0) {
-      console.log("[Memory] 达到 20 轮，触发 Reflection + 记忆压缩")
+      console.log("[Memory] 達到 20 輪，觸發 Reflection + 記憶壓縮")
       await this.deps.runReflectionAndCompression()
     }
   }

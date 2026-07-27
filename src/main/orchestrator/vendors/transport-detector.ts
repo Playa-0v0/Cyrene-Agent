@@ -1,40 +1,40 @@
-// Transport detection —— 根据 baseUrl 启发式判断走 OpenAI 还是 Anthropic 协议。
+// Transport detection —— 根據 baseUrl 啟發式判斷走 OpenAI 還是 Anthropic 協議。
 //
-// 设计动机：之前 transport 由 provider 名 → capabilities 表硬编码，
-// 用户在 settings 改 baseUrl 不会影响 dispatch 行为（典型 bug：MiniMax 填 /v1 时仍走 anthropic 端点）。
-// 现在三段优先级：
-//   1. 用户显式 explicitTransport（settings UI 高级选项）
-//   2. baseUrl 启发式（detectTransport）
-//   3. capabilities 表默认（旧 fallback，兼容现有 8 家预设）
+// 設計動機：之前 transport 由 provider 名 → capabilities 表硬編碼，
+// 用戶在 settings 改 baseUrl 不會影響 dispatch 行為（典型 bug：MiniMax 填 /v1 時仍走 anthropic 端點）。
+// 現在三段優先級：
+//   1. 用戶顯式 explicitTransport（settings UI 高級選項）
+//   2. baseUrl 啟發式（detectTransport）
+//   3. capabilities 表默認（舊 fallback，兼容現有 8 家預設）
 //
-// 启发式规则：
-//   - 路径含 /anthropic 或 /v1/messages → anthropic
-//   - 路径含 /chat/completions 或 /completions → openai
-//   - 仅以 /v1 结尾 → openai（绝大多数 OpenAI 兼容入口用这个后缀）
-//   - 其他 → null，让调用方 fallback
+// 啟發式規則：
+//   - 路徑含 /anthropic 或 /v1/messages → anthropic
+//   - 路徑含 /chat/completions 或 /completions → openai
+//   - 僅以 /v1 結尾 → openai（絕大多數 OpenAI 兼容入口用這個後綴）
+//   - 其他 → null，讓調用方 fallback
 
 import type { Transport } from "./types";
 import { getCapabilityOrOpenAI } from "./capabilities";
 
 /**
- * 根据 baseUrl 路径形态判断 transport；无法判断时返回 null。
- * 纯函数，便于单测。
+ * 根據 baseUrl 路徑形態判斷 transport；無法判斷時返回 null。
+ * 純函數，便於單測。
  */
 export function detectTransport(baseUrl: string): Transport | null {
   const t = baseUrl.trim().replace(/\/+$/, "").toLowerCase();
   if (!t) return null;
-  // Anthropic 端点路径关键字
+  // Anthropic 端點路徑關鍵字
   if (/\/anthropic($|\/)|\/v1\/messages($|\?)/.test(t)) return "anthropic";
-  // OpenAI 端点路径关键字
+  // OpenAI 端點路徑關鍵字
   if (/\/chat\/completions($|\?)|\/completions($|\?)|\/v1\/chat/.test(t)) return "openai";
-  // 仅以 /v1 结尾 → 启发式判为 openai
+  // 僅以 /v1 結尾 → 啟發式判為 openai
   if (t.endsWith("/v1")) return "openai";
   return null;
 }
 
 /**
- * 三段优先级解析 transport。调用方（getAdapterForConfig）使用。
- *  - explicitTransport = "openai" | "anthropic" → 用户强制
+ * 三段優先級解析 transport。調用方（getAdapterForConfig）使用。
+ *  - explicitTransport = "openai" | "anthropic" → 用戶強制
  *  - explicitTransport = "auto" | undefined → 走 detectTransport → fallback capabilities
  */
 export function resolveTransport(cfg: {
@@ -45,6 +45,6 @@ export function resolveTransport(cfg: {
   if (cfg.explicitTransport === "openai" || cfg.explicitTransport === "anthropic") {
     return cfg.explicitTransport;
   }
-  // auto 或 undefined 都走检测 + fallback
+  // auto 或 undefined 都走檢測 + fallback
   return detectTransport(cfg.baseUrl) ?? getCapabilityOrOpenAI(cfg.provider).transport;
 }

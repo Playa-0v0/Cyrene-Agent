@@ -1,4 +1,4 @@
-// 8 场景 baseScore 瞬间快照公式（0-100 连续值，无累积状态）。
+// 8 場景 baseScore 瞬間快照公式（0-100 連續值，無累積狀態）。
 // finalScore = baseScore × affinity
 import type { SceneId, OpenerState, UserStateSnapshot, WeatherSnapshot } from "./opener-types";
 import { SCENE_CONFIGS } from "./scenes-config";
@@ -6,8 +6,8 @@ import { SCENE_CONFIGS } from "./scenes-config";
 const MIN = (v: number, max: number) => Math.min(v / max, 1);
 
 /**
- * 算单个场景的 finalScore = baseScore × affinity。
- * back_from_away 在 tick 内恒返回 0（事件驱动，由 runner 直通车处理）。
+ * 算單個場景的 finalScore = baseScore × affinity。
+ * back_from_away 在 tick 內恆返回 0（事件驅動，由 runner 直通車處理）。
  */
 export function scoreScene(
   scene: SceneId,

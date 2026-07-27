@@ -1,7 +1,11 @@
-// screenshot —— desktopCapturer 截主屏 → PNG base64 + 实际尺寸。
-// Electron 内置，免装库。返回的 width/height 用于 VLM 坐标归一化转像素。
+// screenshot —— desktopCapturer 截主屏 → PNG base64 + 實際尺寸。
+// Electron 內置，免裝庫。返回的 width/height 用於 VLM 座標歸一化轉像素。
 
-import { desktopCapturer, screen } from "electron";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import { execFile } from "child_process";
+import { desktopCapturer, nativeImage, screen } from "electron";
 import type { ImgData } from "./vlm-locator";
 
 export interface ScreenshotResult extends ImgData {
@@ -9,16 +13,50 @@ export interface ScreenshotResult extends ImgData {
   height: number;
 }
 
-/** 截取主屏幕，返回 PNG base64 + 实际像素尺寸。失败返回 null。 */
-export async function captureScreen(): Promise<ScreenshotResult | null> {
-  const display = screen.getPrimaryDisplay();
-  const { width, height } = display.size;
-  const sources = await desktopCapturer.getSources({
+const CAPTURE_TIMEOUT_MS = 8_000;
+
+async function captureWithDesktopCapturer(width: number, height: number): Promise<Electron.NativeImage | null> {
+  const work = desktopCapturer.getSources({
     types: ["screen"],
     thumbnailSize: { width, height },
   });
-  if (sources.length === 0) return null;
-  const thumb = sources[0].thumbnail;
+  const sources = await Promise.race([
+    work,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error("desktopCapturer timeout")), CAPTURE_TIMEOUT_MS)),
+  ]);
+  return sources[0]?.thumbnail ?? null;
+}
+
+async function captureWithMacosTool(): Promise<Electron.NativeImage | null> {
+  const file = path.join(os.tmpdir(), `cyrene-game-screen-${process.pid}-${Date.now()}.png`);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      execFile("/usr/sbin/screencapture", ["-x", "-m", file], { timeout: 15_000 }, (error) => {
+        if (error) reject(error); else resolve();
+      });
+    });
+    const image = nativeImage.createFromPath(file);
+    return image.isEmpty() ? null : image;
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+}
+
+/** 截取主屏幕，返回 PNG base64 + 實際像素尺寸。失敗返回 null。 */
+export async function captureScreen(): Promise<ScreenshotResult | null> {
+  const display = screen.getPrimaryDisplay();
+  const { width, height } = display.size;
+  let thumb: Electron.NativeImage | null = null;
+  try {
+    thumb = await captureWithDesktopCapturer(width, height);
+  } catch (error) {
+    console.warn("[GameBot] Electron 全螢幕擷取失敗，改用 macOS screencapture:", error);
+  }
+  if (!thumb && process.platform === "darwin") {
+    try { thumb = await captureWithMacosTool(); }
+    catch (error) { console.error("[GameBot] macOS 截圖備援失敗:", error); }
+  }
+  if (!thumb) return null;
   const size = thumb.getSize();
   const png = thumb.toPNG();
   return {

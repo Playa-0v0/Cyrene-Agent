@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: cyrene-discord-cloud
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./cloud-bot/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_BASE_URL
+        value: https://api.openai.com/v1
+      - key: LLM_MODEL
+        value: gpt-4.1-mini
+      - key: DISCORD_REQUIRE_MENTION
+        value: "true"
+      - key: BOT_ACTIVITY
+        value: 在雲端守望永晝花庭
+      - key: DATA_DIR
+        value: /data
+      - key: PORT
+        value: "3000"
+    disk:
+      name: cyrene-memory
+      mountPath: /data
+      sizeGB: 1

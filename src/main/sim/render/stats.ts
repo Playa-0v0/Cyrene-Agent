@@ -1,4 +1,4 @@
-// 3 类统计：Prompt 占用率 / 平均寿命 / 每轮 Prompt 排名
+// 3 類統計：Prompt 佔用率 / 平均壽命 / 每輪 Prompt 排名
 import type { SimResult, SimStats, EntrySnapshot } from "../sim-types";
 import { deriveState } from "../../rag/worldbook";
 
@@ -13,7 +13,7 @@ export function computeStats(result: SimResult): SimStats {
     life.set(entry.id, []);
   }
 
-  // 占用率 + 排名（ranking 只含 A>0 的条目，避免把一堆 Archived 死条目当"Prompt 排名"）
+  // 佔用率 + 排名（ranking 只含 A>0 的條目，避免把一堆 Archived 死條目當"Prompt 排名"）
   for (let r = 0; r < result.snapshots.length; r++) {
     const sorted = [...result.snapshots[r]]
       .filter((s) => {
@@ -30,13 +30,13 @@ export function computeStats(result: SimResult): SimStats {
     }
   }
 
-  // 占用率归一化
+  // 佔用率歸一化
   const totalRounds = result.snapshots.length;
   for (const [k, v] of occupancy) {
     occupancy.set(k, totalRounds > 0 ? v / totalRounds : 0);
   }
 
-  // 平均寿命：连续 Active 段的平均长度
+  // 平均壽命：連續 Active 段的平均長度
   for (const entry of result.entries) {
     const snaps = result.snapshots.map((s) => s.find((x) => x.entryId === entry.id)).filter(Boolean) as EntrySnapshot[];
     let curRun = 0;
@@ -61,11 +61,11 @@ export function computeStats(result: SimResult): SimStats {
 
 export function printStats(result: SimResult): void {
   const { stats, entries, params } = result;
-  console.log("\n=== 3 类统计 ===");
-  console.log(`参数: Bu=${params.userRewardBase} γ=${params.wakeGamma} Bm=${params.modelRewardBase} λ=${params.wakeLambda} α=${params.decayAlpha} β=${params.decayBeta} threshold=${params.promptThreshold}`);
-  console.log(`总轮数: ${stats.totalRounds}\n`);
+  console.log("\n=== 3 類統計 ===");
+  console.log(`參數: Bu=${params.userRewardBase} γ=${params.wakeGamma} Bm=${params.modelRewardBase} λ=${params.wakeLambda} α=${params.decayAlpha} β=${params.decayBeta} threshold=${params.promptThreshold}`);
+  console.log(`總輪數: ${stats.totalRounds}\n`);
 
-  console.log("--- Prompt 占用率（多少轮处于 Active）---");
+  console.log("--- Prompt 佔用率（多少輪處於 Active）---");
   const occRows = entries
     .filter((e) => !e.permanent)
     .map((e) => {
@@ -78,16 +78,16 @@ export function printStats(result: SimResult): void {
     console.log(`  ${r.id.padEnd(40)}  I=${String(r.I).padStart(3)}  ${(r.occ * 100).toFixed(1).padStart(5)}%  ${bar}`);
   }
 
-  console.log("\n--- 平均寿命（一次激活平均持续轮数）---");
+  console.log("\n--- 平均壽命（一次激活平均持續輪數）---");
   const lifeRows = entries
     .filter((e) => !e.permanent)
     .map((e) => ({ id: e.id, I: e.intrinsicValue, life: stats.avgActiveLife.get(e.id) ?? 0 }))
     .sort((a, b) => b.life - a.life);
   for (const r of lifeRows) {
-    console.log(`  ${r.id.padEnd(40)}  I=${String(r.I).padStart(3)}  ${r.life.toFixed(2).padStart(6)} 轮/次`);
+    console.log(`  ${r.id.padEnd(40)}  I=${String(r.I).padStart(3)}  ${r.life.toFixed(2).padStart(6)} 輪/次`);
   }
 
-  console.log("\n--- 每轮 Prompt 排名（每 5 轮抽样）---");
+  console.log("\n--- 每輪 Prompt 排名（每 5 輪抽樣）---");
   const step = Math.max(1, Math.floor(stats.totalRounds / 20));
   for (let r = 0; r < stats.totalRounds; r += step) {
     const top = (stats.promptRanking.get(r) ?? []).slice(0, 5);

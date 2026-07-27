@@ -1,12 +1,12 @@
-// ChannelAdapter —— 每个外部渠道（微信/飞书/...）的协议适配层接口。
+// ChannelAdapter —— 每個外部渠道（微信/飛書/...）的協議適配層接口。
 //
-// 设计原则：adapter 负责两件事：
-//   1) start(): 注册 webhook / 启动子进程 / 加载本地状态
-//   2) send(): 把统一 OutgoingMessage 翻译成平台协议发出去
-// 入站消息由 adapter 内部调用 onMessage 回调抛给 manager → dispatcher。
+// 設計原則：adapter 負責兩件事：
+//   1) start(): 註冊 webhook / 啟動子進程 / 加載本地狀態
+//   2) send(): 把統一 OutgoingMessage 翻譯成平臺協議發出去
+// 入站消息由 adapter 內部調用 onMessage 回調拋給 manager → dispatcher。
 //
-// 注意：adapter 不应该直接调 CyreneAgent；那是 dispatcher 的职责。
-// adapter 只做"翻译 + 协议收发 + 账号/凭证管理"。
+// 注意：adapter 不應該直接調 CyreneAgent；那是 dispatcher 的職責。
+// adapter 只做"翻譯 + 協議收發 + 賬號/憑證管理"。
 import type {
   ChannelCapability,
   ChannelId,
@@ -21,23 +21,23 @@ export interface ChannelAdapter {
   readonly displayName: string;
   readonly capability: ChannelCapability;
 
-  /** 启动：注册 webhook / 启子进程 / 加载凭证 / 写运行时配置 */
+  /** 啟動：註冊 webhook / 啟子進程 / 加載憑證 / 寫運行時配置 */
   start(): Promise<void>;
 
-  /** 关闭：停止子进程 / 关闭 webhook 监听 / flush 队列 */
+  /** 關閉：停止子進程 / 關閉 webhook 監聽 / flush 隊列 */
   stop(): Promise<void>;
 
-  /** Manager 在 start() 之前注入；adapter 把入站消息通过这个回调抛给 dispatcher */
+  /** Manager 在 start() 之前注入；adapter 把入站消息通過這個回調拋給 dispatcher */
   onMessage: MessageHandler | null;
 
-  /** 出站：把统一 OutgoingMessage 翻译成平台协议发出去 */
+  /** 出站：把統一 OutgoingMessage 翻譯成平臺協議發出去 */
   send(msg: OutgoingMessage): Promise<{ ok: boolean; error?: string }>;
 
-  /** UI 展示用状态。轮询调用，adapter 内部缓存即可。 */
+  /** UI 展示用狀態。輪詢調用，adapter 內部緩存即可。 */
   getStatus(): ChannelStatus;
 }
 
-/** 工具类型：adapter 的可选 onMessage setter。 */
+/** 工具類型：adapter 的可選 onMessage setter。 */
 export function setAdapterHandler(
   adapter: ChannelAdapter,
   handler: MessageHandler | null,

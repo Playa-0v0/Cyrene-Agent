@@ -21,10 +21,10 @@ function _initModalOverlay(): void {
     '    <h3 class="cy-modal__title" id="cy-modal-title">提示</h3>',
     '  </div>',
     '  <hr class="cy-modal__divider">',
-    '  <p class="cy-modal__body" id="cy-modal-message">确认执行此操作吗？</p>',
+    '  <p class="cy-modal__body" id="cy-modal-message">確認執行此操作嗎？</p>',
     '  <div class="cy-modal__actions">',
     '    <button type="button" class="ghost-btn" id="cy-modal-cancel">取消</button>',
-    '    <button type="button" class="btn-primary" id="cy-modal-confirm">确定</button>',
+    '    <button type="button" class="btn-primary" id="cy-modal-confirm">確定</button>',
     '  </div>',
     '</div>',
   ].join("\n");
@@ -43,7 +43,7 @@ function showModal (options: { title: string; message: string; icon?: string; co
   titleEl.textContent = options.title;
   msgEl.textContent = options.message;
   cancelBtn.textContent = options.cancelText || "取消";
-  confirmBtn.textContent = options.confirmText || "确定";
+  confirmBtn.textContent = options.confirmText || "確定";
   _cyModalOverlay.classList.remove("is-hidden");
   return new Promise(function (resolve) {
     var cleanup = function (result: boolean) {
@@ -59,7 +59,7 @@ function showModal (options: { title: string; message: string; icon?: string; co
   });
 }
 
-// Inline input modal (Electron 禁用了 window.prompt，所以自己实现)
+// Inline input modal (Electron 禁用了 window.prompt，所以自己實現)
 let _cyInputOverlay: HTMLElement | null = null;
 function _initInputOverlay(): void {
   if (_cyInputOverlay) return;
@@ -70,7 +70,7 @@ function _initInputOverlay(): void {
     '<div class="cy-modal" role="dialog" aria-modal="true" style="width:min(420px,90vw);">',
     '  <div class="cy-modal__head">',
     '    <span class="cy-modal__icon" id="cy-input-icon">✏️</span>',
-    '    <h3 class="cy-modal__title" id="cy-input-title">请输入</h3>',
+    '    <h3 class="cy-modal__title" id="cy-input-title">請輸入</h3>',
     '  </div>',
     '  <hr class="cy-modal__divider">',
     '  <p class="cy-modal__body" id="cy-input-message"></p>',
@@ -78,7 +78,7 @@ function _initInputOverlay(): void {
     '    style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(0,0,0,0.32);color:var(--rb-text-strong,#fff);font-family:inherit;font-size:13px;outline:none;margin-bottom:12px;" />',
     '  <div class="cy-modal__actions">',
     '    <button type="button" class="ghost-btn" id="cy-input-cancel">取消</button>',
-    '    <button type="button" class="btn-primary" id="cy-input-confirm">确定</button>',
+    '    <button type="button" class="btn-primary" id="cy-input-confirm">確定</button>',
     '  </div>',
     '</div>',
   ].join("\n");
@@ -108,7 +108,7 @@ function showInputModal(options: {
   inputEl.value = options.defaultValue || "";
   inputEl.placeholder = options.placeholder || "";
   cancelBtn.textContent = options.cancelText || "取消";
-  confirmBtn.textContent = options.confirmText || "确定";
+  confirmBtn.textContent = options.confirmText || "確定";
   _cyInputOverlay.classList.remove("is-hidden");
   setTimeout(() => inputEl.focus(), 30);
   return new Promise((resolve) => {
@@ -122,7 +122,11 @@ function showInputModal(options: {
     const onCancel = () => cleanup(null);
     const onConfirm = () => cleanup(inputEl.value);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Enter") { e.preventDefault(); onConfirm(); }
+      if (e.key === "Enter") {
+        if (e.isComposing) return;
+        e.preventDefault();
+        onConfirm();
+      }
       else if (e.key === "Escape") { e.preventDefault(); onCancel(); }
     };
     cancelBtn.addEventListener("click", onCancel);
@@ -138,8 +142,8 @@ interface ProviderProfile {
   apiKey: string;
   displayName?: string;
   /**
-   * 用户在 settings 显式指定的 transport；"auto" = 按 baseUrl 启发式 + capabilities fallback。
-   * main 进程的 resolveTransport() 负责把 "auto" 解析为具体 transport。
+   * 用戶在 settings 顯式指定的 transport；"auto" = 按 baseUrl 啟發式 + capabilities fallback。
+   * main 進程的 resolveTransport() 負責把 "auto" 解析為具體 transport。
    */
   explicitTransport?: "openai" | "anthropic" | "auto";
 }
@@ -147,17 +151,17 @@ interface ProviderProfile {
 interface ModelSettings {
   mode: "auto" | "manual";
   provider: string;
-  // 用户给模型起的自定义昵称，留空时用厂商 shortName。状态栏"正在喂养"显示它。
+  // 用戶給模型起的自定義暱稱，留空時用廠商 shortName。狀態欄"正在餵養"顯示它。
   displayName?: string;
   baseUrl: string;
   model: string;
   apiKey: string;
   /**
-   * 当前厂商的 explicitTransport 镜像（顶层字段是 main 进程 perProvider[currentProvider] 的视图）。
-   * UI 改动 transport-select 时，saveConfig 把这个值带给 main 进程折叠回 perProvider。
+   * 當前廠商的 explicitTransport 鏡像（頂層字段是 main 進程 perProvider[currentProvider] 的視圖）。
+   * UI 改動 transport-select 時，saveConfig 把這個值帶給 main 進程摺疊回 perProvider。
    */
   explicitTransport?: "openai" | "anthropic" | "auto";
-  // 按厂商缓存：切回该厂商时，从这里恢复 baseUrl / model / apiKey
+  // 按廠商緩存：切回該廠商時，從這裡恢復 baseUrl / model / apiKey
   perProvider?: Record<string, ProviderProfile>;
   runtimeSync: "off" | "local" | "llm";
   stickerEnabled: boolean;
@@ -189,6 +193,8 @@ interface ScheduledTask {
   lastFiredAt?: string;
   toolMode: SchedulerToolMode;
   allowedToolIds: string[];
+  managedBy?: "daily-ritual";
+  ritualId?: "morning" | "afternoon" | "evening";
   createdAt: string;
   updatedAt: string;
 }
@@ -235,22 +241,26 @@ interface SchedulerApi {
 
 interface ModelPreset {
   providerName: string;
-  // 厂商短名（去括号后缀），用于状态栏"正在喂养"显示和昵称默认值。
+  // 下拉選單顯示名；保留 providerName 可兼容既有配置鍵（例如 Custom）。
+  selectLabel?: string;
+  // 廠商短名（去括號後綴），用於狀態欄"正在餵養"顯示和暱稱默認值。
   // 如 "MiniMax（稀宇科技）" → shortName "MiniMax"。
   shortName: string;
   baseUrl: string;
   mainModels: string[];
   iconUrl: string;
-  // 厂商官网链接，显示在预设下拉框旁边，方便用户直接跳转注册/查看文档。
+  // 不需要真實密鑰的本機 OpenAI 兼容服務可提供一個佔位值。
+  defaultApiKey?: string;
+  // 廠商官網鏈接，顯示在預設下拉框旁邊，方便用戶直接跳轉註冊/查看文檔。
   websiteUrl?: string;
-  // 视觉模型的 OpenAI 兼容 baseUrl。仅当主配走 Anthropic 入口、视觉要走 OpenAI 入口时才标
-  // （如 MiniMax 主配 /anthropic，视觉走 /v1）。勾选"同步主模型"时 UI 用它填视觉框。
+  // 視覺模型的 OpenAI 兼容 baseUrl。僅當主配走 Anthropic 入口、視覺要走 OpenAI 入口時才標
+  // （如 MiniMax 主配 /anthropic，視覺走 /v1）。勾選"同步主模型"時 UI 用它填視覺框。
   visionBaseUrl?: string;
-  // 该厂商默认主模型是否支持视觉。true 时设置页加载默认勾选"同步主模型"，
-  // 多模态用户开箱即用。与 capabilities.ts 的 supportsVision 镜像，需手动同步。
+  // 該廠商默認主模型是否支持視覺。true 時設置頁加載默認勾選"同步主模型"，
+  // 多模態用戶開箱即用。與 capabilities.ts 的 supportsVision 鏡像，需手動同步。
   supportsVision?: boolean;
-  // 标记为 true 时，该项在 <select> 里显示但不可选；
-  // 用于"已列出但 vendor adapter 还没接好"的情况，避免用户选到后调用直接报错。
+  // 標記為 true 時，該項在 <select> 裡顯示但不可選；
+  // 用於"已列出但 vendor adapter 還沒接好"的情況，避免用戶選到後調用直接報錯。
   disabled?: boolean;
 }
 
@@ -261,6 +271,7 @@ interface GeneralSettings {
   soundVolume: number;
   petAlwaysOnTop: boolean;
   petVisible: boolean;
+  petChatInputEnabled: boolean;
   petZoom: number;
   sidebarVisible: boolean;
   tasksVisible: boolean;
@@ -293,10 +304,46 @@ interface MemoryPanelPayload {
     id: string;
     content: string;
     triggerText: string;
-    status: "active" | "aging" | "archived";
+    status: "active" | "aging" | "archived" | "superseded" | "merged";
     weight: number;
     createdAt: number;
+    lastAccessedAt: number;
+    accessCount: number;
+    isPinned: boolean;
+    sourceConversationId: string;
+    isSummary: boolean;
+    conflictCount: number;
+    supersededBy?: string;
+    mergedInto?: string;
+    evidence: Array<{
+      id: string;
+      quoteSnippet: string;
+      contextBeforeSnippet?: string;
+      contextAfterSnippet?: string;
+      conversationId?: string;
+      createdAt: number;
+      sourceStatus: "active" | "archived" | "deleted";
+    }>;
   }>;
+  graph: {
+    nodes: Array<{
+      id: string;
+      name: string;
+      type: "user" | "person" | "place" | "concept" | "preference" | "organization";
+      mentionCount: number;
+      firstMentionedAt: number;
+      lastMentionedAt: number;
+    }>;
+    edges: Array<{
+      id: string;
+      sourceId: string;
+      targetId: string;
+      relation: string;
+      strength: number;
+      confidence: number;
+      inferred: boolean;
+    }>;
+  };
   importedDocs: Array<{
     importId: string | null;
     fileName: string;
@@ -316,6 +363,8 @@ interface MemoryPanelApi {
   deleteImportedDoc: (importId: string, fileName?: string) => Promise<{ ok: boolean; deleted: number }>;
   saveL0: (patch: Record<string, unknown>) => Promise<{ ok: boolean }>;
   saveL1: (patch: Record<string, unknown>) => Promise<{ ok: boolean }>;
+  pinL2: (id: string, pinned: boolean) => Promise<{ ok: boolean; error?: string }>;
+  deleteL2: (id: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 interface SettingsApi {
@@ -334,6 +383,14 @@ interface SettingsApi {
   setPetZoom: (value: number) => void;
   previewRuntimeSync: (value: "off" | "local" | "llm") => void;
   openStickerManager: () => Promise<{ ok: boolean; error?: string }>;
+  securityGetStatus: () => Promise<{ available: boolean; backend: string; protectedCount: number; plaintextCount: number; lockedCount: number }>;
+  securityMigrate: () => Promise<{ available: boolean; backend: string; protectedCount: number; plaintextCount: number; lockedCount: number }>;
+  securityRestartApp: () => void;
+  backupGetConfig: () => Promise<{ autoEnabled: boolean; retentionDays: 7 | 30; lastAutoBackupAt?: string }>;
+  backupSaveConfig: (patch: { autoEnabled?: boolean; retentionDays?: 7 | 30 }) => Promise<{ autoEnabled: boolean; retentionDays: 7 | 30; lastAutoBackupAt?: string }>;
+  backupCreate: (categories: string[]) => Promise<BackupSummary | null>;
+  backupPickInspect: () => Promise<BackupSummary | null>;
+  backupRestore: (payload: { filePath: string; categories: string[] }) => Promise<{ restoredFiles: number; safetyBackupPath: string }>;
   stickerPickFile?: () => Promise<string | null>;
   stickerAdd?: (payload: { sourcePath: string; id: string; description: string; phrases: string[] }) => Promise<unknown>;
   getEmbeddingStatus?: () => Promise<Record<string, { installed: boolean; sizeBytes: number }>>;
@@ -352,8 +409,162 @@ interface SettingsApi {
   setPermissionLevel?: (level: string) => Promise<{ ok: boolean; level?: string; error?: string }>;
   testConnection?: (config: { provider: string; baseUrl: string; model: string; apiKey: string }) => Promise<{ ok: boolean; latency: number; sample?: string; error?: string }>;
   testVision?: (config: { baseUrl: string; apiKey: string; model: string }) => Promise<{ ok: boolean; latency: number; sample?: string; error?: string }>;
-  // main → settings：要求切到指定标签（窗口已打开时由 main 发这个事件）
+  channelsDiscordGetProfile: () => Promise<DiscordBotProfile>;
+  channelsDiscordGetMusicState: () => Promise<DiscordMusicState>;
+  channelsDiscordGetMusicHistory: () => Promise<DiscordMusicHistoryEntry[]>;
+  channelsDiscordGetMusicFavorites: () => Promise<DiscordMusicFavoriteEntry[]>;
+  channelsDiscordControlMusic: (input: DiscordMusicControlInput) => Promise<{ ok: boolean; message: string; state?: DiscordMusicState }>;
+  channelsDiscordUpdateProfile: (profile: { username: string; activityText: string; status: string; avatarPath?: string; bannerPath?: string }) => Promise<{ ok: boolean; profile?: DiscordBotProfile; error?: string }>;
+  channelsDiscordPickAvatar: () => Promise<string | null>;
+  channelsDiscordPickBanner: () => Promise<string | null>;
+  channelsSpotifyAuthorize: (input: { clientId?: string; clientSecret?: string }) => Promise<ChannelConnectionResult>;
+  channelsSpotifyGetStatus: () => Promise<SpotifyPlaybackStatus>;
+  channelsSpotifyControl: (input: { command: string; value?: number; deviceId?: string; query?: string }) => Promise<{ ok: boolean; message: string }>;
+  channelsSpotifyDisconnect: () => Promise<ChannelConnectionResult>;
+  channelsBilibiliConnect: () => Promise<ChannelConnectionResult & { profilePath?: string; title?: string }>;
+  channelsBilibiliGetStatus: () => Promise<BilibiliConnectionStatus>;
+  channelsBilibiliDisconnect: () => Promise<ChannelConnectionResult>;
+  channelsGetConfig: () => Promise<ChannelsPreviewConfig>;
+  channelsSaveConfig: (patch: unknown) => Promise<unknown>;
+  channelsList: () => Promise<unknown[]>;
+  channelsGetStatus: () => Promise<Record<string, { phase: string; message?: string }>>;
+  channelsRestart: () => Promise<ChannelConnectionResult>;
+  channelsWechatInstall: () => Promise<ChannelConnectionResult>;
+  channelsWechatLoginStart: () => Promise<ChannelConnectionResult>;
+  channelsWechatLoginCancel: () => Promise<ChannelConnectionResult>;
+  channelsWechatPairingList: () => Promise<unknown[]>;
+  channelsWechatPairingApprove: (code: string) => Promise<ChannelConnectionResult>;
+  channelsWechatLogout: () => Promise<ChannelConnectionResult>;
+  channelsWechatRuntimeDetect: () => Promise<unknown>;
+  channelsWechatRuntimeInstall: () => Promise<ChannelConnectionResult>;
+  channelsWechatRuntimeUpdate: () => Promise<ChannelConnectionResult>;
+  channelsFeishuTestConnection: () => Promise<ChannelConnectionResult>;
+  channelsFeishuTestWebhookReachable: () => Promise<ChannelConnectionResult>;
+  channelsDiscordTestConnection: () => Promise<ChannelConnectionResult>;
+  channelsLogGet: (limit?: number) => Promise<unknown[]>;
+  channelsLogClear: () => Promise<unknown>;
+  onChannelsInstallProgress: (callback: (progress: { channel: string; phase: string; pct: number }) => void) => (() => void) | void;
+  onChannelsStatusChanged: (callback: (status: unknown) => void) => (() => void) | void;
+  onChannelsWechatQrcode: (callback: (dataUrl: string) => void) => (() => void) | void;
+  onChannelsWechatLoginDone: (callback: (payload: { ok: boolean; botId?: string; error?: string }) => void) => (() => void) | void;
+  // main → settings：要求切到指定標籤（窗口已打開時由 main 發這個事件）
   onSwitchSection?: (callback: (section: string) => void) => (() => void) | void;
+}
+
+interface BackupSummary {
+  filePath: string;
+  createdAt: string;
+  appVersion: string;
+  categories: Array<{ id: string; label: string; fileCount: number; sizeBytes: number }>;
+  fileCount: number;
+  sizeBytes: number;
+}
+
+interface DiscordBotProfile {
+  connected: boolean;
+  id?: string;
+  username?: string;
+  tag?: string;
+  avatarUrl?: string;
+  bannerUrl?: string;
+  applicationId?: string;
+  guildCount: number;
+  guilds: Array<{ id: string; name: string }>;
+  presenceStatus?: string;
+  activityText?: string;
+  voiceActive: boolean;
+}
+
+interface DiscordMusicTrack {
+  id: string;
+  title: string;
+  url: string;
+  thumbnail?: string;
+  playlistTitle?: string;
+  duration?: number;
+  index: number;
+  total: number;
+}
+
+interface DiscordMusicState {
+  active: boolean;
+  paused: boolean;
+  current: DiscordMusicTrack | null;
+  queue: DiscordMusicTrack[];
+  volume: number;
+  repeat: "off" | "track" | "queue";
+  shuffle: boolean;
+  autoplay: boolean;
+  elapsed: number;
+}
+
+interface DiscordMusicControlInput {
+  command: "previous" | "pause" | "resume" | "skip" | "stop" | "repeat-track" | "repeat-queue" | "repeat-off" | "shuffle" | "ordered" | "clear" | "remove" | "volume" | "autoplay-on" | "autoplay-off";
+  value?: number;
+}
+
+interface DiscordMusicHistoryEntry {
+  id: string;
+  title: string;
+  url: string;
+  thumbnail?: string;
+  playlistTitle?: string;
+  playedAt: string;
+}
+
+interface DiscordMusicFavoriteEntry {
+  id: string;
+  title: string;
+  url: string;
+  thumbnail?: string;
+  playlistTitle?: string;
+  duration?: number;
+  savedAt: string;
+}
+
+interface SpotifyPlaybackStatus {
+  configured: boolean;
+  connected: boolean;
+  accountName?: string;
+  product?: string;
+  error?: string;
+  playback?: { active: boolean; paused: boolean; progressMs: number; durationMs: number; title?: string; artists?: string; album?: string; imageUrl?: string; deviceName?: string; volume?: number };
+  devices: Array<{ id: string; name: string; type: string; active: boolean; volume?: number }>;
+}
+
+interface BilibiliConnectionStatus {
+  connected: boolean;
+  browser: string;
+  profilePath: string;
+}
+
+interface ChannelsPreviewConfig {
+  wechat: { enabled: boolean };
+  feishu: { enabled: boolean; appId?: string; appSecret?: string };
+  discord: {
+    enabled: boolean;
+    botToken?: string;
+    allowedGuildIds?: string[];
+    allowedChannelIds?: string[];
+    allowedUserIds?: string[];
+    codexImageOwnerId?: string;
+    requireMention?: boolean;
+    voiceEnabled?: boolean;
+  };
+  spotify: { enabled: boolean; clientId?: string; clientSecret?: string; refreshToken?: string; accountName?: string };
+  bilibili: { enabled: boolean; browser?: "opera-gx" };
+  rateLimitPerUser: number;
+  rateLimitPerChannel: number;
+  ttsEnabled: boolean;
+  stickerEnabled: boolean;
+  mirrorToDesktop: boolean;
+  toolSandbox: "safe-only" | "all";
+}
+
+interface ChannelConnectionResult {
+  ok: boolean;
+  message?: string;
+  error?: string;
 }
 
 declare global {
@@ -366,8 +577,36 @@ declare global {
 }
 
 const MODEL_PRESETS: ModelPreset[] = [
-  // 当前 v1 计划适配的 7 家：MiniMax / 火山 Agent-Plan / 智谱 GLM / Kimi / Qwen / ChatGPT / Claude
-  // 顺序按使用频率 + 适配优先级；未在此清单内的厂商已硬删，需要时再补回。
+  {
+    // 沿用既有的 Custom profile key，讓已保存的 OpenRouter API Key 無需遷移即可復用。
+    providerName: "Custom",
+    selectLabel: "OpenRouter（免費路由）",
+    shortName: "OpenRouter Free",
+    baseUrl: "https://openrouter.ai/api/v1",
+    mainModels: ["openrouter/free"],
+    iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openrouter.svg",
+    websiteUrl: "https://openrouter.ai/",
+  },
+  {
+    providerName: "Gemini（Google）",
+    shortName: "Gemini 3.5 Flash",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
+    mainModels: ["gemini-3.5-flash"],
+    iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/gemini.svg",
+    websiteUrl: "https://aistudio.google.com/apikey",
+    supportsVision: true,
+  },
+  {
+    providerName: "Ollama（本機）",
+    shortName: "Llama Local",
+    baseUrl: "http://127.0.0.1:11434/v1",
+    mainModels: ["llama3.1:8b"],
+    iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/ollama.svg",
+    websiteUrl: "https://ollama.com/library/llama3.1",
+    defaultApiKey: "ollama",
+  },
+  // 當前 v1 計劃適配的 7 家：MiniMax / 火山 Agent-Plan / 智譜 GLM / Kimi / Qwen / ChatGPT / Claude
+  // 順序按使用頻率 + 適配優先級；未在此清單內的廠商已硬刪，需要時再補回。
   {
     providerName: "MiniMax（稀宇科技）",
     shortName: "MiniMax",
@@ -375,14 +614,14 @@ const MODEL_PRESETS: ModelPreset[] = [
     mainModels: ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.5"],
     iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/minimax.svg",
     websiteUrl: "https://platform.minimaxi.com/",
-    // 主配走 /anthropic，但视觉要走 OpenAI 入口 /v1。勾"同步"时 UI 自动用这个，用户不用手改。
+    // 主配走 /anthropic，但視覺要走 OpenAI 入口 /v1。勾"同步"時 UI 自動用這個，用戶不用手改。
     visionBaseUrl: "https://api.minimaxi.com/v1",
     supportsVision: true,
   },
   {
-    // DeepSeek：v1 vendor adapter 不为它做协议层强制，仅作为 OpenAI 兼容厂商列出。
-    // 已确认（来自官方定价文档）：支持 Tool Calls / JSON Output；后端原生缓存（命中后输入价跌至 1/50~1/120）。
-    // 缓存能力等 v2 vendor adapter 接入时再利用，v1 不动。
+    // DeepSeek：v1 vendor adapter 不為它做協議層強制，僅作為 OpenAI 兼容廠商列出。
+    // 已確認（來自官方定價文檔）：支持 Tool Calls / JSON Output；後端原生緩存（命中後輸入價跌至 1/50~1/120）。
+    // 緩存能力等 v2 vendor adapter 接入時再利用，v1 不動。
     providerName: "DeepSeek（深度求索）",
     shortName: "DeepSeek",
     baseUrl: "https://api.deepseek.com",
@@ -397,11 +636,11 @@ const MODEL_PRESETS: ModelPreset[] = [
     mainModels: ["ark-code-latest"],
     iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/doubao.svg",
     websiteUrl: "https://www.volcengine.com/product/agent-plan",
-    // 火山方舟是聚合平台，路由到 doubao-seed 等多模态子模型时支持视觉
+    // 火山方舟是聚合平臺，路由到 doubao-seed 等多模態子模型時支持視覺
     supportsVision: true,
   },
   {
-    providerName: "GLM（智谱）",
+    providerName: "GLM（智譜）",
     shortName: "GLM",
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
     mainModels: ["glm-5.1", "glm-5-turbo", "glm-4.7"],
@@ -415,11 +654,11 @@ const MODEL_PRESETS: ModelPreset[] = [
     mainModels: ["kimi-k2.6", "kimi-k2.5", "kimi-k2-thinking"],
     iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/moonshot.svg",
     websiteUrl: "https://platform.moonshot.cn/",
-    // k2.6 / k2.7-code 支持 image_url 多模态
+    // k2.6 / k2.7-code 支持 image_url 多模態
     supportsVision: true,
   },
   {
-    providerName: "Qwen（通义千问）",
+    providerName: "Qwen（通義千問）",
     shortName: "Qwen",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     mainModels: ["qwen-max", "qwen-plus", "qwen-turbo"],
@@ -430,7 +669,7 @@ const MODEL_PRESETS: ModelPreset[] = [
     providerName: "ChatGPT（OpenAI）",
     shortName: "ChatGPT",
     baseUrl: "https://api.openai.com/v1",
-    // 国内多数用户走中转站，型号命名各家不一；预设留空，由用户在型号输入框里自行填写。
+    // 國內多數用戶走中轉站，型號命名各家不一；預設留空，由用戶在型號輸入框裡自行填寫。
     mainModels: [],
     iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openai.svg",
     websiteUrl: "https://platform.openai.com/",
@@ -439,12 +678,12 @@ const MODEL_PRESETS: ModelPreset[] = [
     providerName: "Claude（Anthropic）",
     shortName: "Claude",
     baseUrl: "https://api.anthropic.com/v1",
-    // 同上，且 Anthropic 协议尚未接入，暂禁选。
+    // 同上，且 Anthropic 協議尚未接入，暫禁選。
     mainModels: [],
     iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/claude.svg",
     websiteUrl: "https://console.anthropic.com/",
-    // Anthropic 的请求体不是 OpenAI 兼容格式（messages / system / 流式都不一样），
-    // 在专属 vendor adapter 接好之前先 disabled，避免用户选到后调用直接报 4xx。
+    // Anthropic 的請求體不是 OpenAI 兼容格式（messages / system / 流式都不一樣），
+    // 在專屬 vendor adapter 接好之前先 disabled，避免用戶選到後調用直接報 4xx。
     disabled: true,
   },
 ];
@@ -455,17 +694,18 @@ if (!window.settings) {
     close: () => {},
     getConfig: () =>
       Promise.resolve({
-        mode: "auto",
-        provider: "DeepSeek",
-        baseUrl: "https://api.deepseek.com",
-        model: "deepseek-v4-pro",
+        mode: "manual",
+        provider: "Custom",
+        displayName: "OpenRouter Free",
+        baseUrl: "https://openrouter.ai/api/v1",
+        model: "openrouter/free",
         apiKey: "",
         runtimeSync: "off",
         stickerEnabled: true,
         stickerSize: "standard",
       }),
     saveConfig: (c) => Promise.resolve(c as ModelSettings),
-    getGeneral: () => Promise.resolve({ musicEnabled: false, musicVolume: 60, soundEnabled: true, soundVolume: 70, petAlwaysOnTop: true, petVisible: true, petZoom: 1, sidebarVisible: true, tasksVisible: true, launchAtLogin: false, language: "zh-CN", uiTheme: "classic" }),
+    getGeneral: () => Promise.resolve({ musicEnabled: false, musicVolume: 60, soundEnabled: true, soundVolume: 70, petAlwaysOnTop: true, petVisible: true, petChatInputEnabled: false, petZoom: 1, sidebarVisible: true, tasksVisible: true, launchAtLogin: false, language: "zh-CN", uiTheme: "classic" }),
     saveGeneral: (c) => Promise.resolve(c as GeneralSettings),
     openSidebar: () => {},
     closeSidebar: () => {},
@@ -475,6 +715,14 @@ if (!window.settings) {
     setPetVisible: () => {},
     setPetZoom: () => {},
     openStickerManager: async () => ({ ok: false, error: "settings api unavailable" }),
+    securityGetStatus: async () => ({ available: false, backend: "不可用", protectedCount: 0, plaintextCount: 0, lockedCount: 0 }),
+    securityMigrate: async () => ({ available: false, backend: "不可用", protectedCount: 0, plaintextCount: 0, lockedCount: 0 }),
+    securityRestartApp: () => {},
+    backupGetConfig: async () => ({ autoEnabled: false, retentionDays: 7 }),
+    backupSaveConfig: async (patch) => ({ autoEnabled: patch.autoEnabled ?? false, retentionDays: patch.retentionDays ?? 7 }),
+    backupCreate: async () => null,
+    backupPickInspect: async () => null,
+    backupRestore: async () => ({ restoredFiles: 0, safetyBackupPath: "" }),
     stickerPickFile: async () => null,
     stickerAdd: async () => { throw new Error("settings api unavailable"); },
     setToolEnabled: async () => ({ ok: false, error: "settings api unavailable" }),
@@ -484,6 +732,60 @@ if (!window.settings) {
     addMcpServer: async () => ({ ok: false, error: "settings api unavailable" }),
     removeMcpServer: async () => ({ ok: false, error: "settings api unavailable" }),
     listMcpServers: async () => [],
+    channelsDiscordGetProfile: async () => ({ connected: false, guildCount: 0, guilds: [], voiceActive: false }),
+    channelsDiscordGetMusicState: async () => ({ active: false, paused: false, current: null, queue: [], volume: 100, repeat: "off", shuffle: false, autoplay: false, elapsed: 0 }),
+    channelsDiscordGetMusicHistory: async () => [],
+    channelsDiscordGetMusicFavorites: async () => [],
+    channelsDiscordControlMusic: async () => ({ ok: false, message: "settings api unavailable" }),
+    channelsDiscordUpdateProfile: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsDiscordPickAvatar: async () => null,
+    channelsDiscordPickBanner: async () => null,
+    channelsSpotifyAuthorize: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsSpotifyGetStatus: async () => ({ configured: false, connected: false, devices: [] }),
+    channelsSpotifyControl: async () => ({ ok: false, message: "settings api unavailable" }),
+    channelsSpotifyDisconnect: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsBilibiliConnect: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsBilibiliGetStatus: async () => ({ connected: false, browser: "Opera GX", profilePath: "" }),
+    channelsBilibiliDisconnect: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsGetConfig: async () => ({
+      wechat: { enabled: false },
+      feishu: { enabled: false },
+      discord: { enabled: false, requireMention: true, voiceEnabled: true },
+      spotify: { enabled: false },
+      bilibili: { enabled: false, browser: "opera-gx" },
+      rateLimitPerUser: 10,
+      rateLimitPerChannel: 100,
+      ttsEnabled: true,
+      stickerEnabled: true,
+      mirrorToDesktop: true,
+      toolSandbox: "safe-only",
+    }),
+    channelsSaveConfig: async () => ({}),
+    channelsList: async () => [],
+    channelsGetStatus: async () => ({
+      wechat: { phase: "offline", message: "預覽模式" },
+      feishu: { phase: "offline", message: "預覽模式" },
+      discord: { phase: "offline", message: "預覽模式" },
+    }),
+    channelsRestart: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsWechatInstall: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsWechatLoginStart: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsWechatLoginCancel: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsWechatPairingList: async () => [],
+    channelsWechatPairingApprove: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsWechatLogout: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsWechatRuntimeDetect: async () => ({ available: false }),
+    channelsWechatRuntimeInstall: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsWechatRuntimeUpdate: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsFeishuTestConnection: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsFeishuTestWebhookReachable: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsDiscordTestConnection: async () => ({ ok: false, error: "settings api unavailable" }),
+    channelsLogGet: async () => [],
+    channelsLogClear: async () => ({}),
+    onChannelsInstallProgress: () => () => {},
+    onChannelsStatusChanged: () => () => {},
+    onChannelsWechatQrcode: () => () => {},
+    onChannelsWechatLoginDone: () => () => {},
   };
 }
 
@@ -551,9 +853,9 @@ let editingSchedulerTaskId: string | null = null;
 
 const presetSelect = document.getElementById("preset-select") as HTMLSelectElement;
 const presetWebsiteLink = document.getElementById("preset-website-link") as HTMLAnchorElement;
-// 模式按钮已删除——baseUrl 永远可改、模型名永远可手填（datalist 出预设建议）
-// provider 不再暴露给用户（从预设内部拿，保证 capabilities 匹配不出错）。
-// 用户看到的是"昵称"框——给模型起自定义名字，状态栏"正在喂养"显示它。
+// 模式按鈕已刪除——baseUrl 永遠可改、模型名永遠可手填（datalist 出預設建議）
+// provider 不再暴露給用戶（從預設內部拿，保證 capabilities 匹配不出錯）。
+// 用戶看到的是"暱稱"框——給模型起自定義名字，狀態欄"正在餵養"顯示它。
 const displayNameInput = document.getElementById("display-name") as HTMLInputElement;
 const baseUrlInput = document.getElementById("base-url") as HTMLInputElement;
 const baseUrlResetBtn = document.getElementById("base-url-reset-btn") as HTMLButtonElement;
@@ -561,11 +863,12 @@ const modelInput = document.getElementById("model-input") as HTMLInputElement;
 const modelInputSuggestions = document.getElementById("model-input-suggestions") as HTMLDataListElement;
 const apiKeyInput = document.getElementById("api-key") as HTMLInputElement;
 const testConnectionBtn = document.getElementById("test-connection-btn") as HTMLButtonElement | null;
-// API 协议下拉（auto / openai / anthropic）—— 用户显式 override transport
+const quickApiButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-api-source]"));
+// API 協議下拉（auto / openai / anthropic）—— 用戶顯式 override transport
 const transportSelect = document.getElementById("transport-select") as HTMLSelectElement;
 
-// 视觉模型配置区元素
-// 同步主模型改为胶囊按钮组：[与主聊天模型相同] / [独立配置]
+// 視覺模型配置區元素
+// 同步主模型改為膠囊按鈕組：[與主聊天模型相同] / [獨立配置]
 const visionSyncBlocks = document.getElementById("vision-sync-blocks") as HTMLElement;
 const visionSyncMainBtn = visionSyncBlocks.querySelector('[data-vision-sync="main"]') as HTMLButtonElement;
 const visionSyncIndepBtn = visionSyncBlocks.querySelector('[data-vision-sync="independent"]') as HTMLButtonElement;
@@ -576,11 +879,11 @@ const visionFieldsWrap = document.querySelector(".vision-fields") as HTMLElement
 const testVisionBtn = document.getElementById("test-vision-btn") as HTMLButtonElement;
 const visionTestStatus = document.getElementById("vision-test-status") as HTMLElement;
 
-// 渲染端内存缓存：保存每个厂商上一次填写的 baseUrl / model / apiKey
-// 切厂商时从这里读，保存时同步进去；持久化由 main 进程的 saveModelSettings 负责（perProvider 字段）。
+// 渲染端內存緩存：保存每個廠商上一次填寫的 baseUrl / model / apiKey
+// 切廠商時從這裡讀，保存時同步進去；持久化由 main 進程的 saveModelSettings 負責（perProvider 字段）。
 const providerProfileCache: Record<string, ProviderProfile> = {};
 
-// 当前激活的厂商：每次 applyPreset 后更新；用于"切到下一家厂商前先把当前那家的输入框值缓存住"
+// 當前激活的廠商：每次 applyPreset 後更新；用於"切到下一家廠商前先把當前那家的輸入框值緩存住"
 let activeProvider: string = "";
 const runtimeSyncSelect = document.getElementById("runtime-sync") as HTMLElement;
 const runtimeSyncNote = document.getElementById("runtime-sync-note") as HTMLElement;
@@ -592,6 +895,7 @@ const soundEnabledInput = document.getElementById("sound-enabled") as HTMLInputE
 const soundVolumeInput = document.getElementById("sound-volume") as HTMLInputElement;
 const petAlwaysOnTopInput = document.getElementById("pet-always-on-top") as HTMLInputElement;
 const petVisibleInput = document.getElementById("pet-visible") as HTMLInputElement;
+const petChatInputEnabledInput = document.getElementById("pet-chat-input-enabled") as HTMLInputElement;
 const petZoomInput = document.getElementById("pet-zoom") as HTMLInputElement;
 const petZoomVal = document.getElementById("pet-zoom-val") as HTMLElement;
 const launchAtLoginInput = document.getElementById("launch-at-login") as HTMLInputElement;
@@ -606,20 +910,23 @@ const stickerThresholdInput = document.getElementById("sticker-threshold") as HT
 const stickerThresholdVal = document.getElementById("sticker-threshold-val") as HTMLElement;
 
 const NAV_LABELS: Record<string, { emoji: string; title: string; hint: string }> = {
-  memory: { emoji: "🧠", title: "记忆", hint: "管理长期记忆与画像" },
-  chat: { emoji: "💬", title: "聊天", hint: "管理聊天窗口与会话" },
-  user: { emoji: "👤", title: "用户信息", hint: "编辑你的个人资料" },
-  tasks: { emoji: "⏰", title: "定时任务", hint: "管理定时提醒与日程" },
-  identity: { emoji: "💼", title: "职位", hint: "自定义昔涟的身份定位与工作职责" },
-  skills: { emoji: "✨", title: "Skill", hint: "管理 agent 的 skill 指令（约束如何用工具）" },
-  plugins: { emoji: "🔌", title: "插件", hint: "扩展功能与第三方集成" },
-  general: { emoji: "⚙️", title: "设置", hint: "通用偏好与外观" },
-  api: { emoji: "🔑", title: "API 设置", hint: "选择预设后只需要填写 API Key。" },
-  cyrene: { emoji: "🌸", title: "昔涟设置", hint: "管理 Agent 行为、记忆、RAG 与权限" },
-  tts: { emoji: "🎙️", title: "TTS 设置", hint: "语音合成与朗读偏好" },
-  asr: { emoji: "🎧", title: "ASR 设置", hint: "语音识别与通话配置" },
-  tokens: { emoji: "📊", title: "Token 用量", hint: "查看 API 调用统计与消耗" },
-  disclaimer: { emoji: "📜", title: "免责声明", hint: "使用条款与隐私说明" },
+  memory: { emoji: "🧠", title: "記憶", hint: "管理長期記憶與畫像" },
+  chat: { emoji: "💬", title: "聊天", hint: "管理聊天窗口與會話" },
+  user: { emoji: "👤", title: "用戶信息", hint: "編輯你的個人資料" },
+  tasks: { emoji: "⏰", title: "定時任務", hint: "管理定時提醒與日程" },
+  identity: { emoji: "💼", title: "職位", hint: "自定義昔漣的身份定位與工作職責" },
+  skills: { emoji: "✨", title: "Skill", hint: "管理 agent 的 skill 指令（約束如何用工具）" },
+  plugins: { emoji: "🔌", title: "插件", hint: "擴展功能與第三方集成" },
+  general: { emoji: "⚙️", title: "設置", hint: "通用偏好與外觀" },
+  api: { emoji: "🔑", title: "API 設置", hint: "選擇預設後只需要填寫 API Key。" },
+  cyrene: { emoji: "🌸", title: "昔漣設置", hint: "管理 Agent 行為、記憶、RAG 與權限" },
+  channels: { emoji: "📱", title: "連接手機", hint: "管理 Discord、Spotify、飛書與微信連線" },
+  tts: { emoji: "🎙️", title: "TTS 設置", hint: "語音合成與朗讀偏好" },
+  asr: { emoji: "🎧", title: "ASR 設置", hint: "語音識別與通話配置" },
+  tokens: { emoji: "📊", title: "Token 用量", hint: "查看 API 調用統計與消耗" },
+  security: { emoji: "🛡️", title: "資料安全", hint: "備份回憶並保護本機密鑰" },
+  disclaimer: { emoji: "📜", title: "免責聲明", hint: "使用條款與隱私說明" },
+  "channels-discord": { emoji: "💬", title: "Discord", hint: "管理 Bot 身分、連線與回覆規則" },
 };
 
 minBtn.addEventListener("click", () => window.settings?.minimize());
@@ -731,28 +1038,28 @@ function fillPresetOptions(): void {
     const option = document.createElement("option");
     option.value = preset.providerName;
     if (preset.disabled) {
-      option.textContent = preset.providerName + "（暂未适配）";
+      option.textContent = (preset.selectLabel ?? preset.providerName) + "（暫未適配）";
       option.disabled = true;
     } else {
-      option.textContent = preset.providerName;
+      option.textContent = preset.selectLabel ?? preset.providerName;
     }
     presetSelect.appendChild(option);
   }
 }
 
 function findPreset(providerName: string): ModelPreset {
-  // fallback：找不到匹配的预设时，回退到列表第一个可用项（当前是 MiniMax）。
-  // 不直接返回 MODEL_PRESETS[0] 是为了未来若把首项改成 disabled 也仍然合法。
+  // fallback：找不到匹配的預設時，回退到列表第一個可用項（當前是 OpenRouter）。
+  // 不直接返回 MODEL_PRESETS[0] 是為了未來若把首項改成 disabled 也仍然合法。
   const fallback = MODEL_PRESETS.find((preset) => !preset.disabled) ?? MODEL_PRESETS[0];
   return MODEL_PRESETS.find((preset) => preset.providerName === providerName) ?? fallback;
 }
 
 /**
- * 填充模型名输入框 + datalist 联想建议。
- * 模式按钮已删除——只有一个输入框，可手填，按方向键也能从厂商预设里选。
+ * 填充模型名輸入框 + datalist 聯想建議。
+ * 模式按鈕已刪除——只有一個輸入框，可手填，按方向鍵也能從廠商預設裡選。
  */
 function fillModelOptions(preset: ModelPreset, preferredModel?: string): void {
-  // datalist 联想建议
+  // datalist 聯想建議
   modelInputSuggestions.replaceChildren();
   for (const model of preset.mainModels) {
     const option = document.createElement("option");
@@ -760,15 +1067,15 @@ function fillModelOptions(preset: ModelPreset, preferredModel?: string): void {
     modelInputSuggestions.appendChild(option);
   }
 
-  // 选中值：preferredModel 命中预设则用之；否则用预设首项；
-  // preferredModel 不在预设里（用户自填型号）也保留显示，不强行清空。
+  // 選中值：preferredModel 命中預設則用之；否則用預設首項；
+  // preferredModel 不在預設裡（用戶自填型號）也保留顯示，不強行清空。
   const fallback = preset.mainModels[0] ?? "";
   modelInput.value = preferredModel ?? fallback;
 }
 
 /**
- * 把"当前输入框里的值"快照到内存缓存里（perProvider）。
- * 切厂商前调用一次，避免覆盖丢失。
+ * 把"當前輸入框裡的值"快照到內存緩存裡（perProvider）。
+ * 切廠商前調用一次，避免覆蓋丟失。
  */
 function captureActiveProviderProfile(): void {
   if (!activeProvider) return;
@@ -781,23 +1088,33 @@ function captureActiveProviderProfile(): void {
   };
 }
 
-/** 模式按钮已删除——模型名永远从 input 读取。保留函数名供旧调用点用，语义不变。 */
+function syncQuickApiSelection(): void {
+  for (const button of quickApiButtons) {
+    const active = button.dataset.apiSource === activeProvider;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+    const state = button.querySelector<HTMLElement>(".api-source-card__state");
+    if (state) state.textContent = active ? "使用中" : "選擇";
+  }
+}
+
+/** 模式按鈕已刪除——模型名永遠從 input 讀取。保留函數名供舊調用點用，語義不變。 */
 function getCurrentModelValue(): string {
   return modelInput.value;
 }
 
 /**
- * 视觉同步 UI（胶囊按钮组）：
- * - 选"与主聊天模型相同"：三框变只读 + 值随主配置
- * - 选"独立配置"：三框可编辑
- * baseUrl 特殊处理：若当前厂商标了 visionBaseUrl（主配走 Anthropic 入口、视觉要走 OpenAI 入口），
- * 用 visionBaseUrl 填视觉框，让用户看到的就是正确的视觉入口，不用手动改。
+ * 視覺同步 UI（膠囊按鈕組）：
+ * - 選"與主聊天模型相同"：三框變只讀 + 值隨主配置
+ * - 選"獨立配置"：三框可編輯
+ * baseUrl 特殊處理：若當前廠商標了 visionBaseUrl（主配走 Anthropic 入口、視覺要走 OpenAI 入口），
+ * 用 visionBaseUrl 填視覺框，讓用戶看到的就是正確的視覺入口，不用手動改。
  */
 function applyVisionSyncUI(): void {
   const synced = visionSyncMainBtn.classList.contains("is-active");
   if (synced) {
     visionFieldsWrap.classList.add("is-locked");
-    // 找当前厂商 preset，看有没有 visionBaseUrl
+    // 找當前廠商 preset，看有沒有 visionBaseUrl
     const preset = findPreset(activeProvider);
     const visionBaseUrl = preset?.visionBaseUrl || baseUrlInput.value;
     visionBaseUrlInput.value = visionBaseUrl;
@@ -808,7 +1125,7 @@ function applyVisionSyncUI(): void {
   }
 }
 
-/** 切换视觉同步胶囊按钮的激活态。synced=true 激活"与主相同"，false 激活"独立配置"。 */
+/** 切換視覺同步膠囊按鈕的激活態。synced=true 激活"與主相同"，false 激活"獨立配置"。 */
 function setVisionSyncState(synced: boolean): void {
   visionSyncMainBtn.classList.toggle("is-active", synced);
   visionSyncMainBtn.setAttribute("aria-pressed", String(synced));
@@ -819,46 +1136,47 @@ function setVisionSyncState(synced: boolean): void {
 function applyPreset(providerName: string, preferredModel?: string, preferredApiKey?: string, preferredBaseUrl?: string, preferredDisplayName?: string, preferredExplicitTransport?: "openai" | "anthropic" | "auto"): void {
   const preset = findPreset(providerName);
 
-  // 模式按钮已删除——ChatGPT / Claude 这种没预设型号的厂商，input 框空着让用户手填，
-  // datalist 没建议也不影响（用户知道自己型号）。
+  // 模式按鈕已刪除——ChatGPT / Claude 這種沒預設型號的廠商，input 框空著讓用戶手填，
+  // datalist 沒建議也不影響（用戶知道自己型號）。
 
   presetSelect.value = preset.providerName;
 
-  // 昵称：优先用传入的（用户自定义过）；否则用厂商 shortName 作默认。
-  // 留空显示厂商短名——但这里主动填 shortName 让用户看到默认值，可改可清。
+  // 暱稱：優先用傳入的（用戶自定義過）；否則用廠商 shortName 作默認。
+  // 留空顯示廠商短名——但這裡主動填 shortName 讓用戶看到默認值，可改可清。
   displayNameInput.value = preferredDisplayName ?? preset.shortName;
 
-  // baseUrl：优先用缓存（用户自定义过），其次用 preset 默认
+  // baseUrl：優先用緩存（用戶自定義過），其次用 preset 默認
   baseUrlInput.value = preferredBaseUrl ?? preset.baseUrl;
 
   fillModelOptions(preset, preferredModel);
 
-  // apiKey：优先用缓存；否则**显式清空**——避免上一家厂商的 key 残留在输入框里被用户误点保存。
-  // 这是 v1 切厂商行为里的关键不变量：apiKey 永远只跟当前厂商绑定。
-  apiKeyInput.value = preferredApiKey ?? "";
+  // apiKey：優先用緩存；否則**顯式清空**——避免上一家廠商的 key 殘留在輸入框裡被用戶誤點保存。
+  // 這是 v1 切廠商行為裡的關鍵不變量：apiKey 永遠只跟當前廠商綁定。
+  apiKeyInput.value = preferredApiKey ?? preset.defaultApiKey ?? "";
 
-  // explicitTransport：优先用缓存（用户自定义过），其次默认 "auto"
-  // （切厂商时上一家的 explicitTransport 不应该延续，preset 自带 capabilities transport 兜底）
+  // explicitTransport：優先用緩存（用戶自定義過），其次默認 "auto"
+  // （切廠商時上一家的 explicitTransport 不應該延續，preset 自帶 capabilities transport 兜底）
   transportSelect.value = preferredExplicitTransport ?? "auto";
 
-  // 官网链接：有 websiteUrl 就显示并指向，没有就隐藏。
+  // 官網鏈接：有 websiteUrl 就顯示並指向，沒有就隱藏。
   if (preset.websiteUrl) {
     presetWebsiteLink.href = preset.websiteUrl;
-    presetWebsiteLink.title = `前往 ${preset.shortName} 官网`;
+    presetWebsiteLink.title = `前往 ${preset.shortName} 官網`;
     presetWebsiteLink.style.display = "";
   } else {
     presetWebsiteLink.style.display = "none";
   }
 
   activeProvider = preset.providerName;
+  syncQuickApiSelection();
 }
 
 async function loadConfig(): Promise<void> {
   try {
     fillPresetOptions();
     const cfg = await window.settings!.getConfig();
-    // 模式按钮已删除——mode 字段不再用 UI 控制，直接忽略 cfg.mode
-    // 把 main 进程返回的 perProvider 灌进渲染端内存缓存，切厂商时用到
+    // 模式按鈕已刪除——mode 字段不再用 UI 控制，直接忽略 cfg.mode
+    // 把 main 進程返回的 perProvider 灌進渲染端內存緩存，切廠商時用到
     if (cfg.perProvider && typeof cfg.perProvider === "object") {
       for (const [key, value] of Object.entries(cfg.perProvider)) {
         if (value && typeof value === "object") {
@@ -874,7 +1192,23 @@ async function loadConfig(): Promise<void> {
         }
       }
     }
-    applyPreset(cfg.provider, cfg.model, cfg.apiKey, cfg.baseUrl, cfg.displayName, cfg.explicitTransport);
+    // 舊版把 Google Gemini 存在 ChatGPT profile 下。保留原資料並映射到新的專屬 Gemini 卡，
+    // 讓用戶無需重新輸入已加密保存的 API Key。
+    const legacyGemini = providerProfileCache["ChatGPT（OpenAI）"];
+    if (
+      !providerProfileCache["Gemini（Google）"]
+      && legacyGemini?.baseUrl.includes("generativelanguage.googleapis.com")
+    ) {
+      providerProfileCache["Gemini（Google）"] = {
+        ...legacyGemini,
+        displayName: legacyGemini.displayName || "Gemini 3.5 Flash",
+      };
+    }
+    const loadedProvider = cfg.provider === "ChatGPT（OpenAI）"
+      && cfg.baseUrl.includes("generativelanguage.googleapis.com")
+      ? "Gemini（Google）"
+      : cfg.provider;
+    applyPreset(loadedProvider, cfg.model, cfg.apiKey, cfg.baseUrl, cfg.displayName, cfg.explicitTransport);
     applyRuntimeSyncSelection(cfg.runtimeSync);
     stickerEnabledInput.checked = cfg.stickerEnabled !== false;
     applyStickerSizeSelection(cfg.stickerSize);
@@ -882,7 +1216,7 @@ async function loadConfig(): Promise<void> {
     stickerThresholdInput.value = String(threshold);
     stickerThresholdVal.textContent = threshold.toFixed(2);
 
-    // 视觉模型配置
+    // 視覺模型配置
     const vision = cfg.vision;
     if (vision) {
       setVisionSyncState(vision.syncWithMain);
@@ -890,8 +1224,8 @@ async function loadConfig(): Promise<void> {
       visionApiKeyInput.value = vision.apiKey || "";
       visionModelInput.value = vision.model || "";
     } else {
-      // 用户从未配过视觉。按当前主模型 supportsVision 决定默认——
-      // 多模态主模型用户开箱即用（默认"与主相同"），非视觉主模型则默认"独立配置"。
+      // 用戶從未配過視覺。按當前主模型 supportsVision 決定默認——
+      // 多模態主模型用戶開箱即用（默認"與主相同"），非視覺主模型則默認"獨立配置"。
       const preset = findPreset(cfg.provider);
       setVisionSyncState(preset?.supportsVision === true);
       visionBaseUrlInput.value = "";
@@ -904,10 +1238,9 @@ async function loadConfig(): Promise<void> {
     setCyreneSaveStatus("等待保存");
   } catch {
     fillPresetOptions();
-    // 默认厂商已从 DeepSeek 改为 MiniMax（v1 vendor adapter 第一家落地的）
-    applyPreset("MiniMax（稀宇科技）");
-    setSaveStatus("读取配置失败", "is-error");
-    setCyreneSaveStatus("读取配置失败", "is-error");
+    applyPreset("Custom");
+    setSaveStatus("讀取配置失敗", "is-error");
+    setCyreneSaveStatus("讀取配置失敗", "is-error");
   }
 }
 
@@ -921,6 +1254,7 @@ async function loadGeneralSettings(): Promise<void> {
     soundVolumeInput.value = String(cfg.soundVolume);
     petAlwaysOnTopInput.checked = cfg.petAlwaysOnTop;
     petVisibleInput.checked = cfg.petVisible;
+    petChatInputEnabledInput.checked = cfg.petChatInputEnabled ?? false;
     petZoomInput.value = String(cfg.petZoom ?? 1);
     petZoomVal.textContent = Math.round((cfg.petZoom ?? 1) * 100) + "%";
     sidebarVisibleInput.checked = cfg.sidebarVisible ?? true;
@@ -930,7 +1264,7 @@ async function loadGeneralSettings(): Promise<void> {
     applyLanguageSelection("zh-CN");
     setGeneralSaveStatus("等待保存");
   } catch {
-    setGeneralSaveStatus("读取设置失败", "is-error");
+    setGeneralSaveStatus("讀取設置失敗", "is-error");
   }
 }
 
@@ -987,6 +1321,9 @@ soundVolumeInput.addEventListener("input", () => setGeneralSaveStatus("有未保
 
 petAlwaysOnTopInput.addEventListener("change", () => window.settings?.setPetAlwaysOnTop(petAlwaysOnTopInput.checked));
 petVisibleInput.addEventListener("change", () => window.settings?.setPetVisible(petVisibleInput.checked));
+petChatInputEnabledInput.addEventListener("change", () => {
+  void window.settings?.saveGeneral({ petChatInputEnabled: petChatInputEnabledInput.checked });
+});
 petZoomInput.addEventListener("input", () => {
   petZoomVal.textContent = Math.round(Number(petZoomInput.value) * 100) + "%";
 });
@@ -1008,15 +1345,15 @@ openStickerManagerBtn.addEventListener("click", async () => {
     const result = await window.settings?.openStickerManager();
     if (!result?.ok) {
       console.error("[settings] open sticker manager failed", result?.error);
-      window.alert("表情包管理窗口打开失败，请查看终端日志。" + (result?.error ? `\n${result.error}` : ""));
+      window.alert("表情包管理窗口打開失敗，請查看終端日誌。" + (result?.error ? `\n${result.error}` : ""));
     }
   } catch (error) {
     console.error("[settings] open sticker manager error", error);
-    window.alert("表情包管理窗口打开失败，请查看终端日志。");
+    window.alert("表情包管理窗口打開失敗，請查看終端日誌。");
   }
 });
 
-// ── 添加表情包弹窗 ──
+// ── 添加表情包彈窗 ──
 const stickerAddOverlay = document.getElementById("sticker-add-overlay") as HTMLElement;
 const stickerAddPickBtn = document.getElementById("sticker-add-pick-btn") as HTMLButtonElement;
 const stickerAddFileName = document.getElementById("sticker-add-file-name") as HTMLElement;
@@ -1031,7 +1368,7 @@ let stickerAddPickedPath: string | null = null;
 
 function openStickerAddModal(): void {
   stickerAddPickedPath = null;
-  stickerAddFileName.textContent = "未选择";
+  stickerAddFileName.textContent = "未選擇";
   stickerAddId.value = "";
   stickerAddDesc.value = "";
   stickerAddPhrases.value = "";
@@ -1063,30 +1400,30 @@ stickerAddConfirm.addEventListener("click", async () => {
   stickerAddError.classList.add("is-hidden");
 
   if (!stickerAddPickedPath) {
-    stickerAddError.textContent = "请先选择图片文件";
+    stickerAddError.textContent = "請先選擇圖片文件";
     stickerAddError.classList.remove("is-hidden");
     return;
   }
   const id = stickerAddId.value.trim();
   if (!id) {
-    stickerAddError.textContent = "请填写英文名称";
+    stickerAddError.textContent = "請填寫英文名稱";
     stickerAddError.classList.remove("is-hidden");
     return;
   }
   if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
-    stickerAddError.textContent = "名称只能用英文字母、数字、下划线和连字符";
+    stickerAddError.textContent = "名稱只能用英文字母、數字、下劃線和連字符";
     stickerAddError.classList.remove("is-hidden");
     return;
   }
   const description = stickerAddDesc.value.trim();
   if (!description) {
-    stickerAddError.textContent = "请填写图片描述";
+    stickerAddError.textContent = "請填寫圖片描述";
     stickerAddError.classList.remove("is-hidden");
     return;
   }
   const phrases = stickerAddPhrases.value.split("\n").map((s) => s.trim()).filter(Boolean);
   if (phrases.length === 0) {
-    stickerAddError.textContent = "请至少写一行相近语义";
+    stickerAddError.textContent = "請至少寫一行相近語義";
     stickerAddError.classList.remove("is-hidden");
     return;
   }
@@ -1095,30 +1432,30 @@ stickerAddConfirm.addEventListener("click", async () => {
     await window.settings?.stickerAdd?.({ sourcePath: stickerAddPickedPath, id, description, phrases });
     closeStickerAddModal();
   } catch (err) {
-    stickerAddError.textContent = "添加失败：" + (err as Error).message;
+    stickerAddError.textContent = "添加失敗：" + (err as Error).message;
     stickerAddError.classList.remove("is-hidden");
   }
 });
 
-// ── 插件开关事件 ──────────────────────────────────────────
-// 文档检索/用户记忆/世界书/联网搜索为常驻工具，无开关，显示绿灯。
-// 天气查询/联网搜索有独立配置卡片（下方）。
+// ── 插件開關事件 ──────────────────────────────────────────
+// 文檔檢索/用戶記憶/世界書/聯網搜索為常駐工具，無開關，顯示綠燈。
+// 天氣查詢/聯網搜索有獨立配置卡片（下方）。
 
-// ── 天气插件（Open-Meteo / 高德天气）──
+// ── 天氣插件（Open-Meteo / 高德天氣）──
 const weatherEnabledCheckbox = document.getElementById("plugin-weather-enabled") as HTMLInputElement | null;
 const weatherConfig = document.getElementById("plugin-weather-config") as HTMLElement | null;
 const weatherSourceSelect = document.getElementById("weather-source") as HTMLSelectElement | null;
 const amapFields = document.getElementById("amap-fields");
 const amapKeyInput = document.getElementById("amap-key") as HTMLInputElement | null;
 
-// 启用开关：勾上才展开配置区
+// 啟用開關：勾上才展開配置區
 function syncWeatherConfigVisibility(): void {
   if (weatherConfig) weatherConfig.style.display = weatherEnabledCheckbox?.checked ? "block" : "none";
   syncWeatherFieldsVisibility();
 }
 function syncWeatherFieldsVisibility(): void {
   const src = weatherSourceSelect?.value ?? "open-meteo";
-  // 选高德才显示高德 Key 输入框
+  // 選高德才顯示高德 Key 輸入框
   if (amapFields) amapFields.style.display = src === "amap" ? "block" : "none";
 }
 weatherEnabledCheckbox?.addEventListener("change", () => {
@@ -1132,7 +1469,7 @@ weatherSourceSelect?.addEventListener("change", () => {
 amapKeyInput?.addEventListener("change", () => {
   void saveWeatherField("amapKey", amapKeyInput.value.trim());
 });
-// 防抖保存：粘贴后 800ms 自动保存
+// 防抖保存：粘貼後 800ms 自動保存
 amapKeyInput?.addEventListener("input", () => {
   clearTimeout(amapKeyDebounceTimer);
   amapKeyDebounceTimer = setTimeout(() => {
@@ -1146,7 +1483,7 @@ async function saveWeatherField(field: string, value: unknown): Promise<void> {
   try {
     await window.tts.saveSettings({ [field]: value });
   } catch (err) {
-    console.warn("[plugins] 保存天气配置失败:", field, err);
+    console.warn("[plugins] 保存天氣配置失敗:", field, err);
   }
 }
 
@@ -1164,7 +1501,7 @@ async function loadWeatherConfig(): Promise<void> {
     }
     syncWeatherConfigVisibility();
   } catch (err) {
-    console.warn("[plugins] 加载天气配置失败", err);
+    console.warn("[plugins] 加載天氣配置失敗", err);
   }
 }
 void loadWeatherConfig();
@@ -1182,10 +1519,10 @@ travelEnabledCheckbox?.addEventListener("change", () => {
   void saveTravelField("travelEnabled", travelEnabledCheckbox.checked);
 });
 travelAmapKeyInput?.addEventListener("change", () => {
-  // 存到同一个 amapKey 字段（与天气查询共用）
+  // 存到同一個 amapKey 字段（與天氣查詢共用）
   void saveTravelField("amapKey", travelAmapKeyInput.value.trim());
 });
-// 防抖保存：粘贴后 800ms 自动保存
+// 防抖保存：粘貼後 800ms 自動保存
 let travelAmapKeyDebounceTimer: ReturnType<typeof setTimeout> | undefined;
 travelAmapKeyInput?.addEventListener("input", () => {
   clearTimeout(travelAmapKeyDebounceTimer);
@@ -1199,7 +1536,7 @@ async function saveTravelField(field: string, value: unknown): Promise<void> {
   try {
     await window.tts.saveSettings({ [field]: value });
   } catch (err) {
-    console.warn("[plugins] 保存出行配置失败:", field, err);
+    console.warn("[plugins] 保存出行配置失敗:", field, err);
   }
 }
 
@@ -1214,12 +1551,12 @@ async function loadTravelConfig(): Promise<void> {
     }
     syncTravelConfigVisibility();
   } catch (err) {
-    console.warn("[plugins] 加载出行配置失败", err);
+    console.warn("[plugins] 加載出行配置失敗", err);
   }
 }
 void loadTravelConfig();
 
-// ── ✉️邮件发送插件 ──
+// ── ✉️郵件發送插件 ──
 const emailEnabledCheckbox = document.getElementById("plugin-email-enabled") as HTMLInputElement | null;
 const emailConfig = document.getElementById("plugin-email-config") as HTMLElement | null;
 const emailSmtpHostInput = document.getElementById("email-smtp-host") as HTMLInputElement | null;
@@ -1237,7 +1574,7 @@ emailEnabledCheckbox?.addEventListener("change", () => {
   void saveEmailField("emailEnabled", emailEnabledCheckbox.checked);
 });
 
-// 防抖保存：每个字段独立 timer，避免连续填写多个字段时只有最后一个被保存
+// 防抖保存：每個字段獨立 timer，避免連續填寫多個字段時只有最後一個被保存
 let emailSmtpHostTimer: ReturnType<typeof setTimeout> | undefined;
 let emailSmtpPortTimer: ReturnType<typeof setTimeout> | undefined;
 let emailSmtpUserTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1256,7 +1593,7 @@ async function saveEmailField(field: string, value: unknown): Promise<void> {
   try {
     await window.tts.saveSettings({ [field]: value });
   } catch (err) {
-    console.warn("[plugins] 保存邮件配置失败:", field, err);
+    console.warn("[plugins] 保存郵件配置失敗:", field, err);
   }
 }
 
@@ -1286,12 +1623,12 @@ async function loadEmailConfig(): Promise<void> {
     }
     syncEmailConfigVisibility();
   } catch (err) {
-    console.warn("[plugins] 加载邮件配置失败", err);
+    console.warn("[plugins] 加載郵件配置失敗", err);
   }
 }
 void loadEmailConfig();
 
-// ── 🎧ASR 设置 ──
+// ── 🎧ASR 設置 ──
 const asrEngineSelect = document.getElementById("asr-engine") as HTMLSelectElement | null;
 const asrAliyunConfig = document.getElementById("asr-aliyun-config");
 const asrAliyunAppKeyInput = document.getElementById("asr-aliyun-app-key") as HTMLInputElement | null;
@@ -1300,6 +1637,8 @@ const asrAliyunAccessKeySecretInput = document.getElementById("asr-aliyun-access
 const asrLanguageSelect = document.getElementById("asr-language") as HTMLSelectElement | null;
 const asrVadSilenceInput = document.getElementById("asr-vad-silence") as HTMLInputElement | null;
 const asrShowTranscriptCheckbox = document.getElementById("asr-show-transcript") as HTMLInputElement | null;
+const asrFallbackLocalCheckbox = document.getElementById("asr-fallback-local") as HTMLInputElement | null;
+const asrPushToTalkCheckbox = document.getElementById("asr-push-to-talk") as HTMLInputElement | null;
 
 function syncAsrVisibility(): void {
   if (asrAliyunConfig) {
@@ -1311,7 +1650,7 @@ asrEngineSelect?.addEventListener("change", () => {
   syncAsrVisibility();
   void saveAsrField("asrEngine", asrEngineSelect.value);
 });
-// 防抖保存：每个字段独立 timer，避免连续填写多个字段时只有最后一个被保存
+// 防抖保存：每個字段獨立 timer，避免連續填寫多個字段時只有最後一個被保存
 let asrAliyunAppKeyTimer: ReturnType<typeof setTimeout> | undefined;
 let asrAliyunAccessKeyIdTimer: ReturnType<typeof setTimeout> | undefined;
 let asrAliyunAccessKeySecretTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1324,13 +1663,15 @@ asrVadSilenceInput?.addEventListener("input", () => {
   void saveAsrField("asrVadSilenceMs", Number(asrVadSilenceInput.value) || 1000);
 });
 asrShowTranscriptCheckbox?.addEventListener("change", () => void saveAsrField("asrShowTranscript", asrShowTranscriptCheckbox.checked));
+asrFallbackLocalCheckbox?.addEventListener("change", () => void saveAsrField("asrFallbackToLocal", asrFallbackLocalCheckbox.checked));
+asrPushToTalkCheckbox?.addEventListener("change", () => void saveAsrField("asrPushToTalk", asrPushToTalkCheckbox.checked));
 
 async function saveAsrField(field: string, value: unknown): Promise<void> {
   if (!window.tts) return;
   try {
     await window.tts.saveSettings({ [field]: value });
   } catch (err) {
-    console.warn("[asr] 保存 ASR 配置失败:", field, err);
+    console.warn("[asr] 保存 ASR 配置失敗:", field, err);
   }
 }
 
@@ -1345,15 +1686,87 @@ async function loadAsrConfig(): Promise<void> {
       if (asrLanguageSelect) asrLanguageSelect.value = String(cfg.asrLanguage ?? "zh");
       if (asrVadSilenceInput) asrVadSilenceInput.value = String(cfg.asrVadSilenceMs ?? 1000);
       if (asrShowTranscriptCheckbox) asrShowTranscriptCheckbox.checked = Boolean(cfg.asrShowTranscript);
+      if (asrFallbackLocalCheckbox) asrFallbackLocalCheckbox.checked = cfg.asrFallbackToLocal !== false;
+      if (asrPushToTalkCheckbox) asrPushToTalkCheckbox.checked = Boolean(cfg.asrPushToTalk);
     }
     syncAsrVisibility();
   } catch (err) {
-    console.warn("[asr] 加载 ASR 配置失败", err);
+    console.warn("[asr] 加載 ASR 配置失敗", err);
   }
 }
 void loadAsrConfig();
 
-// ── 联网搜索插件（博查/Tavily/火山/MiniMax）──
+function downsampleToPcm16(chunks: Float32Array[], sourceRate: number): Uint8Array {
+  const samples = new Float32Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+  let cursor = 0;
+  chunks.forEach((chunk) => { samples.set(chunk, cursor); cursor += chunk.length; });
+  const ratio = sourceRate / 16000;
+  const output = new Int16Array(Math.floor(samples.length / ratio));
+  for (let index = 0; index < output.length; index += 1) {
+    const start = Math.floor(index * ratio);
+    const end = Math.max(start + 1, Math.floor((index + 1) * ratio));
+    let sum = 0;
+    for (let source = start; source < end && source < samples.length; source += 1) sum += samples[source];
+    const value = Math.max(-1, Math.min(1, sum / (end - start)));
+    output[index] = value < 0 ? value * 32768 : value * 32767;
+  }
+  return new Uint8Array(output.buffer);
+}
+
+document.getElementById("asr-test-btn")?.addEventListener("click", async () => {
+  const button = document.getElementById("asr-test-btn") as HTMLButtonElement;
+  const status = document.getElementById("asr-test-status");
+  const meter = document.getElementById("asr-test-meter");
+  const fill = document.getElementById("asr-meter-fill") as HTMLElement | null;
+  const transcript = document.getElementById("asr-test-transcript");
+  button.disabled = true;
+  setSecurityStatus(status, "準備麥克風…");
+  let stream: MediaStream | null = null;
+  let context: AudioContext | null = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    context = new AudioContext();
+    const source = context.createMediaStreamSource(stream);
+    const analyser = context.createAnalyser();
+    const processor = context.createScriptProcessor(4096, 1, 1);
+    const sink = context.createGain();
+    sink.gain.value = 0;
+    const chunks: Float32Array[] = [];
+    processor.onaudioprocess = (event) => {
+      const data = event.inputBuffer.getChannelData(0);
+      chunks.push(new Float32Array(data));
+      let sum = 0;
+      for (const sample of data) sum += sample * sample;
+      const rms = Math.sqrt(sum / data.length);
+      const db = Math.max(-60, 20 * Math.log10(rms || 0.001));
+      if (meter) meter.textContent = `${Math.round(db)} dB`;
+      if (fill) fill.style.width = `${Math.max(2, Math.min(100, (db + 60) / 60 * 100))}%`;
+    };
+    source.connect(analyser);
+    analyser.connect(processor);
+    processor.connect(sink);
+    sink.connect(context.destination);
+    setSecurityStatus(status, "正在錄音，請說一句話…");
+    await new Promise((resolve) => window.setTimeout(resolve, 3000));
+    processor.disconnect();
+    const pcm = downsampleToPcm16(chunks, context.sampleRate);
+    let binary = "";
+    for (let offset = 0; offset < pcm.length; offset += 0x8000) binary += String.fromCharCode(...pcm.subarray(offset, offset + 0x8000));
+    setSecurityStatus(status, "本機 Whisper 辨識中…");
+    const result = await window.agentActivity?.testLocalAsr({ pcmBase64: btoa(binary), language: asrLanguageSelect?.value ?? "zh" });
+    if (!result) throw new Error("本機辨識服務未載入");
+    setSecurityStatus(status, `完成，延遲 ${(result.latencyMs / 1000).toFixed(1)} 秒`, "is-ok");
+    if (transcript) { transcript.textContent = result.text || "（沒有辨識到文字）"; transcript.classList.remove("is-hidden"); }
+  } catch (error) {
+    setSecurityStatus(status, error instanceof Error ? error.message : String(error), "is-error");
+  } finally {
+    stream?.getTracks().forEach((track) => track.stop());
+    await context?.close().catch(() => {});
+    button.disabled = false;
+  }
+});
+
+// ── 聯網搜索插件（博查/Tavily/火山/MiniMax）──
 const searchEnabledCheckbox = document.getElementById("plugin-search-enabled") as HTMLInputElement | null;
 const searchConfig = document.getElementById("plugin-search-config") as HTMLElement | null;
 const searchEngineSelect = document.getElementById("search-engine") as HTMLSelectElement | null;
@@ -1396,7 +1809,7 @@ function syncSearchEngineRows(): void {
 
 searchEnabledCheckbox?.addEventListener("change", () => {
   syncSearchConfigVisibility();
-  // 开关变化时，若开启则把 searchEngine 从 off 改成第一个有 key 的源（或 bocha）
+  // 開關變化時，若開啟則把 searchEngine 從 off 改成第一個有 key 的源（或 bocha）
   if (searchEnabledCheckbox.checked && searchEngineSelect?.value === "off") {
     searchEngineSelect.value = "bocha";
     syncSearchEngineRows();
@@ -1411,14 +1824,14 @@ searchEngineSelect?.addEventListener("change", () => {
   void saveSearchField("searchEngine", searchEngineSelect.value);
 });
 
-// 各源 key 输入：失焦保存 + 输入时防抖保存（防粘贴后未失焦就丢失）
+// 各源 key 輸入：失焦保存 + 輸入時防抖保存（防粘貼後未失焦就丟失）
 const searchKeyDebounceTimers: Record<string, ReturnType<typeof setTimeout> | undefined> = {};
 for (const [engine, input] of Object.entries(SEARCH_KEY_INPUT_MAP)) {
   if (!input) continue;
   const field = SEARCH_KEY_FIELD_MAP[engine];
   input.addEventListener("change", () => { void saveSearchField(field, input.value.trim()); });
   input.addEventListener("blur", () => { void saveSearchField(field, input.value.trim()); });
-  // 输入时防抖保存：粘贴或打字后 800ms 自动保存，不依赖失焦
+  // 輸入時防抖保存：粘貼或打字後 800ms 自動保存，不依賴失焦
   input.addEventListener("input", () => {
     clearTimeout(searchKeyDebounceTimers[engine]);
     searchKeyDebounceTimers[engine] = setTimeout(() => {
@@ -1432,7 +1845,7 @@ async function saveSearchField(field: string, value: unknown): Promise<void> {
   try {
     await window.tts.saveSettings({ [field]: value });
   } catch (err) {
-    console.warn("[plugins] 保存搜索配置失败:", field, err);
+    console.warn("[plugins] 保存搜索配置失敗:", field, err);
   }
 }
 
@@ -1445,18 +1858,18 @@ async function loadSearchConfig(): Promise<void> {
     if (searchBochaKeyInput) searchBochaKeyInput.value = String(cfg.searchBochaKey ?? "");
     if (searchTavilyKeyInput) searchTavilyKeyInput.value = String(cfg.searchTavilyKey ?? "");
     if (searchMinimaxKeyInput) searchMinimaxKeyInput.value = String(cfg.searchMinimaxKey ?? "");
-    // 开关状态：engine 不是 off 就算启用
+    // 開關狀態：engine 不是 off 就算啟用
     if (searchEnabledCheckbox) searchEnabledCheckbox.checked = engine !== "off";
     syncSearchConfigVisibility();
   } catch (err) {
-    console.warn("[plugins] 加载搜索配置失败", err);
+    console.warn("[plugins] 加載搜索配置失敗", err);
   }
 }
 void loadSearchConfig();
 
-// ── 🌐 内置 MCP 工具开关 ──────────────────────────────────────
-// Playwright MCP（浏览器自动化）通过 playwrightMcpEnabled 控制，
-// main 端的 syncPlaywrightMcp() 会监听字段变化自动注册 / 移除 MCP server。
+// ── 🌐 內置 MCP 工具開關 ──────────────────────────────────────
+// Playwright MCP（瀏覽器自動化）通過 playwrightMcpEnabled 控制，
+// main 端的 syncPlaywrightMcp() 會監聽字段變化自動註冊 / 移除 MCP server。
 const playwrightMcpCheckbox = document.getElementById("plugin-playwright-mcp-enabled") as HTMLInputElement | null;
 
 async function saveBuiltinMcpField(field: string, value: unknown): Promise<void> {
@@ -1464,7 +1877,7 @@ async function saveBuiltinMcpField(field: string, value: unknown): Promise<void>
   try {
     await window.tts.saveSettings({ [field]: value });
   } catch (err) {
-    console.warn(`[settings] 保存 ${field} 失败:`, err);
+    console.warn(`[settings] 保存 ${field} 失敗:`, err);
   }
 }
 
@@ -1476,21 +1889,21 @@ async function loadBuiltinMcpToggles(): Promise<void> {
   try {
     const cfg = await window.tts?.loadSettings();
     if (cfg && playwrightMcpCheckbox) {
-      // 默认关闭 —— 启用会下载 Chromium，约 150MB
+      // 默認關閉 —— 啟用會下載 Chromium，約 150MB
       playwrightMcpCheckbox.checked = Boolean(cfg.playwrightMcpEnabled);
     }
   } catch (err) {
-    console.warn("[settings] 加载内置 MCP 开关失败:", err);
+    console.warn("[settings] 加載內置 MCP 開關失敗:", err);
   }
 }
 void loadBuiltinMcpToggles();
 
 // ── MCP Server 管理 UI ──────────────────────────────────────
 const pluginAddBtn = document.querySelector(".plugin-add-btn") as HTMLButtonElement | null;
-console.log("[settings] plugin-add-btn 查询结果:", pluginAddBtn ? "找到" : "未找到");
+console.log("[settings] plugin-add-btn 查詢結果:", pluginAddBtn ? "找到" : "未找到");
 
 
-// 简易命令行解析：支持引号包裹的参数
+// 簡易命令行解析：支持引號包裹的參數
 function parseCommandLine(input: string): { command: string; args: string[] } {
   const trimmed = input.trim();
   if (!trimmed) return { command: "", args: [] };
@@ -1521,29 +1934,29 @@ function parseCommandLine(input: string): { command: string; args: string[] } {
   return { command: parts[0] || "", args: parts.slice(1) };
 }
 pluginAddBtn?.addEventListener("click", async () => {
-  console.log("[settings] ＋ 按钮被点击，弹出输入框…");
+  console.log("[settings] ＋ 按鈕被點擊，彈出輸入框…");
   const command = await showInputModal({
     title: "添加 MCP Server",
-    message: "输入启动命令，例如：node C:\\my-mcp-server\\index.js",
+    message: "輸入啟動命令，例如：node C:\\my-mcp-server\\index.js",
     placeholder: "node path\\to\\server.js --flag",
     icon: "🧩",
   });
   if (!command || !command.trim()) {
-    console.log("[settings] 用户取消或命令为空");
+    console.log("[settings] 用戶取消或命令為空");
     return;
   }
 
   const nameInput = await showInputModal({
-    title: "MCP Server 名称",
-    message: "给这个 MCP server 起个名字（仅用于展示）",
-    placeholder: "例如：天气工具",
+    title: "MCP Server 名稱",
+    message: "給這個 MCP server 起個名字（僅用於展示）",
+    placeholder: "例如：天氣工具",
     icon: "🏷️",
   });
   const name = (nameInput && nameInput.trim()) || "未命名 MCP";
   const serverId = "mcp-" + Date.now();
   const parsed = parseCommandLine(command.trim());
   if (!parsed.command) {
-    await showModal({ title: "添加失败", message: "请输入有效的启动命令", icon: "⚠️" });
+    await showModal({ title: "添加失敗", message: "請輸入有效的啟動命令", icon: "⚠️" });
     return;
   }
 
@@ -1559,52 +1972,52 @@ pluginAddBtn?.addEventListener("click", async () => {
     });
 
     if (result?.ok) {
-      console.log("[settings] MCP server 添加成功，工具数:", result.toolIds?.length);
+      console.log("[settings] MCP server 添加成功，工具數:", result.toolIds?.length);
       await showModal({
         title: "添加成功",
-        message: '"' + name + '" 已连接，发现 ' + (result.toolIds?.length || 0) + " 个工具。详情见终端日志。",
+        message: '"' + name + '" 已連接，發現 ' + (result.toolIds?.length || 0) + " 個工具。詳情見終端日誌。",
         icon: "✅",
       });
     } else {
-      console.error("[settings] MCP server 添加失败:", result?.error);
+      console.error("[settings] MCP server 添加失敗:", result?.error);
       await showModal({
-        title: "添加失败",
-        message: (result?.error || "未知错误") + "（详情见终端日志）",
+        title: "添加失敗",
+        message: (result?.error || "未知錯誤") + "（詳情見終端日誌）",
         icon: "⚠️",
       });
     }
   } catch (err) {
-    console.error("[settings] MCP server 添加异常:", err);
+    console.error("[settings] MCP server 添加異常:", err);
     await showModal({
-      title: "添加异常",
-      message: "调用过程中发生错误，详情见终端日志。",
+      title: "添加異常",
+      message: "調用過程中發生錯誤，詳情見終端日誌。",
       icon: "⚠️",
     });
   }
 });
 
 clearChatHistoryBtn.addEventListener("click", async () => {
-  if (!window.confirm("清空所有聊天会话？\n此操作会删除全部历史对话，无法恢复。")) return;
+  if (!window.confirm("清空所有聊天會話？\n此操作會刪除全部歷史對話，無法恢復。")) return;
   try {
     const sessions = await window.chatStore?.list();
     if (sessions && sessions.length > 0) {
-      // 串行删除（store 不支持批量删除；会话数量不会大，可接受）
+      // 串行刪除（store 不支持批量刪除；會話數量不會大，可接受）
       for (const s of sessions) {
         await window.chatStore?.delete(s.id);
       }
     }
-    setGeneralSaveStatus("所有聊天会话已清空", "is-ok");
+    setGeneralSaveStatus("所有聊天會話已清空", "is-ok");
   } catch (err) {
-    console.warn("[settings] 清空聊天会话失败:", err);
-    setGeneralSaveStatus("清空失败，请查看终端日志", "is-error");
+    console.warn("[settings] 清空聊天會話失敗:", err);
+    setGeneralSaveStatus("清空失敗，請查看終端日誌", "is-error");
   }
 });
 
 presetSelect.addEventListener("change", () => {
-  // 切厂商前先把当前厂商的输入值快照进缓存，避免覆盖丢失
+  // 切廠商前先把當前廠商的輸入值快照進緩存，避免覆蓋丟失
   captureActiveProviderProfile();
 
-  // 从缓存里取目标厂商的旧配置；没有缓存就用 preset 默认值
+  // 從緩存裡取目標廠商的舊配置；沒有緩存就用 preset 默認值
   const cached = providerProfileCache[presetSelect.value];
   applyPreset(
     presetSelect.value,
@@ -1614,34 +2027,70 @@ presetSelect.addEventListener("change", () => {
     cached?.displayName,
     cached?.explicitTransport,
   );
-  setSaveStatus(cached ? "已切回上次配置" : "已应用预设，填写 API Key 后保存");
+  setSaveStatus(cached ? "已切回上次配置" : "已應用預設，填寫 API Key 後保存");
 });
 
-// 测试连接按钮：调用厂商 adapter 的真实连接测试
+for (const button of quickApiButtons) {
+  button.addEventListener("click", async () => {
+    const providerName = button.dataset.apiSource;
+    if (!providerName) return;
+    if (providerName === activeProvider) {
+      setSaveStatus("目前已在使用這個 API", "is-ok");
+      return;
+    }
+
+    captureActiveProviderProfile();
+    const cached = providerProfileCache[providerName];
+    applyPreset(
+      providerName,
+      cached?.model,
+      cached?.apiKey,
+      cached?.baseUrl,
+      cached?.displayName,
+      cached?.explicitTransport,
+    );
+    applyVisionSyncUI();
+
+    quickApiButtons.forEach((item) => { item.disabled = true; });
+    button.classList.add("is-switching");
+    setSaveStatus(`正在切換至 ${findPreset(providerName).shortName}…`);
+    try {
+      await persistApiSettings();
+      setSaveStatus(`已切換至 ${findPreset(providerName).shortName}`, "is-ok");
+    } catch {
+      setSaveStatus("切換失敗，請檢查配置後再試", "is-error");
+    } finally {
+      button.classList.remove("is-switching");
+      quickApiButtons.forEach((item) => { item.disabled = false; });
+    }
+  });
+}
+
+// 測試連接按鈕：調用廠商 adapter 的真實連接測試
 if (testConnectionBtn) {
   testConnectionBtn.addEventListener("click", async () => {
     const provider = activeProvider;
     const baseUrl = baseUrlInput.value;
     const model = getCurrentModelValue().trim();
     const apiKey = apiKeyInput.value;
-    if (!apiKey) { setSaveStatus("请先填写 API Key 再测试", "is-error"); return; }
-    if (!model) { setSaveStatus("请先选择/填写模型再测试", "is-error"); return; }
-    setSaveStatus("测试连接中…");
+    if (!apiKey) { setSaveStatus("請先填寫 API Key 再測試", "is-error"); return; }
+    if (!model) { setSaveStatus("請先選擇/填寫模型再測試", "is-error"); return; }
+    setSaveStatus("測試連接中…");
     testConnectionBtn.disabled = true;
     try {
       const result = await window.settings!.testConnection({ provider, baseUrl, model, apiKey });
-      if (result.ok) setSaveStatus("连接成功 " + result.latency + "ms · " + (result.sample ?? ""), "is-ok");
-      else setSaveStatus("连接失败：" + (result.error ?? "未知错误"), "is-error");
+      if (result.ok) setSaveStatus("連接成功 " + result.latency + "ms · " + (result.sample ?? ""), "is-ok");
+      else setSaveStatus("連接失敗：" + (result.error ?? "未知錯誤"), "is-error");
     } catch (e) {
-      setSaveStatus("连接失败：" + (e instanceof Error ? e.message : String(e)), "is-error");
+      setSaveStatus("連接失敗：" + (e instanceof Error ? e.message : String(e)), "is-error");
     } finally {
       testConnectionBtn.disabled = false;
     }
   });
 }
 
-// ── 视觉模型配置事件 ──────────────────────────────────────
-// 胶囊按钮组：[与主聊天模型相同] / [独立配置]
+// ── 視覺模型配置事件 ──────────────────────────────────────
+// 膠囊按鈕組：[與主聊天模型相同] / [獨立配置]
 function isVisionSynced(): boolean {
   return visionSyncMainBtn.classList.contains("is-active");
 }
@@ -1657,8 +2106,8 @@ visionSyncIndepBtn.addEventListener("click", () => {
   setSaveStatus("有未保存的更改");
 });
 
-// 主配置变化时，若处于"与主相同"，联动更新视觉三框。
-// baseUrl 用 visionBaseUrl（若有），其他直接复制。
+// 主配置變化時，若處於"與主相同"，聯動更新視覺三框。
+// baseUrl 用 visionBaseUrl（若有），其他直接複製。
 baseUrlInput.addEventListener("input", () => {
   if (!isVisionSynced()) return;
   const preset = findPreset(presetSelect.value);
@@ -1667,29 +2116,29 @@ baseUrlInput.addEventListener("input", () => {
 apiKeyInput.addEventListener("input", () => { if (isVisionSynced()) visionApiKeyInput.value = apiKeyInput.value; });
 modelInput.addEventListener("input", () => { if (isVisionSynced()) visionModelInput.value = modelInput.value; });
 
-// Base URL 重置按钮：一键复原厂商默认 baseUrl
+// Base URL 重置按鈕：一鍵復原廠商默認 baseUrl
 baseUrlResetBtn.addEventListener("click", () => {
   const preset = findPreset(presetSelect.value);
   if (preset) {
     baseUrlInput.value = preset.baseUrl;
-    setSaveStatus("已重置为厂商默认 URL");
+    setSaveStatus("已重置為廠商默認 URL");
   }
 });
 
-// 测试视觉模型按钮
+// 測試視覺模型按鈕
 testVisionBtn.addEventListener("click", async () => {
   const synced = isVisionSynced();
   const baseUrl = synced ? baseUrlInput.value : visionBaseUrlInput.value;
   const apiKey = synced ? apiKeyInput.value : visionApiKeyInput.value;
   const model = synced ? getCurrentModelValue() : visionModelInput.value;
-  if (!apiKey) { visionTestStatus.textContent = "请先填写 API Key"; return; }
-  if (!model) { visionTestStatus.textContent = "请先填写视觉型号"; return; }
-  visionTestStatus.textContent = "测试中…";
+  if (!apiKey) { visionTestStatus.textContent = "請先填寫 API Key"; return; }
+  if (!model) { visionTestStatus.textContent = "請先填寫視覺型號"; return; }
+  visionTestStatus.textContent = "測試中…";
   testVisionBtn.disabled = true;
   try {
     const result = await window.settings!.testVision?.({ baseUrl, apiKey, model });
-    if (result?.ok) visionTestStatus.textContent = "✅ 连接成功 " + result.latency + "ms · " + (result.sample ?? "");
-    else visionTestStatus.textContent = "❌ " + (result?.error ?? "未知错误");
+    if (result?.ok) visionTestStatus.textContent = "✅ 連接成功 " + result.latency + "ms · " + (result.sample ?? "");
+    else visionTestStatus.textContent = "❌ " + (result?.error ?? "未知錯誤");
   } catch (e) {
     visionTestStatus.textContent = "❌ " + (e instanceof Error ? e.message : String(e));
   } finally {
@@ -1711,18 +2160,18 @@ function isValidTimeOfDay(value: string): boolean {
 function formatSchedulerDate(value: string | null | undefined): string {
   if (!value) return "未安排";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "时间无效";
+  if (Number.isNaN(date.getTime())) return "時間無效";
   return date.toLocaleString();
 }
 
 function describeSchedule(schedule: ScheduleConfig): string {
-  if (schedule.kind === "once") return "仅一次 " + formatSchedulerDate(schedule.runAt);
+  if (schedule.kind === "once") return "僅一次 " + formatSchedulerDate(schedule.runAt);
   if (schedule.kind === "daily") return "每天 " + schedule.timeOfDay;
   if (schedule.kind === "weekly") {
-    const names = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+    const names = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
     return `${names[schedule.dayOfWeek]} ${schedule.timeOfDay}`;
   }
-  return `每隔 ${schedule.every} ${schedule.unit === "minutes" ? "分钟" : "小时"}`;
+  return `每隔 ${schedule.every} ${schedule.unit === "minutes" ? "分鐘" : "小時"}`;
 }
 
 function setSchedulerStatus(text: string, className = ""): void {
@@ -1770,39 +2219,45 @@ async function renderSchedulerList(): Promise<void> {
     if (strong) strong.textContent = task.title;
     const badge = card.querySelector(".scheduler-badge") as HTMLSpanElement | null;
     if (badge) {
-      badge.textContent = task.enabled ? "已启用" : "已停用";
+      badge.textContent = task.managedBy === "daily-ritual"
+        ? `每日儀式 · ${task.enabled ? "已啟用" : "已停用"}`
+        : task.enabled ? "已啟用" : "已停用";
       badge.classList.toggle("is-disabled", !task.enabled);
     }
     const meta = card.querySelector(".scheduler-card__meta");
-    if (meta) meta.textContent = `${describeSchedule(task.schedule)} · 下次运行：${formatSchedulerDate(task.nextFireAt)} · 工具：${task.toolMode === "all-enabled" ? "全部已启用工具" : task.allowedToolIds.join(", ") || "无"}`;
+    if (meta) meta.textContent = `${describeSchedule(task.schedule)} · 下次運行：${formatSchedulerDate(task.nextFireAt)} · 工具：${task.toolMode === "all-enabled" ? "全部已啟用工具" : task.allowedToolIds.join(", ") || "無"}`;
     const actions = card.querySelector(".scheduler-card__actions") as HTMLDivElement | null;
     if (actions) {
       const fireBtn = document.createElement("button");
       fireBtn.type = "button";
       fireBtn.className = "ghost-btn";
-      fireBtn.textContent = "立即运行";
+      fireBtn.textContent = "立即運行";
       fireBtn.addEventListener("click", () => void fireSchedulerTask(task.id));
       const editBtn = document.createElement("button");
       editBtn.type = "button";
       editBtn.className = "ghost-btn";
-      editBtn.textContent = "编辑";
+      editBtn.textContent = "編輯";
       editBtn.addEventListener("click", () => void openSchedulerEditor(task));
       const toggleBtn = document.createElement("button");
       toggleBtn.type = "button";
       toggleBtn.className = "ghost-btn";
-      toggleBtn.textContent = task.enabled ? "停用" : "启用";
+      toggleBtn.textContent = task.enabled ? "停用" : "啟用";
       toggleBtn.addEventListener("click", () => void toggleSchedulerTask(task.id, !task.enabled));
       const historyBtn = document.createElement("button");
       historyBtn.type = "button";
       historyBtn.className = "ghost-btn";
-      historyBtn.textContent = "历史";
+      historyBtn.textContent = "歷史";
       historyBtn.addEventListener("click", () => void toggleSchedulerHistory(task.id, card));
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
       deleteBtn.className = "ghost-btn";
-      deleteBtn.textContent = "删除";
+      deleteBtn.textContent = "刪除";
       deleteBtn.addEventListener("click", () => void deleteSchedulerTask(task.id));
-      actions.append(fireBtn, editBtn, toggleBtn, historyBtn, deleteBtn);
+      if (task.managedBy === "daily-ritual") {
+        actions.append(fireBtn, historyBtn);
+      } else {
+        actions.append(fireBtn, editBtn, toggleBtn, historyBtn, deleteBtn);
+      }
     }
     schedulerList.appendChild(card);
   }
@@ -1819,6 +2274,7 @@ generalForm.addEventListener("submit", async (e) => {
       soundVolume: Number(soundVolumeInput.value),
       petAlwaysOnTop: petAlwaysOnTopInput.checked,
       petVisible: petVisibleInput.checked,
+      petChatInputEnabled: petChatInputEnabledInput.checked,
       petZoom: Number(petZoomInput.value),
       sidebarVisible: sidebarVisibleInput.checked,
       tasksVisible: tasksVisibleInput.checked,
@@ -1828,7 +2284,7 @@ generalForm.addEventListener("submit", async (e) => {
     });
     setGeneralSaveStatus("已保存", "is-ok");
   } catch {
-    setGeneralSaveStatus("保存失败", "is-error");
+    setGeneralSaveStatus("保存失敗", "is-error");
   }
 });
 
@@ -1839,38 +2295,42 @@ cyrenePanel.addEventListener("submit", async (e) => {
     await window.settings!.saveConfig({ runtimeSync: getRuntimeSyncValue(), stickerEnabled: stickerEnabledInput.checked, stickerSize: getStickerSizeValue(), stickerSimilarityThreshold: parseFloat(stickerThresholdInput.value) });
     setCyreneSaveStatus("已保存", "is-ok");
   } catch {
-    setCyreneSaveStatus("保存失败", "is-error");
+    setCyreneSaveStatus("保存失敗", "is-error");
   }
 });
+
+async function persistApiSettings(): Promise<void> {
+  // 保存前把當前輸入快照進 perProvider 緩存（main 進程也會做一次，但渲染端先做一遍，
+  // 是為了下一次切廠商再切回來不依賴磁盤往返）
+  captureActiveProviderProfile();
+  // mode 字段在 UI 層已刪除，但仍傳給 main 進程保留向後兼容（舊配置文件可能有該字段）。
+  // 默認 "manual"（baseUrl 永遠可改、模型名永遠可填，行為等同原 Manual）。
+  await window.settings!.saveConfig({
+    mode: "manual",
+    provider: activeProvider,
+    displayName: displayNameInput.value.trim(),
+    baseUrl: baseUrlInput.value.trim(),
+    model: getCurrentModelValue().trim(),
+    apiKey: apiKeyInput.value.trim(),
+    explicitTransport: transportSelect.value as "openai" | "anthropic" | "auto",
+    vision: {
+      syncWithMain: isVisionSynced(),
+      // syncWithMain=true 時三字段傳空（main 進程不落盤，運行時從主配置讀）
+      baseUrl: isVisionSynced() ? "" : visionBaseUrlInput.value.trim(),
+      apiKey: isVisionSynced() ? "" : visionApiKeyInput.value.trim(),
+      model: isVisionSynced() ? "" : visionModelInput.value.trim(),
+    },
+  });
+}
 
 apiForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   setSaveStatus("保存中…");
   try {
-    // 保存前把当前输入快照进 perProvider 缓存（main 进程也会做一次，但渲染端先做一遍，
-    // 是为了下一次切厂商再切回来不依赖磁盘往返）
-    captureActiveProviderProfile();
-    // mode 字段在 UI 层已删除，但仍传给 main 进程保留向后兼容（旧配置文件可能有该字段）。
-    // 默认 "manual"（baseUrl 永远可改、模型名永远可填，行为等同原 Manual）。
-    await window.settings!.saveConfig({
-      mode: "manual",
-      provider: activeProvider,
-      displayName: displayNameInput.value.trim(),
-      baseUrl: baseUrlInput.value.trim(),
-      model: getCurrentModelValue().trim(),
-      apiKey: apiKeyInput.value.trim(),
-      explicitTransport: transportSelect.value as "openai" | "anthropic" | "auto",
-      vision: {
-        syncWithMain: isVisionSynced(),
-        // syncWithMain=true 时三字段传空（main 进程不落盘，运行时从主配置读）
-        baseUrl: isVisionSynced() ? "" : visionBaseUrlInput.value.trim(),
-        apiKey: isVisionSynced() ? "" : visionApiKeyInput.value.trim(),
-        model: isVisionSynced() ? "" : visionModelInput.value.trim(),
-      },
-    });
+    await persistApiSettings();
     setSaveStatus("已保存", "is-ok");
   } catch {
-    setSaveStatus("保存失败", "is-error");
+    setSaveStatus("保存失敗", "is-error");
   }
 });
 
@@ -1888,12 +2348,12 @@ async function loadSchedulerPanel(): Promise<void> {
 async function openSchedulerEditor(task?: ScheduledTask): Promise<void> {
   editingSchedulerTaskId = task?.id ?? null;
   schedulerEditor?.classList.remove("is-hidden");
-  // 确保工具列表已加载
+  // 確保工具列表已加載
   if (schedulerTools.length === 0) {
     const toolsResult = await window.cyreneScheduler!.getTools();
     if (toolsResult.ok) schedulerTools = toolsResult.value ?? [];
   }
-  if (schedulerEditorTitle) schedulerEditorTitle.textContent = task ? "编辑定时任务" : "新建定时任务";
+  if (schedulerEditorTitle) schedulerEditorTitle.textContent = task ? "編輯定時任務" : "新建定時任務";
   if (schedulerTitleInput) schedulerTitleInput.value = task?.title ?? "";
   if (schedulerPromptInput) schedulerPromptInput.value = task?.prompt ?? "";
   if (schedulerEnabledInput) schedulerEnabledInput.checked = task?.enabled ?? true;
@@ -1937,29 +2397,29 @@ function collectSchedule(): ScheduleConfig {
   const kind = schedulerKindInput?.value ?? "daily";
   if (kind === "once") {
     const value = schedulerOnceRunAtInput?.value;
-    if (!value) throw new Error("请选择一次性运行时间");
+    if (!value) throw new Error("請選擇一次性運行時間");
     const runAt = new Date(value);
-    if (Number.isNaN(runAt.getTime())) throw new Error("一次性运行时间无效");
-    if (runAt.getTime() <= Date.now()) throw new Error("一次性任务时间必须晚于当前时间");
+    if (Number.isNaN(runAt.getTime())) throw new Error("一次性運行時間無效");
+    if (runAt.getTime() <= Date.now()) throw new Error("一次性任務時間必須晚於當前時間");
     return { kind: "once", runAt: runAt.toISOString() };
   }
   if (kind === "weekly") {
     const timeOfDay = schedulerTimeOfDayInput?.value || "08:00";
-    if (!isValidTimeOfDay(timeOfDay)) throw new Error("每周时间格式必须是 HH:mm");
+    if (!isValidTimeOfDay(timeOfDay)) throw new Error("每週時間格式必須是 HH:mm");
     const dayOfWeek = Number(schedulerDayOfWeekInput?.value ?? 1);
-    if (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) throw new Error("星期必须是周一到周日");
+    if (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) throw new Error("星期必須是週一到週日");
     return { kind: "weekly", dayOfWeek: dayOfWeek as 0 | 1 | 2 | 3 | 4 | 5 | 6, timeOfDay };
   }
   if (kind === "interval") {
     const every = Number(schedulerIntervalEveryInput?.value ?? 1);
     const unit = schedulerIntervalUnitInput?.value === "hours" ? "hours" : "minutes";
-    if (!Number.isInteger(every) || every <= 0) throw new Error("间隔必须是正整数");
-    if (unit === "minutes" && every > 1440) throw new Error("分钟间隔不能超过 1440");
-    if (unit === "hours" && every > 168) throw new Error("小时间隔不能超过 168");
+    if (!Number.isInteger(every) || every <= 0) throw new Error("間隔必須是正整數");
+    if (unit === "minutes" && every > 1440) throw new Error("分鐘間隔不能超過 1440");
+    if (unit === "hours" && every > 168) throw new Error("小時間隔不能超過 168");
     return { kind: "interval", every, unit };
   }
   const timeOfDay = schedulerTimeOfDayInput?.value || "08:00";
-  if (!isValidTimeOfDay(timeOfDay)) throw new Error("每日时间格式必须是 HH:mm");
+  if (!isValidTimeOfDay(timeOfDay)) throw new Error("每日時間格式必須是 HH:mm");
   return { kind: "daily", timeOfDay };
 }
 
@@ -1973,8 +2433,8 @@ async function saveSchedulerTask(): Promise<void> {
     setSchedulerStatus("保存中…");
     const title = (schedulerTitleInput?.value ?? "").trim();
     const prompt = (schedulerPromptInput?.value ?? "").trim();
-    if (!title) throw new Error("标题不能为空");
-    if (!prompt) throw new Error("提示词不能为空");
+    if (!title) throw new Error("標題不能為空");
+    if (!prompt) throw new Error("提示詞不能為空");
     const input = {
       title,
       prompt,
@@ -1986,7 +2446,7 @@ async function saveSchedulerTask(): Promise<void> {
     const result = editingSchedulerTaskId
       ? await window.cyreneScheduler!.update(editingSchedulerTaskId, input)
       : await window.cyreneScheduler!.add(input);
-    if (!result.ok) throw new Error(result.error ?? "保存失败");
+    if (!result.ok) throw new Error(result.error ?? "保存失敗");
     await loadSchedulerPanel();
     closeSchedulerEditor();
   } catch (err) {
@@ -1996,20 +2456,20 @@ async function saveSchedulerTask(): Promise<void> {
 
 async function toggleSchedulerTask(id: string, enabled: boolean): Promise<void> {
   const result = await window.cyreneScheduler!.toggle(id, enabled);
-  if (!result.ok) window.alert(result.error ?? "切换失败");
+  if (!result.ok) window.alert(result.error ?? "切換失敗");
   await loadSchedulerPanel();
 }
 
 async function fireSchedulerTask(id: string): Promise<void> {
   const result = await window.cyreneScheduler!.fireNow(id);
-  if (!result.ok) window.alert(result.reason === "task already running" ? "该任务正在运行中" : (result.error ?? result.reason ?? "立即运行失败"));
+  if (!result.ok) window.alert(result.reason === "task already running" ? "該任務正在運行中" : (result.error ?? result.reason ?? "立即運行失敗"));
 }
 
 async function deleteSchedulerTask(id: string): Promise<void> {
-  const ok = await showModal({ title: "删除定时任务", message: "确定删除这个定时任务吗？", icon: "🗑️", confirmText: "删除" });
+  const ok = await showModal({ title: "刪除定時任務", message: "確定刪除這個定時任務嗎？", icon: "🗑️", confirmText: "刪除" });
   if (!ok) return;
   const result = await window.cyreneScheduler!.delete(id);
-  if (!result.ok) window.alert(result.error ?? "删除失败");
+  if (!result.ok) window.alert(result.error ?? "刪除失敗");
   await loadSchedulerPanel();
 }
 
@@ -2024,7 +2484,7 @@ async function toggleSchedulerHistory(taskId: string, card: Element): Promise<vo
   const rows = result.value ?? [];
   box.replaceChildren();
   if (!result.ok || rows.length === 0) {
-    box.textContent = result.ok ? "暂无运行历史" : (result.error ?? "读取历史失败");
+    box.textContent = result.ok ? "暫無運行歷史" : (result.error ?? "讀取歷史失敗");
   } else {
     for (const row of rows) {
       const div = document.createElement("div");
@@ -2052,7 +2512,9 @@ function switchSection(section: string): void {
   const isPlugins = section === "plugins";
   const isSkills = section === "skills";
   const isTokens = section === "tokens";
-  const isChannels = section === "channels";
+  const isSecurity = section === "security";
+  const isDiscordChannel = section === "channels-discord";
+  const isChannels = section === "channels" || isDiscordChannel;
   const isTts = section === "tts";
   const isAsr = section === "asr";
   apiForm.classList.toggle("is-hidden", !isApi);
@@ -2065,7 +2527,7 @@ function switchSection(section: string): void {
   if (userPanel) userPanel.classList.toggle("is-hidden", !isUser);
   const chatPanel = document.getElementById("chat-panel");
   if (chatPanel) chatPanel.classList.toggle("is-hidden", !isChat);
-  // 切到 💬 聊天面板时拉一次列表（cross-window 变化由 onChanged 监听器自己刷新）
+  // 切到 💬 聊天面板時拉一次列表（cross-window 變化由 onChanged 監聽器自己刷新）
   if (isChat) void renderChatSessions();
   const tasksPanel = document.getElementById("tasks-panel");
   if (tasksPanel) tasksPanel.classList.toggle("is-hidden", !isTasks);
@@ -2078,16 +2540,25 @@ function switchSection(section: string): void {
   if (isSkills) void renderSkills();
   const tokenPanel = document.getElementById("token-panel");
   if (tokenPanel) tokenPanel.classList.toggle("is-hidden", !isTokens);
+  if (isTokens) void refreshAgentActivity(7);
+  const securityPanel = document.getElementById("security-panel");
+  if (securityPanel) securityPanel.classList.toggle("is-hidden", !isSecurity);
+  if (isSecurity) void loadSecurityPanel();
   const channelsPanel = document.getElementById("channels-panel");
   if (channelsPanel) channelsPanel.classList.toggle("is-hidden", !isChannels);
-  if (isChannels) void loadChannelsPanel();
+  if (isChannels) {
+    void loadChannelsPanel().then(() => {
+      if (!isDiscordChannel) return;
+      window.setTimeout(() => document.getElementById("channels-discord-card")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    });
+  }
   const ttsPanel = document.getElementById("tts-panel");
   if (ttsPanel) ttsPanel.classList.toggle("is-hidden", !isTts);
   const asrPanel = document.getElementById("asr-panel");
   if (asrPanel) asrPanel.classList.toggle("is-hidden", !isAsr);
   placeholderPanel.classList.toggle(
     "is-hidden",
-    isApi || isGeneral || isCyrene || isDisclaimer || isMemory || isUser || isChat || isTasks || isIdentity || isPlugins || isSkills || isTokens || isChannels || isTts || isAsr,
+    isApi || isGeneral || isCyrene || isDisclaimer || isMemory || isUser || isChat || isTasks || isIdentity || isPlugins || isSkills || isTokens || isSecurity || isChannels || isTts || isAsr,
   );
 
   if (
@@ -2103,13 +2574,14 @@ function switchSection(section: string): void {
     !isPlugins &&
     !isSkills &&
     !isTokens &&
+    !isSecurity &&
     !isChannels &&
     !isTts &&
     !isAsr
   ) {
     placeholderIcon.textContent = label.emoji;
     placeholderTitle.textContent = label.title;
-    placeholderCopy.textContent = "这个模块先占位，等核心聊天与 API 接通后再继续扩展。";
+    placeholderCopy.textContent = "這個模塊先佔位，等核心聊天與 API 接通後再繼續擴展。";
   }
 
   document.querySelectorAll(".nav-item").forEach((el) => {
@@ -2132,7 +2604,7 @@ schedulerKindInput?.addEventListener("change", updateSchedulerConditionalFields)
 schedulerToolLimitInput?.addEventListener("change", updateSchedulerConditionalFields);
 updateSchedulerConditionalFields();
 
-// ===== 游戏代肝插件卡（在 plugins 面板里，MCP 下、生活工具上）=====
+// ===== 遊戲代肝插件卡（在 plugins 面板裡，MCP 下、生活工具上）=====
 function initGameBotPluginCard(): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const gb = (window as any).gameBot as {
@@ -2174,8 +2646,8 @@ function initGameBotPluginCard(): void {
     const refs = await gb!.listRefs(currentRecipe);
     if (refsListEl) {
       refsListEl.innerHTML = refs.length
-        ? "已就位参考图：" + refs.map((r) => "<code>" + r + "</code>").join(" ")
-        : "（目录还没有参考图，把裁好的小图按命名放进上方目录）";
+        ? "已就位參考圖：" + refs.map((r) => "<code>" + r + "</code>").join(" ")
+        : "（目錄還沒有參考圖，把裁好的小圖按命名放進上方目錄）";
     }
   }
 
@@ -2200,13 +2672,13 @@ function initGameBotPluginCard(): void {
     await refreshRefs();
   }
 
-  // 胶囊开关：开/关时保存 enabled 并显隐配置区
+  // 膠囊開關：開/關時保存 enabled 並顯隱配置區
   enabledCb.addEventListener("change", async () => {
     configEl.style.display = enabledCb.checked ? "block" : "none";
     await gb.saveConfig({ enabled: enabledCb.checked });
   });
 
-  // 配置项失焦即存
+  // 配置項失焦即存
   const saveFields = () => gb.saveConfig({
     exePath: exe.value.trim(),
     activeRecipe: recipeSel.value,
@@ -2217,9 +2689,9 @@ function initGameBotPluginCard(): void {
 
   startBtn?.addEventListener("click", async () => {
     const r = await gb.start();
-    appendLog(r.ok ? "代肝已启动" : "启动失败: " + (r.error ?? ""));
+    appendLog(r.ok ? "代肝已啟動" : "啟動失敗: " + (r.error ?? ""));
   });
-  stopBtn?.addEventListener("click", () => { void gb.stop(); appendLog("已请求停止"); });
+  stopBtn?.addEventListener("click", () => { void gb.stop(); appendLog("已請求停止"); });
 
   gb.onProgress((info) => {
     const i = info as { index: number; total: number; desc: string };
@@ -2230,33 +2702,657 @@ function initGameBotPluginCard(): void {
 }
 
 initGameBotPluginCard();
+
+// ===== 資料安全：時間膠囊與系統保管庫 =====
+let selectedBackup: BackupSummary | null = null;
+
+function formatBackupBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 102.4) / 10} KB`;
+  return `${Math.round(bytes / 1024 / 102.4) / 10} MB`;
+}
+
+function selectedCategories(containerId: string): string[] {
+  return Array.from(document.querySelectorAll<HTMLInputElement>(`#${containerId} input[type="checkbox"]:checked`)).map((input) => input.value);
+}
+
+function setSecurityStatus(element: HTMLElement | null, text: string, kind?: "is-ok" | "is-error"): void {
+  if (!element) return;
+  element.textContent = text;
+  element.className = "security-status";
+  if (kind) element.classList.add(kind);
+}
+
+async function renderVaultStatus(): Promise<void> {
+  const title = document.getElementById("vault-title");
+  const detail = document.getElementById("vault-detail");
+  if (!title || !detail || !window.settings) return;
+  try {
+    const status = await window.settings.securityGetStatus();
+    if (!status.available) {
+      title.textContent = "系統保管庫目前不可用";
+      detail.textContent = `密鑰尚未加密；請確認 ${status.backend} 可用後再試。`;
+    } else if (status.lockedCount) {
+      title.textContent = `${status.lockedCount} 個密鑰暫時無法解鎖`;
+      detail.textContent = `由 ${status.backend} 保護，請在原本的系統帳號中開啟。`;
+    } else {
+      title.textContent = status.protectedCount ? `${status.protectedCount} 個密鑰已安全封存` : "系統保管庫已就緒";
+      detail.textContent = `由 ${status.backend} 加密；${status.plaintextCount ? `另有 ${status.plaintextCount} 個等待保護。` : "備份不會帶走任何密鑰。"}`;
+    }
+  } catch (error) {
+    title.textContent = "無法讀取保管庫狀態";
+    detail.textContent = error instanceof Error ? error.message : String(error);
+  }
+}
+
+async function loadSecurityPanel(): Promise<void> {
+  await renderVaultStatus();
+  try {
+    const config = await window.settings!.backupGetConfig();
+    const enabled = document.getElementById("backup-auto-enabled") as HTMLInputElement | null;
+    const retention = document.getElementById("backup-retention") as HTMLSelectElement | null;
+    const last = document.getElementById("backup-last-auto");
+    if (enabled) enabled.checked = config.autoEnabled;
+    if (retention) retention.value = String(config.retentionDays);
+    if (last) last.textContent = config.lastAutoBackupAt ? `上次 ${new Date(config.lastAutoBackupAt).toLocaleDateString("zh-TW")}` : "尚未執行";
+  } catch { /* service may still be starting */ }
+}
+
+document.getElementById("vault-protect-btn")?.addEventListener("click", async () => {
+  await window.settings?.securityMigrate();
+  await renderVaultStatus();
+});
+
+document.getElementById("backup-create-btn")?.addEventListener("click", async () => {
+  const status = document.getElementById("backup-create-status");
+  const categories = selectedCategories("backup-create-categories");
+  if (!categories.length) return setSecurityStatus(status, "請至少選擇一種資料", "is-error");
+  setSecurityStatus(status, "正在封存…");
+  try {
+    const summary = await window.settings!.backupCreate(categories);
+    if (!summary) return setSecurityStatus(status, "已取消建立備份");
+    setSecurityStatus(status, `完成：${summary.fileCount} 個檔案，${formatBackupBytes(summary.sizeBytes)}`, "is-ok");
+  } catch (error) {
+    setSecurityStatus(status, error instanceof Error ? error.message : String(error), "is-error");
+  }
+});
+
+for (const id of ["backup-auto-enabled", "backup-retention"]) {
+  document.getElementById(id)?.addEventListener("change", async () => {
+    const enabled = document.getElementById("backup-auto-enabled") as HTMLInputElement;
+    const retention = document.getElementById("backup-retention") as HTMLSelectElement;
+    await window.settings?.backupSaveConfig({ autoEnabled: enabled.checked, retentionDays: retention.value === "30" ? 30 : 7 });
+    await loadSecurityPanel();
+  });
+}
+
+document.getElementById("backup-pick-btn")?.addEventListener("click", async () => {
+  const restoreStatus = document.getElementById("backup-restore-status");
+  try {
+    selectedBackup = await window.settings!.backupPickInspect();
+    if (!selectedBackup) return;
+    const preview = document.getElementById("backup-preview");
+    const date = document.getElementById("backup-preview-date");
+    const summary = document.getElementById("backup-preview-summary");
+    const categories = document.getElementById("backup-restore-categories");
+    preview?.classList.remove("is-hidden");
+    if (date) date.textContent = new Date(selectedBackup.createdAt).toLocaleString("zh-TW");
+    if (summary) summary.textContent = `${selectedBackup.fileCount} 個檔案 · ${formatBackupBytes(selectedBackup.sizeBytes)} · v${selectedBackup.appVersion}`;
+    categories?.replaceChildren(...selectedBackup.categories.map((category) => {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = category.id;
+      input.checked = true;
+      label.append(input, `${category.label} · ${category.fileCount}`);
+      return label;
+    }));
+    setSecurityStatus(restoreStatus, "請確認要還原的分類");
+  } catch (error) {
+    setSecurityStatus(restoreStatus, error instanceof Error ? error.message : String(error), "is-error");
+  }
+});
+
+document.getElementById("backup-restore-btn")?.addEventListener("click", async () => {
+  const status = document.getElementById("backup-restore-status");
+  if (!selectedBackup) return;
+  const categories = selectedCategories("backup-restore-categories");
+  if (!categories.length) return setSecurityStatus(status, "請至少選擇一種資料", "is-error");
+  const confirmed = await showModal({ title: "回到這個時間點？", message: "還原前會先自動備份目前資料。完成後需要重新啟動昔漣。", icon: "⏳", confirmText: "安全還原" });
+  if (!confirmed) return;
+  setSecurityStatus(status, "正在建立安全快照並還原…");
+  try {
+    const result = await window.settings!.backupRestore({ filePath: selectedBackup.filePath, categories });
+    setSecurityStatus(status, `已還原 ${result.restoredFiles} 個檔案`, "is-ok");
+    document.getElementById("backup-restart-callout")?.classList.remove("is-hidden");
+  } catch (error) {
+    setSecurityStatus(status, error instanceof Error ? error.message : String(error), "is-error");
+  }
+});
+
+document.getElementById("security-restart-btn")?.addEventListener("click", () => window.settings?.securityRestartApp());
+
 void loadConfig();
 void loadGeneralSettings();
 
-// ===== channels panel (连接手机) =====
+// ===== channels panel (連接手機) =====
 const channelsWechatEnabledEl = document.getElementById("channels-wechat-enabled") as HTMLInputElement | null;
 const channelsFeishuEnabledEl = document.getElementById("channels-feishu-enabled") as HTMLInputElement | null;
+const channelsDiscordEnabledEl = document.getElementById("channels-discord-enabled") as HTMLInputElement | null;
 const channelsWechatStatusEl = document.getElementById("channels-wechat-status");
 const channelsFeishuStatusEl = document.getElementById("channels-feishu-status");
+const channelsDiscordStatusEl = document.getElementById("channels-discord-status");
 const channelsRateUserEl = document.getElementById("channels-rate-user") as HTMLInputElement | null;
 const channelsRateChannelEl = document.getElementById("channels-rate-channel") as HTMLInputElement | null;
 const channelsTtsEl = document.getElementById("channels-tts-enabled") as HTMLInputElement | null;
 const channelsStickerEl = document.getElementById("channels-sticker-enabled") as HTMLInputElement | null;
 const channelsMirrorEl = document.getElementById("channels-mirror-desktop") as HTMLInputElement | null;
 const channelsSandboxEl = document.getElementById("channels-tool-sandbox") as HTMLInputElement | null;
-// 飞书配置输入框（Phase 2 长连接版：只需 App ID + App Secret）
+// 飛書配置輸入框（Phase 2 長連接版：只需 App ID + App Secret）
 const channelsFeishuAppIdEl = document.getElementById("channels-feishu-app-id") as HTMLInputElement | null;
 const channelsFeishuAppSecretEl = document.getElementById("channels-feishu-app-secret") as HTMLInputElement | null;
 const channelsFeishuAppSecretRevealBtn = document.getElementById("channels-feishu-app-secret-reveal");
 const channelsFeishuSaveBtn = document.getElementById("channels-feishu-save");
-// 微信按钮
+const channelsDiscordTokenEl = document.getElementById("channels-discord-token") as HTMLInputElement | null;
+const channelsDiscordTokenRevealBtn = document.getElementById("channels-discord-token-reveal");
+const channelsDiscordGuildIdsEl = document.getElementById("channels-discord-guild-ids") as HTMLInputElement | null;
+const channelsDiscordChannelIdsEl = document.getElementById("channels-discord-channel-ids") as HTMLInputElement | null;
+const channelsDiscordUserIdsEl = document.getElementById("channels-discord-user-ids") as HTMLInputElement | null;
+const channelsDiscordCodexOwnerIdEl = document.getElementById("channels-discord-codex-owner-id") as HTMLInputElement | null;
+const channelsDiscordRequireMentionEl = document.getElementById("channels-discord-require-mention") as HTMLInputElement | null;
+const channelsDiscordVoiceEnabledEl = document.getElementById("channels-discord-voice-enabled") as HTMLInputElement | null;
+const channelsDiscordSaveBtn = document.getElementById("channels-discord-save");
+const channelsDiscordAvatarEl = document.getElementById("channels-discord-avatar") as HTMLImageElement | null;
+const channelsDiscordAvatarFallbackEl = document.getElementById("channels-discord-avatar-fallback");
+const channelsDiscordAvatarPresenceEl = document.getElementById("channels-discord-avatar-presence");
+const channelsDiscordDisplayNameEl = document.getElementById("channels-discord-display-name");
+const channelsDiscordTagEl = document.getElementById("channels-discord-tag");
+const channelsDiscordApplicationIdEl = document.getElementById("channels-discord-application-id");
+const channelsDiscordGuildCountEl = document.getElementById("channels-discord-guild-count");
+const channelsDiscordVoiceStatusEl = document.getElementById("channels-discord-voice-status");
+const channelsDiscordGuildsEl = document.getElementById("channels-discord-guilds");
+const channelsDiscordUsernameEl = document.getElementById("channels-discord-username") as HTMLInputElement | null;
+const channelsDiscordActivityEl = document.getElementById("channels-discord-activity") as HTMLInputElement | null;
+const channelsDiscordPresenceEl = document.getElementById("channels-discord-presence") as HTMLSelectElement | null;
+const channelsDiscordAvatarPickBtn = document.getElementById("channels-discord-avatar-pick") as HTMLButtonElement | null;
+const channelsDiscordMediaMenuEl = document.getElementById("channels-discord-media-menu");
+const channelsDiscordAvatarOptionBtn = document.getElementById("channels-discord-avatar-option") as HTMLButtonElement | null;
+const channelsDiscordBannerOptionBtn = document.getElementById("channels-discord-banner-option") as HTMLButtonElement | null;
+const channelsDiscordProfileSaveBtn = document.getElementById("channels-discord-profile-save") as HTMLButtonElement | null;
+const channelsDiscordProfileFeedbackEl = document.getElementById("channels-discord-profile-feedback");
+const channelsDiscordEmojiPickerEl = document.getElementById("channels-discord-emoji-picker");
+const channelsDiscordMusicStatusEl = document.getElementById("channels-discord-music-status");
+const channelsDiscordMusicRecordEl = document.getElementById("channels-discord-music-record");
+const channelsDiscordMusicCoverEl = document.getElementById("channels-discord-music-cover") as HTMLImageElement | null;
+const channelsDiscordMusicTitleEl = document.getElementById("channels-discord-music-title");
+const channelsDiscordMusicProgressEl = document.getElementById("channels-discord-music-progress") as HTMLElement | null;
+const channelsDiscordMusicElapsedEl = document.getElementById("channels-discord-music-elapsed");
+const channelsDiscordMusicDurationEl = document.getElementById("channels-discord-music-duration");
+const channelsDiscordMusicToggleBtn = document.getElementById("channels-discord-music-toggle") as HTMLButtonElement | null;
+const channelsDiscordMusicPreviousBtn = document.getElementById("channels-discord-music-previous") as HTMLButtonElement | null;
+const channelsDiscordMusicNextBtn = document.getElementById("channels-discord-music-next") as HTMLButtonElement | null;
+const channelsDiscordMusicStopBtn = document.getElementById("channels-discord-music-stop") as HTMLButtonElement | null;
+const channelsDiscordMusicRepeatBtn = document.getElementById("channels-discord-music-repeat") as HTMLButtonElement | null;
+const channelsDiscordMusicShuffleBtn = document.getElementById("channels-discord-music-shuffle") as HTMLButtonElement | null;
+const channelsDiscordMusicAutoplayBtn = document.getElementById("channels-discord-music-autoplay") as HTMLButtonElement | null;
+const channelsDiscordMusicClearBtn = document.getElementById("channels-discord-music-clear") as HTMLButtonElement | null;
+const channelsDiscordMusicVolumeEl = document.getElementById("channels-discord-music-volume") as HTMLInputElement | null;
+const channelsDiscordMusicVolumeValueEl = document.getElementById("channels-discord-music-volume-value") as HTMLOutputElement | null;
+const channelsDiscordMusicQueueEl = document.getElementById("channels-discord-music-queue");
+const channelsDiscordMusicPlaylistTitleEl = document.getElementById("channels-discord-music-playlist-title");
+const channelsDiscordMusicLibraryKindEl = document.getElementById("channels-discord-music-library-kind");
+const channelsDiscordMusicQueueToggleBtn = document.getElementById("channels-discord-music-queue-toggle") as HTMLButtonElement | null;
+const channelsDiscordMusicFavoritesToggleBtn = document.getElementById("channels-discord-music-favorites-toggle") as HTMLButtonElement | null;
+const channelsDiscordMusicHistoryToggleBtn = document.getElementById("channels-discord-music-history-toggle") as HTMLButtonElement | null;
+const channelsDiscordMusicFavoritesEl = document.getElementById("channels-discord-music-favorites");
+const channelsDiscordMusicHistoryEl = document.getElementById("channels-discord-music-history");
+const channelsDiscordMusicFeedbackEl = document.getElementById("channels-discord-music-feedback");
+const channelsSpotifyPlanEl = document.getElementById("channels-spotify-plan");
+const channelsSpotifyCoverEl = document.getElementById("channels-spotify-cover") as HTMLImageElement | null;
+const channelsSpotifyDeviceEl = document.getElementById("channels-spotify-device");
+const channelsSpotifyTitleEl = document.getElementById("channels-spotify-title");
+const channelsSpotifyArtistEl = document.getElementById("channels-spotify-artist");
+const channelsSpotifyProgressEl = document.getElementById("channels-spotify-progress") as HTMLElement | null;
+const channelsSpotifyPreviousBtn = document.getElementById("channels-spotify-previous") as HTMLButtonElement | null;
+const channelsSpotifyToggleBtn = document.getElementById("channels-spotify-toggle") as HTMLButtonElement | null;
+const channelsSpotifyNextBtn = document.getElementById("channels-spotify-next") as HTMLButtonElement | null;
+const channelsSpotifyDeviceSelectEl = document.getElementById("channels-spotify-device-select") as HTMLSelectElement | null;
+const channelsSpotifyVolumeEl = document.getElementById("channels-spotify-volume") as HTMLInputElement | null;
+const channelsSpotifyVolumeValueEl = document.getElementById("channels-spotify-volume-value") as HTMLOutputElement | null;
+const channelsSpotifyQueryEl = document.getElementById("channels-spotify-query") as HTMLInputElement | null;
+const channelsSpotifyPlayQueryBtn = document.getElementById("channels-spotify-play-query") as HTMLButtonElement | null;
+const channelsSpotifyClientIdEl = document.getElementById("channels-spotify-client-id") as HTMLInputElement | null;
+const channelsSpotifyClientSecretEl = document.getElementById("channels-spotify-client-secret") as HTMLInputElement | null;
+const channelsSpotifySecretRevealBtn = document.getElementById("channels-spotify-secret-reveal") as HTMLButtonElement | null;
+const channelsSpotifyConnectBtn = document.getElementById("channels-spotify-connect") as HTMLButtonElement | null;
+const channelsSpotifyDisconnectBtn = document.getElementById("channels-spotify-disconnect") as HTMLButtonElement | null;
+const channelsSpotifyFeedbackEl = document.getElementById("channels-spotify-feedback");
+const channelsBilibiliCardEl = document.getElementById("channels-bilibili-card");
+const channelsBilibiliStatusEl = document.getElementById("channels-bilibili-status");
+const channelsBilibiliSessionTitleEl = document.getElementById("channels-bilibili-session-title");
+const channelsBilibiliSessionDetailEl = document.getElementById("channels-bilibili-session-detail");
+const channelsBilibiliConnectBtn = document.getElementById("channels-bilibili-connect") as HTMLButtonElement | null;
+const channelsBilibiliDisconnectBtn = document.getElementById("channels-bilibili-disconnect") as HTMLButtonElement | null;
+const channelsBilibiliFeedbackEl = document.getElementById("channels-bilibili-feedback");
+// 微信按鈕
 const channelsWechatLoginBtn = document.getElementById("channels-wechat-login");
 const channelsWechatRestartBtn = document.getElementById("channels-wechat-restart");
 const channelsWechatFeedbackEl = document.getElementById("channels-wechat-feedback");
 const channelsFeishuFeedbackEl = document.getElementById("channels-feishu-feedback");
+const channelsDiscordFeedbackEl = document.getElementById("channels-discord-feedback");
 
 let channelsInitialized = false;
 let channelsSaveTimer: number | null = null;
+let pendingDiscordAvatarPath: string | undefined;
+let pendingDiscordBannerPath: string | undefined;
+let discordMusicState: DiscordMusicState = { active: false, paused: false, current: null, queue: [], volume: 100, repeat: "off", shuffle: false, autoplay: false, elapsed: 0 };
+let discordMusicLibraryView: "queue" | "favorites" | "history" = "queue";
+let discordMusicRefreshTimer: number | null = null;
+let discordMusicVolumeTimer: number | null = null;
+let spotifyStatus: SpotifyPlaybackStatus = { configured: false, connected: false, devices: [] };
+let spotifyRefreshTimer: number | null = null;
+let spotifyVolumeTimer: number | null = null;
+
+function setDiscordProfileFeedback(kind: "info" | "ok" | "err", message: string): void {
+  if (!channelsDiscordProfileFeedbackEl) return;
+  channelsDiscordProfileFeedbackEl.textContent = message;
+  channelsDiscordProfileFeedbackEl.className = "channels-feedback";
+  channelsDiscordProfileFeedbackEl.classList.add(kind === "ok" ? "channels-feedback--ok" : kind === "err" ? "channels-feedback--err" : "channels-feedback--info");
+}
+
+function renderDiscordProfile(profile: DiscordBotProfile): void {
+  const connected = profile.connected;
+  if (channelsDiscordDisplayNameEl) channelsDiscordDisplayNameEl.textContent = profile.username ?? "尚未連接";
+  if (channelsDiscordTagEl) channelsDiscordTagEl.textContent = profile.tag ?? "連接 Gateway 後顯示即時資訊";
+  if (channelsDiscordApplicationIdEl) channelsDiscordApplicationIdEl.textContent = profile.applicationId ?? "—";
+  if (channelsDiscordGuildCountEl) channelsDiscordGuildCountEl.textContent = String(profile.guildCount ?? 0);
+  if (channelsDiscordVoiceStatusEl) channelsDiscordVoiceStatusEl.textContent = profile.voiceActive ? "通話中" : "未通話";
+  if (channelsDiscordAvatarPresenceEl) channelsDiscordAvatarPresenceEl.classList.toggle("is-online", connected);
+  if (channelsDiscordAvatarEl) {
+    if (profile.avatarUrl) {
+      channelsDiscordAvatarEl.src = profile.avatarUrl;
+      channelsDiscordAvatarEl.hidden = false;
+      if (channelsDiscordAvatarFallbackEl) channelsDiscordAvatarFallbackEl.hidden = true;
+    } else {
+      channelsDiscordAvatarEl.hidden = true;
+      if (channelsDiscordAvatarFallbackEl) channelsDiscordAvatarFallbackEl.hidden = false;
+    }
+  }
+  if (channelsDiscordGuildsEl) {
+    channelsDiscordGuildsEl.replaceChildren();
+    if (!profile.guilds?.length) {
+      const empty = document.createElement("span");
+      empty.textContent = connected ? "尚未加入任何伺服器" : "連接後顯示 Bot 所在的伺服器";
+      channelsDiscordGuildsEl.appendChild(empty);
+    } else {
+      for (const guild of profile.guilds) {
+        const chip = document.createElement("span");
+        chip.className = "discord-guild-chip";
+        chip.textContent = guild.name;
+        chip.title = `Server ID: ${guild.id}`;
+        channelsDiscordGuildsEl.appendChild(chip);
+      }
+    }
+  }
+  if (channelsDiscordUsernameEl) {
+    channelsDiscordUsernameEl.value = profile.username ?? "";
+    channelsDiscordUsernameEl.disabled = !connected;
+  }
+  if (channelsDiscordActivityEl) {
+    channelsDiscordActivityEl.value = profile.activityText ?? "";
+    channelsDiscordActivityEl.disabled = !connected;
+  }
+  if (channelsDiscordPresenceEl) {
+    const presence = profile.presenceStatus === "offline" ? "invisible" : profile.presenceStatus;
+    channelsDiscordPresenceEl.value = ["online", "idle", "dnd", "invisible"].includes(presence ?? "") ? presence! : "online";
+    channelsDiscordPresenceEl.disabled = !connected;
+  }
+  if (channelsDiscordAvatarPickBtn) channelsDiscordAvatarPickBtn.disabled = !connected;
+  if (channelsDiscordAvatarOptionBtn) channelsDiscordAvatarOptionBtn.disabled = !connected;
+  if (channelsDiscordBannerOptionBtn) channelsDiscordBannerOptionBtn.disabled = !connected;
+  if (channelsDiscordProfileSaveBtn) channelsDiscordProfileSaveBtn.disabled = !connected;
+  for (const button of document.querySelectorAll<HTMLButtonElement>(".discord-emoji-button")) button.disabled = !connected;
+}
+
+async function refreshDiscordProfile(): Promise<void> {
+  try {
+    renderDiscordProfile(await window.settings.channelsDiscordGetProfile());
+  } catch (err) {
+    console.warn("[Channels] 讀取 Discord Bot 資訊失敗:", err);
+    renderDiscordProfile({ connected: false, guildCount: 0, guilds: [], voiceActive: false });
+  }
+}
+
+function formatDiscordMusicTime(seconds?: number): string {
+  if (!Number.isFinite(seconds) || (seconds ?? 0) < 0) return "—";
+  const total = Math.floor(seconds ?? 0);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const rest = total % 60;
+  return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}` : `${minutes}:${String(rest).padStart(2, "0")}`;
+}
+
+function setDiscordMusicFeedback(kind: "info" | "ok" | "err", message: string): void {
+  if (!channelsDiscordMusicFeedbackEl) return;
+  channelsDiscordMusicFeedbackEl.textContent = message;
+  channelsDiscordMusicFeedbackEl.className = "channels-feedback";
+  channelsDiscordMusicFeedbackEl.classList.add(kind === "ok" ? "channels-feedback--ok" : kind === "err" ? "channels-feedback--err" : "channels-feedback--info");
+}
+
+function renderDiscordMusic(state: DiscordMusicState): void {
+  discordMusicState = state;
+  const current = state.current;
+  const controls = [channelsDiscordMusicPreviousBtn, channelsDiscordMusicToggleBtn, channelsDiscordMusicNextBtn, channelsDiscordMusicStopBtn, channelsDiscordMusicRepeatBtn, channelsDiscordMusicShuffleBtn, channelsDiscordMusicAutoplayBtn];
+  for (const control of controls) if (control) control.disabled = !state.active;
+  if (channelsDiscordMusicClearBtn) channelsDiscordMusicClearBtn.disabled = !state.queue.length;
+  if (channelsDiscordMusicVolumeEl) {
+    if (document.activeElement !== channelsDiscordMusicVolumeEl) channelsDiscordMusicVolumeEl.value = String(state.volume);
+    channelsDiscordMusicVolumeEl.disabled = !state.active;
+  }
+  if (channelsDiscordMusicVolumeValueEl && document.activeElement !== channelsDiscordMusicVolumeEl) channelsDiscordMusicVolumeValueEl.value = `${state.volume}%`;
+  if (channelsDiscordMusicStatusEl) {
+    channelsDiscordMusicStatusEl.textContent = state.active ? (state.paused ? "已暫停" : "正在播放") : "尚未播放";
+    channelsDiscordMusicStatusEl.classList.toggle("is-active", state.active);
+  }
+  if (channelsDiscordMusicRecordEl) {
+    channelsDiscordMusicRecordEl.classList.toggle("is-playing", state.active);
+    channelsDiscordMusicRecordEl.classList.toggle("is-paused", state.paused);
+  }
+  if (channelsDiscordMusicCoverEl && channelsDiscordMusicRecordEl) {
+    const thumbnail = current?.thumbnail;
+    if (thumbnail) {
+      if (channelsDiscordMusicCoverEl.src !== thumbnail) channelsDiscordMusicCoverEl.src = thumbnail;
+      channelsDiscordMusicCoverEl.hidden = false;
+      channelsDiscordMusicRecordEl.classList.add("has-cover");
+    } else {
+      channelsDiscordMusicCoverEl.removeAttribute("src");
+      channelsDiscordMusicCoverEl.hidden = true;
+      channelsDiscordMusicRecordEl.classList.remove("has-cover");
+    }
+  }
+  if (channelsDiscordMusicTitleEl) channelsDiscordMusicTitleEl.textContent = current?.title ?? "等待你在 Discord 使用 /play";
+  if (channelsDiscordMusicPlaylistTitleEl) {
+    channelsDiscordMusicPlaylistTitleEl.textContent = discordMusicLibraryView === "history"
+      ? "播放歷史"
+      : discordMusicLibraryView === "favorites"
+        ? "我喜歡的歌"
+        : current?.playlistTitle ?? state.queue[0]?.playlistTitle ?? "播放清單";
+    channelsDiscordMusicPlaylistTitleEl.title = channelsDiscordMusicPlaylistTitleEl.textContent;
+  }
+  if (channelsDiscordMusicToggleBtn) {
+    channelsDiscordMusicToggleBtn.textContent = state.paused ? "▶" : "Ⅱ";
+    channelsDiscordMusicToggleBtn.title = state.paused ? "繼續播放" : "暫停播放";
+  }
+  if (channelsDiscordMusicRepeatBtn) {
+    channelsDiscordMusicRepeatBtn.textContent = state.repeat === "track" ? "↻¹" : state.repeat === "queue" ? "↻∞" : "↻";
+    channelsDiscordMusicRepeatBtn.setAttribute("aria-pressed", String(state.repeat !== "off"));
+    channelsDiscordMusicRepeatBtn.title = state.repeat === "track" ? "單曲循環（點擊切換清單循環）" : state.repeat === "queue" ? "清單循環（點擊關閉）" : "開啟單曲循環";
+  }
+  if (channelsDiscordMusicShuffleBtn) channelsDiscordMusicShuffleBtn.setAttribute("aria-pressed", String(state.shuffle));
+  if (channelsDiscordMusicAutoplayBtn) {
+    channelsDiscordMusicAutoplayBtn.setAttribute("aria-pressed", String(state.autoplay));
+    channelsDiscordMusicAutoplayBtn.title = state.autoplay ? "自動推薦已開啟（點擊關閉）" : "佇列結束後自動推薦相近歌曲";
+  }
+  const duration = current?.duration;
+  if (channelsDiscordMusicElapsedEl) channelsDiscordMusicElapsedEl.textContent = formatDiscordMusicTime(state.elapsed);
+  if (channelsDiscordMusicDurationEl) channelsDiscordMusicDurationEl.textContent = formatDiscordMusicTime(duration);
+  if (channelsDiscordMusicProgressEl) channelsDiscordMusicProgressEl.style.width = duration ? `${Math.min(100, state.elapsed / duration * 100)}%` : "0%";
+
+  if (channelsDiscordMusicQueueEl) {
+    channelsDiscordMusicQueueEl.replaceChildren();
+    const activePlaylist = current?.playlistTitle ?? state.queue[0]?.playlistTitle;
+    const categoryQueue = activePlaylist
+      ? state.queue.filter((track) => track.playlistTitle === activePlaylist)
+      : state.queue;
+    const tracks = current ? [current, ...categoryQueue] : categoryQueue;
+    if (!tracks.length) {
+      const empty = document.createElement("li");
+      empty.className = "is-empty";
+      empty.textContent = "用 Discord 的 /play 加入歌曲後，播放清單會顯示在這裡";
+      channelsDiscordMusicQueueEl.appendChild(empty);
+    } else {
+      tracks.forEach((track, index) => {
+        const item = document.createElement("li");
+        if (index === 0 && current) item.className = "is-current";
+        const number = document.createElement("span");
+        number.textContent = index === 0 && current ? "♪" : String(current ? index : index + 1);
+        const title = document.createElement("strong");
+        title.textContent = track.title;
+        title.title = track.title;
+        const time = document.createElement("small");
+        time.textContent = formatDiscordMusicTime(track.duration);
+        item.append(number, title, time);
+        if (!(index === 0 && current)) {
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.textContent = "×";
+          remove.title = `從播放清單移除 ${track.title}`;
+          remove.dataset.queuePosition = String(current ? index : index + 1);
+          item.appendChild(remove);
+        } else {
+          item.appendChild(document.createElement("span"));
+        }
+        channelsDiscordMusicQueueEl.appendChild(item);
+      });
+    }
+  }
+}
+
+async function refreshDiscordMusic(): Promise<void> {
+  try {
+    renderDiscordMusic(await window.settings.channelsDiscordGetMusicState());
+  } catch (err) {
+    console.warn("[Channels] 讀取 Discord 音樂狀態失敗:", err);
+  }
+}
+
+async function renderDiscordMusicHistory(): Promise<void> {
+  if (!channelsDiscordMusicHistoryEl) return;
+  channelsDiscordMusicHistoryEl.replaceChildren();
+  const history = await window.settings.channelsDiscordGetMusicHistory();
+  if (!history.length) {
+    const empty = document.createElement("li");
+    empty.className = "is-empty";
+    empty.textContent = "歌曲或影片開始播放後會記錄在這裡";
+    channelsDiscordMusicHistoryEl.appendChild(empty);
+    return;
+  }
+  for (const entry of history) {
+    const item = document.createElement("li");
+    const icon = document.createElement("span");
+    icon.textContent = "♪";
+    const title = document.createElement("strong");
+    title.textContent = entry.title;
+    title.title = entry.url;
+    const time = document.createElement("small");
+    time.textContent = new Intl.DateTimeFormat("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(entry.playedAt));
+    item.append(icon, title, time);
+    channelsDiscordMusicHistoryEl.appendChild(item);
+  }
+}
+
+function discordFavoriteSource(url: string): { label: string; className: string } {
+  if (/open\.spotify\.com/i.test(url)) return { label: "Spotify", className: "is-spotify" };
+  if (/(?:bilibili\.com|b23\.tv)/i.test(url)) return { label: "Bilibili", className: "is-bilibili" };
+  if (/(?:youtube\.com|youtu\.be)/i.test(url)) return { label: "YouTube", className: "is-youtube" };
+  return { label: "Music", className: "is-music" };
+}
+
+async function renderDiscordMusicFavorites(): Promise<void> {
+  if (!channelsDiscordMusicFavoritesEl) return;
+  channelsDiscordMusicFavoritesEl.replaceChildren();
+  const favorites = await window.settings.channelsDiscordGetMusicFavorites();
+  if (!favorites.length) {
+    const empty = document.createElement("li");
+    empty.className = "is-empty discord-player__favorites-empty";
+    empty.textContent = "還沒有收藏歌曲。在 Discord 播放器按 ❤️ Save，或使用 /favorite。";
+    channelsDiscordMusicFavoritesEl.appendChild(empty);
+    return;
+  }
+  for (const entry of favorites) {
+    const source = discordFavoriteSource(entry.url);
+    const item = document.createElement("li");
+    item.className = `discord-player__favorite ${source.className}`;
+
+    const cover = document.createElement("div");
+    cover.className = "discord-player__favorite-cover";
+    cover.textContent = "♪";
+    if (entry.thumbnail) {
+      const image = document.createElement("img");
+      image.src = entry.thumbnail;
+      image.alt = "";
+      image.loading = "lazy";
+      image.addEventListener("error", () => image.remove(), { once: true });
+      cover.appendChild(image);
+    }
+
+    const copy = document.createElement("div");
+    copy.className = "discord-player__favorite-copy";
+    const meta = document.createElement("div");
+    meta.className = "discord-player__favorite-meta";
+    const badge = document.createElement("span");
+    badge.textContent = source.label;
+    const saved = document.createElement("time");
+    saved.dateTime = entry.savedAt;
+    saved.textContent = new Intl.DateTimeFormat("zh-TW", { month: "numeric", day: "numeric" }).format(new Date(entry.savedAt));
+    meta.append(badge, saved);
+    const title = document.createElement("a");
+    title.href = entry.url;
+    title.target = "_blank";
+    title.rel = "noopener";
+    title.textContent = entry.title;
+    title.title = `開啟 ${entry.title}`;
+    const detail = document.createElement("small");
+    detail.textContent = [entry.playlistTitle, entry.duration ? formatDiscordMusicTime(entry.duration) : ""].filter(Boolean).join(" · ") || "單曲收藏";
+    copy.append(meta, title, detail);
+
+    const open = document.createElement("a");
+    open.className = "discord-player__favorite-open";
+    open.href = entry.url;
+    open.target = "_blank";
+    open.rel = "noopener";
+    open.textContent = "↗";
+    open.title = "開啟原始連結";
+    item.append(cover, copy, open);
+    channelsDiscordMusicFavoritesEl.appendChild(item);
+  }
+}
+
+async function showDiscordMusicLibrary(view: "queue" | "favorites" | "history"): Promise<void> {
+  discordMusicLibraryView = view;
+  if (channelsDiscordMusicQueueEl) channelsDiscordMusicQueueEl.hidden = view !== "queue";
+  if (channelsDiscordMusicFavoritesEl) channelsDiscordMusicFavoritesEl.hidden = view !== "favorites";
+  if (channelsDiscordMusicHistoryEl) channelsDiscordMusicHistoryEl.hidden = view !== "history";
+  const tabs = [
+    [channelsDiscordMusicQueueToggleBtn, "queue"],
+    [channelsDiscordMusicFavoritesToggleBtn, "favorites"],
+    [channelsDiscordMusicHistoryToggleBtn, "history"],
+  ] as const;
+  for (const [button, name] of tabs) {
+    button?.setAttribute("aria-selected", String(name === view));
+    button?.setAttribute("aria-pressed", String(name === view));
+  }
+  if (channelsDiscordMusicClearBtn) channelsDiscordMusicClearBtn.hidden = view !== "queue";
+  if (channelsDiscordMusicLibraryKindEl) channelsDiscordMusicLibraryKindEl.textContent = view === "queue" ? "PLAYLIST" : view === "favorites" ? "FAVORITES" : "HISTORY";
+  if (view === "favorites") await renderDiscordMusicFavorites();
+  else if (view === "history") await renderDiscordMusicHistory();
+  renderDiscordMusic(discordMusicState);
+}
+
+async function controlDiscordMusic(input: DiscordMusicControlInput, quiet = false): Promise<void> {
+  try {
+    const result = await window.settings.channelsDiscordControlMusic(input);
+    if (result.state) renderDiscordMusic(result.state);
+    if (!quiet || !result.ok) setDiscordMusicFeedback(result.ok ? "ok" : "err", result.message);
+  } catch (err) {
+    setDiscordMusicFeedback("err", err instanceof Error ? err.message : String(err));
+  }
+}
+
+function setSpotifyFeedback(kind: "info" | "ok" | "err", message: string): void {
+  if (!channelsSpotifyFeedbackEl) return;
+  channelsSpotifyFeedbackEl.textContent = message;
+  channelsSpotifyFeedbackEl.className = "channels-feedback";
+  channelsSpotifyFeedbackEl.classList.add(kind === "ok" ? "channels-feedback--ok" : kind === "err" ? "channels-feedback--err" : "channels-feedback--info");
+}
+
+function renderSpotify(status: SpotifyPlaybackStatus): void {
+  spotifyStatus = status;
+  const playback = status.playback;
+  const usable = status.connected && status.devices.length > 0;
+  if (channelsSpotifyPlanEl) {
+    channelsSpotifyPlanEl.textContent = status.connected ? `${status.accountName ?? "已連線"}${status.product ? ` · ${status.product}` : ""}` : "尚未連線";
+    channelsSpotifyPlanEl.classList.toggle("is-connected", status.connected);
+  }
+  if (channelsSpotifyConnectBtn) channelsSpotifyConnectBtn.textContent = status.connected ? "重新授權" : "連接 Spotify";
+  if (channelsSpotifyDisconnectBtn) channelsSpotifyDisconnectBtn.disabled = !status.connected;
+  if (channelsSpotifyQueryEl) channelsSpotifyQueryEl.disabled = !status.connected || !status.devices.length;
+  if (channelsSpotifyPlayQueryBtn) channelsSpotifyPlayQueryBtn.disabled = !status.connected || !status.devices.length;
+  for (const button of [channelsSpotifyPreviousBtn, channelsSpotifyToggleBtn, channelsSpotifyNextBtn]) if (button) button.disabled = !usable;
+  if (channelsSpotifyVolumeEl) channelsSpotifyVolumeEl.disabled = !usable;
+  if (channelsSpotifyDeviceSelectEl) {
+    const selected = channelsSpotifyDeviceSelectEl.value;
+    channelsSpotifyDeviceSelectEl.replaceChildren();
+    if (!status.devices.length) channelsSpotifyDeviceSelectEl.add(new Option("請先開啟 Spotify 播放器", ""));
+    else for (const device of status.devices) channelsSpotifyDeviceSelectEl.add(new Option(`${device.active ? "● " : ""}${device.name} · ${device.type}`, device.id));
+    channelsSpotifyDeviceSelectEl.disabled = !status.connected || !status.devices.length;
+    const active = status.devices.find((device) => device.active)?.id;
+    channelsSpotifyDeviceSelectEl.value = status.devices.some((device) => device.id === selected) ? selected : (active ?? status.devices[0]?.id ?? "");
+  }
+  if (channelsSpotifyTitleEl) channelsSpotifyTitleEl.textContent = playback?.title ?? (status.connected ? "Spotify 已連線，請先在任一裝置開始播放" : "連線後即可控制手機或電腦上的 Spotify");
+  if (channelsSpotifyArtistEl) channelsSpotifyArtistEl.textContent = playback?.artists ? `${playback.artists}${playback.album ? ` · ${playback.album}` : ""}` : "Premium 播放控制";
+  if (channelsSpotifyDeviceEl) channelsSpotifyDeviceEl.textContent = playback?.deviceName ?? (status.connected ? "目前沒有作用中的播放器" : "等待 Spotify 裝置");
+  if (channelsSpotifyToggleBtn) channelsSpotifyToggleBtn.textContent = playback?.active && !playback.paused ? "Ⅱ" : "▶";
+  if (channelsSpotifyProgressEl) channelsSpotifyProgressEl.style.width = playback?.durationMs ? `${Math.min(100, playback.progressMs / playback.durationMs * 100)}%` : "0%";
+  if (channelsSpotifyCoverEl) {
+    if (playback?.imageUrl) { if (channelsSpotifyCoverEl.src !== playback.imageUrl) channelsSpotifyCoverEl.src = playback.imageUrl; channelsSpotifyCoverEl.hidden = false; }
+    else { channelsSpotifyCoverEl.hidden = true; channelsSpotifyCoverEl.removeAttribute("src"); }
+  }
+  if (channelsSpotifyVolumeEl && document.activeElement !== channelsSpotifyVolumeEl && playback?.volume != null) channelsSpotifyVolumeEl.value = String(playback.volume);
+  if (channelsSpotifyVolumeValueEl && document.activeElement !== channelsSpotifyVolumeEl) channelsSpotifyVolumeValueEl.value = `${playback?.volume ?? Number(channelsSpotifyVolumeEl?.value ?? 50)}%`;
+  if (status.error) setSpotifyFeedback("err", status.error);
+}
+
+let spotifyRefreshInFlight = false;
+async function refreshSpotify(): Promise<void> {
+  if (spotifyRefreshInFlight) return;
+  spotifyRefreshInFlight = true;
+  try { renderSpotify(await window.settings.channelsSpotifyGetStatus()); }
+  catch (err) { setSpotifyFeedback("err", err instanceof Error ? err.message : String(err)); }
+  finally { spotifyRefreshInFlight = false; }
+}
+
+async function controlSpotifyUi(command: string, value?: number, query?: string): Promise<void> {
+  const result = await window.settings.channelsSpotifyControl({ command, value, query, deviceId: channelsSpotifyDeviceSelectEl?.value || undefined });
+  if (!result.ok) setSpotifyFeedback("err", result.message);
+  await refreshSpotify();
+}
+
+function setBilibiliFeedback(kind: "info" | "ok" | "err", message: string): void {
+  if (!channelsBilibiliFeedbackEl) return;
+  channelsBilibiliFeedbackEl.textContent = message;
+  channelsBilibiliFeedbackEl.className = "channels-feedback";
+  channelsBilibiliFeedbackEl.classList.add(kind === "ok" ? "channels-feedback--ok" : kind === "err" ? "channels-feedback--err" : "channels-feedback--info");
+}
+
+function renderBilibili(status: BilibiliConnectionStatus): void {
+  channelsBilibiliCardEl?.classList.toggle("is-connected", status.connected);
+  if (channelsBilibiliStatusEl) {
+    channelsBilibiliStatusEl.textContent = status.connected ? "已連接 · Opera GX" : "尚未連接";
+    channelsBilibiliStatusEl.classList.toggle("is-connected", status.connected);
+  }
+  if (channelsBilibiliSessionTitleEl) channelsBilibiliSessionTitleEl.textContent = status.connected ? "Opera GX 登入狀態已連接" : "連接你的 Opera GX 登入狀態";
+  if (channelsBilibiliSessionDetailEl) channelsBilibiliSessionDetailEl.textContent = status.connected
+    ? "Discord 收到 Bilibili 連結時，會自動使用這台 Mac 的瀏覽器登入狀態。"
+    : "連接後，Discord 播放 Bilibili 連結時會自動讀取你的本機登入狀態。";
+  if (channelsBilibiliConnectBtn) channelsBilibiliConnectBtn.textContent = status.connected ? "重新驗證" : "連接 Bilibili";
+  if (channelsBilibiliDisconnectBtn) channelsBilibiliDisconnectBtn.disabled = !status.connected;
+}
+
+async function refreshBilibili(): Promise<void> {
+  try { renderBilibili(await window.settings.channelsBilibiliGetStatus()); }
+  catch (err) { setBilibiliFeedback("err", err instanceof Error ? err.message : String(err)); }
+}
 
 function renderChannelStatus(el: HTMLElement | null, phase: string, message?: string): void {
   if (!el) return;
@@ -2270,16 +3366,20 @@ function renderChannelStatus(el: HTMLElement | null, phase: string, message?: st
     else if (phase === "config_missing") dot.classList.add("channels-status__dot--config_missing");
     else dot.classList.add("channels-status__dot--offline");
   }
-  if (text) text.textContent = message ?? (phase === "running" ? "运行中" : phase === "starting" ? "启动中" : phase === "config_missing" ? "配置缺失" : phase === "error" ? "错误" : "未启用");
+  if (text) text.textContent = message ?? (phase === "running" ? "運行中" : phase === "starting" ? "啟動中" : phase === "config_missing" ? "配置缺失" : phase === "error" ? "錯誤" : "未啟用");
 }
 
 async function loadChannelsPanel(): Promise<void> {
-  if (channelsInitialized) return;
+  if (channelsInitialized) {
+    await Promise.all([refreshDiscordProfile(), refreshDiscordMusic(), refreshSpotify(), refreshBilibili()]);
+    return;
+  }
   channelsInitialized = true;
   try {
     const cfg = await window.settings.channelsGetConfig();
     if (channelsWechatEnabledEl) channelsWechatEnabledEl.checked = !!cfg.wechat.enabled;
     if (channelsFeishuEnabledEl) channelsFeishuEnabledEl.checked = !!cfg.feishu.enabled;
+    if (channelsDiscordEnabledEl) channelsDiscordEnabledEl.checked = !!cfg.discord.enabled;
     if (channelsRateUserEl) channelsRateUserEl.value = String(cfg.rateLimitPerUser ?? 10);
     if (channelsRateChannelEl) channelsRateChannelEl.value = String(cfg.rateLimitPerChannel ?? 100);
     if (channelsTtsEl) channelsTtsEl.checked = cfg.ttsEnabled !== false;
@@ -2287,26 +3387,47 @@ async function loadChannelsPanel(): Promise<void> {
     if (channelsMirrorEl) channelsMirrorEl.checked = cfg.mirrorToDesktop !== false;
     if (channelsSandboxEl) channelsSandboxEl.checked = cfg.toolSandbox === "safe-only";
 
-    // 飞书字段填充（长连接模式只需要 App ID；secret 加密存盘，UI 不回填明文）
+    // 飛書字段填充（長連接模式只需要 App ID；secret 加密存盤，UI 不回填明文）
     if (channelsFeishuAppIdEl) channelsFeishuAppIdEl.value = cfg.feishu.appId ?? "";
     if (channelsFeishuAppSecretEl) {
       channelsFeishuAppSecretEl.value = "";
       channelsFeishuAppSecretEl.placeholder = cfg.feishu.appSecret
-        ? "已保存（输入新值会覆盖）"
-        : "点击保存配置时加密保存";
+        ? "已保存（輸入新值會覆蓋）"
+        : "點擊保存配置時加密保存";
+    }
+    if (channelsDiscordTokenEl) {
+      channelsDiscordTokenEl.value = "";
+      channelsDiscordTokenEl.placeholder = cfg.discord.botToken ? "已保存（輸入新值會覆蓋）" : "保存時會加密";
+    }
+    if (channelsDiscordGuildIdsEl) channelsDiscordGuildIdsEl.value = (cfg.discord.allowedGuildIds ?? []).join(", ");
+    if (channelsDiscordChannelIdsEl) channelsDiscordChannelIdsEl.value = (cfg.discord.allowedChannelIds ?? []).join(", ");
+    if (channelsDiscordUserIdsEl) channelsDiscordUserIdsEl.value = (cfg.discord.allowedUserIds ?? []).join(", ");
+    if (channelsDiscordCodexOwnerIdEl) channelsDiscordCodexOwnerIdEl.value = cfg.discord.codexImageOwnerId ?? "";
+    if (channelsDiscordRequireMentionEl) channelsDiscordRequireMentionEl.checked = cfg.discord.requireMention !== false;
+    if (channelsDiscordVoiceEnabledEl) channelsDiscordVoiceEnabledEl.checked = cfg.discord.voiceEnabled !== false;
+    if (channelsSpotifyClientIdEl) channelsSpotifyClientIdEl.value = cfg.spotify.clientId ?? "";
+    if (channelsSpotifyClientSecretEl) {
+      channelsSpotifyClientSecretEl.value = "";
+      channelsSpotifyClientSecretEl.placeholder = cfg.spotify.clientSecret ? "已加密保存（輸入新值會覆蓋）" : "從 Spotify Developer Dashboard 複製";
     }
 
-    // 拉一次渠道状态
+    // 拉一次渠道狀態
     const status = (await window.settings.channelsGetStatus()) as Record<string, { phase: string; message?: string }>;
     renderChannelStatus(channelsWechatStatusEl, status.wechat?.phase ?? "offline", status.wechat?.message);
     renderChannelStatus(channelsFeishuStatusEl, status.feishu?.phase ?? "offline", status.feishu?.message);
-    // Phase 3.4：拉一次消息日志
+    renderChannelStatus(channelsDiscordStatusEl, status.discord?.phase ?? "offline", status.discord?.message);
+    await Promise.all([refreshDiscordProfile(), refreshDiscordMusic(), refreshSpotify(), refreshBilibili()]);
+    if (discordMusicRefreshTimer == null) {
+      discordMusicRefreshTimer = window.setInterval(() => void refreshDiscordMusic(), 1000);
+    }
+    if (spotifyRefreshTimer == null) spotifyRefreshTimer = window.setInterval(() => void refreshSpotify(), 3000);
+    // Phase 3.4：拉一次消息日誌
     void refreshChannelsLog();
   } catch (err) {
-    console.warn("[Channels] loadChannelsPanel 失败:", err);
+    console.warn("[Channels] loadChannelsPanel 失敗:", err);
   }
 
-  // 自动保存（debounce 200ms）
+  // 自動保存（debounce 200ms）
   const scheduleSave = () => {
     if (channelsSaveTimer != null) window.clearTimeout(channelsSaveTimer);
     channelsSaveTimer = window.setTimeout(() => {
@@ -2335,55 +3456,336 @@ async function loadChannelsPanel(): Promise<void> {
     el?.addEventListener("change", scheduleSave);
   }
 
-  // 监听安装进度（Phase 1+ 才会收到）
+  // 監聽安裝進度（Phase 1+ 才會收到）
   window.settings.onChannelsInstallProgress((progress) => {
-    const target = progress.channel === "wechat" ? channelsWechatStatusEl : progress.channel === "feishu" ? channelsFeishuStatusEl : null;
+    const target = progress.channel === "wechat" ? channelsWechatStatusEl : progress.channel === "feishu" ? channelsFeishuStatusEl : progress.channel === "discord" ? channelsDiscordStatusEl : null;
     if (target) renderChannelStatus(target, "starting", `${progress.phase} ${progress.pct}%`);
   });
   window.settings.onChannelsStatusChanged((status) => {
     const s = status as Record<string, { phase: string; message?: string }>;
     renderChannelStatus(channelsWechatStatusEl, s.wechat?.phase ?? "offline", s.wechat?.message);
     renderChannelStatus(channelsFeishuStatusEl, s.feishu?.phase ?? "offline", s.feishu?.message);
+    renderChannelStatus(channelsDiscordStatusEl, s.discord?.phase ?? "offline", s.discord?.message);
+    void refreshDiscordProfile();
   });
 
-  // ===== 飞书交互（Phase 2 长连接版） =====
+  // ===== 飛書交互（Phase 2 長連接版） =====
 
-  // 显示/隐藏 App Secret
+  // 顯示/隱藏 App Secret
   channelsFeishuAppSecretRevealBtn?.addEventListener("click", () => {
     if (!channelsFeishuAppSecretEl) return;
     channelsFeishuAppSecretEl.type =
       channelsFeishuAppSecretEl.type === "password" ? "text" : "password";
   });
 
-  // 保存配置（secret 用 safeStorage 加密后落盘 + 触发长连接重连）
+  // 保存配置（secret 用 safeStorage 加密後落盤 + 觸發長連接重連）
   channelsFeishuSaveBtn?.addEventListener("click", async () => {
-    setFeishuFeedback("info", "保存并连接中...");
+    setFeishuFeedback("info", "保存並連接中...");
     const patch: Record<string, unknown> = {
       feishu: {
         enabled: channelsFeishuEnabledEl?.checked ?? false,
         appId: channelsFeishuAppIdEl?.value.trim() || undefined,
       },
     };
-    // 仅在用户输入了新值时才覆盖 secret（避免误清空）
+    // 僅在用戶輸入了新值時才覆蓋 secret（避免誤清空）
     if (channelsFeishuAppSecretEl?.value) {
       (patch.feishu as Record<string, unknown>).appSecret = channelsFeishuAppSecretEl.value;
     }
     try {
       await window.settings.channelsSaveConfig(patch);
-      // 保存后立即触发飞书 adapter 重建 + 重连长连接
+      // 保存後立即觸發飛書 adapter 重建 + 重連長連接
       await window.settings.channelsRestart();
-      setFeishuFeedback("ok", "已保存，飞书长连接正在建立…");
-      // 清空输入框（已落盘），并把 placeholder 切到"已保存"
+      setFeishuFeedback("ok", "已保存，飛書長連接正在建立…");
+      // 清空輸入框（已落盤），並把 placeholder 切到"已保存"
       if (channelsFeishuAppSecretEl) {
         channelsFeishuAppSecretEl.value = "";
-        channelsFeishuAppSecretEl.placeholder = "已保存（输入新值会覆盖）";
+        channelsFeishuAppSecretEl.placeholder = "已保存（輸入新值會覆蓋）";
       }
     } catch (err) {
       setFeishuFeedback("err", err instanceof Error ? err.message : String(err));
     }
   });
 
-  // ===== 微信交互（扫码登录走 iLink HTTP API，详见 src/main/channels/adapters/wechat/） =====
+  // ===== Spotify Premium / Connect =====
+  channelsSpotifySecretRevealBtn?.addEventListener("click", () => {
+    if (channelsSpotifyClientSecretEl) channelsSpotifyClientSecretEl.type = channelsSpotifyClientSecretEl.type === "password" ? "text" : "password";
+  });
+  channelsSpotifyConnectBtn?.addEventListener("click", async () => {
+    const clientId = channelsSpotifyClientIdEl?.value.trim() ?? "";
+    if (!clientId) return setSpotifyFeedback("err", "請輸入 Spotify Client ID");
+    channelsSpotifyConnectBtn.disabled = true;
+    setSpotifyFeedback("info", "正在開啟 Spotify 授權頁…");
+    try {
+      const result = await window.settings.channelsSpotifyAuthorize({ clientId, clientSecret: channelsSpotifyClientSecretEl?.value || undefined });
+      if (!result.ok) throw new Error(result.error || "Spotify 授權無法啟動");
+      if (channelsSpotifyClientSecretEl?.value) { channelsSpotifyClientSecretEl.value = ""; channelsSpotifyClientSecretEl.placeholder = "已加密保存（輸入新值會覆蓋）"; }
+      setSpotifyFeedback("info", result.message || "請在瀏覽器完成 Spotify 授權");
+    } catch (err) { setSpotifyFeedback("err", err instanceof Error ? err.message : String(err)); }
+    finally { channelsSpotifyConnectBtn.disabled = false; }
+  });
+  channelsSpotifyDisconnectBtn?.addEventListener("click", async () => {
+    const confirmed = await showModal({ title: "解除 Spotify 連線？", message: "Cyrene 會刪除本機保存的 Spotify 授權；之後可隨時重新連線。", icon: "🎧", confirmText: "解除連線" });
+    if (!confirmed) return;
+    const result = await window.settings.channelsSpotifyDisconnect();
+    setSpotifyFeedback(result.ok ? "ok" : "err", result.message || result.error || "Spotify 已解除連線");
+    await refreshSpotify();
+  });
+  channelsSpotifyPreviousBtn?.addEventListener("click", () => void controlSpotifyUi("previous"));
+  channelsSpotifyNextBtn?.addEventListener("click", () => void controlSpotifyUi("next"));
+  channelsSpotifyToggleBtn?.addEventListener("click", () => void controlSpotifyUi(spotifyStatus.playback?.active && !spotifyStatus.playback.paused ? "pause" : "resume"));
+  channelsSpotifyDeviceSelectEl?.addEventListener("change", () => void controlSpotifyUi("transfer"));
+  const playSpotifyQuery = async () => {
+    const query = channelsSpotifyQueryEl?.value.trim() ?? "";
+    if (!query) { setSpotifyFeedback("err", "請輸入歌曲名稱或 Spotify 連結"); return; }
+    if (channelsSpotifyPlayQueryBtn) channelsSpotifyPlayQueryBtn.disabled = true;
+    try {
+      await controlSpotifyUi("play", undefined, query);
+      if (channelsSpotifyQueryEl) channelsSpotifyQueryEl.value = "";
+    } finally {
+      if (channelsSpotifyPlayQueryBtn) channelsSpotifyPlayQueryBtn.disabled = false;
+    }
+  };
+  channelsSpotifyPlayQueryBtn?.addEventListener("click", () => void playSpotifyQuery());
+  channelsSpotifyQueryEl?.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); void playSpotifyQuery(); } });
+  channelsSpotifyVolumeEl?.addEventListener("input", () => {
+    const volume = Number(channelsSpotifyVolumeEl.value);
+    if (channelsSpotifyVolumeValueEl) channelsSpotifyVolumeValueEl.value = `${volume}%`;
+    if (spotifyVolumeTimer != null) window.clearTimeout(spotifyVolumeTimer);
+    spotifyVolumeTimer = window.setTimeout(() => void controlSpotifyUi("volume", volume), 160);
+  });
+
+  // ===== Bilibili / Opera GX browser session =====
+  channelsBilibiliConnectBtn?.addEventListener("click", async () => {
+    channelsBilibiliConnectBtn.disabled = true;
+    setBilibiliFeedback("info", "正在驗證 Opera GX 的 Bilibili 登入狀態…");
+    try {
+      const result = await window.settings.channelsBilibiliConnect();
+      if (!result.ok) throw new Error(result.error || "Bilibili 連接失敗");
+      setBilibiliFeedback("ok", result.message || "Bilibili 已連接");
+      await refreshBilibili();
+    } catch (err) {
+      setBilibiliFeedback("err", err instanceof Error ? err.message : String(err));
+    } finally {
+      channelsBilibiliConnectBtn.disabled = false;
+    }
+  });
+  channelsBilibiliDisconnectBtn?.addEventListener("click", async () => {
+    const result = await window.settings.channelsBilibiliDisconnect();
+    setBilibiliFeedback(result.ok ? "ok" : "err", result.message || result.error || "Bilibili 已解除連接");
+    await refreshBilibili();
+  });
+
+  // ===== Discord Gateway =====
+  const parseIds = (value: string | undefined): string[] => [...new Set((value ?? "").split(/[\s,]+/).map((v) => v.trim()).filter(Boolean))];
+  const setDiscordFeedback = (kind: "info" | "ok" | "err", msg: string): void => {
+    if (!channelsDiscordFeedbackEl) return;
+    channelsDiscordFeedbackEl.textContent = msg;
+    channelsDiscordFeedbackEl.className = "channels-feedback";
+    channelsDiscordFeedbackEl.classList.add(kind === "ok" ? "channels-feedback--ok" : kind === "err" ? "channels-feedback--err" : "channels-feedback--info");
+  };
+  channelsDiscordTokenRevealBtn?.addEventListener("click", () => {
+    if (channelsDiscordTokenEl) channelsDiscordTokenEl.type = channelsDiscordTokenEl.type === "password" ? "text" : "password";
+  });
+  channelsDiscordEnabledEl?.addEventListener("change", async () => {
+    const enabled = channelsDiscordEnabledEl.checked;
+    channelsDiscordEnabledEl.disabled = true;
+    setDiscordFeedback("info", enabled ? "正在連接 Discord…" : "正在停止 Discord 連線…");
+    const discord: Record<string, unknown> = { enabled };
+    if (channelsDiscordTokenEl?.value.trim()) discord.botToken = channelsDiscordTokenEl.value.trim();
+    try {
+      await window.settings.channelsSaveConfig({ discord });
+      const result = await window.settings.channelsDiscordTestConnection();
+      if (!result.ok) throw new Error(result.error || (enabled ? "Discord 連接失敗" : "停止連線失敗"));
+      setDiscordFeedback("ok", result.message || (enabled ? "Discord Gateway 已連接" : "Discord 已停止連線"));
+      if (channelsDiscordTokenEl?.value.trim()) {
+        channelsDiscordTokenEl.value = "";
+        channelsDiscordTokenEl.placeholder = "已保存（輸入新值會覆蓋）";
+      }
+      const status = (await window.settings.channelsGetStatus()) as Record<string, { phase: string; message?: string }>;
+      renderChannelStatus(channelsDiscordStatusEl, status.discord?.phase ?? "offline", status.discord?.message);
+      await refreshDiscordProfile();
+    } catch (err) {
+      setDiscordFeedback("err", err instanceof Error ? err.message : String(err));
+      const status = (await window.settings.channelsGetStatus().catch(() => null)) as Record<string, { phase: string; message?: string }> | null;
+      if (status) renderChannelStatus(channelsDiscordStatusEl, status.discord?.phase ?? "offline", status.discord?.message);
+      await refreshDiscordProfile();
+    } finally {
+      channelsDiscordEnabledEl.disabled = false;
+    }
+  });
+  const closeDiscordMediaMenu = (): void => {
+    channelsDiscordMediaMenuEl?.setAttribute("hidden", "");
+    channelsDiscordAvatarPickBtn?.setAttribute("aria-expanded", "false");
+  };
+  channelsDiscordAvatarPickBtn?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (!channelsDiscordMediaMenuEl) return;
+    const willOpen = channelsDiscordMediaMenuEl.hasAttribute("hidden");
+    if (willOpen) channelsDiscordMediaMenuEl.removeAttribute("hidden");
+    else channelsDiscordMediaMenuEl.setAttribute("hidden", "");
+    channelsDiscordAvatarPickBtn.setAttribute("aria-expanded", String(willOpen));
+  });
+  channelsDiscordMediaMenuEl?.addEventListener("click", (event) => event.stopPropagation());
+  document.addEventListener("click", closeDiscordMediaMenu);
+  channelsDiscordAvatarOptionBtn?.addEventListener("click", async () => {
+    closeDiscordMediaMenu();
+    const avatarPath = await window.settings.channelsDiscordPickAvatar();
+    if (!avatarPath) return;
+    pendingDiscordAvatarPath = avatarPath;
+    setDiscordProfileFeedback("info", `已選擇 ${avatarPath.split(/[\\/]/).pop() ?? "新頭像"}，按「更新 Discord 身分」套用。`);
+  });
+  channelsDiscordBannerOptionBtn?.addEventListener("click", async () => {
+    closeDiscordMediaMenu();
+    const bannerPath = await window.settings.channelsDiscordPickBanner();
+    if (!bannerPath) return;
+    pendingDiscordBannerPath = bannerPath;
+    setDiscordProfileFeedback("info", `已選擇 ${bannerPath.split(/[\\/]/).pop() ?? "新 Banner"}，按「更新 Discord 身分」套用。`);
+  });
+
+  const discordEmojis = [
+    "😀", "😊", "🥰", "😍", "😌", "😉", "🥺",
+    "✨", "💫", "🌸", "🌙", "⭐", "💜", "🩷",
+    "🎀", "🪽", "🦋", "🌷", "🍀", "🍓", "🍰",
+    "🎵", "🎧", "🎮", "📖", "💬", "🤍", "🔥",
+  ];
+  if (channelsDiscordEmojiPickerEl) {
+    channelsDiscordEmojiPickerEl.replaceChildren(...discordEmojis.map((emoji) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = emoji;
+      button.title = emoji;
+      button.setAttribute("aria-label", `插入 ${emoji}`);
+      return button;
+    }));
+  }
+  let discordEmojiTarget: HTMLInputElement | null = null;
+  const closeDiscordEmojiPicker = (): void => {
+    channelsDiscordEmojiPickerEl?.setAttribute("hidden", "");
+    discordEmojiTarget = null;
+  };
+  for (const trigger of document.querySelectorAll<HTMLButtonElement>(".discord-emoji-button")) {
+    trigger.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const input = document.getElementById(trigger.dataset.emojiTarget ?? "") as HTMLInputElement | null;
+      if (!input || !channelsDiscordEmojiPickerEl) return;
+      if (!channelsDiscordEmojiPickerEl.hasAttribute("hidden") && discordEmojiTarget === input) {
+        closeDiscordEmojiPicker();
+        return;
+      }
+      discordEmojiTarget = input;
+      const rect = trigger.getBoundingClientRect();
+      const pickerWidth = 270;
+      channelsDiscordEmojiPickerEl.style.left = `${Math.max(10, Math.min(rect.right - pickerWidth, window.innerWidth - pickerWidth - 10))}px`;
+      channelsDiscordEmojiPickerEl.style.top = `${Math.min(rect.bottom + 8, window.innerHeight - 190)}px`;
+      channelsDiscordEmojiPickerEl.removeAttribute("hidden");
+    });
+  }
+  channelsDiscordEmojiPickerEl?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const button = (event.target as HTMLElement).closest("button");
+    if (!button || !discordEmojiTarget) return;
+    const start = discordEmojiTarget.selectionStart ?? discordEmojiTarget.value.length;
+    const end = discordEmojiTarget.selectionEnd ?? start;
+    discordEmojiTarget.setRangeText(button.textContent ?? "", start, end, "end");
+    discordEmojiTarget.focus();
+    closeDiscordEmojiPicker();
+  });
+  document.addEventListener("click", closeDiscordEmojiPicker);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeDiscordEmojiPicker();
+      closeDiscordMediaMenu();
+    }
+  });
+  channelsDiscordProfileSaveBtn?.addEventListener("click", async () => {
+    if (!channelsDiscordUsernameEl?.value.trim()) {
+      setDiscordProfileFeedback("err", "請輸入 Bot 顯示名稱。");
+      return;
+    }
+    channelsDiscordProfileSaveBtn.disabled = true;
+    setDiscordProfileFeedback("info", "正在更新 Discord 身分…");
+    try {
+      const result = await window.settings.channelsDiscordUpdateProfile({
+        username: channelsDiscordUsernameEl.value.trim(),
+        activityText: channelsDiscordActivityEl?.value ?? "",
+        status: channelsDiscordPresenceEl?.value ?? "online",
+        avatarPath: pendingDiscordAvatarPath,
+        bannerPath: pendingDiscordBannerPath,
+      });
+      if (!result.ok || !result.profile) throw new Error(result.error || "更新失敗");
+      pendingDiscordAvatarPath = undefined;
+      pendingDiscordBannerPath = undefined;
+      renderDiscordProfile(result.profile);
+      setDiscordProfileFeedback("ok", "Discord 身分已更新。名稱修改受到 Discord 頻率限制，短時間內請勿重複變更。 ");
+    } catch (err) {
+      setDiscordProfileFeedback("err", err instanceof Error ? err.message : String(err));
+    } finally {
+      channelsDiscordProfileSaveBtn.disabled = false;
+    }
+  });
+  channelsDiscordMusicToggleBtn?.addEventListener("click", () => {
+    void controlDiscordMusic({ command: discordMusicState.paused ? "resume" : "pause" }, true);
+  });
+  channelsDiscordMusicPreviousBtn?.addEventListener("click", () => void controlDiscordMusic({ command: "previous" }, true));
+  channelsDiscordMusicCoverEl?.addEventListener("error", () => {
+    channelsDiscordMusicCoverEl.hidden = true;
+    channelsDiscordMusicRecordEl?.classList.remove("has-cover");
+  });
+  channelsDiscordMusicNextBtn?.addEventListener("click", () => void controlDiscordMusic({ command: "skip" }, true));
+  channelsDiscordMusicStopBtn?.addEventListener("click", () => void controlDiscordMusic({ command: "stop" }, true));
+  channelsDiscordMusicRepeatBtn?.addEventListener("click", () => {
+    const command = discordMusicState.repeat === "off" ? "repeat-track" : discordMusicState.repeat === "track" ? "repeat-queue" : "repeat-off";
+    void controlDiscordMusic({ command }, true);
+  });
+  channelsDiscordMusicShuffleBtn?.addEventListener("click", () => {
+    void controlDiscordMusic({ command: discordMusicState.shuffle ? "ordered" : "shuffle" }, true);
+  });
+  channelsDiscordMusicAutoplayBtn?.addEventListener("click", () => {
+    void controlDiscordMusic({ command: discordMusicState.autoplay ? "autoplay-off" : "autoplay-on" }, true);
+  });
+  channelsDiscordMusicClearBtn?.addEventListener("click", () => void controlDiscordMusic({ command: "clear" }));
+  channelsDiscordMusicQueueToggleBtn?.addEventListener("click", () => void showDiscordMusicLibrary("queue"));
+  channelsDiscordMusicFavoritesToggleBtn?.addEventListener("click", () => void showDiscordMusicLibrary("favorites"));
+  channelsDiscordMusicHistoryToggleBtn?.addEventListener("click", () => void showDiscordMusicLibrary("history"));
+  channelsDiscordMusicQueueEl?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-queue-position]");
+    const position = Number(button?.dataset.queuePosition);
+    if (Number.isInteger(position) && position > 0) void controlDiscordMusic({ command: "remove", value: position }, true);
+  });
+  channelsDiscordMusicVolumeEl?.addEventListener("input", () => {
+    const value = Number(channelsDiscordMusicVolumeEl.value);
+    if (channelsDiscordMusicVolumeValueEl) channelsDiscordMusicVolumeValueEl.value = `${value}%`;
+    if (discordMusicVolumeTimer != null) window.clearTimeout(discordMusicVolumeTimer);
+    discordMusicVolumeTimer = window.setTimeout(() => void controlDiscordMusic({ command: "volume", value }, true), 120);
+  });
+  channelsDiscordSaveBtn?.addEventListener("click", async () => {
+    setDiscordFeedback("info", "保存並連接中…");
+    const discord: Record<string, unknown> = {
+      enabled: channelsDiscordEnabledEl?.checked ?? false,
+      allowedGuildIds: parseIds(channelsDiscordGuildIdsEl?.value),
+      allowedChannelIds: parseIds(channelsDiscordChannelIdsEl?.value),
+      allowedUserIds: parseIds(channelsDiscordUserIdsEl?.value),
+      codexImageOwnerId: channelsDiscordCodexOwnerIdEl?.value.trim() || undefined,
+      requireMention: channelsDiscordRequireMentionEl?.checked ?? true,
+      voiceEnabled: channelsDiscordVoiceEnabledEl?.checked ?? true,
+    };
+    if (channelsDiscordTokenEl?.value.trim()) discord.botToken = channelsDiscordTokenEl.value.trim();
+    try {
+      await window.settings.channelsSaveConfig({ discord });
+      const result = await window.settings.channelsDiscordTestConnection();
+      if (!result.ok) throw new Error(result.error || "Discord 連接失敗");
+      setDiscordFeedback("ok", result.message || "Discord Gateway 已連接");
+      if (channelsDiscordTokenEl) {
+        channelsDiscordTokenEl.value = "";
+        channelsDiscordTokenEl.placeholder = "已保存（輸入新值會覆蓋）";
+      }
+      await refreshDiscordProfile();
+    } catch (err) {
+      setDiscordFeedback("err", err instanceof Error ? err.message : String(err));
+    }
+  });
+
+  // ===== 微信交互（掃碼登錄走 iLink HTTP API，詳見 src/main/channels/adapters/wechat/） =====
 
   function setWechatFeedback(kind: "info" | "ok" | "err", msg: string): void {
     if (!channelsWechatFeedbackEl) return;
@@ -2394,7 +3796,7 @@ async function loadChannelsPanel(): Promise<void> {
     else channelsWechatFeedbackEl.classList.add("channels-feedback--info");
   }
 
-  // 扫码登录：Main Process 生成 PNG → 推到 Renderer → modal 弹窗
+  // 掃碼登錄：Main Process 生成 PNG → 推到 Renderer → modal 彈窗
   const channelsWechatQrEl = document.getElementById("channels-wechat-qr");
   const channelsWechatQrImgEl = document.getElementById("channels-wechat-qr-img") as HTMLImageElement | null;
   const channelsWechatQrCloseBtn = document.getElementById("channels-wechat-qr-close");
@@ -2415,7 +3817,7 @@ async function loadChannelsPanel(): Promise<void> {
     }
   }
 
-  // 关闭交互：点按钮 / 点背景 / 按 ESC
+  // 關閉交互：點按鈕 / 點背景 / 按 ESC
   channelsWechatQrCloseBtn?.addEventListener("click", hideWechatQr);
   channelsWechatQrBackdrop?.addEventListener("click", hideWechatQr);
   document.addEventListener("keydown", (e) => {
@@ -2424,44 +3826,44 @@ async function loadChannelsPanel(): Promise<void> {
     }
   });
 
-  // 订阅 Main 推送的二维码（每次登录会推一次）
+  // 訂閱 Main 推送的二維碼（每次登錄會推一次）
   window.settings.onChannelsWechatQrcode((dataUrl) => {
     console.log("[WechatSettings] QR event received, dataUrl prefix:", dataUrl?.slice(0, 40), "len:", dataUrl?.length);
     showWechatQr(dataUrl);
-    setWechatFeedback("info", "请用微信扫描二维码");
+    setWechatFeedback("info", "請用微信掃描二維碼");
   });
-  // 订阅 Main 推送的登录结果（成功 / 失败 / 二维码过期）
+  // 訂閱 Main 推送的登錄結果（成功 / 失敗 / 二維碼過期）
   window.settings.onChannelsWechatLoginDone((payload) => {
     hideWechatQr();
     if (payload.ok) {
-      setWechatFeedback("ok", `已登录（botId=${payload.botId ?? "?"}）`);
+      setWechatFeedback("ok", `已登錄（botId=${payload.botId ?? "?"}）`);
     } else {
-      setWechatFeedback("err", `登录失败：${payload.error ?? "未知错误"}`);
+      setWechatFeedback("err", `登錄失敗：${payload.error ?? "未知錯誤"}`);
     }
   });
 
   channelsWechatLoginBtn?.addEventListener("click", async () => {
     hideWechatQr();
-    setWechatFeedback("info", "正在启动扫码…");
+    setWechatFeedback("info", "正在啟動掃碼…");
     try {
       const result = await window.settings.channelsWechatLoginStart();
       if (result.ok) {
-        // 二维码由 onChannelsWechatQrcode 推过来并显示；这里只刷个轻提示
-        setWechatFeedback("info", "等待二维码推送…");
+        // 二維碼由 onChannelsWechatQrcode 推過來並顯示；這裡只刷個輕提示
+        setWechatFeedback("info", "等待二維碼推送…");
       } else {
-        setWechatFeedback("err", result.error ?? "启动失败");
+        setWechatFeedback("err", result.error ?? "啟動失敗");
       }
     } catch (err) {
       setWechatFeedback("err", err instanceof Error ? err.message : String(err));
     }
   });
 
-  // 重启连接
+  // 重啟連接
   channelsWechatRestartBtn?.addEventListener("click", async () => {
-    setWechatFeedback("info", "重启连接中…");
+    setWechatFeedback("info", "重啟連接中…");
     try {
       await window.settings.channelsRestart();
-      setWechatFeedback("ok", "已重启");
+      setWechatFeedback("ok", "已重啟");
     } catch (err) {
       setWechatFeedback("err", err instanceof Error ? err.message : String(err));
     }
@@ -2477,7 +3879,7 @@ function setFeishuFeedback(kind: "info" | "ok" | "err", msg: string): void {
   else channelsFeishuFeedbackEl.classList.add("channels-feedback--info");
 }
 
-// ===== Phase 3.4：消息日志 =====
+// ===== Phase 3.4：消息日誌 =====
 const channelsLogListEl = document.getElementById("channels-log-list");
 const channelsLogRefreshBtn = document.getElementById("channels-log-refresh");
 const channelsLogClearBtn = document.getElementById("channels-log-clear");
@@ -2496,7 +3898,7 @@ interface LogEntry {
 function renderChannelsLog(entries: LogEntry[]): void {
   if (!channelsLogListEl) return;
   if (entries.length === 0) {
-    channelsLogListEl.innerHTML = '<p class="empty-hint">暂无消息。</p>';
+    channelsLogListEl.innerHTML = '<p class="empty-hint">暫無消息。</p>';
     return;
   }
   const html = entries
@@ -2505,7 +3907,7 @@ function renderChannelsLog(entries: LogEntry[]): void {
       const hh = String(t.getHours()).padStart(2, "0");
       const mm = String(t.getMinutes()).padStart(2, "0");
       const ss = String(t.getSeconds()).padStart(2, "0");
-      const dir = e.dir === "incoming" ? "← 收到" : "→ 回复";
+      const dir = e.dir === "incoming" ? "← 收到" : "→ 回覆";
       const who = e.senderName ? `${e.senderName} (${e.senderId})` : e.senderId;
       const safe = (s: string) =>
         s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -2524,25 +3926,28 @@ async function refreshChannelsLog(): Promise<void> {
     const entries = (await window.settings.channelsLogGet(100)) as LogEntry[];
     renderChannelsLog(entries);
   } catch (err) {
-    console.warn("[Channels] refreshChannelsLog 失败:", err);
+    console.warn("[Channels] refreshChannelsLog 失敗:", err);
   }
 }
 
 channelsLogRefreshBtn?.addEventListener("click", () => void refreshChannelsLog());
 channelsLogClearBtn?.addEventListener("click", async () => {
-  if (!confirm("确认清空所有 bot 消息日志？")) return;
+  if (!confirm("確認清空所有 bot 消息日誌？")) return;
   await window.settings.channelsLogClear();
   await refreshChannelsLog();
 });
 
-// 首次进入 channels panel 时拉一次日志
-// （也可以在用户展开 details 时再拉，但保持简单直接拉）
+// 首次進入 channels panel 時拉一次日誌
+// （也可以在用戶展開 details 時再拉，但保持簡單直接拉）
 void loadChannelsPanel();
-// 启动时读 URL hash 决定初始标签（main 通过 loadURL 带 #api 实现"切换模型按钮跳 API"）。
-// 无 hash 默认 general。
+// 啟動時讀 URL hash 決定初始標籤（main 通過 loadURL 帶 #api 實現"切換模型按鈕跳 API"）。
+// 無 hash 默認 general。
 const initialSection = (window.location.hash || "#general").slice(1);
 switchSection(initialSection);
-// 监听 main 发来的切标签事件（窗口已打开时，main 不重新 loadURL，改发事件）
+window.addEventListener("hashchange", () => {
+  switchSection((window.location.hash || "#general").slice(1));
+});
+// 監聽 main 發來的切標籤事件（窗口已打開時，main 不重新 loadURL，改發事件）
 window.settings?.onSwitchSection?.((section) => {
   switchSection(section);
 });
@@ -2570,7 +3975,7 @@ window.settings?.onSwitchSection?.((section) => {
         if (result?.ok) {
           console.log("[settings] embedding switched to", value, "cleared:", result.clearedEntries);
           if (result.clearedEntries && result.clearedEntries > 0) {
-            window.alert("已切换至 " + (value === "bgem3" ? "BGE-M3" : "MiniLM") + "。由于向量维度不同，已清除 " + result.clearedEntries + " 条旧向量记忆。");
+            window.alert("已切換至 " + (value === "bgem3" ? "BGE-M3" : "MiniLM") + "。由於向量維度不同，已清除 " + result.clearedEntries + " 條舊向量記憶。");
           }
         } else {
           // Rollback on failure
@@ -2580,7 +3985,7 @@ window.settings?.onSwitchSection?.((section) => {
             prevCard?.classList.add("is-active");
             localStorage.setItem(KEY, previousValue);
           }
-          window.alert("切换失败：" + (result?.error || "未知错误"));
+          window.alert("切換失敗：" + (result?.error || "未知錯誤"));
         }
       } catch (err) {
         // Rollback on error
@@ -2634,12 +4039,12 @@ window.settings?.onSwitchSection?.((section) => {
   try {
     const status = await (window as any).settings?.getRerankerStatus?.();
     if (!status) return;
-    if (lightEl) lightEl.textContent = status.light ? "已下载 · 约 23MB" : "未下载 · 可选";
-    if (standardEl) standardEl.textContent = status.standard ? "已下载 · 约 279MB" : "未下载 · 可选";
+    if (lightEl) lightEl.textContent = status.light ? "已下載 · 約 23MB" : "未下載 · 可選";
+    if (standardEl) standardEl.textContent = status.standard ? "已下載 · 約 279MB" : "未下載 · 可選";
   } catch (err) {
     console.warn("[Reranker] status check failed:", err);
-    if (lightEl) lightEl.textContent = "状态未知";
-    if (standardEl) standardEl.textContent = "状态未知";
+    if (lightEl) lightEl.textContent = "狀態未知";
+    if (standardEl) standardEl.textContent = "狀態未知";
   }
 })();
 
@@ -2650,16 +4055,16 @@ window.settings?.onSwitchSection?.((section) => {
   try {
     const status = await window.modelConfig?.getModelInstallStatus?.();
     if (!status) {
-      if (bgem3El) bgem3El.textContent = "状态未知";
-      if (minilmEl) minilmEl.textContent = "状态未知";
+      if (bgem3El) bgem3El.textContent = "狀態未知";
+      if (minilmEl) minilmEl.textContent = "狀態未知";
       return;
     }
-    if (bgem3El) bgem3El.textContent = status.embedding?.bgem3 ? "已下载 · 约 570MB" : "未下载";
-    if (minilmEl) minilmEl.textContent = status.embedding?.minilm ? "已下载 · 约 23MB" : "未下载";
+    if (bgem3El) bgem3El.textContent = status.embedding?.bgem3 ? "已下載 · 約 570MB" : "未下載";
+    if (minilmEl) minilmEl.textContent = status.embedding?.minilm ? "已下載 · 約 23MB" : "未下載";
   } catch (err) {
     console.warn("[Embedding] status check failed:", err);
-    if (bgem3El) bgem3El.textContent = "状态未知";
-    if (minilmEl) minilmEl.textContent = "状态未知";
+    if (bgem3El) bgem3El.textContent = "狀態未知";
+    if (minilmEl) minilmEl.textContent = "狀態未知";
   }
 })();
 
@@ -2680,7 +4085,7 @@ window.settings?.onSwitchSection?.((section) => {
   }
 
   downloadBtn?.addEventListener("click", async () => {
-    // 打开模型安装说明文档
+    // 打開模型安裝說明文檔
     await window.system?.openExternal(
       "https://github.com/Playa-0v0/Cyrene-Agent/blob/master/docs/local-models.md"
     );
@@ -2694,7 +4099,7 @@ window.settings?.onSwitchSection?.((section) => {
       ov = document.createElement("div");
       ov.id = "cy-modal-overlay";
       ov.className = "cy-modal-overlay is-hidden";
-      ov.innerHTML = '<div class="cy-modal" role="alertdialog" aria-modal="true"><div class="cy-modal__head"><span class="cy-modal__icon" id="cy-modal-icon">📌</span><h3 class="cy-modal__title" id="cy-modal-title">提示</h3></div><hr class="cy-modal__divider"><p class="cy-modal__body" id="cy-modal-message">确认执行此操作吗？</p><div class="cy-modal__actions"><button type="button" class="ghost-btn" id="cy-modal-cancel">取消</button><button type="button" class="btn-primary" id="cy-modal-confirm">确定</button></div></div>';
+      ov.innerHTML = '<div class="cy-modal" role="alertdialog" aria-modal="true"><div class="cy-modal__head"><span class="cy-modal__icon" id="cy-modal-icon">📌</span><h3 class="cy-modal__title" id="cy-modal-title">提示</h3></div><hr class="cy-modal__divider"><p class="cy-modal__body" id="cy-modal-message">確認執行此操作嗎？</p><div class="cy-modal__actions"><button type="button" class="ghost-btn" id="cy-modal-cancel">取消</button><button type="button" class="btn-primary" id="cy-modal-confirm">確定</button></div></div>';
       document.body.appendChild(ov);
     }
     var iconEl = ov.querySelector("#cy-modal-icon") as HTMLElement;
@@ -2706,7 +4111,7 @@ window.settings?.onSwitchSection?.((section) => {
     titleEl.textContent = opts.title;
     msgEl.textContent = opts.message;
     cancelBtn.textContent = opts.cancelText || "取消";
-    confirmBtn.textContent = opts.confirmText || "确定";
+    confirmBtn.textContent = opts.confirmText || "確定";
     ov.classList.remove("is-hidden");
     return new Promise(function (resolve) {
       var cleanup = function (result: boolean) {
@@ -2724,7 +4129,7 @@ window.settings?.onSwitchSection?.((section) => {
   deleteBtn?.addEventListener("click", async () => {
     const model = getSelectedModel();
     const name = model === "minilm" ? "MiniLM" : "BGE-M3";
-    var confirmed = await _showModal({ title: "删 除 模 型", message: "确 定 删 除 " + name + " 模 型 缓 存？下 次 使 用 需 重 新 下 载。", icon: "⚠️", confirmText: "删 除", cancelText: "取 消" });
+    var confirmed = await _showModal({ title: "刪 除 模 型", message: "確 定 刪 除 " + name + " 模 型 緩 存？下 次 使 用 需 重 新 下 載。", icon: "⚠️", confirmText: "刪 除", cancelText: "取 消" });
     if (!confirmed) return;
     deleteBtn.disabled = true;
     deleteBtn.textContent = "\u5220\u9664\u4E2D\u2026";
@@ -2771,12 +4176,12 @@ window.settings?.onSwitchSection?.((section) => {
     updateBtn.textContent = "已是最新版本";
     updateBtn.disabled = true;
     setTimeout(() => {
-      updateBtn.textContent = "检查更新";
+      updateBtn.textContent = "檢查更新";
       updateBtn.disabled = false;
     }, 2000);
   });
 })();
-// ── 用户信息面板 ──
+// ── 用戶信息面板 ──
 const avatarEl = document.getElementById("user-avatar-el") as HTMLElement | null;
 const avatarImg = avatarEl?.querySelector("img") as HTMLImageElement | null;
 const avatarPlaceholder = avatarEl?.querySelector("span") as HTMLElement | null;
@@ -2794,7 +4199,16 @@ const memoryL1GoalsInput = document.getElementById("memory-l1-goals") as HTMLTex
 const memoryL1PreferencesInput = document.getElementById("memory-l1-preferences") as HTMLTextAreaElement | null;
 const memoryL1ProjectInput = document.getElementById("memory-l1-project") as HTMLTextAreaElement | null;
 const memoryL2SearchInput = document.getElementById("memory-l2-search") as HTMLInputElement | null;
+const memoryL2StatusFilter = document.getElementById("memory-l2-status-filter") as HTMLSelectElement | null;
 const memoryL2List = document.getElementById("memory-l2-list") as HTMLElement | null;
+const memoryTimelineToolbar = document.getElementById("memory-timeline-toolbar") as HTMLElement | null;
+const memoryTimelineView = document.getElementById("memory-timeline-view") as HTMLElement | null;
+const memoryGraphView = document.getElementById("memory-graph-view") as HTMLElement | null;
+const memoryGraphNodes = document.getElementById("memory-graph-nodes") as HTMLElement | null;
+const memoryGraphLines = document.getElementById("memory-graph-lines") as SVGSVGElement | null;
+const memoryGraphDetail = document.getElementById("memory-graph-detail") as HTMLElement | null;
+const memoryGraphEmpty = document.getElementById("memory-graph-empty") as HTMLElement | null;
+const memoryViewCount = document.getElementById("memory-view-count") as HTMLElement | null;
 const memoryImportedList = document.getElementById("memory-imported-list") as HTMLElement | null;
 const memoryReflectionList = document.getElementById("memory-reflection-list") as HTMLElement | null;
 const memoryL0EditBtn = document.getElementById("memory-l0-edit-btn") as HTMLButtonElement | null;
@@ -2825,9 +4239,9 @@ function showAvatar(dataUrl: string | null): void {
 }
 
 function formatDateTime(timestamp: number): string {
-  if (!timestamp) return "暂无时间";
+  if (!timestamp) return "暫無時間";
   const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return "暂无时间";
+  if (Number.isNaN(date.getTime())) return "暫無時間";
   return date.toLocaleString("zh-CN", {
     year: "numeric",
     month: "2-digit",
@@ -2886,23 +4300,171 @@ function renderInfoList(
 function renderL2List(query = ""): void {
   const list = memoryPanelCache?.l2 ?? [];
   const normalized = query.trim().toLowerCase();
-  const filtered = normalized
-    ? list.filter((item) => {
-        const haystack = [item.content, item.triggerText, item.status].join(" ").toLowerCase();
-        return haystack.includes(normalized);
-      })
-    : list;
+  const statusFilter = memoryL2StatusFilter?.value ?? "all";
+  const filtered = list.filter(item => {
+    if (statusFilter === "pinned" && !item.isPinned) return false;
+    if (statusFilter === "conflict" && item.conflictCount === 0) return false;
+    if (!["all", "pinned", "conflict"].includes(statusFilter) && item.status !== statusFilter) return false;
+    if (!normalized) return true;
+    const evidenceText = item.evidence.map(evidence => evidence.quoteSnippet).join(" ");
+    return [item.content, item.triggerText, item.status, evidenceText, item.sourceConversationId]
+      .join(" ").toLowerCase().includes(normalized);
+  });
 
-  renderInfoList(
-    memoryL2List,
-    filtered.map((item) => ({
-      title: item.content,
-      body: item.triggerText ? `触发片段：${item.triggerText}` : "无触发片段",
-      meta: `状态：${item.status} · 权重：${item.weight.toFixed(1)} · 创建于：${formatDateTime(item.createdAt)}`,
-    })),
-    normalized ? "没有匹配的事件记忆" : "暂无事件记忆",
-    normalized ? "换个关键词试试" : "聊天后昔涟会自动提炼重要信息",
-  );
+  if (memoryViewCount) memoryViewCount.textContent = `${filtered.length} 段記憶`;
+  if (!memoryL2List) return;
+  if (filtered.length === 0) {
+    renderEmptyState(
+      memoryL2List,
+      normalized || statusFilter !== "all" ? "沒有符合條件的記憶" : "暫無事件記憶",
+      normalized || statusFilter !== "all" ? "調整搜尋文字或狀態篩選" : "聊天後昔漣會自動提煉重要資訊",
+    );
+    return;
+  }
+
+  const groups = new Map<string, typeof filtered>();
+  for (const item of filtered) {
+    const date = new Date(item.createdAt);
+    const key = Number.isNaN(date.getTime()) ? "時間未知" : date.toLocaleDateString("zh-TW", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
+    const group = groups.get(key) ?? [];
+    group.push(item);
+    groups.set(key, group);
+  }
+
+  const statusLabels: Record<string, string> = {
+    active: "活躍", aging: "淡化中", archived: "已封存", superseded: "已更新", merged: "已合併",
+  };
+  memoryL2List.innerHTML = [...groups.entries()].map(([date, items]) => [
+    '<section class="memory-day">',
+    `  <div class="memory-day__label"><span></span><strong>${escapeHtml(date)}</strong><small>${items.length} 段</small></div>`,
+    '  <div class="memory-day__events">',
+    items.map(item => {
+      const evidence = item.evidence.find(entry => entry.sourceStatus === "active") ?? item.evidence[0];
+      const badges = [
+        `<span class="memory-event__status" data-status="${escapeHtml(item.status)}">${escapeHtml(statusLabels[item.status] ?? item.status)}</span>`,
+        item.isPinned ? '<span class="memory-event__badge">已固定</span>' : "",
+        item.isSummary ? '<span class="memory-event__badge">階段摘要</span>' : "",
+        item.conflictCount > 0 ? `<span class="memory-event__badge memory-event__badge--warning">${item.conflictCount} 個衝突</span>` : "",
+      ].filter(Boolean).join("");
+      const quote = evidence?.quoteSnippet || item.triggerText;
+      return [
+        `<article class="memory-event" data-memory-id="${escapeHtml(item.id)}">`,
+        '  <span class="memory-event__dot"></span>',
+        '  <div class="memory-event__card">',
+        `    <div class="memory-event__top"><time>${escapeHtml(new Date(item.createdAt).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" }))}</time><div>${badges}</div></div>`,
+        `    <p class="memory-event__content">${escapeHtml(item.content)}</p>`,
+        quote ? `    <blockquote class="memory-event__evidence"><span>證據</span>${escapeHtml(quote)}</blockquote>` : "",
+        `    <div class="memory-event__meta"><span>權重 ${item.weight.toFixed(1)}</span><span>想起 ${item.accessCount} 次</span><span>最近取用 ${escapeHtml(formatDateTime(item.lastAccessedAt))}</span></div>`,
+        '    <div class="memory-event__actions">',
+        `      <button type="button" data-memory-action="pin">${item.isPinned ? "取消固定" : "固定記憶"}</button>`,
+        item.sourceConversationId ? '      <button type="button" data-memory-action="source">開啟來源對話</button>' : "",
+        '      <button type="button" class="is-danger" data-memory-action="delete">忘記這段</button>',
+        '    </div>',
+        '  </div>',
+        '</article>',
+      ].join("\n");
+    }).join("\n"),
+    '  </div>',
+    '</section>',
+  ].join("\n")).join("\n");
+}
+
+function renderMemoryGraph(): void {
+  const graph = memoryPanelCache?.graph;
+  if (!graph || !memoryGraphNodes || !memoryGraphLines || !memoryGraphEmpty) return;
+  memoryGraphNodes.replaceChildren();
+  memoryGraphLines.replaceChildren();
+  const entityNodes = graph.nodes.filter(node => node.type !== "user");
+  memoryGraphEmpty.classList.toggle("is-hidden", entityNodes.length > 0);
+  if (entityNodes.length === 0) return;
+
+  const positions = new Map<string, { x: number; y: number }>();
+  const root = graph.nodes.find(node => node.type === "user") ?? graph.nodes[0];
+  positions.set(root.id, { x: 50, y: 50 });
+  entityNodes.forEach((node, index) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / entityNodes.length;
+    const radiusX = index % 2 === 0 ? 39 : 31;
+    const radiusY = index % 2 === 0 ? 39 : 31;
+    positions.set(node.id, { x: 50 + Math.cos(angle) * radiusX, y: 50 + Math.sin(angle) * radiusY });
+  });
+
+  memoryGraphLines.setAttribute("viewBox", "0 0 1000 600");
+  for (const edge of graph.edges) {
+    const source = positions.get(edge.sourceId);
+    const target = positions.get(edge.targetId);
+    if (!source || !target) continue;
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", String(source.x * 10));
+    line.setAttribute("y1", String(source.y * 6));
+    line.setAttribute("x2", String(target.x * 10));
+    line.setAttribute("y2", String(target.y * 6));
+    line.setAttribute("class", edge.inferred ? "is-inferred" : "is-explicit");
+    line.setAttribute("stroke-width", String(Math.min(5, 1 + Math.log2(Math.max(1, edge.strength)))));
+    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    title.textContent = `${edge.relation} · 強度 ${edge.strength}`;
+    line.appendChild(title);
+    memoryGraphLines.appendChild(line);
+  }
+
+  for (const node of graph.nodes) {
+    const position = positions.get(node.id);
+    if (!position) continue;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "memory-graph-node";
+    button.dataset.nodeId = node.id;
+    button.dataset.type = node.type;
+    button.style.setProperty("--node-x", `${position.x}%`);
+    button.style.setProperty("--node-y", `${position.y}%`);
+    button.style.setProperty("--node-scale", String(Math.min(1.22, .88 + Math.log2(Math.max(1, node.mentionCount)) * .08)));
+    const name = document.createElement("strong");
+    name.textContent = node.name;
+    const count = document.createElement("small");
+    count.textContent = node.type === "user" ? "記憶中心" : `${node.mentionCount} 次`;
+    button.append(name, count);
+    button.addEventListener("click", () => showMemoryGraphNode(node.id));
+    memoryGraphNodes.appendChild(button);
+  }
+}
+
+function showMemoryGraphNode(nodeId: string): void {
+  const graph = memoryPanelCache?.graph;
+  if (!graph || !memoryGraphDetail) return;
+  const node = graph.nodes.find(item => item.id === nodeId);
+  if (!node) return;
+  memoryGraphNodes?.querySelectorAll(".memory-graph-node").forEach(element => {
+    element.classList.toggle("is-active", (element as HTMLElement).dataset.nodeId === nodeId);
+  });
+  const edges = graph.edges.filter(edge => edge.sourceId === nodeId || edge.targetId === nodeId);
+  const related = edges.map(edge => {
+    const otherId = edge.sourceId === nodeId ? edge.targetId : edge.sourceId;
+    return { edge, other: graph.nodes.find(item => item.id === otherId) };
+  }).filter(item => item.other);
+  const typeNames: Record<string, string> = { user: "記憶中心", person: "人物", place: "地點", preference: "偏好", organization: "組織", concept: "概念" };
+  memoryGraphDetail.replaceChildren();
+  const eyebrow = document.createElement("span");
+  eyebrow.className = "memory-graph-detail__eyebrow";
+  eyebrow.textContent = typeNames[node.type] ?? node.type;
+  const title = document.createElement("h3");
+  title.textContent = node.name;
+  const meta = document.createElement("p");
+  meta.textContent = node.type === "user"
+    ? `目前連著 ${related.length} 個記憶實體。`
+    : `提及 ${node.mentionCount} 次 · 最近出現 ${formatDateTime(node.lastMentionedAt)}`;
+  const list = document.createElement("div");
+  list.className = "memory-graph-relations";
+  for (const item of related.slice(0, 12)) {
+    const row = document.createElement("button");
+    row.type = "button";
+    const relation = document.createElement("span");
+    relation.textContent = item.edge.relation;
+    const other = document.createElement("strong");
+    other.textContent = item.other?.name ?? "未知";
+    row.append(relation, other);
+    row.addEventListener("click", () => showMemoryGraphNode(item.other!.id));
+    list.appendChild(row);
+  }
+  memoryGraphDetail.append(eyebrow, title, meta, list);
 }
 
 async function loadMemoryPanel(): Promise<void> {
@@ -2922,32 +4484,98 @@ async function loadMemoryPanel(): Promise<void> {
     if (memoryL1ProjectInput) memoryL1ProjectInput.value = payload.l1.currentProject || "";
 
     renderL2List(memoryL2SearchInput?.value || "");
-
-        renderImportedDocs();;
+    renderMemoryGraph();
+    renderImportedDocs();
 
     renderInfoList(
       memoryReflectionList,
       payload.reflections,
-      "暂无阶段总结",
-      "当前项目里 Reflection 还没真正生成落地",
+      "暫無階段總結",
+      "持續聊天後，昔漣會在整理記憶時留下階段回顧",
     );
 
     if (memoryL0EditBtn) memoryL0EditBtn.disabled = false;
     if (memoryL1EditBtn) memoryL1EditBtn.disabled = false;
   } catch (err) {
     console.error("[settings] load memory panel failed", err);
-    renderEmptyState(memoryL2List, "记忆读取失败", "请查看终端日志");
-    renderEmptyState(memoryImportedList, "导入知识读取失败", "请查看终端日志");
-    renderEmptyState(memoryReflectionList, "阶段总结读取失败", "请查看终端日志");
+    renderEmptyState(memoryL2List, "記憶讀取失敗", "請查看終端日誌");
+    renderEmptyState(memoryImportedList, "導入知識讀取失敗", "請查看終端日誌");
+    renderEmptyState(memoryReflectionList, "階段總結讀取失敗", "請查看終端日誌");
   }
 }
+
+memoryL2SearchInput?.addEventListener("input", () => renderL2List(memoryL2SearchInput.value));
+memoryL2StatusFilter?.addEventListener("change", () => renderL2List(memoryL2SearchInput?.value ?? ""));
+
+document.querySelectorAll<HTMLButtonElement>("[data-memory-view]").forEach(button => {
+  button.addEventListener("click", () => {
+    const view = button.dataset.memoryView === "graph" ? "graph" : "timeline";
+    document.querySelectorAll<HTMLButtonElement>("[data-memory-view]").forEach(tab => {
+      const active = tab === button;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", String(active));
+    });
+    memoryTimelineView?.classList.toggle("is-hidden", view !== "timeline");
+    memoryTimelineToolbar?.classList.toggle("is-hidden", view !== "timeline");
+    memoryGraphView?.classList.toggle("is-hidden", view !== "graph");
+    if (memoryViewCount) {
+      memoryViewCount.textContent = view === "graph"
+        ? `${Math.max(0, (memoryPanelCache?.graph.nodes.length ?? 1) - 1)} 個實體`
+        : `${memoryPanelCache?.l2.length ?? 0} 段記憶`;
+    }
+    if (view === "graph") renderMemoryGraph();
+  });
+});
+
+memoryL2List?.addEventListener("click", async event => {
+  const button = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>("[data-memory-action]");
+  const article = button?.closest<HTMLElement>("[data-memory-id]");
+  const id = article?.dataset.memoryId;
+  const item = memoryPanelCache?.l2.find(memory => memory.id === id);
+  if (!button || !item) return;
+  const action = button.dataset.memoryAction;
+  button.disabled = true;
+  try {
+    if (action === "pin") {
+      const result = await window.memoryPanel?.pinL2(item.id, !item.isPinned);
+      if (!result?.ok) throw new Error(result?.error || "無法更新固定狀態");
+      await loadMemoryPanel();
+    } else if (action === "source" && item.sourceConversationId) {
+      const chatStore = (window as unknown as { chatStore?: { openInChatWindow: (id: string) => Promise<unknown> } }).chatStore;
+      await chatStore?.openInChatWindow(item.sourceConversationId);
+    } else if (action === "delete") {
+      const confirmed = await showModal({
+        title: "忘記這段記憶",
+        message: `確定要讓昔漣忘記這段嗎？\n\n${item.content}\n\n這個動作無法復原。`,
+        icon: "🫧",
+        confirmText: "忘記",
+        cancelText: "保留",
+      });
+      if (!confirmed) return;
+      const result = await window.memoryPanel?.deleteL2(item.id);
+      if (!result?.ok) throw new Error(result?.error || "無法刪除記憶");
+      await loadMemoryPanel();
+    }
+  } catch (err) {
+    console.error("[settings] memory action failed", err);
+    await showModal({
+      title: "記憶操作未完成",
+      message: err instanceof Error ? err.message : String(err),
+      icon: "⚠️",
+      confirmText: "知道了",
+      cancelText: "關閉",
+    });
+  } finally {
+    button.disabled = false;
+  }
+});
 
 async function loadUserProfile(): Promise<void> {
   try {
     const avatarDataUrl = await window.user?.getAvatar();
     if (avatarDataUrl) showAvatar(avatarDataUrl);
     if (uploadAvatarBtn) uploadAvatarBtn.disabled = false;
-    // 加载用户字段（昵称/称呼偏好/生日/默认城市）
+    // 加載用戶字段（暱稱/稱呼偏好/生日/默認城市）
     const profile = await window.user?.getProfile();
     if (profile) {
       if (userNicknameInput) userNicknameInput.value = String(profile.nickname ?? "");
@@ -2960,7 +4588,7 @@ async function loadUserProfile(): Promise<void> {
   }
 }
 
-// 用户字段：失焦/回车保存（每个字段独立原子保存）
+// 用戶字段：失焦/回車保存（每個字段獨立原子保存）
 function bindUserProfileSave(input: HTMLInputElement | null, field: string): void {
   if (!input) return;
   const save = (): void => { void window.user?.saveProfile({ [field]: input.value.trim() }); };
@@ -2970,7 +4598,7 @@ function bindUserProfileSave(input: HTMLInputElement | null, field: string): voi
 bindUserProfileSave(userNicknameInput, "nickname");
 bindUserProfileSave(userCallPrefInput, "callPreference");
 bindUserProfileSave(userBirthdayInput, "birthday");
-// 默认城市复用上面的 saveCity（保持原逻辑）
+// 默認城市複用上面的 saveCity（保持原邏輯）
 if (userDefaultCityInput) {
   const saveCity = (): void => {
     const value = userDefaultCityInput.value.trim();
@@ -3049,7 +4677,7 @@ function exitL0EditMode(): void {
   l0Editing = false;
   l0Snapshot = null;
   setL0FieldsDisabled(true);
-  if (memoryL0EditBtn) memoryL0EditBtn.textContent = "✏️ 编辑";
+  if (memoryL0EditBtn) memoryL0EditBtn.textContent = "✏️ 編輯";
   if (memoryL0CancelBtn) memoryL0CancelBtn.classList.add("is-hidden");
 }
 
@@ -3065,11 +4693,11 @@ async function saveL0(): Promise<void> {
     exitL0EditMode();
     if (memoryL0EditBtn) {
       memoryL0EditBtn.textContent = "✅ 已保存";
-      setTimeout(() => { if (memoryL0EditBtn && !l0Editing) memoryL0EditBtn.textContent = "✏️ 编辑"; }, 2000);
+      setTimeout(() => { if (memoryL0EditBtn && !l0Editing) memoryL0EditBtn.textContent = "✏️ 編輯"; }, 2000);
     }
   } catch (err) {
     console.error("[settings] save L0 failed", err);
-    alert("保存失败，请重试");
+    alert("保存失敗，請重試");
   }
 }
 
@@ -3097,7 +4725,7 @@ function exitL1EditMode(): void {
   l1Editing = false;
   l1Snapshot = null;
   setL1FieldsDisabled(true);
-  if (memoryL1EditBtn) memoryL1EditBtn.textContent = "✏️ 编辑";
+  if (memoryL1EditBtn) memoryL1EditBtn.textContent = "✏️ 編輯";
   if (memoryL1CancelBtn) memoryL1CancelBtn.classList.add("is-hidden");
 }
 
@@ -3113,11 +4741,11 @@ async function saveL1(): Promise<void> {
     exitL1EditMode();
     if (memoryL1EditBtn) {
       memoryL1EditBtn.textContent = "✅ 已保存";
-      setTimeout(() => { if (memoryL1EditBtn && !l1Editing) memoryL1EditBtn.textContent = "✏️ 编辑"; }, 2000);
+      setTimeout(() => { if (memoryL1EditBtn && !l1Editing) memoryL1EditBtn.textContent = "✏️ 編輯"; }, 2000);
     }
   } catch (err) {
     console.error("[settings] save L1 failed", err);
-    alert("保存失败，请重试");
+    alert("保存失敗，請重試");
   }
 }
 
@@ -3147,7 +4775,7 @@ function renderImportedDocs(): void {
   if (!memoryImportedList) return;
 
   if (list.length === 0) {
-    renderEmptyState(memoryImportedList, "暂无导入文档", "在聊天窗口上传文件后会自动索引");
+    renderEmptyState(memoryImportedList, "暫無導入文檔", "在聊天窗口上傳文件後會自動索引");
     return;
   }
 
@@ -3155,8 +4783,8 @@ function renderImportedDocs(): void {
     .map((item) => {
       const importId = item.importId || "";
       const fileName = escapeHtml(item.fileName);
-      const chunkInfo = "已索引 " + item.chunkCount + " 个片段";
-      const timeInfo = "最近导入：" + formatDateTime(item.lastImportedAt);
+      const chunkInfo = "已索引 " + item.chunkCount + " 個片段";
+      const timeInfo = "最近導入：" + formatDateTime(item.lastImportedAt);
       return [
         '<article class="memory-record memory-record--doc">',
         '  <div class="memory-record__main">',
@@ -3164,7 +4792,7 @@ function renderImportedDocs(): void {
         '    <p class="memory-record__body">' + escapeHtml(chunkInfo) + '</p>',
         '    <p class="memory-record__meta">' + escapeHtml(timeInfo) + '</p>',
         '  </div>',
-        '  <button type="button" class="memory-record__delete" data-import-id="' + escapeHtml(importId) + '" data-file-name="' + fileName + '" title="删除此导入文档">🗑️</button>',
+        '  <button type="button" class="memory-record__delete" data-import-id="' + escapeHtml(importId) + '" data-file-name="' + fileName + '" title="刪除此導入文檔">🗑️</button>',
         '</article>',
       ].join("\n");
     })
@@ -3177,13 +4805,13 @@ memoryImportedList?.addEventListener("click", async (event) => {
   if (!deleteBtn) return;
 
   const importId = deleteBtn.dataset.importId || "";
-  const fileName = deleteBtn.dataset.fileName || "未命名文档";
+  const fileName = deleteBtn.dataset.fileName || "未命名文檔";
 
   const confirmed = await showModal({
-    title: "删除导入知识",
-    message: "确定删除导入知识？\n\n文件：\n《" + fileName + "》\n\n删除后不可恢复，如需使用请重新导入。",
+    title: "刪除導入知識",
+    message: "確定刪除導入知識？\n\n文件：\n《" + fileName + "》\n\n刪除後不可恢復，如需使用請重新導入。",
     icon: "⚠️",
-    confirmText: "删除",
+    confirmText: "刪除",
     cancelText: "取消",
   });
 
@@ -3203,22 +4831,22 @@ memoryImportedList?.addEventListener("click", async (event) => {
 void loadMemoryPanel();
 void loadUserProfile();
 
-// ── 权限档位 UI ───────────────────────────────────────────
+// ── 權限檔位 UI ───────────────────────────────────────────
 type PermissionLevel = "read-only" | "scoped" | "per-action" | "full";
 
 const permissionBlocksWrap = document.getElementById("plugin-file-permission") as HTMLElement | null;
 const permissionNote = document.getElementById("plugin-file-note") as HTMLElement | null;
 
 const PERMISSION_NOTES: Record<PermissionLevel, string> = {
-  "read-only": "只读：昔涟不会修改本地任何文件，也不能为你安装新工具。",
-  "scoped": "指定目录：昔涟只能在你授权的目录里读写文件（白名单后续在此面板配置）。",
-  "per-action": "每次审批：每次涉及文件或安装的操作，昔涟都会在聊天里弹卡片让你确认。",
-  "full": "完全访问：昔涟可以自由调用本地命令（含 git/npm/pip）。请只在你完全信任的情况下使用。",
+  "read-only": "只讀：昔漣不會修改本地任何文件，也不能為你安裝新工具。",
+  "scoped": "指定目錄：昔漣只能在你授權的目錄裡讀寫文件（白名單後續在此面板配置）。",
+  "per-action": "每次審批：每次涉及文件或安裝的操作，昔漣都會在聊天裡彈卡片讓你確認。",
+  "full": "完全訪問：昔漣可以自由調用本地命令（含 git/npm/pip）。請只在你完全信任的情況下使用。",
 };
 
 function paintPermissionUI(level: PermissionLevel): void {
   if (!permissionBlocksWrap) return;
-  // scoped 档已从插件面板移除，回退显示只读
+  // scoped 檔已從插件面板移除，回退顯示只讀
   const display = level === "scoped" ? "read-only" : level;
   const blocks = permissionBlocksWrap.querySelectorAll<HTMLButtonElement>("button[data-level]");
   blocks.forEach((b) => {
@@ -3232,7 +4860,7 @@ function paintPermissionUI(level: PermissionLevel): void {
 }
 
 async function confirmFullAccess(): Promise<boolean> {
-  // 完全访问需要延迟确认 + 风险提示
+  // 完全訪問需要延遲確認 + 風險提示
   _initModalOverlay();
   if (!_cyModalOverlay) return false;
   const iconEl = _cyModalOverlay.querySelector("#cy-modal-icon") as HTMLElement;
@@ -3241,23 +4869,23 @@ async function confirmFullAccess(): Promise<boolean> {
   const cancelBtn = _cyModalOverlay.querySelector("#cy-modal-cancel") as HTMLButtonElement;
   const confirmBtn = _cyModalOverlay.querySelector("#cy-modal-confirm") as HTMLButtonElement;
   iconEl.textContent = "⚠️";
-  titleEl.textContent = "切换到完全访问？";
-  msgEl.textContent = "这意味着昔涟可以在你的电脑上自由执行命令，包括 git clone、npm install、删除文件等。请只在你完全信任她的判断时启用。";
+  titleEl.textContent = "切換到完全訪問？";
+  msgEl.textContent = "這意味著昔漣可以在你的電腦上自由執行命令，包括 git clone、npm install、刪除文件等。請只在你完全信任她的判斷時啟用。";
   cancelBtn.textContent = "再想想";
   _cyModalOverlay.classList.remove("is-hidden");
 
-  // 倒计时 5 秒强制等待
+  // 倒計時 5 秒強制等待
   let remain = 5;
   confirmBtn.disabled = true;
-  confirmBtn.textContent = "我了解风险（" + remain + "）";
+  confirmBtn.textContent = "我瞭解風險（" + remain + "）";
   const tick = setInterval(() => {
     remain -= 1;
     if (remain <= 0) {
       confirmBtn.disabled = false;
-      confirmBtn.textContent = "我了解风险，启用";
+      confirmBtn.textContent = "我瞭解風險，啟用";
       clearInterval(tick);
     } else {
-      confirmBtn.textContent = "我了解风险（" + remain + "）";
+      confirmBtn.textContent = "我瞭解風險（" + remain + "）";
     }
   }, 1000);
 
@@ -3284,46 +4912,46 @@ if (permissionBlocksWrap) {
     const target = (btn.dataset.level || "") as PermissionLevel;
     if (!target) return;
     if (btn.classList.contains("is-active")) {
-      console.log("[settings] 档位未变，不动作");
+      console.log("[settings] 檔位未變，不動作");
       return;
     }
 
     if (target === "full") {
       const ok = await confirmFullAccess();
       if (!ok) {
-        console.log("[settings] 用户取消了完全访问");
+        console.log("[settings] 用戶取消了完全訪問");
         return;
       }
     }
 
-    console.log("[settings] 切换权限档位 →", target);
+    console.log("[settings] 切換權限檔位 →", target);
     try {
       const result = await window.settings?.setPermissionLevel?.(target);
       if (result?.ok) {
         paintPermissionUI((result.level || target) as PermissionLevel);
       } else {
-        console.warn("[settings] 切换档位失败:", result?.error);
+        console.warn("[settings] 切換檔位失敗:", result?.error);
       }
     } catch (err) {
-      console.error("[settings] 切换档位异常:", err);
+      console.error("[settings] 切換檔位異常:", err);
     }
   });
 
-  // 初始化：从后端拿当前档位
+  // 初始化：從後端拿當前檔位
   void (async () => {
     try {
       const result = await window.settings?.getPermissionLevel?.();
       const level = (result?.level || "read-only") as PermissionLevel;
-      console.log("[settings] 当前权限档位:", level);
+      console.log("[settings] 當前權限檔位:", level);
       paintPermissionUI(level);
     } catch (err) {
-      console.warn("[settings] 加载权限档位失败:", err);
+      console.warn("[settings] 加載權限檔位失敗:", err);
       paintPermissionUI("read-only");
     }
   })();
 }
 
-// ── 生活工具手风琴 ─────────────────────────────────────────
+// ── 生活工具手風琴 ─────────────────────────────────────────
 const lifeToggle = document.getElementById("plugin-life-toggle") as HTMLButtonElement | null;
 const lifeCard = document.getElementById("plugin-life-card");
 const lifeBody = document.getElementById("plugin-life-body");
@@ -3334,7 +4962,7 @@ lifeToggle?.addEventListener("click", () => {
   lifeBody?.classList.toggle("is-collapsed", expanded);
 });
 
-// ── Skill 面板：列 skill 开关 ──────────────────────────────
+// ── Skill 面板：列 skill 開關 ──────────────────────────────
 async function renderSkills(): Promise<void> {
   const listEl = document.getElementById("skills-list");
   const emptyEl = document.getElementById("skills-empty");
@@ -3344,7 +4972,7 @@ async function renderSkills(): Promise<void> {
   try {
     skills = await window.settings.listSkills();
   } catch (err) {
-    console.warn("[settings] 加载 skill 列表失败:", err);
+    console.warn("[settings] 加載 skill 列表失敗:", err);
   }
 
   listEl.innerHTML = "";
@@ -3354,12 +4982,12 @@ async function renderSkills(): Promise<void> {
   }
   if (emptyEl) emptyEl.classList.add("is-hidden");
 
-  // MiniMax 办公合集 id 列表
+  // MiniMax 辦公合集 id 列表
   const officeGroupIds = new Set(["docx", "pdf", "pptx-generator", "xlsx"]);
   const officeSkills = skills.filter((s) => officeGroupIds.has(s.id));
   const otherSkills = skills.filter((s) => !officeGroupIds.has(s.id));
 
-  // 渲染单条 skill
+  // 渲染單條 skill
   function renderSkillRow(s: typeof skills[number]): HTMLDivElement {
     const row = document.createElement("div");
     row.className = "skill-row";
@@ -3367,7 +4995,7 @@ async function renderSkills(): Promise<void> {
     label.className = "skill-row__info";
     const title = document.createElement("div");
     title.className = "skill-row__title";
-    title.textContent = s.name + (s.source === "user" ? " （用户）" : "");
+    title.textContent = s.name + (s.source === "user" ? " （用戶）" : "");
     const desc = document.createElement("div");
     desc.className = "skill-row__desc";
     const short = s.description.length > 120 ? s.description.slice(0, 120) + "…" : s.description;
@@ -3384,7 +5012,7 @@ async function renderSkills(): Promise<void> {
       try {
         await window.settings?.setSkillEnabled?.(s.id, toggle.checked);
       } catch (err) {
-        console.warn("[settings] 切换 skill 失败:", err);
+        console.warn("[settings] 切換 skill 失敗:", err);
         toggle.checked = !toggle.checked;
       }
     });
@@ -3399,7 +5027,7 @@ async function renderSkills(): Promise<void> {
     listEl.appendChild(renderSkillRow(s));
   }
 
-  // MiniMax 办公合集折叠组
+  // MiniMax 辦公合集摺疊組
   if (officeSkills.length > 0) {
     const group = document.createElement("div");
     group.className = "skill-group";
@@ -3414,7 +5042,7 @@ async function renderSkills(): Promise<void> {
     gTitle.textContent = "MiniMAX-office-skills";
     const gDesc = document.createElement("span");
     gDesc.className = "skill-group__desc";
-    gDesc.textContent = "MiniMax开源的办公文档Skills合集";
+    gDesc.textContent = "MiniMax開源的辦公文檔Skills合集";
     header.appendChild(arrow);
     header.appendChild(gTitle);
     header.appendChild(gDesc);
@@ -3443,14 +5071,14 @@ async function renderSkills(): Promise<void> {
 
 
 /* ============================================================
-   💬 聊天面板：会话列表
-   - 渲染 chatStore.list 返回的会话元数据，按 updatedAt desc 排序（store 已排）
-   - 微信式时间：刚刚 / N 分钟前 / 今天 HH:mm / 昨天 HH:mm / N 天前 / MM-DD
-   - 点击列表项 = 在聊天窗口里打开（窗口未开则开窗）
-   - 双击标题 = 改名（contentEditable + Enter/Esc/blur 提交）
-   - 点🗑️ = 删除（活跃会话给出"正在阅读这个会话"差异化提示）
-   - 跨窗口同步：onChanged 触发重渲；onActiveSessionChanged 更新高亮态
-   - HTML/CSS 已在 index.html / settings.css 里就位（见 chat-sessions__*）
+   💬 聊天面板：會話列表
+   - 渲染 chatStore.list 返回的會話元數據，按 updatedAt desc 排序（store 已排）
+   - 微信式時間：剛剛 / N 分鐘前 / 今天 HH:mm / 昨天 HH:mm / N 天前 / MM-DD
+   - 點擊列表項 = 在聊天窗口裡打開（窗口未開則開窗）
+   - 雙擊標題 = 改名（contentEditable + Enter/Esc/blur 提交）
+   - 點🗑️ = 刪除（活躍會話給出"正在閱讀這個會話"差異化提示）
+   - 跨窗口同步：onChanged 觸發重渲；onActiveSessionChanged 更新高亮態
+   - HTML/CSS 已在 index.html / settings.css 裡就位（見 chat-sessions__*）
    ============================================================ */
 
 declare global {
@@ -3477,7 +5105,7 @@ async function renderChatSessions(): Promise<void> {
   const emptyEl = document.getElementById("chat-sessions-empty");
   if (!listEl || !window.chatStore) return;
 
-  // 第一次渲染前如果还不知道活跃 sessionId，主动拉一次
+  // 第一次渲染前如果還不知道活躍 sessionId，主動拉一次
   if (chatSessionsActiveId === null) {
     try { chatSessionsActiveId = (await window.chatStore.getActiveSession()) ?? null; } catch { /* ignore */ }
   }
@@ -3486,7 +5114,7 @@ async function renderChatSessions(): Promise<void> {
   try {
     sessions = await window.chatStore.list();
   } catch (err) {
-    console.warn("[settings] 加载聊天会话列表失败:", err);
+    console.warn("[settings] 加載聊天會話列表失敗:", err);
   }
 
   listEl.innerHTML = "";
@@ -3510,7 +5138,7 @@ function buildChatSessionItem(session: ChatSessionMetaUI): HTMLLIElement {
 
   const titleEl = document.createElement("div");
   titleEl.className = "chat-sessions__title";
-  titleEl.textContent = session.title || "新对话";
+  titleEl.textContent = session.title || "新對話";
 
   const metaEl = document.createElement("div");
   metaEl.className = "chat-sessions__meta";
@@ -3521,14 +5149,14 @@ function buildChatSessionItem(session: ChatSessionMetaUI): HTMLLIElement {
 
   const identityEl = document.createElement("span");
   identityEl.className = "chat-sessions__identity";
-  // 职位面板未做，所有 identityId == null 的会话先 fallback 到"聊天陪伴"
-  // 后续职位面板做好后这里改成用 identity 注册表查实际名称
+  // 職位面板未做，所有 identityId == null 的會話先 fallback 到"聊天陪伴"
+  // 後續職位面板做好後這裡改成用 identity 註冊表查實際名稱
   identityEl.textContent = "💼 " + (session.identityId ? session.identityId : CHAT_DEFAULT_IDENTITY_LABEL);
 
   metaEl.appendChild(timeEl);
   metaEl.appendChild(identityEl);
 
-  // 左侧主区：标题 + meta
+  // 左側主區：標題 + meta
   const mainEl = document.createElement("div");
   mainEl.className = "chat-sessions__main";
   mainEl.appendChild(titleEl);
@@ -3537,23 +5165,23 @@ function buildChatSessionItem(session: ChatSessionMetaUI): HTMLLIElement {
   const deleteBtn = document.createElement("button");
   deleteBtn.type = "button";
   deleteBtn.className = "chat-sessions__delete";
-  deleteBtn.title = "删除会话";
-  deleteBtn.setAttribute("aria-label", "删除会话");
+  deleteBtn.title = "刪除會話";
+  deleteBtn.setAttribute("aria-label", "刪除會話");
   deleteBtn.textContent = "🗑️";
 
   const renameBtn = document.createElement("button");
   renameBtn.type = "button";
   renameBtn.className = "chat-sessions__rename";
   renameBtn.title = "重命名";
-  renameBtn.setAttribute("aria-label", "重命名会话");
+  renameBtn.setAttribute("aria-label", "重命名會話");
   renameBtn.textContent = "✏️";
 
-  // 编辑态确认/取消按钮（默认隐藏，进入编辑态时显示，替换 ✏️/🗑️ 的位置）
+  // 編輯態確認/取消按鈕（默認隱藏，進入編輯態時顯示，替換 ✏️/🗑️ 的位置）
   const confirmRenameBtn = document.createElement("button");
   confirmRenameBtn.type = "button";
   confirmRenameBtn.className = "chat-sessions__confirm-rename is-hidden";
-  confirmRenameBtn.title = "确认（Enter）";
-  confirmRenameBtn.setAttribute("aria-label", "确认重命名");
+  confirmRenameBtn.title = "確認（Enter）";
+  confirmRenameBtn.setAttribute("aria-label", "確認重命名");
   confirmRenameBtn.textContent = "✓";
 
   const cancelRenameBtn = document.createElement("button");
@@ -3563,7 +5191,7 @@ function buildChatSessionItem(session: ChatSessionMetaUI): HTMLLIElement {
   cancelRenameBtn.setAttribute("aria-label", "取消重命名");
   cancelRenameBtn.textContent = "✕";
 
-  // 右侧操作区：✏️ 🗑️（常规）/ ✓ ✕（编辑态）
+  // 右側操作區：✏️ 🗑️（常規）/ ✓ ✕（編輯態）
   const actionsEl = document.createElement("div");
   actionsEl.className = "chat-sessions__actions";
   actionsEl.appendChild(renameBtn);
@@ -3571,8 +5199,8 @@ function buildChatSessionItem(session: ChatSessionMetaUI): HTMLLIElement {
   actionsEl.appendChild(cancelRenameBtn);
   actionsEl.appendChild(deleteBtn);
 
-  // —— 交互绑定 ——
-  // 点列表项 = 在聊天窗口里打开（编辑态时禁用，避免切走会话）
+  // —— 交互綁定 ——
+  // 點列表項 = 在聊天窗口裡打開（編輯態時禁用，避免切走會話）
   li.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
     if (target.closest(".chat-sessions__actions")) return;
@@ -3580,13 +5208,13 @@ function buildChatSessionItem(session: ChatSessionMetaUI): HTMLLIElement {
     void window.chatStore?.openInChatWindow(session.id);
   });
 
-  // ✏️ 按钮进入改名态
+  // ✏️ 按鈕進入改名態
   renameBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     enterRenameMode(titleEl, session, { renameBtn, deleteBtn, confirmRenameBtn, cancelRenameBtn });
   });
 
-  // 🗑️ 删除（含活跃会话差异化提示）
+  // 🗑️ 刪除（含活躍會話差異化提示）
   deleteBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     void deleteChatSession(session);
@@ -3597,8 +5225,8 @@ function buildChatSessionItem(session: ChatSessionMetaUI): HTMLLIElement {
   return li;
 }
 
-// 进入改名态：把 ✏️/🗑️ 隐藏，显示 ✓/✕；title 变 contentEditable 并聚焦全选。
-// 提交走 ✓ 按钮 / Enter；取消走 ✕ 按钮 / Esc / 失焦。失焦=取消（避免点别处误提交）。
+// 進入改名態：把 ✏️/🗑️ 隱藏，顯示 ✓/✕；title 變 contentEditable 並聚焦全選。
+// 提交走 ✓ 按鈕 / Enter；取消走 ✕ 按鈕 / Esc / 失焦。失焦=取消（避免點別處誤提交）。
 function enterRenameMode(
   titleEl: HTMLElement,
   session: ChatSessionMetaUI,
@@ -3611,7 +5239,7 @@ function enterRenameMode(
 ): void {
   const original = titleEl.textContent || "";
 
-  // 切换按钮可见性
+  // 切換按鈕可見性
   btns.renameBtn.classList.add("is-hidden");
   btns.deleteBtn.classList.add("is-hidden");
   btns.confirmRenameBtn.classList.remove("is-hidden");
@@ -3619,10 +5247,10 @@ function enterRenameMode(
 
   titleEl.contentEditable = "true";
   titleEl.classList.add("is-editing");
-  // 用 requestAnimationFrame 等按钮 click 冒泡完再聚焦，避免焦点抢夺导致 blur 误触发
+  // 用 requestAnimationFrame 等按鈕 click 冒泡完再聚焦，避免焦點搶奪導致 blur 誤觸發
   requestAnimationFrame(() => {
     titleEl.focus();
-    // 全选当前文本，方便用户直接覆盖
+    // 全選當前文本，方便用戶直接覆蓋
     const range = document.createRange();
     range.selectNodeContents(titleEl);
     const sel = window.getSelection();
@@ -3649,9 +5277,9 @@ function enterRenameMode(
     cleanup();
     if (newTitle && newTitle !== original) {
       void window.chatStore?.rename(session.id, newTitle);
-      // rename 成功后 main 广播 chats:changed → 列表重渲，无需手动改 DOM
+      // rename 成功後 main 廣播 chats:changed → 列表重渲，無需手動改 DOM
     } else {
-      titleEl.textContent = original; // 空内容或未变：还原
+      titleEl.textContent = original; // 空內容或未變：還原
     }
   };
 
@@ -3669,13 +5297,13 @@ function enterRenameMode(
       cancel();
     }
   };
-  // 失焦=取消（点别处想放弃编辑的心智模型）
+  // 失焦=取消（點別處想放棄編輯的心智模型）
   const onBlur = () => cancel();
   const onConfirm = (e: MouseEvent) => { e.stopPropagation(); commit(); };
   const onCancel = (e: MouseEvent) => { e.stopPropagation(); cancel(); };
-  // 关键：mousedown 时 preventDefault，阻止 ✓/✕ 按钮抢焦点，
-  // 否则顺序是 mousedown→titleEl blur(cancel 还原内容)→click(commit 读到原值)→改不了名。
-  // 阻止焦点转移后，titleEl 保持聚焦，blur 不触发，click 正常执行 commit/cancel。
+  // 關鍵：mousedown 時 preventDefault，阻止 ✓/✕ 按鈕搶焦點，
+  // 否則順序是 mousedown→titleEl blur(cancel 還原內容)→click(commit 讀到原值)→改不了名。
+  // 阻止焦點轉移後，titleEl 保持聚焦，blur 不觸發，click 正常執行 commit/cancel。
   const suppressFocus = (e: MouseEvent) => e.preventDefault();
 
   titleEl.addEventListener("keydown", onKey);
@@ -3689,20 +5317,20 @@ function enterRenameMode(
 async function deleteChatSession(session: ChatSessionMetaUI): Promise<void> {
   const isActive = session.id === chatSessionsActiveId;
   const prompt = isActive
-    ? `「${session.title || "新对话"}」正在聊天窗口里打开，确定删除？\n删除后聊天窗口会跳到最新一条会话或自动新建。`
-    : `确定删除「${session.title || "新对话"}」？\n删除后无法恢复。`;
+    ? `「${session.title || "新對話"}」正在聊天窗口裡打開，確定刪除？\n刪除後聊天窗口會跳到最新一條會話或自動新建。`
+    : `確定刪除「${session.title || "新對話"}」？\n刪除後無法恢復。`;
   if (!window.confirm(prompt)) return;
   try {
     await window.chatStore?.delete(session.id);
-    // 删除成功后 main 广播 chats:changed → 列表重渲；
-    // 聊天窗口若在显示该会话也会通过 onChanged 自动 fallback。
+    // 刪除成功後 main 廣播 chats:changed → 列表重渲；
+    // 聊天窗口若在顯示該會話也會通過 onChanged 自動 fallback。
   } catch (err) {
-    console.warn("[settings] 删除会话失败:", err);
-    window.alert("删除失败，请查看终端日志。");
+    console.warn("[settings] 刪除會話失敗:", err);
+    window.alert("刪除失敗，請查看終端日誌。");
   }
 }
 
-// —— 顶部"+新对话"按钮 ——
+// —— 頂部"+新對話"按鈕 ——
 const chatNewBtn = document.getElementById("chat-new-btn") as HTMLButtonElement | null;
 chatNewBtn?.addEventListener("click", async () => {
   if (!window.chatStore) return;
@@ -3710,20 +5338,20 @@ chatNewBtn?.addEventListener("click", async () => {
     const session = await window.chatStore.create({ identityId: null });
     if (session?.id) await window.chatStore.openInChatWindow(session.id);
   } catch (err) {
-    console.warn("[settings] 新建会话失败:", err);
-    window.alert("新建会话失败，请查看终端日志。");
+    console.warn("[settings] 新建會話失敗:", err);
+    window.alert("新建會話失敗，請查看終端日誌。");
   }
 });
 
-// —— 底部"打开存储位置"按钮 ——
+// —— 底部"打開存儲位置"按鈕 ——
 const chatOpenFolderBtn = document.getElementById("chat-open-folder-btn") as HTMLButtonElement | null;
 chatOpenFolderBtn?.addEventListener("click", () => {
   void window.chatStore?.openFolder();
 });
 
 // —— 跨窗口同步 ——
-// 任意会话变动（创建/追加/改名/删除）：重渲列表
-// 仅在面板可见时刷新，节省 DOM 写入；不可见时下次切到面板会重新拉
+// 任意會話變動（創建/追加/改名/刪除）：重渲列表
+// 僅在面板可見時刷新，節省 DOM 寫入；不可見時下次切到面板會重新拉
 window.chatStore?.onChanged(() => {
   const panel = document.getElementById("chat-panel");
   if (panel && !panel.classList.contains("is-hidden")) {
@@ -3731,7 +5359,7 @@ window.chatStore?.onChanged(() => {
   }
 });
 
-// 活跃 sessionId 变化：仅更新 is-active 高亮，不重新拉列表（轻量）
+// 活躍 sessionId 變化：僅更新 is-active 高亮，不重新拉列表（輕量）
 window.chatStore?.onActiveSessionChanged((sessionId) => {
   chatSessionsActiveId = sessionId;
   const listEl = document.getElementById("chat-sessions-list");
@@ -3742,10 +5370,10 @@ window.chatStore?.onActiveSessionChanged((sessionId) => {
 });
 
 /* ============================================================
-   📊 Token 用量面板：指标卡片 + 柱状图 + Chart.js 波浪图
-   - 时间范围 7d/14d/30d 切换，切换后调 IPC 拉真实数据并重渲
-   - hover 柱子/波浪节点 → tooltip 显示当天 输入/输出/命中/未命中
-   - 全空时显示空态（暂无用量数据）
+   📊 Token 用量面板：指標卡片 + 柱狀圖 + Chart.js 波浪圖
+   - 時間範圍 7d/14d/30d 切換，切換後調 IPC 拉真實數據並重渲
+   - hover 柱子/波浪節點 → tooltip 顯示當天 輸入/輸出/命中/未命中
+   - 全空時顯示空態（暫無用量數據）
    ============================================================ */
 
 import { Chart, registerables, type ChartConfiguration } from "chart.js";
@@ -3754,12 +5382,19 @@ Chart.register(...registerables);
 
 interface TokenDayData {
   date: string;       // ISO 日期 "06-15"
-  weekday: string;    // "周日"
+  weekday: string;    // "週日"
   input: number;
   output: number;
-  hit: number;        // 缓存命中（占位 0）
-  miss: number;       // 缓存未命中（占位 0）
+  hit: number;        // 緩存命中（佔位 0）
+  miss: number;       // 緩存未命中（佔位 0）
   requests: number;
+}
+
+interface AgentActivityPayload {
+  events: Array<{ id: string; at: string; kind: "tool" | "permission" | "system"; name: string; status: "success" | "failed" | "denied" | "running"; durationMs: number; argsSummary?: string; resultSummary?: string; error?: string }>;
+  summary: { total: number; success: number; failed: number; denied: number; avgDurationMs: number };
+  models: Array<{ model: string; input: number; output: number; requests: number }>;
+  resources: { rssBytes: number; heapUsedBytes: number; heapTotalBytes: number; queue: { pending: number; running: number; limit: number }; activityLimit: number; callContextTurnLimit: number };
 }
 
 declare global {
@@ -3767,11 +5402,16 @@ declare global {
     tokenUsage?: {
       get: (days: number) => Promise<TokenDayData[]>;
     };
+    agentActivity?: {
+      get: (days: number) => Promise<AgentActivityPayload>;
+      exportDiagnostic: () => Promise<{ filePath: string } | null>;
+      testLocalAsr: (payload: { pcmBase64: string; language: string }) => Promise<{ text: string; latencyMs: number }>;
+    };
   }
 }
 
-// 根据天数生成假数据（带随机波动，模拟真实趋势）
-// 柱状图：根据数据动态生成柱子（复用 chart.css 的 .chart-bar 样式）
+// 根據天數生成假數據（帶隨機波動，模擬真實趨勢）
+// 柱狀圖：根據數據動態生成柱子（複用 chart.css 的 .chart-bar 樣式）
 function renderTokenBarChart(data: TokenDayData[]): void {
   const container = document.getElementById("token-bar-chart");
   if (!container) return;
@@ -3781,13 +5421,13 @@ function renderTokenBarChart(data: TokenDayData[]): void {
   const peakIdx = data.reduce((peak, d, i, arr) =>
     (d.input + d.output) > (arr[peak].input + arr[peak].output) ? i : peak, 0);
 
-  // 柱状图最多显示 14 根（30d 时隔天显示），避免太挤
+  // 柱狀圖最多顯示 14 根（30d 時隔天顯示），避免太擠
   const displayData = data.length > 14
     ? data.filter((_, i) => i % 2 === 0)
     : data;
 
-  // 容器实际可用高度（mini-chart 高度 112px - padding-top 18px - 底部 label 区 18px ≈ 76px）
-  // 用固定像素高度，避免 flex 百分比高度在 padding 容器里不可靠
+  // 容器實際可用高度（mini-chart 高度 112px - padding-top 18px - 底部 label 區 18px ≈ 76px）
+  // 用固定像素高度，避免 flex 百分比高度在 padding 容器裡不可靠
   const chartHeight = 76;
 
   for (let i = 0; i < displayData.length; i++) {
@@ -3796,18 +5436,18 @@ function renderTokenBarChart(data: TokenDayData[]): void {
     const barH = Math.max(6, Math.round((total / maxVal) * chartHeight));
     const bar = document.createElement("div");
     bar.className = "token-bar";
-    // 峰值柱加标记
+    // 峰值柱加標記
     const origIdx = data.indexOf(d);
     if (origIdx === peakIdx) bar.classList.add("token-bar--peak");
 
-    // 真实 fill div（不用伪元素，直接控制像素高度）
+    // 真實 fill div（不用偽元素，直接控制像素高度）
     const fill = document.createElement("div");
     fill.className = "token-bar__fill";
     fill.style.height = barH + "px";
 
     const label = document.createElement("span");
     label.className = "token-bar__label";
-    label.textContent = d.date.split("-")[1]; // 只显示日
+    label.textContent = d.date.split("-")[1]; // 只顯示日
     bar.appendChild(fill);
     bar.appendChild(label);
 
@@ -3819,7 +5459,7 @@ function renderTokenBarChart(data: TokenDayData[]): void {
     container.appendChild(bar);
   }
 
-  // 日均标签
+  // 日均標籤
   const avgEl = document.getElementById("token-avg-label");
   if (avgEl) {
     const avg = Math.round(data.reduce((s, d) => s + d.input + d.output, 0) / data.length);
@@ -3832,14 +5472,14 @@ function formatTokenShort(n: number): string {
   return String(n);
 }
 
-// tooltip 显示/移动/隐藏
+// tooltip 顯示/移動/隱藏
 function showTokenTooltip(e: MouseEvent, d: TokenDayData): void {
   const tip = document.getElementById("token-tooltip");
   if (!tip) return;
   tip.innerHTML = `
     <div class="token-tooltip__date">${d.date} ${d.weekday}</div>
-    <div class="token-tooltip__row"><span>📥 输入</span><span>${d.input.toLocaleString()}</span></div>
-    <div class="token-tooltip__row"><span>📤 输出</span><span>${d.output.toLocaleString()}</span></div>
+    <div class="token-tooltip__row"><span>📥 輸入</span><span>${d.input.toLocaleString()}</span></div>
+    <div class="token-tooltip__row"><span>📤 輸出</span><span>${d.output.toLocaleString()}</span></div>
     <div class="token-tooltip__row"><span>🎯 命中</span><span>${d.hit > 0 ? d.hit.toLocaleString() : "N/A"}</span></div>
     <div class="token-tooltip__row"><span>❌ 未命中</span><span>${d.miss > 0 ? d.miss.toLocaleString() : "N/A"}</span></div>
   `;
@@ -3853,7 +5493,7 @@ function moveTokenTooltip(e: MouseEvent): void {
   const offset = 14;
   let x = e.clientX + offset;
   let y = e.clientY + offset;
-  // 防止超出视口右边
+  // 防止超出視口右邊
   const tipW = tip.offsetWidth;
   if (x + tipW > window.innerWidth) x = e.clientX - tipW - offset;
   tip.style.left = x + "px";
@@ -3865,14 +5505,15 @@ function hideTokenTooltip(): void {
   if (tip) tip.hidden = true;
 }
 
-// Chart.js 波浪面积图
+// Chart.js 波浪面積圖
 let tokenTrendChart: Chart | null = null;
+let tokenRangeDays = 7;
 
 function renderTokenTrendChart(data: TokenDayData[]): void {
   const canvas = document.getElementById("token-trend-chart") as HTMLCanvasElement | null;
   if (!canvas) return;
 
-  // 销毁旧实例避免重叠
+  // 銷燬舊實例避免重疊
   if (tokenTrendChart) { tokenTrendChart.destroy(); tokenTrendChart = null; }
 
   const labels = data.map((d) => d.date);
@@ -3885,7 +5526,7 @@ function renderTokenTrendChart(data: TokenDayData[]): void {
       labels,
       datasets: [
         {
-          label: "📥 输入",
+          label: "📥 輸入",
           data: inputData,
           borderColor: "#3b82f6",
           backgroundColor: "rgba(59, 130, 246, 0.15)",
@@ -3897,7 +5538,7 @@ function renderTokenTrendChart(data: TokenDayData[]): void {
           pointHoverBackgroundColor: "#3b82f6",
         },
         {
-          label: "📤 输出",
+          label: "📤 輸出",
           data: outputData,
           borderColor: "#ff8ccc",
           backgroundColor: "rgba(255, 140, 204, 0.15)",
@@ -3921,7 +5562,7 @@ function renderTokenTrendChart(data: TokenDayData[]): void {
           labels: { color: "rgba(235, 229, 245, 0.7)", font: { size: 11 }, boxWidth: 12, boxHeight: 12 },
         },
         tooltip: {
-          // 用 Chart.js 自带 tooltip，显示输入/输出/命中/未命中
+          // 用 Chart.js 自帶 tooltip，顯示輸入/輸出/命中/未命中
           backgroundColor: "rgba(30, 20, 45, 0.95)",
           borderColor: "rgba(255, 182, 220, 0.3)",
           borderWidth: 1,
@@ -3941,7 +5582,7 @@ function renderTokenTrendChart(data: TokenDayData[]): void {
               const d = data[idx];
               const which = item.datasetIndex === 0 ? "input" : "output";
               const val = which === "input" ? d.input : d.output;
-              return `${which === "input" ? "📥 输入" : "📤 输出"}: ${val.toLocaleString()}`;
+              return `${which === "input" ? "📥 輸入" : "📤 輸出"}: ${val.toLocaleString()}`;
             },
             afterBody: (items) => {
               const idx = items[0].dataIndex;
@@ -3975,7 +5616,7 @@ function renderTokenTrendChart(data: TokenDayData[]): void {
   tokenTrendChart = new Chart(canvas, config);
 }
 
-// 更新指标卡片
+// 更新指標卡片
 function updateTokenStats(data: TokenDayData[]): void {
   const totalInput = data.reduce((s, d) => s + d.input, 0);
   const totalOutput = data.reduce((s, d) => s + d.output, 0);
@@ -3993,13 +5634,13 @@ function updateTokenStats(data: TokenDayData[]): void {
   set("token-hit", "N/A");
 }
 
-// 刷新整个面板：调 IPC 拉真实数据 → 有数据渲染图表，无数据显示空态
+// 刷新整個面板：調 IPC 拉真實數據 → 有數據渲染圖表，無數據顯示空態
 async function refreshTokenPanel(days: number): Promise<void> {
   let data: TokenDayData[] = [];
   try {
     data = await window.tokenUsage?.get(days) ?? [];
   } catch (err) {
-    console.warn("[settings] 拉取 Token 用量失败:", err);
+    console.warn("[settings] 拉取 Token 用量失敗:", err);
   }
 
   const hasData = data.some((d) => d.input > 0 || d.output > 0 || d.requests > 0);
@@ -4007,7 +5648,7 @@ async function refreshTokenPanel(days: number): Promise<void> {
   const chartsEl = document.getElementById("token-charts");
 
   if (!hasData) {
-    // 空态：隐藏图表区，显示空态提示，指标卡片归零
+    // 空態：隱藏圖表區，顯示空態提示，指標卡片歸零
     if (emptyEl) emptyEl.classList.remove("is-hidden");
     if (chartsEl) chartsEl.classList.add("is-hidden");
     const set = (id: string, val: string) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -4019,7 +5660,7 @@ async function refreshTokenPanel(days: number): Promise<void> {
     return;
   }
 
-  // 有数据：显示图表区，隐藏空态
+  // 有數據：顯示圖表區，隱藏空態
   if (emptyEl) emptyEl.classList.add("is-hidden");
   if (chartsEl) chartsEl.classList.remove("is-hidden");
   updateTokenStats(data);
@@ -4027,7 +5668,7 @@ async function refreshTokenPanel(days: number): Promise<void> {
   renderTokenTrendChart(data);
 }
 
-// 时间范围按钮交互
+// 時間範圍按鈕交互
 document.querySelectorAll<HTMLButtonElement>(".token-range__btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".token-range__btn").forEach((b) => {
@@ -4037,20 +5678,94 @@ document.querySelectorAll<HTMLButtonElement>(".token-range__btn").forEach((btn) 
     btn.classList.add("is-active");
     btn.setAttribute("aria-selected", "true");
     const days = Number(btn.dataset.range) || 7;
+    tokenRangeDays = days;
     void refreshTokenPanel(days);
+    void refreshAgentActivity(days);
   });
+});
+
+function formatResourceBytes(bytes: number): string {
+  return `${Math.round(bytes / 1024 / 1024)} MB`;
+}
+
+async function refreshAgentActivity(days: number): Promise<void> {
+  const payload = await window.agentActivity?.get(days).catch(() => null);
+  if (!payload) return;
+  const set = (id: string, value: string) => { const element = document.getElementById(id); if (element) element.textContent = value; };
+  set("activity-total", String(payload.summary.total));
+  set("activity-success-rate", payload.summary.total ? `${Math.round(payload.summary.success / payload.summary.total * 100)}%` : "—");
+  set("activity-avg", payload.summary.total ? `${payload.summary.avgDurationMs} ms` : "—");
+  set("activity-problems", String(payload.summary.failed + payload.summary.denied));
+  set("activity-rss", formatResourceBytes(payload.resources.rssBytes));
+  set("activity-heap", `${formatResourceBytes(payload.resources.heapUsedBytes)} / ${formatResourceBytes(payload.resources.heapTotalBytes)}`);
+  set("activity-queue", `${payload.resources.queue.running} 執行 · ${payload.resources.queue.pending}/${payload.resources.queue.limit} 等待`);
+  set("activity-context", `${payload.resources.callContextTurnLimit} 輪`);
+
+  const events = document.getElementById("activity-events");
+  if (events) {
+    events.replaceChildren();
+    if (!payload.events.length) events.innerHTML = '<p class="activity-empty">尚未有工具活動</p>';
+    for (const event of payload.events) {
+      const article = document.createElement("article");
+      article.className = "activity-event";
+      article.dataset.status = event.status;
+      const strong = document.createElement("strong");
+      strong.textContent = event.name;
+      const badge = document.createElement("em");
+      badge.textContent = event.status === "success" ? "成功" : event.status === "denied" ? "已拒絕" : "失敗";
+      strong.appendChild(badge);
+      const time = document.createElement("time");
+      time.textContent = `${new Date(event.at).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" })} · ${event.durationMs} ms`;
+      const detail = document.createElement("p");
+      detail.textContent = event.error ?? event.resultSummary ?? event.argsSummary ?? "沒有額外摘要";
+      article.append(strong, time, detail);
+      events.appendChild(article);
+    }
+  }
+
+  const models = document.getElementById("activity-models");
+  if (models) {
+    models.replaceChildren();
+    const max = Math.max(1, ...payload.models.map((model) => model.input + model.output));
+    if (!payload.models.length) models.innerHTML = '<p class="activity-empty">尚無模型資料</p>';
+    for (const model of payload.models.slice(0, 6)) {
+      const row = document.createElement("div");
+      row.className = "activity-model";
+      const total = model.input + model.output;
+      const label = document.createElement("div");
+      label.className = "activity-model__row";
+      const name = document.createElement("strong"); name.textContent = model.model;
+      const count = document.createElement("span"); count.textContent = `${total.toLocaleString()} · ${model.requests} 次`;
+      label.append(name, count);
+      const bar = document.createElement("div"); bar.className = "activity-model__bar";
+      const fill = document.createElement("i"); fill.style.width = `${Math.max(3, total / max * 100)}%`; bar.appendChild(fill);
+      row.append(label, bar); models.appendChild(row);
+    }
+  }
+}
+
+document.getElementById("diagnostic-export-btn")?.addEventListener("click", async () => {
+  const status = document.getElementById("activity-export-status");
+  if (status) status.textContent = "正在整理…";
+  try {
+    const result = await window.agentActivity?.exportDiagnostic();
+    if (status) status.textContent = result ? "已匯出" : "已取消";
+  } catch (error) {
+    if (status) status.textContent = error instanceof Error ? error.message : String(error);
+  }
 });
 
 // 初始渲染
 void refreshTokenPanel(7);
+void refreshAgentActivity(tokenRangeDays);
 
 /* ============================================================
-   🎙️ TTS 设置面板交互
-   - 配置加载/保存（存 general settings，跟其他设置一起）
-   - 引擎选择卡片切换：选中哪个展开哪个配置表单
-   - 语速/音量滑块实时显示数值 + 自动保存
-   - MiniMax 测试发音：调 synthesize 合成固定文本并播放
-   - 音色快速复刻：选文件→上传→训练→自动填入 voice_id
+   🎙️ TTS 設置面板交互
+   - 配置加載/保存（存 general settings，跟其他設置一起）
+   - 引擎選擇卡片切換：選中哪個展開哪個配置表單
+   - 語速/音量滑塊實時顯示數值 + 自動保存
+   - MiniMax 測試發音：調 synthesize 合成固定文本並播放
+   - 音色快速復刻：選文件→上傳→訓練→自動填入 voice_id
    ============================================================ */
 
 interface TtsApi {
@@ -4065,7 +5780,7 @@ interface TtsApi {
     apiKey: string; voiceId: string; text: string;
     speed?: number; volume?: number; pitch?: number;
     model?: string; format?: "mp3" | "wav" | "pcm";
-  }) => Promise<string>; // base64 音频
+  }) => Promise<string>; // base64 音頻
   // GPT-SoVITS（返回 base64 + cacheKey + cached + format）
   synthesizeGptsovits: (payload: {
     baseUrl: string; refAudioPath: string; promptText: string; text: string;
@@ -4076,7 +5791,7 @@ interface TtsApi {
     speed?: number; format?: "wav" | "mp3";
     expectedCacheKey?: string;
   }) => Promise<{ base64: string; cacheKey: string; cached: boolean; format: "wav" | "mp3" }>;
-  // 自定义云端（返回 base64 + cacheKey + cached + format）
+  // 自定義雲端（返回 base64 + cacheKey + cached + format）
   synthesizeCustomCloud: (payload: {
     endpointUrl: string; apiKey?: string; voiceId?: string; text: string;
     speed?: number; volume?: number; format?: "wav" | "mp3"; timeoutMs?: number;
@@ -4105,27 +5820,27 @@ declare global {
   }
 }
 
-const TTS_TEST_TEXT = "你好，我是昔涟，很高兴见到你。";
+const TTS_TEST_TEXT = "你好，我是昔漣，很高興見到你。";
 
-// 获取 DOM 元素的辅助函数
+// 獲取 DOM 元素的輔助函數
 function ttsEl(id: string): HTMLInputElement {
   return document.getElementById(id) as HTMLInputElement;
 }
 
-// 当前加载的 TTS 配置（内存缓存，改一个字段就存一次）
+// 當前加載的 TTS 配置（內存緩存，改一個字段就存一次）
 let ttsConfig: Record<string, unknown> = {};
 
-// 加载配置并填充表单
+// 加載配置並填充表單
 async function loadTtsConfig(): Promise<void> {
   if (!window.tts) return;
   try {
     ttsConfig = await window.tts.loadSettings() as Record<string, unknown>;
   } catch (err) {
-    console.warn("[TTS] 加载配置失败:", err);
+    console.warn("[TTS] 加載配置失敗:", err);
     return;
   }
 
-  // 引擎选择
+  // 引擎選擇
   const engine = String(ttsConfig.ttsEngine || "off");
   document.querySelectorAll<HTMLButtonElement>(".tts-engine").forEach((btn) => {
     const isActive = btn.dataset.engine === engine;
@@ -4158,7 +5873,7 @@ async function loadTtsConfig(): Promise<void> {
   (ttsEl("tts-gptsovits-format") as HTMLSelectElement).value =
     ttsConfig.ttsGptsovitsFormat === "mp3" ? "mp3" : "wav";
 
-  // 自定义云端
+  // 自定義雲端
   ttsEl("tts-custom-cloud-url").value = String(ttsConfig.ttsCustomCloudEndpointUrl ?? "");
   ttsEl("tts-custom-cloud-key").value = String(ttsConfig.ttsCustomCloudApiKey ?? "");
   ttsEl("tts-custom-cloud-voice").value = String(ttsConfig.ttsCustomCloudVoiceId ?? "");
@@ -4169,14 +5884,99 @@ async function loadTtsConfig(): Promise<void> {
   // 小米 MiMo
   ttsEl("tts-mimo-key").value = String(ttsConfig.ttsMimoKey ?? "");
   ttsEl("tts-mimo-voice-audio").value = String(ttsConfig.ttsMimoVoiceAudioPath ?? "");
-  ttsEl("tts-mimo-style").value = String(ttsConfig.ttsMimoStylePrompt ?? "温柔、自然、略带亲近感，像在轻声陪用户聊天。");
+  ttsEl("tts-mimo-style").value = String(ttsConfig.ttsMimoStylePrompt ?? "溫柔、自然、略帶親近感，像在輕聲陪用戶聊天。");
 
-  // Opener 主动开口档位
+  // Opener 主動開口檔位
   const openerMode = String(ttsConfig.openerMode ?? "off");
   document.querySelectorAll<HTMLButtonElement>(".opener-mode").forEach((btn) => {
     const isActive = btn.dataset.mode === openerMode;
     btn.classList.toggle("is-active", isActive);
     btn.setAttribute("aria-checked", isActive ? "true" : "false");
+  });
+  openerEl("opener-quiet-start").value = String(ttsConfig.openerQuietStart ?? "23:00");
+  openerEl("opener-quiet-end").value = String(ttsConfig.openerQuietEnd ?? "07:00");
+  openerEl("opener-daily-limit").value = String(ttsConfig.openerDailyLimit ?? 4);
+  openerEl("opener-routine-enabled").checked = ttsConfig.openerRoutineEnabled !== false;
+  openerEl("opener-breaks-enabled").checked = ttsConfig.openerBreaksEnabled !== false;
+  openerEl("opener-weather-enabled").checked = ttsConfig.openerWeatherEnabled !== false;
+  updateOpenerUi();
+  void refreshOpenerStatus();
+
+  // 每日陪伴儀式
+  ritualEl("daily-ritual-enabled").checked = Boolean(ttsConfig.dailyRitualEnabled);
+  ritualEl("daily-ritual-voice").checked = ttsConfig.dailyRitualVoice !== false;
+  ritualEl("daily-ritual-morning-enabled").checked = ttsConfig.dailyRitualMorningEnabled !== false;
+  ritualEl("daily-ritual-morning-time").value = String(ttsConfig.dailyRitualMorningTime ?? "08:00");
+  ritualEl("daily-ritual-afternoon-enabled").checked = ttsConfig.dailyRitualAfternoonEnabled !== false;
+  ritualEl("daily-ritual-afternoon-time").value = String(ttsConfig.dailyRitualAfternoonTime ?? "15:00");
+  ritualEl("daily-ritual-evening-enabled").checked = ttsConfig.dailyRitualEveningEnabled !== false;
+  ritualEl("daily-ritual-evening-time").value = String(ttsConfig.dailyRitualEveningTime ?? "22:30");
+  updateRitualEnabledState();
+}
+
+function ritualEl(id: string): HTMLInputElement {
+  return document.getElementById(id) as HTMLInputElement;
+}
+
+function setRitualStatus(text: string): void {
+  const el = document.getElementById("daily-ritual-status");
+  if (el) el.textContent = text;
+}
+
+function updateRitualEnabledState(): void {
+  document.getElementById("daily-ritual-timeline")?.classList.toggle(
+    "is-disabled",
+    !ritualEl("daily-ritual-enabled").checked,
+  );
+}
+
+async function saveRitualField(field: string, value: unknown): Promise<void> {
+  setRitualStatus("正在保存…");
+  await saveTtsField(field, value);
+  setRitualStatus("已保存");
+  window.setTimeout(() => setRitualStatus("設定會立即保存"), 1600);
+}
+
+function bindDailyRitualControls(): void {
+  const master = document.getElementById("daily-ritual-enabled") as HTMLInputElement | null;
+  if (!master) return;
+  master.addEventListener("change", () => {
+    updateRitualEnabledState();
+    void saveRitualField("dailyRitualEnabled", master.checked);
+  });
+  ritualEl("daily-ritual-voice").addEventListener("change", event => {
+    void saveRitualField("dailyRitualVoice", (event.currentTarget as HTMLInputElement).checked);
+  });
+
+  for (const period of ["morning", "afternoon", "evening"] as const) {
+    const enabled = ritualEl(`daily-ritual-${period}-enabled`);
+    const time = ritualEl(`daily-ritual-${period}-time`);
+    const key = period[0].toUpperCase() + period.slice(1);
+    enabled.addEventListener("change", () => void saveRitualField(`dailyRitual${key}Enabled`, enabled.checked));
+    time.addEventListener("change", () => void saveRitualField(`dailyRitual${key}Time`, time.value));
+  }
+
+  document.querySelectorAll<HTMLButtonElement>("[data-ritual-test]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const ritualId = button.dataset.ritualTest;
+      button.disabled = true;
+      setRitualStatus("昔漣正在準備…");
+      try {
+        const list = await window.cyreneScheduler?.list();
+        const task = list?.value?.find(item => item.managedBy === "daily-ritual" && item.ritualId === ritualId);
+        if (!task) throw new Error("儀式任務尚未建立，請先切換一次啟用開關");
+        const fired = await window.cyreneScheduler?.fireNow(task.id);
+        if (!fired?.ok) throw new Error(fired?.error || fired?.reason || "無法立即運行");
+        const history = await window.cyreneScheduler?.getHistory(task.id, 1);
+        const latest = history?.value?.[0];
+        if (latest?.status === "failed") throw new Error(latest.errorMessage || "生成失敗");
+        setRitualStatus("已送到桌寵");
+      } catch (err) {
+        setRitualStatus(err instanceof Error ? err.message : String(err));
+      } finally {
+        button.disabled = false;
+      }
+    });
   });
 }
 
@@ -4187,18 +5987,108 @@ function updateTtsSliderLabels(): void {
   if (volVal) volVal.textContent = Math.round(Number(ttsEl("tts-volume").value) * 100) + "%";
 }
 
-// 保存单个 TTS 配置字段
+interface OpenerUiStatus {
+  running: boolean;
+  packSource: "voice-pack" | "built-in-text";
+  sceneCount: number;
+  audioItemCount: number;
+  textItemCount: number;
+  dailyFireCount: number;
+  dailyLimit: number;
+  desire: number;
+  lastScene: string | null;
+  lastTriggeredAt: number | null;
+  city: string;
+}
+
+interface OpenerBridgeApi {
+  testFire: (sceneId?: string) => Promise<{ ok: boolean; message: string }>;
+  getStatus: () => Promise<OpenerUiStatus>;
+  openPackFolder: () => Promise<{ ok: boolean; error?: string }>;
+}
+
+function openerBridge(): OpenerBridgeApi | undefined {
+  return (window as unknown as { openerBridge?: OpenerBridgeApi }).openerBridge;
+}
+
+function openerEl(id: string): HTMLInputElement {
+  return document.getElementById(id) as HTMLInputElement;
+}
+
+function updateOpenerUi(): void {
+  const mode = String(ttsConfig.openerMode ?? "off");
+  document.querySelector(".opener-console")?.classList.toggle("is-off", mode === "off");
+  const limit = Number(openerEl("opener-daily-limit").value || 4);
+  const label = document.getElementById("opener-daily-limit-value");
+  if (label) label.textContent = `${limit} 次`;
+}
+
+function setOpenerTestStatus(text: string): void {
+  const status = document.getElementById("opener-test-status");
+  if (status) status.textContent = text;
+}
+
+async function refreshOpenerStatus(): Promise<void> {
+  const api = openerBridge();
+  if (!api) return;
+  try {
+    const status = await api.getStatus();
+    const health = document.getElementById("opener-health");
+    health?.classList.toggle("is-running", status.running);
+    if (health) health.title = status.city ? `天氣位置：${status.city}` : "尚未設定默認城市，天氣場景不會觸發";
+    const title = document.getElementById("opener-health-title");
+    const detail = document.getElementById("opener-health-detail");
+    if (title) title.textContent = status.running ? "感知中" : "目前已關閉";
+    if (detail) {
+      const source = status.packSource === "voice-pack"
+        ? `語音包 · ${status.audioItemCount} 句`
+        : `內建文字 · ${status.textItemCount} 句`;
+      detail.textContent = `${source} · 今日 ${status.dailyFireCount}/${status.dailyLimit}`;
+    }
+  } catch (err) {
+    const title = document.getElementById("opener-health-title");
+    const detail = document.getElementById("opener-health-detail");
+    if (title) title.textContent = "狀態讀取失敗";
+    if (detail) detail.textContent = err instanceof Error ? err.message : String(err);
+  }
+}
+
+function bindOpenerControls(): void {
+  for (const [id, field] of [
+    ["opener-quiet-start", "openerQuietStart"],
+    ["opener-quiet-end", "openerQuietEnd"],
+  ] as const) {
+    openerEl(id).addEventListener("change", () => void saveTtsField(field, openerEl(id).value).then(refreshOpenerStatus));
+  }
+  const limit = openerEl("opener-daily-limit");
+  limit.addEventListener("input", updateOpenerUi);
+  limit.addEventListener("change", () => void saveTtsField("openerDailyLimit", Number(limit.value)).then(refreshOpenerStatus));
+  for (const [id, field] of [
+    ["opener-routine-enabled", "openerRoutineEnabled"],
+    ["opener-breaks-enabled", "openerBreaksEnabled"],
+    ["opener-weather-enabled", "openerWeatherEnabled"],
+  ] as const) {
+    openerEl(id).addEventListener("change", () => void saveTtsField(field, openerEl(id).checked).then(refreshOpenerStatus));
+  }
+
+  document.getElementById("opener-open-pack-folder")?.addEventListener("click", async () => {
+    const result = await openerBridge()?.openPackFolder();
+    setOpenerTestStatus(result?.ok ? "已打開語音包資料夾；放入 manifest.json 與 wav 後重新讀取即可。" : result?.error || "無法打開資料夾");
+  });
+}
+
+// 保存單個 TTS 配置字段
 async function saveTtsField(field: string, value: unknown): Promise<void> {
   if (!window.tts) return;
   ttsConfig[field] = value;
   try {
     await window.tts.saveSettings({ [field]: value });
   } catch (err) {
-    console.warn("[TTS] 保存配置失败:", field, err);
+    console.warn("[TTS] 保存配置失敗:", field, err);
   }
 }
 
-// 播放 base64 音频。format 决定 Blob MIME（minimax 默认 mp3，gptsovits 默认 wav）
+// 播放 base64 音頻。format 決定 Blob MIME（minimax 默認 mp3，gptsovits 默認 wav）
 function playTtsAudio(base64: string, format: "wav" | "mp3" = "mp3"): void {
   try {
     const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
@@ -4206,17 +6096,17 @@ function playTtsAudio(base64: string, format: "wav" | "mp3" = "mp3"): void {
     const blob = new Blob([bytes], { type: mime });
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
-    audio.play().catch((err) => console.warn("[TTS] 播放失败:", err));
+    audio.play().catch((err) => console.warn("[TTS] 播放失敗:", err));
     audio.onended = () => URL.revokeObjectURL(url);
   } catch (err) {
-    console.warn("[TTS] 音频解码失败:", err);
+    console.warn("[TTS] 音頻解碼失敗:", err);
   }
 }
 
-// 引擎选择切换
-// 只匹配带 data-engine 的按钮（即 TTS 厂商按钮）——主动开口档位按钮虽然
-// 共用 .tts-engine 视觉 class，但只有 data-mode 没有 data-engine，
-// 用属性选择器避免误触把它们当作 TTS 厂商处理。
+// 引擎選擇切換
+// 只匹配帶 data-engine 的按鈕（即 TTS 廠商按鈕）——主動開口檔位按鈕雖然
+// 共用 .tts-engine 視覺 class，但只有 data-mode 沒有 data-engine，
+// 用屬性選擇器避免誤觸把它們當作 TTS 廠商處理。
 document.querySelectorAll<HTMLButtonElement>("[data-engine]").forEach((btn) => {
   btn.addEventListener("click", () => {
     const engine = btn.dataset.engine || "off";
@@ -4235,7 +6125,7 @@ document.querySelectorAll<HTMLButtonElement>("[data-engine]").forEach((btn) => {
   });
 });
 
-// Opener 主动开口档位切换
+// Opener 主動開口檔位切換
 document.querySelectorAll<HTMLButtonElement>(".opener-mode").forEach((btn) => {
   btn.addEventListener("click", () => {
     const mode = btn.dataset.mode || "off";
@@ -4245,28 +6135,41 @@ document.querySelectorAll<HTMLButtonElement>(".opener-mode").forEach((btn) => {
     });
     btn.classList.add("is-active");
     btn.setAttribute("aria-checked", "true");
-    void saveTtsField("openerMode", mode);
+    ttsConfig.openerMode = mode;
+    updateOpenerUi();
+    void saveTtsField("openerMode", mode).then(refreshOpenerStatus);
   });
 });
 
-// Opener 测试气泡（手动触发一次，看样式）
-document.getElementById("opener-test-fire")?.addEventListener("click", () => {
-  const win = window as unknown as { openerBridge?: { testFire?: () => Promise<void> } };
-  void win.openerBridge?.testFire?.();
+// Opener 測試氣泡：可選場景，並把缺少桌寵/語音包等原因直接顯示給使用者。
+document.getElementById("opener-test-fire")?.addEventListener("click", async () => {
+  const button = document.getElementById("opener-test-fire") as HTMLButtonElement;
+  const scene = (document.getElementById("opener-test-scene") as HTMLSelectElement | null)?.value;
+  button.disabled = true;
+  setOpenerTestStatus("正在送出測試氣泡…");
+  try {
+    const result = await openerBridge()?.testFire(scene);
+    setOpenerTestStatus(result?.message ?? "主動開口橋接尚未就緒。");
+    await refreshOpenerStatus();
+  } catch (err) {
+    setOpenerTestStatus(err instanceof Error ? err.message : String(err));
+  } finally {
+    button.disabled = false;
+  }
 });
 
-// 自动朗读开关
+// 自動朗讀開關
 ttsEl("tts-auto-read").addEventListener("change", () => {
   void saveTtsField("ttsAutoRead", ttsEl("tts-auto-read").checked);
 });
 
-// 语速/音量滑块（change 时保存，input 时实时显示）
+// 語速/音量滑塊（change 時保存，input 時實時顯示）
 ttsEl("tts-speed").addEventListener("input", updateTtsSliderLabels);
 ttsEl("tts-speed").addEventListener("change", () => saveTtsField("ttsSpeed", Number(ttsEl("tts-speed").value)));
 ttsEl("tts-volume").addEventListener("input", updateTtsSliderLabels);
 ttsEl("tts-volume").addEventListener("change", () => saveTtsField("ttsVolume", Number(ttsEl("tts-volume").value)));
 
-// 配置输入框 change 时保存 + input 时防抖保存（防粘贴后未失焦就丢失）
+// 配置輸入框 change 時保存 + input 時防抖保存（防粘貼後未失焦就丟失）
 const ttsSaveFields: Array<[string, string]> = [
   ["tts-minimax-key", "ttsMinimaxKey"],
   ["tts-minimax-voice", "ttsMinimaxVoiceId"],
@@ -4285,7 +6188,7 @@ const ttsSaveFields: Array<[string, string]> = [
 const ttsDebounceTimers: Record<string, ReturnType<typeof setTimeout> | undefined> = {};
 for (const [elId, field] of ttsSaveFields) {
   ttsEl(elId).addEventListener("change", () => saveTtsField(field, ttsEl(elId).value));
-  // 防抖保存：输入或粘贴后 800ms 自动保存，不依赖失焦
+  // 防抖保存：輸入或粘貼後 800ms 自動保存，不依賴失焦
   ttsEl(elId).addEventListener("input", () => {
     clearTimeout(ttsDebounceTimers[field]);
     ttsDebounceTimers[field] = setTimeout(() => {
@@ -4294,22 +6197,22 @@ for (const [elId, field] of ttsSaveFields) {
   });
 }
 
-// GPT-SoVITS 格式选择（select，change 时直接保存）
+// GPT-SoVITS 格式選擇（select，change 時直接保存）
 (ttsEl("tts-gptsovits-format") as HTMLSelectElement).addEventListener("change", () => {
   void saveTtsField("ttsGptsovitsFormat", (ttsEl("tts-gptsovits-format") as HTMLSelectElement).value as "wav" | "mp3");
 });
 
-// 自定义云端格式选择
+// 自定義雲端格式選擇
 (ttsEl("tts-custom-cloud-format") as HTMLSelectElement).addEventListener("change", () => {
   void saveTtsField("ttsCustomCloudFormat", (ttsEl("tts-custom-cloud-format") as HTMLSelectElement).value as "wav" | "mp3");
 });
 
-// MiniMax 流式播放开关
+// MiniMax 流式播放開關
 ttsEl("tts-streaming").addEventListener("change", () => {
   void saveTtsField("ttsStreaming", ttsEl("tts-streaming").checked);
 });
 
-// GPT-SoVITS 选择参考音频
+// GPT-SoVITS 選擇參考音頻
 document.getElementById("tts-gptsovits-ref-pick")?.addEventListener("click", async () => {
   if (!window.tts) return;
   const filePath = await window.tts.pickAudioFile();
@@ -4319,16 +6222,16 @@ document.getElementById("tts-gptsovits-ref-pick")?.addEventListener("click", asy
   }
 });
 
-// GPT-SoVITS 测试发音
+// GPT-SoVITS 測試發音
 document.getElementById("tts-gptsovits-test")?.addEventListener("click", async () => {
   if (!window.tts) return;
   const baseUrl = ttsEl("tts-gptsovits-url").value.trim();
   const refAudioPath = ttsEl("tts-gptsovits-ref-audio").value.trim();
   const promptText = ttsEl("tts-gptsovits-prompt-text").value.trim();
   const format = (ttsEl("tts-gptsovits-format") as HTMLSelectElement).value as "wav" | "mp3";
-  if (!baseUrl) { window.alert("请先填写 GPT-SoVITS API 地址"); return; }
-  if (!refAudioPath) { window.alert("请先选择参考音频文件"); return; }
-  if (!promptText) { window.alert("请先填写参考音频对应的文本"); return; }
+  if (!baseUrl) { window.alert("請先填寫 GPT-SoVITS API 地址"); return; }
+  if (!refAudioPath) { window.alert("請先選擇參考音頻文件"); return; }
+  if (!promptText) { window.alert("請先填寫參考音頻對應的文本"); return; }
 
   const btn = document.getElementById("tts-gptsovits-test") as HTMLButtonElement;
   btn.disabled = true;
@@ -4339,14 +6242,14 @@ document.getElementById("tts-gptsovits-test")?.addEventListener("click", async (
     });
     playTtsAudio(result.base64, result.format);
   } catch (err) {
-    window.alert("测试失败: " + (err instanceof Error ? err.message : String(err)));
+    window.alert("測試失敗: " + (err instanceof Error ? err.message : String(err)));
   } finally {
     btn.disabled = false;
-    btn.textContent = "🔊 测试发音";
+    btn.textContent = "🔊 測試發音";
   }
 });
 
-// 小米 MiMo 选择昔涟克隆参考音频
+// 小米 MiMo 選擇昔漣克隆參考音頻
 document.getElementById("tts-mimo-voice-pick")?.addEventListener("click", async () => {
   if (!window.tts) return;
   const filePath = await window.tts.pickAudioFile();
@@ -4356,7 +6259,7 @@ document.getElementById("tts-mimo-voice-pick")?.addEventListener("click", async 
   }
 });
 
-// 自定义云端测试发音
+// 自定義雲端測試發音
 document.getElementById("tts-custom-cloud-test")?.addEventListener("click", async () => {
   if (!window.tts) return;
   const endpointUrl = ttsEl("tts-custom-cloud-url").value.trim();
@@ -4364,7 +6267,7 @@ document.getElementById("tts-custom-cloud-test")?.addEventListener("click", asyn
   const voiceId = ttsEl("tts-custom-cloud-voice").value.trim();
   const format = (ttsEl("tts-custom-cloud-format") as HTMLSelectElement).value as "wav" | "mp3";
   const timeoutMs = Number(ttsEl("tts-custom-cloud-timeout").value) || 30000;
-  if (!endpointUrl) { window.alert("请先填写自定义云端 Endpoint URL"); return; }
+  if (!endpointUrl) { window.alert("請先填寫自定義雲端 Endpoint URL"); return; }
 
   const btn = document.getElementById("tts-custom-cloud-test") as HTMLButtonElement;
   btn.disabled = true;
@@ -4379,21 +6282,21 @@ document.getElementById("tts-custom-cloud-test")?.addEventListener("click", asyn
     });
     playTtsAudio(result.base64, result.format);
   } catch (err) {
-    window.alert("测试失败: " + (err instanceof Error ? err.message : String(err)));
+    window.alert("測試失敗: " + (err instanceof Error ? err.message : String(err)));
   } finally {
     btn.disabled = false;
-    btn.textContent = "🔊 测试发音";
+    btn.textContent = "🔊 測試發音";
   }
 });
 
-// 小米 MiMo 测试发音
+// 小米 MiMo 測試發音
 document.getElementById("tts-mimo-test")?.addEventListener("click", async () => {
   if (!window.tts) return;
   const apiKey = ttsEl("tts-mimo-key").value.trim();
   const voiceAudioPath = ttsEl("tts-mimo-voice-audio").value.trim();
   const stylePrompt = ttsEl("tts-mimo-style").value.trim();
-  if (!apiKey) { window.alert("请先填写小米 MiMo API Key"); return; }
-  if (!voiceAudioPath) { window.alert("请先选择昔涟克隆参考音频"); return; }
+  if (!apiKey) { window.alert("請先填寫小米 MiMo API Key"); return; }
+  if (!voiceAudioPath) { window.alert("請先選擇昔漣克隆參考音頻"); return; }
 
   const btn = document.getElementById("tts-mimo-test") as HTMLButtonElement;
   btn.disabled = true;
@@ -4404,22 +6307,22 @@ document.getElementById("tts-mimo-test")?.addEventListener("click", async () => 
     });
     playTtsAudio(result.base64, result.format);
   } catch (err) {
-    window.alert("测试失败: " + (err instanceof Error ? err.message : String(err)));
+    window.alert("測試失敗: " + (err instanceof Error ? err.message : String(err)));
   } finally {
     btn.disabled = false;
-    btn.textContent = "🔊 测试发音";
+    btn.textContent = "🔊 測試發音";
   }
 });
 
-// MiniMax 测试发音
+// MiniMax 測試發音
 document.getElementById("tts-minimax-test")?.addEventListener("click", async () => {
   if (!window.tts) return;
   const apiKey = ttsEl("tts-minimax-key").value.trim();
   const voiceId = ttsEl("tts-minimax-voice").value.trim();
   const modelSelect = ttsEl("tts-minimax-model") as HTMLSelectElement;
   const model = modelSelect.value === "speech-2.8-hd" ? "speech-2.8-hd" : "speech-2.8-turbo";
-  if (!apiKey) { window.alert("请先填写 MiniMax API Key"); return; }
-  if (!voiceId) { window.alert("请先填写音色 ID（或下方复刻训练）"); return; }
+  if (!apiKey) { window.alert("請先填寫 MiniMax API Key"); return; }
+  if (!voiceId) { window.alert("請先填寫音色 ID（或下方復刻訓練）"); return; }
 
   const btn = document.getElementById("tts-minimax-test") as HTMLButtonElement;
   btn.disabled = true;
@@ -4428,29 +6331,29 @@ document.getElementById("tts-minimax-test")?.addEventListener("click", async () 
     const base64 = await window.tts.synthesize({ apiKey, voiceId, text: TTS_TEST_TEXT, model });
     playTtsAudio(base64);
   } catch (err) {
-    window.alert("测试失败: " + (err instanceof Error ? err.message : String(err)));
+    window.alert("測試失敗: " + (err instanceof Error ? err.message : String(err)));
   } finally {
     btn.disabled = false;
-    btn.textContent = "🔊 测试发音";
+    btn.textContent = "🔊 測試發音";
   }
 });
 
-// ── 音色快速复刻 ──
-// 选择配音文件
+// ── 音色快速復刻 ──
+// 選擇配音文件
 document.getElementById("tts-clone-pick")?.addEventListener("click", async () => {
   if (!window.tts) return;
   const filePath = await window.tts.pickAudio();
   if (filePath) ttsEl("tts-clone-file").value = filePath;
 });
 
-// 选择示例音频
+// 選擇示例音頻
 document.getElementById("tts-clone-prompt-pick")?.addEventListener("click", async () => {
   if (!window.tts) return;
   const filePath = await window.tts.pickAudio();
   if (filePath) ttsEl("tts-clone-prompt-file").value = filePath;
 });
 
-// 设置复刻状态文案
+// 設置復刻狀態文案
 function setCloneStatus(text: string, type: "ok" | "error" | "loading"): void {
   const el = document.getElementById("tts-clone-status");
   if (!el) return;
@@ -4458,7 +6361,7 @@ function setCloneStatus(text: string, type: "ok" | "error" | "loading"): void {
   el.className = "tts-clone-status" + (type ? " is-" + type : "");
 }
 
-// 开始复刻
+// 開始復刻
 document.getElementById("tts-clone-start")?.addEventListener("click", async () => {
   if (!window.tts) return;
   const apiKey = ttsEl("tts-minimax-key").value.trim();
@@ -4468,51 +6371,51 @@ document.getElementById("tts-clone-start")?.addEventListener("click", async () =
   const cloneText = ttsEl("tts-clone-text").value.trim();
   const voiceId = ttsEl("tts-clone-voice-id").value.trim();
 
-  if (!apiKey) { window.alert("请先填写 MiniMax API Key"); return; }
-  if (!cloneFile) { window.alert("请选择配音文件"); return; }
-  if (!cloneText) { window.alert("请填写复刻文本"); return; }
-  if (!voiceId) { window.alert("请填写音色命名"); return; }
+  if (!apiKey) { window.alert("請先填寫 MiniMax API Key"); return; }
+  if (!cloneFile) { window.alert("請選擇配音文件"); return; }
+  if (!cloneText) { window.alert("請填寫復刻文本"); return; }
+  if (!voiceId) { window.alert("請填寫音色命名"); return; }
 
   const btn = document.getElementById("tts-clone-start") as HTMLButtonElement;
   btn.disabled = true;
-  setCloneStatus("正在上传配音文件…", "loading");
+  setCloneStatus("正在上傳配音文件…", "loading");
 
   try {
-    // 步骤1: 上传配音文件
+    // 步驟1: 上傳配音文件
     const cloneUpload = await window.tts.upload(apiKey, cloneFile, "voice_clone");
-    setCloneStatus("配音文件上传完成 (file_id: " + cloneUpload.file_id + ")，正在上传示例音频…", "loading");
+    setCloneStatus("配音文件上傳完成 (file_id: " + cloneUpload.file_id + ")，正在上傳示例音頻…", "loading");
 
-    // 步骤2: 上传示例音频（可选）
+    // 步驟2: 上傳示例音頻（可選）
     let promptFileId: string | undefined;
     if (promptFile) {
       const promptUpload = await window.tts.upload(apiKey, promptFile, "prompt_audio");
       promptFileId = promptUpload.file_id;
-      setCloneStatus("示例音频上传完成，正在训练音色…", "loading");
+      setCloneStatus("示例音頻上傳完成，正在訓練音色…", "loading");
     } else {
-      setCloneStatus("正在训练音色…", "loading");
+      setCloneStatus("正在訓練音色…", "loading");
     }
 
-    // 步骤3: 音色克隆
+    // 步驟3: 音色克隆
     const result = await window.tts.clone({
       apiKey, fileId: cloneUpload.file_id, voiceId,
       promptAudioId: promptFileId, promptText: promptText || undefined,
       text: cloneText,
     });
 
-    // 自动填入音色 ID
+    // 自動填入音色 ID
     ttsEl("tts-minimax-voice").value = result.voiceId;
     void saveTtsField("ttsMinimaxVoiceId", result.voiceId);
 
-    setCloneStatus("✅ 复刻成功！音色 ID「" + result.voiceId + "」已自动填入。", "ok");
+    setCloneStatus("✅ 復刻成功！音色 ID「" + result.voiceId + "」已自動填入。", "ok");
 
-    // 如果有试听音频，播放
+    // 如果有試聽音頻，播放
     if (result.audioDemo) {
       try {
         const resp = await fetch(result.audioDemo);
         const buf = await resp.arrayBuffer();
         const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
         playTtsAudio(base64);
-      } catch { /* 试听音频播放失败不影响主流程 */ }
+      } catch { /* 試聽音頻播放失敗不影響主流程 */ }
     }
   } catch (err) {
     setCloneStatus("❌ " + (err instanceof Error ? err.message : String(err)), "error");
@@ -4521,5 +6424,11 @@ document.getElementById("tts-clone-start")?.addEventListener("click", async () =
   }
 });
 
-// 初始加载配置
+// 初始加載配置
+bindDailyRitualControls();
+bindOpenerControls();
 void loadTtsConfig();
+
+if (window.self !== window.top) {
+  document.body.classList.add("is-embedded");
+}

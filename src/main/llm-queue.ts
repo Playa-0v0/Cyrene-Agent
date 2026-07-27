@@ -1,81 +1,95 @@
-// 后台 LLM 调用串行队列 + 限流自动重试。
+// 後臺 LLM 調用串行隊列 + 限流自動重試。
 //
-// 背景：主聊天结束后，MemoryJudge 和心情观察器并发打 LLM 请求，
-// 加上主聊天本身的请求，三个调用同时打到一个 key 上，触发厂商 RPM 限流。
+// 背景：主聊天結束後，MemoryJudge 和心情觀察器併發打 LLM 請求，
+// 加上主聊天本身的請求，三個調用同時打到一個 key 上，觸發廠商 RPM 限流。
 //
-// 设计：
-// - 主聊天**不入队**（用户感知优先，照常即时发）
-// - 后台 LLM 调用（MemoryJudge / 心情观察 / 未来的 Reflection）入队，FIFO 串行
-// - 队列里检测限流错误，退避 5s 重试 1 次；其他错误直接放弃
-// - 不依赖第三方限流库（p-queue 等），项目内 ~50 行能搞定
+// 設計：
+// - 主聊天**不入隊**（用戶感知優先，照常即時發）
+// - 後臺 LLM 調用（MemoryJudge / 心情觀察 / 未來的 Reflection）入隊，FIFO 串行
+// - 隊列裡檢測限流錯誤，退避 5s 重試 1 次；其他錯誤直接放棄
+// - 不依賴第三方限流庫（p-queue 等），項目內 ~50 行能搞定
 
 const LOG_PREFIX = "[LLMQueue]";
 const RETRY_DELAY_MS = 5_000;
+const MAX_PENDING_TASKS = 50;
+let pendingTasks = 0;
+let runningTasks = 0;
 
-/** 限流错误关键词。任一命中视为可重试。 */
+/** 限流錯誤關鍵詞。任一命中視為可重試。 */
 const RATE_LIMIT_KEYWORDS = [
   "rate limit",
   "速率限制",
-  "频率",
+  "頻率",
   "too many requests",
   "429",
   "rate_limit",
   "ratelimit",
 ];
 
-/** 判断错误是否为限流（可退避重试）。 */
+/** 判斷錯誤是否為限流（可退避重試）。 */
 function isRateLimitError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   const lower = msg.toLowerCase();
   return RATE_LIMIT_KEYWORDS.some(k => lower.includes(k.toLowerCase()));
 }
 
-// 队列内部用一个 promise chain 实现 FIFO 串行。
-// 每次 enqueue 把任务挂在 tail 后面，tail 更新到这个任务。
-// 这样多个 enqueue 调用会自然串行，不需要锁。
+// 隊列內部用一個 promise chain 實現 FIFO 串行。
+// 每次 enqueue 把任務掛在 tail 後面，tail 更新到這個任務。
+// 這樣多個 enqueue 調用會自然串行，不需要鎖。
 let tail: Promise<unknown> = Promise.resolve();
 
 /**
- * 入队一个后台 LLM 任务。FIFO 串行执行；限流时自动退避 5s 重试 1 次。
+ * 入隊一個後臺 LLM 任務。FIFO 串行執行；限流時自動退避 5s 重試 1 次。
  *
- * @param label 任务名（用于日志）
- * @param task  返回 Promise 的任务函数
- * @returns 任务结果的 Promise；失败时 reject，调用方自己处理（一般 .catch 吞掉，不影响主流程）
+ * @param label 任務名（用於日誌）
+ * @param task  返回 Promise 的任務函數
+ * @returns 任務結果的 Promise；失敗時 reject，調用方自己處理（一般 .catch 吞掉，不影響主流程）
  */
 export function enqueueLLMTask<T>(label: string, task: () => Promise<T>): Promise<T> {
+  if (pendingTasks >= MAX_PENDING_TASKS) {
+    return Promise.reject(new Error(`背景任務佇列已達上限（${MAX_PENDING_TASKS}）`));
+  }
+  pendingTasks += 1;
   const next = tail.then(async (): Promise<T> => {
-    return runWithRetry(label, task);
+    pendingTasks -= 1;
+    runningTasks += 1;
+    try { return await runWithRetry(label, task); }
+    finally { runningTasks -= 1; }
   });
-  // tail 必须包住错误，否则一个失败的任务会让整条链断（后续任务永远不执行）
+  // tail 必須包住錯誤，否則一個失敗的任務會讓整條鏈斷（後續任務永遠不執行）
   tail = next.catch(() => {
-    // 吞错误，不让链断；调用方仍然能从 next 拿到 reject
+    // 吞錯誤，不讓鏈斷；調用方仍然能從 next 拿到 reject
   });
   return next;
 }
 
-/** 执行任务，限流时退避 5s 重试 1 次。 */
+export function getLLMQueueStatus(): { pending: number; running: number; limit: number } {
+  return { pending: pendingTasks, running: runningTasks, limit: MAX_PENDING_TASKS };
+}
+
+/** 執行任務，限流時退避 5s 重試 1 次。 */
 async function runWithRetry<T>(label: string, task: () => Promise<T>): Promise<T> {
   const startedAt = Date.now();
-  console.log(LOG_PREFIX, "开始执行:", label);
+  console.log(LOG_PREFIX, "開始執行:", label);
   try {
     const result = await task();
-    console.log(LOG_PREFIX, "完成:", label, "耗时=" + (Date.now() - startedAt) + "ms");
+    console.log(LOG_PREFIX, "完成:", label, "耗時=" + (Date.now() - startedAt) + "ms");
     return result;
   } catch (err) {
     if (!isRateLimitError(err)) {
-      // 非限流错误直接抛，不重试
-      console.warn(LOG_PREFIX, "失败（非限流，不重试）:", label, err instanceof Error ? err.message : String(err));
+      // 非限流錯誤直接拋，不重試
+      console.warn(LOG_PREFIX, "失敗（非限流，不重試）:", label, err instanceof Error ? err.message : String(err));
       throw err;
     }
-    // 限流：退避 5s 重试 1 次
-    console.warn(LOG_PREFIX, "限流，" + (RETRY_DELAY_MS / 1000) + "s 后重试 1 次:", label);
+    // 限流：退避 5s 重試 1 次
+    console.warn(LOG_PREFIX, "限流，" + (RETRY_DELAY_MS / 1000) + "s 後重試 1 次:", label);
     await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
     try {
       const result = await task();
-      console.log(LOG_PREFIX, "重试成功:", label, "总耗时=" + (Date.now() - startedAt) + "ms");
+      console.log(LOG_PREFIX, "重試成功:", label, "總耗時=" + (Date.now() - startedAt) + "ms");
       return result;
     } catch (retryErr) {
-      console.error(LOG_PREFIX, "重试仍失败，放弃:", label, retryErr instanceof Error ? retryErr.message : String(retryErr));
+      console.error(LOG_PREFIX, "重試仍失敗，放棄:", label, retryErr instanceof Error ? retryErr.message : String(retryErr));
       throw retryErr;
     }
   }

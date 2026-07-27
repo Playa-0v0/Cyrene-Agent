@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>昔漣 · 考試模式</title>
+  <script type="module" crossorigin src="../assets/exam-D5cUHSiJ.js"></script>
+  <link rel="modulepreload" crossorigin href="../assets/base-CbynX6G5.js">
+  <link rel="stylesheet" crossorigin href="../assets/base-DacNE79P.css">
+  <link rel="stylesheet" crossorigin href="../assets/exam-B8G_ZRA2.css">
+</head>
+<body>
+  <div class="exam-container">
+    <!-- 頂部標題列 -->
+    <header class="exam-header">
+      <div class="exam-header__title">
+        <span class="exam-header__icon">📝</span>
+        <span class="exam-header__text">昔漣的考試模式</span>
+      </div>
+      <div class="exam-header__subtitle">來測試看看你的物理與學科實力吧！</div>
+    </header>
+
+    <!-- 1. 設定畫面 -->
+    <main class="exam-view" id="view-setup">
+      <div class="setup-card">
+        <div class="setup-group">
+          <label class="setup-label" for="subject-select">📚 選擇考試科目</label>
+          <select class="setup-select" id="subject-select">
+            <option value="AP Physics 1">AP Physics 1 (力學與基本電路)</option>
+            <option value="AP Physics C: Mechanics">AP Physics C: Mechanics (AP 物理 C：力學)</option>
+            <option value="AP Physics C: Electricity and Magnetism">AP Physics C: E&M (AP 物理 C：電磁學)</option>
+            <option value="AP Chemistry">AP Chemistry (AP 化學)</option>
+            <option value="AP Calculus BC">AP Calculus BC (AP 微積分 BC)</option>
+            <option value="custom">自定義主題...</option>
+          </select>
+        </div>
+
+        <div class="setup-group is-hidden" id="custom-subject-group">
+          <label class="setup-label" for="custom-subject-input">✏️ 輸入自定義主題</label>
+          <input type="text" class="setup-input" id="custom-subject-input" placeholder="例如：萬有引力與克卜勒定律" />
+        </div>
+
+        <div class="setup-group">
+          <label class="setup-label">🙋 選擇考試題數</label>
+          <div class="pill-group">
+            <button type="button" class="pill-btn is-active" data-count="3">3 題 (快速熱身)</button>
+            <button type="button" class="pill-btn" data-count="5">5 題 (標準測試)</button>
+            <button type="button" class="pill-btn" data-count="10">10 題 (深度挑戰)</button>
+          </div>
+        </div>
+
+        <div class="setup-group">
+          <label class="setup-label">🧠 推理強度 (大腦設置)</label>
+          <div class="pill-group" id="reasoning-strength-group">
+            <button type="button" class="pill-btn is-active" data-strength="auto">自動 (推薦)</button>
+            <button type="button" class="pill-btn" data-strength="high">深度推理 (答題更精準)</button>
+          </div>
+        </div>
+
+        <button type="button" class="start-btn" id="start-btn">✨ 讓昔漣幫我出題！</button>
+      </div>
+    </main>
+
+    <!-- 2. 出題中載入畫面 -->
+    <main class="exam-view is-hidden" id="view-loading">
+      <div class="loading-card">
+        <div class="loading-spinner"></div>
+        <div class="loading-title">昔漣正在為你出題中...</div>
+        <div class="loading-subtitle">正在用 Gemini 3.5 Flash 產生高品質的 AP 物理/學科測驗題，請稍候喔 🌸</div>
+        <div class="loading-progress-container">
+          <div class="loading-progress-bar" id="loading-progress"></div>
+        </div>
+        <div class="loading-log" id="loading-log">正在連線至雲端大腦...</div>
+      </div>
+    </main>
+
+    <!-- 3. 答題畫面 -->
+    <main class="exam-view is-hidden" id="view-quiz">
+      <div class="quiz-container">
+        <!-- 頂部薄條進度條 -->
+        <div class="quiz-progress-bar-container">
+          <div class="quiz-progress-bar-fill" id="quiz-progress-bar"></div>
+        </div>
+
+        <!-- 進度與計時 -->
+        <div class="quiz-meta">
+          <div class="quiz-progress" id="quiz-progress-text">問題 1 / 5</div>
+          <div class="quiz-timer" id="quiz-timer-text">⏱️ 用時: 00:00</div>
+        </div>
+
+        <!-- 題目內容 -->
+        <div class="quiz-question-card">
+          <div class="quiz-question" id="quiz-question-text">
+            加載題目中...
+          </div>
+        </div>
+
+        <!-- 選項列表 -->
+        <div class="quiz-options" id="quiz-options-list">
+          <!-- 選項按鈕會動態插入在這裡 -->
+        </div>
+
+        <!-- 昔漣解答回饋區 -->
+        <div class="feedback-card is-hidden" id="quiz-feedback">
+          <div class="feedback-avatar-row">
+            <img class="feedback-avatar" src="../avatars/cyrene-avatar.png" alt="昔漣" />
+            <div class="feedback-balloon">
+              <div class="feedback-status" id="feedback-status-title">✅ 答對了！你太棒了！</div>
+              <div class="feedback-explanation" id="feedback-explanation-text">
+                昔漣的解析加載中...
+              </div>
+            </div>
+          </div>
+          <button type="button" class="next-btn" id="next-btn">下一題 ➜</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- 4. 結算畫面 -->
+    <main class="exam-view is-hidden" id="view-result">
+      <div class="result-card">
+        <!-- 圓形計分圖表 -->
+        <div class="result-circular-chart">
+          <svg viewBox="0 0 36 36" class="circular-chart">
+            <defs>
+              <linearGradient id="chart-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#a5f3fc" />
+                <stop offset="50%" stop-color="#c084fc" />
+                <stop offset="100%" stop-color="#ec4899" />
+              </linearGradient>
+            </defs>
+            <path class="result-svg-circle"
+              d="M18 2.0845
+                a 15.9155 15.9155 0 0 1 0 31.831
+                a 15.9155 15.9155 0 0 1 0 -31.831"
+            />
+            <path class="result-svg-progress" id="result-svg-progress-bar"
+              stroke-dasharray="0, 100"
+              d="M18 2.0845
+                a 15.9155 15.9155 0 0 1 0 31.831
+                a 15.9155 15.9155 0 0 1 0 -31.831"
+            />
+          </svg>
+          <div class="result-score-overlay" id="result-score-overlay-text">80%</div>
+        </div>
+
+        <div class="result-comment-box">
+          <img class="result-avatar" src="../avatars/cyrene-avatar.png" alt="昔漣" />
+          <div class="result-comment" id="result-comment-text">昔漣的評語加載中...</div>
+        </div>
+
+        <div class="result-summary">
+          <div class="summary-item">
+            <span class="summary-label">總題數</span>
+            <span class="summary-val" id="result-total-questions">5 題</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">答對題數</span>
+            <span class="summary-val" id="result-correct-count">4 題</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">總用時</span>
+            <span class="summary-val" id="result-total-time">02:15</span>
+          </div>
+        </div>
+
+        <!-- 錯題回顧 -->
+        <div class="review-section is-hidden" id="review-section">
+          <div class="review-title">🔍 錯題與解析回顧</div>
+          <div class="review-list" id="review-list">
+            <!-- 錯題項目會動態插入在這裡 -->
+          </div>
+        </div>
+
+        <div class="result-actions">
+          <button type="button" class="action-btn action-btn--save" id="save-notebook-btn">💾 存入昔漣的筆記本</button>
+          <button type="button" class="action-btn action-btn--restart" id="restart-btn">🔄 重新開始挑戰</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+</body>
+</html>

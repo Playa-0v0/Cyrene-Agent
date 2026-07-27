@@ -1,9 +1,9 @@
 {
-  "name": "优雅阅读",
+  "name": "優雅閱讀",
   "titleColor": "FF455A64",
   "titleSize": 28,
-  "titleFont": "微软雅黑",
-  "bodyFont": "楷体",
+  "titleFont": "微軟雅黑",
+  "bodyFont": "楷體",
   "bodySize": 24,
   "bodyColor": "FF37474F",
   "lineSpacing": 380,

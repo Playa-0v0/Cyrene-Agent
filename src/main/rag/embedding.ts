@@ -3,7 +3,7 @@ import { checkEmbeddingModelInstalled, getProjectModelsDir } from "./model-statu
 import * as path from "path";
 import * as os from "os";
 
-// ── 类型 ──
+// ── 類型 ──
 export interface EmbeddingProvider {
   embed(text: string): Promise<number[]>;
   embedBatch(texts: string[]): Promise<number[][]>;
@@ -11,7 +11,7 @@ export interface EmbeddingProvider {
   readonly name: string;
 }
 
-// ── 模型注册表 ──
+// ── 模型註冊表 ──
 interface ModelConfig {
   key: string;
   hfName: string;
@@ -26,7 +26,7 @@ const LOCAL_MODELS: Record<string, ModelConfig> = {
 const DEFAULT_MODEL_KEY = "minilm";
 
 // ── 本地 Pipeline ──
-// 每个模型 key 独立缓存 pipeline，支持多模型同时运行（minilm 管文档/记忆，bgem3 管场景识别）
+// 每個模型 key 獨立緩存 pipeline，支持多模型同時運行（minilm 管文檔/記憶，bgem3 管場景識別）
 const localPipelines: Map<string, any> = new Map();
 let currentModelKey: string = DEFAULT_MODEL_KEY;
 
@@ -43,9 +43,9 @@ async function getLocalPipeline(modelKey?: string): Promise<any> {
     env.allowLocalModels = true;
     env.allowRemoteModels = false;
     env.useBrowserCache = false;
-    // 主路径：项目根 models/（用户实际放模型的地方）。
-    // 兜底：HF cache，通过 cache_dir 选项传给 pipeline。
-    // transformers 内部会按 (localModelPath, cache_dir) 顺序查找文件。
+    // 主路徑：項目根 models/（用戶實際放模型的地方）。
+    // 兜底：HF cache，通過 cache_dir 選項傳給 pipeline。
+    // transformers 內部會按 (localModelPath, cache_dir) 順序查找文件。
     env.localModelPath = getProjectModelsDir();
     pipe = await pipeline("feature-extraction", config.hfName, {
       cache_dir: path.join(os.homedir(), ".cache", "huggingface"),
@@ -60,7 +60,7 @@ export function createLocalEmbeddingProvider(modelKey?: string): EmbeddingProvid
   const config = LOCAL_MODELS[key];
   if (!config) throw new Error("Unknown embedding model: " + key);
 
-  // 模型缺失返回 null，调用方决定如何处理
+  // 模型缺失返回 null，調用方決定如何處理
   if (!checkEmbeddingModelInstalled(key)) {
     return null;
   }
@@ -133,7 +133,7 @@ export function createOpenAIEmbeddingProvider(
   };
 }
 
-// ── 自动选择 Provider ──
+// ── 自動選擇 Provider ──
 let cachedProvider: EmbeddingProvider | null = null;
 
 export function getEmbeddingProvider(
@@ -149,7 +149,7 @@ export function getEmbeddingProvider(
   } else if (mode === "cloud" && cloudBaseUrl && cloudApiKey) {
     cachedProvider = createOpenAIEmbeddingProvider(cloudBaseUrl, cloudApiKey);
   } else {
-    // auto 模式：优先 local，local 不存在且 cloud 配置完整时用 cloud，否则 null
+    // auto 模式：優先 local，local 不存在且 cloud 配置完整時用 cloud，否則 null
     const local = createLocalEmbeddingProvider(modelKey);
     if (local) {
       cachedProvider = local;
@@ -186,13 +186,13 @@ export function resetEmbeddingProvider(): void {
   currentModelKey = DEFAULT_MODEL_KEY;
 }
 
-// ── 场景识别专用 provider（固定 bge-m3，不受 RAG 模型切换影响）──
+// ── 場景識別專用 provider（固定 bge-m3，不受 RAG 模型切換影響）──
 let sceneProvider: EmbeddingProvider | null = null;
 
 /**
- * 获取场景识别专用的 embedding provider（固定 bge-m3）。
- * 和文档/记忆的 provider 独立——RAG 切换模型不影响场景识别。
- * 模型不存在时返回 null。
+ * 獲取場景識別專用的 embedding provider（固定 bge-m3）。
+ * 和文檔/記憶的 provider 獨立——RAG 切換模型不影響場景識別。
+ * 模型不存在時返回 null。
  */
 export function getSceneEmbeddingProvider(): EmbeddingProvider | null {
   if (!sceneProvider) {

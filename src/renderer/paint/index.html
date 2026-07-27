@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>昔漣的創作工作台</title>
+  <link rel="stylesheet" href="../ui/tokens.css" />
+  <link rel="stylesheet" href="../ui/fonts.css" />
+  <link rel="stylesheet" href="../ui/base.css" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="paint-shell">
+    <header class="paint-header">
+      <div class="paint-header__identity">
+        <span class="paint-logo" aria-hidden="true">🎨</span>
+        <div>
+          <strong>AI 繪圖</strong>
+          <span>昔漣的創作工作台</span>
+        </div>
+      </div>
+      <div class="paint-header__status" id="header-status">
+        <span class="status-dot"></span>
+        <span id="header-provider-label">正在檢查生成管道</span>
+      </div>
+    </header>
+
+    <div class="paint-layout">
+      <aside class="control-panel">
+        <nav class="panel-tabs" aria-label="繪圖設定">
+          <button type="button" class="panel-tab is-active" data-panel-tab="generate">生成</button>
+          <button type="button" class="panel-tab" data-panel-tab="character">角色</button>
+          <button type="button" class="panel-tab" data-panel-tab="reference">參考 <span class="tab-badge" id="reference-count">0</span></button>
+          <button type="button" class="panel-tab" data-panel-tab="connection">連接</button>
+        </nav>
+
+        <div class="tab-contents">
+          <section class="tab-pane is-active" id="pane-generate">
+            <div class="form-group">
+              <label for="creation-params" class="form-label">創作描述</label>
+              <textarea id="creation-params" class="form-textarea form-textarea--brief" placeholder="用中文描述場景、服裝、表情或動作。&#10;例如：昔漣穿著白紫禮服，站在星空花園裡，柔和地看向鏡頭。"></textarea>
+            </div>
+
+            <button type="button" class="btn btn-secondary btn-block prompt-builder" id="build-prompt-btn">
+              <span aria-hidden="true">✦</span> 構建繪圖 Prompt
+            </button>
+
+            <div class="form-group form-group--spaced">
+              <div class="label-row">
+                <label for="image-prompt" class="form-label">最終 Prompt</label>
+                <button type="button" class="text-action" id="clear-prompt-btn">清除</button>
+              </div>
+              <textarea id="image-prompt" class="form-textarea code-font" placeholder="可直接輸入英文提示詞，或先用上方中文描述自動構建…"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="provider-select" class="form-label">生成管道</label>
+              <select id="provider-select" class="form-select">
+                <option value="openrouter">OpenRouter Image API</option>
+                <option value="gemini">Gemini 原生圖片 API</option>
+              </select>
+              <p class="form-help" id="provider-help">會使用「設定」中已保存的 API Key。</p>
+            </div>
+
+            <div class="form-group">
+              <label for="clothing-select" class="form-label">本次繪圖服裝</label>
+              <select id="clothing-select" class="form-select">
+                <option value="none">未選擇 · 不注入服裝</option>
+                <option value="signature">昔漣星海禮服</option>
+                <option value="casual">柔軟居家白襯衫</option>
+                <option value="black-stockings">白紫禮服＋黑色絲襪</option>
+                <option value="wedding">月桂婚紗</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="model-select" class="form-label">模型</label>
+              <select id="model-select" class="form-select"></select>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="aspect-select" class="form-label">畫面比例</label>
+                <select id="aspect-select" class="form-select">
+                  <option value="1:1">1:1 方形</option>
+                  <option value="3:4">3:4 直式</option>
+                  <option value="9:16" selected>9:16 手機桌布</option>
+                  <option value="4:3">4:3 橫式</option>
+                  <option value="16:9">16:9 寬螢幕</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="resolution-select" class="form-label">解析度</label>
+                <select id="resolution-select" class="form-select">
+                  <option value="1K" selected>1K · 草稿</option>
+                  <option value="2K">2K · 精緻</option>
+                  <option value="4K">4K · 最高</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="quality-select" class="form-label">品質</label>
+              <select id="quality-select" class="form-select">
+                <option value="auto">Auto · 自動</option>
+                <option value="low">Low · 快速</option>
+                <option value="medium" selected>Medium · 平衡</option>
+                <option value="high">High · 細緻</option>
+              </select>
+            </div>
+
+            <div class="generation-summary" id="generation-summary">
+              <span>參考圖 0 張</span>
+              <span>單張生成</span>
+              <span>安全模式</span>
+            </div>
+
+            <button type="button" class="btn btn-primary btn-block" id="generate-btn">
+              <span aria-hidden="true">✦</span> 開始生成圖像
+            </button>
+            <div class="inline-message" id="inline-message" role="status" aria-live="polite"></div>
+          </section>
+
+          <section class="tab-pane" id="pane-character">
+            <div class="character-card">
+              <div class="character-card__avatar">昔</div>
+              <div>
+                <strong>昔漣 · Cyrene</strong>
+                <p>角色設定會在每次生成時自動注入，強化臉部、髮型與配色一致性。</p>
+              </div>
+            </div>
+            <div class="form-group form-group--spaced">
+              <label for="character-prompt" class="form-label">角色核心設定</label>
+              <textarea id="character-prompt" class="form-textarea code-font">adult Cyrene from Honkai: Star Rail, short layered pastel-pink hair, violet-pink eyes, subtle pointed ears, white laurel halo, blue-violet rose ornament, iridescent crystal wing, elegant anime game character design</textarea>
+            </div>
+            <label class="toggle-row">
+              <input type="checkbox" id="inject-character" checked />
+              <span>
+                <strong>自動注入角色設定</strong>
+                <small>關閉後可以生成其他人物或純場景。</small>
+              </span>
+            </label>
+          </section>
+
+          <section class="tab-pane" id="pane-reference">
+            <div class="drop-zone" id="reference-drop-zone">
+              <input id="reference-input" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden />
+              <span class="drop-zone__icon">◇</span>
+              <strong>加入角色或風格參考圖</strong>
+              <p>PNG、JPEG、WebP；最多 4 張，每張不超過 8 MB。</p>
+              <button type="button" class="btn btn-secondary" id="pick-reference-btn">選擇圖片</button>
+            </div>
+            <div class="reference-grid" id="reference-grid"></div>
+            <p class="form-help">參考圖只會在你按下生成時送到選定的模型。</p>
+          </section>
+
+          <section class="tab-pane" id="pane-connection">
+            <div class="connection-list" id="connection-list"></div>
+            <div class="connection-note">
+              <strong>API Key 不會顯示在這裡</strong>
+              <p>繪圖頁只讀取連線狀態；金鑰由主程序保存並代為呼叫服務。</p>
+            </div>
+            <button type="button" class="btn btn-secondary btn-block" id="open-settings-btn">前往 API 設定</button>
+          </section>
+        </div>
+      </aside>
+
+      <main class="canvas-area">
+        <div class="canvas-header">
+          <div>
+            <span class="eyebrow">CURRENT CREATION</span>
+            <h1 id="canvas-title">AI 繪圖 · 未選擇服裝</h1>
+            <div class="canvas-header__meta">
+              <span class="meta-tag" id="meta-resolution">9:16 · 1K</span>
+              <span class="meta-tag" id="meta-model">等待選擇模型</span>
+              <span class="meta-tag" id="meta-provider">OpenRouter</span>
+            </div>
+          </div>
+          <button type="button" class="btn btn-action" id="view-details-btn">查看完整提示詞</button>
+        </div>
+
+        <div class="prompt-drawer" id="prompt-drawer">
+          <div class="drawer-content">
+            <span class="eyebrow">FINAL PROMPT</span>
+            <pre class="prompt-pre" id="final-prompt-preview">尚未建立提示詞</pre>
+          </div>
+        </div>
+
+        <div class="canvas-viewport">
+          <div class="ambient-glow ambient-glow--one"></div>
+          <div class="ambient-glow ambient-glow--two"></div>
+          <div class="image-stage" id="image-stage">
+            <img src="/avatars/cyrene-painting-placeholder.jpg" alt="生成圖像預覽" class="generated-img" id="display-image" />
+            <div class="image-stage__frame"></div>
+            <div class="canvas-loader" id="canvas-loader">
+              <div class="loader-orbit"><span></span></div>
+              <strong id="loader-text">昔漣正在構思畫面…</strong>
+              <small>生成高品質圖片可能需要一到兩分鐘</small>
+            </div>
+          </div>
+        </div>
+
+        <footer class="tasks-panel">
+          <div class="tasks-panel__header">
+            <span>生成任務</span>
+            <span class="tasks-count" id="tasks-count">0 項</span>
+          </div>
+          <div class="tasks-list" id="tasks-list"></div>
+        </footer>
+      </main>
+    </div>
+  </div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

@@ -5,37 +5,37 @@ import * as os from "os";
 import { parseSkillFrontmatter, scanSkills } from "./skill-scanner";
 
 describe("parseSkillFrontmatter", () => {
-  it("解析合规 SKILL.md", () => {
+  it("解析合規 SKILL.md", () => {
     const md = `---
 name: write-expense-report
-description: 生成支出报告
+description: 生成支出報告
 tools: [query_expense, write_excel]
 version: 1.0.0
 ---
 
-# 写支出报告
+# 寫支出報告
 
-调用 query_expense 取数据。`;
+調用 query_expense 取數據。`;
     const r = parseSkillFrontmatter(md);
     expect(r).not.toBeNull();
     expect(r!.name).toBe("write-expense-report");
-    expect(r!.description).toBe("生成支出报告");
+    expect(r!.description).toBe("生成支出報告");
     expect(r!.tools).toEqual(["query_expense", "write_excel"]);
     expect(r!.version).toBe("1.0.0");
-    expect(r!.body).toContain("# 写支出报告");
+    expect(r!.body).toContain("# 寫支出報告");
     expect(r!.body).not.toContain("description:");
   });
 
-  it("无 tools/version 也能解析", () => {
+  it("無 tools/version 也能解析", () => {
     const md = `---
 name: plain
-description: 纯指令
+description: 純指令
 ---
 正文`;
     const r = parseSkillFrontmatter(md);
     expect(r).not.toBeNull();
     expect(r!.name).toBe("plain");
-    expect(r!.description).toBe("纯指令");
+    expect(r!.description).toBe("純指令");
     expect(r!.tools).toBeUndefined();
     expect(r!.version).toBeUndefined();
     expect(r!.body).toBe("正文");
@@ -43,7 +43,7 @@ description: 纯指令
 
   it("缺 name 返回 null", () => {
     const md = `---
-description: 没 name
+description: 沒 name
 ---
 正文`;
     expect(parseSkillFrontmatter(md)).toBeNull();
@@ -67,12 +67,12 @@ tools: query_expense
     expect(parseSkillFrontmatter(md)).toBeNull();
   });
 
-  it("无 frontmatter 返回 null", () => {
-    expect(parseSkillFrontmatter("纯正文无 frontmatter")).toBeNull();
+  it("無 frontmatter 返回 null", () => {
+    expect(parseSkillFrontmatter("純正文無 frontmatter")).toBeNull();
   });
 });
 
-/** 建临时 skill 目录。 */
+/** 建臨時 skill 目錄。 */
 function makeSkillDir(root: string, id: string, md: string, refs: string[] = []): void {
   const dir = path.join(root, id);
   fs.mkdirSync(dir, { recursive: true });
@@ -89,9 +89,9 @@ describe("scanSkills", () => {
   beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), "skill-")); });
   afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
-  it("扫描合规 skill，列出 references 文件名", () => {
+  it("掃描合規 skill，列出 references 文件名", () => {
     makeSkillDir(tmp, "write-expense-report",
-      "---\nname: write-expense-report\ndescription: 生成支出报告\ntools: [query_expense]\n---\n正文",
+      "---\nname: write-expense-report\ndescription: 生成支出報告\ntools: [query_expense]\n---\n正文",
       ["col-spec.md", "examples.json"]);
     const r = scanSkills(tmp, "builtin");
     expect(r).toHaveLength(1);
@@ -103,19 +103,19 @@ describe("scanSkills", () => {
     expect(r[0].dirPath).toBe(path.join(tmp, "write-expense-report"));
   });
 
-  it("跳过不合规 skill（无 description）", () => {
+  it("跳過不合規 skill（無 description）", () => {
     makeSkillDir(tmp, "bad", "---\nname: bad\n---\n正文");
     const r = scanSkills(tmp, "builtin");
     expect(r).toHaveLength(0);
   });
 
-  it("跳过没有 SKILL.md 的目录", () => {
+  it("跳過沒有 SKILL.md 的目錄", () => {
     fs.mkdirSync(path.join(tmp, "empty"), { recursive: true });
     const r = scanSkills(tmp, "builtin");
     expect(r).toHaveLength(0);
   });
 
-  it("name 不等于目录名仍收录，id 用目录名", () => {
+  it("name 不等於目錄名仍收錄，id 用目錄名", () => {
     makeSkillDir(tmp, "real-id", "---\nname: other-name\ndescription: x\n---\n正文");
     const r = scanSkills(tmp, "builtin");
     expect(r).toHaveLength(1);
@@ -125,25 +125,25 @@ describe("scanSkills", () => {
     expect(r[0].bodyPath).toBe(path.join(tmp, "real-id", "SKILL.md"));
   });
 
-  it("目录不存在返回空数组", () => {
+  it("目錄不存在返回空數組", () => {
     const r = scanSkills(path.join(tmp, "nope"), "builtin");
     expect(r).toHaveLength(0);
   });
 
-  it("空根目录返回空数组", () => {
+  it("空根目錄返回空數組", () => {
     const emptyRoot = path.join(tmp, "empty-root");
     fs.mkdirSync(emptyRoot, { recursive: true });
     const r = scanSkills(emptyRoot, "builtin");
     expect(r).toHaveLength(0);
   });
 
-  it("无 references 目录时 references 为空数组", () => {
+  it("無 references 目錄時 references 為空數組", () => {
     makeSkillDir(tmp, "no-refs", "---\nname: no-refs\ndescription: x\n---\n正文");
     const r = scanSkills(tmp, "builtin");
     expect(r[0].references).toEqual([]);
   });
 
-  it("references 下子目录被排除，只列文件", () => {
+  it("references 下子目錄被排除，只列文件", () => {
     makeSkillDir(tmp, "with-refs", "---\nname: with-refs\ndescription: x\n---\n正文");
     const refDir = path.join(tmp, "with-refs", "references");
     fs.mkdirSync(path.join(refDir, "sub"), { recursive: true });
@@ -153,7 +153,7 @@ describe("scanSkills", () => {
     expect(r[0].references).toEqual(["note.md"]);
   });
 
-  it("多个 skill 都扫到，source 标记正确", () => {
+  it("多個 skill 都掃到，source 標記正確", () => {
     makeSkillDir(tmp, "a", "---\nname: a\ndescription: x\n---\n正文");
     makeSkillDir(tmp, "b", "---\nname: b\ndescription: y\n---\n正文");
     const r = scanSkills(tmp, "user");

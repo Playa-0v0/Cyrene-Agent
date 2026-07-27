@@ -36,7 +36,7 @@ describe("build-options", () => {
     }, createBuildDeps())
 
     const system = result.options.messages[0].content
-    expect(system).toContain("你正在通过微信回复用户")
+    expect(system).toContain("你正在通過微信回覆用戶")
     expect(system).toContain("BASE_SYSTEM")
     expect(system).toContain("RELATIONSHIP")
   })
@@ -48,12 +48,12 @@ describe("build-options", () => {
     }, createBuildDeps())
 
     const system = result.options.messages[0].content
-    expect(system).not.toContain("你正在通过微信回复用户")
-    expect(system).not.toContain("你正在通过飞书回复用户")
+    expect(system).not.toContain("你正在通過微信回覆用戶")
+    expect(system).not.toContain("你正在通過飛書回覆用戶")
   })
 
   it("has distinct system text for Feishu work chat", () => {
-    expect(buildChannelSystem("feishu")).toContain("你正在通过飞书回复用户")
+    expect(buildChannelSystem("feishu")).toContain("你正在通過飛書回覆用戶")
     expect(buildChannelSystem("feishu")).toContain("工作上下文")
   })
 
@@ -63,8 +63,8 @@ describe("build-options", () => {
       loadModelSettings: () => ({ provider: "test", baseUrl: "", model: "", apiKey: "", runtimeSync: "off" }),
       scheduleMemoryWrite: () => {},
       inferRuntimeState: () => ({ status: "陪伴中" }),
-      runtimeState: { status: "陪伴中", feeling: "温柔", expression: 0, updatedAt: 0 },
-      feelingToExpression: { "温柔": 0 },
+      runtimeState: { status: "陪伴中", feeling: "溫柔", expression: 0, updatedAt: 0 },
+      feelingToExpression: { "溫柔": 0 },
       setRuntimeState: () => {},
       stickerEmbeddingIndex: null,
       getEmbeddingProvider: () => null,
@@ -76,12 +76,12 @@ describe("build-options", () => {
       getChatWindow: () => null,
     }
 
-    await onAgentRunFinished({ reply: "好呀", toolResults: [] }, "今天有点累", deps, "wechat")
+    await onAgentRunFinished({ reply: "好呀", toolResults: [] }, "今天有點累", deps, "wechat")
 
     expect(recordRelationshipTurn).toHaveBeenCalledWith({
-      userText: "今天有点累",
+      userText: "今天有點累",
       assistantText: "好呀",
-      cyreneFeeling: "温柔",
+      cyreneFeeling: "溫柔",
       channel: "wechat",
     })
   })
@@ -102,8 +102,8 @@ describe("build-options", () => {
       }),
       scheduleMemoryWrite: () => {},
       inferRuntimeState: () => ({ status: "陪伴中" }),
-      runtimeState: { status: "陪伴中", feeling: "温柔", expression: 0, updatedAt: 0 },
-      feelingToExpression: { "温柔": 0 },
+      runtimeState: { status: "陪伴中", feeling: "溫柔", expression: 0, updatedAt: 0 },
+      feelingToExpression: { "溫柔": 0 },
       setRuntimeState: () => {},
       stickerEmbeddingIndex: null,
       getStickerEmbeddingIndex: () => latestIndex,
@@ -122,10 +122,10 @@ describe("build-options", () => {
       }),
     }
 
-    await onAgentRunFinished({ reply: "来，抱抱你", toolResults: [] }, "今天好累", deps)
+    const sticker = await onAgentRunFinished({ reply: "來，抱抱你", toolResults: [] }, "今天好累", deps)
 
     expect(matchSticker).toHaveBeenCalledWith(
-      "来，抱抱你\n今天好累",
+      "來，抱抱你\n今天好累",
       expect.anything(),
       latestIndex,
       0.55,
@@ -134,5 +134,6 @@ describe("build-options", () => {
       name: "cyrene.sticker",
       value: "hugtight",
     }))
+    expect(sticker).toBe("hugtight")
   })
 })

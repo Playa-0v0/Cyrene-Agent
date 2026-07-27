@@ -5,6 +5,7 @@ import type { VendorConfig, ChatMessage } from "../orchestrator/vendors"
 import { app } from "electron"
 import { MemoryCandidate, L0_FIELD_DESCRIPTIONS, MemoryJudgeTurn } from "./memory-types"
 import { recordUsage } from "../token-usage-store"
+import { revealSecrets } from "../security/secret-vault"
 
 interface ModelSettings {
   provider: string
@@ -30,8 +31,8 @@ function loadModelSettings(): ModelSettings {
     const filePath = getSettingsPath()
     if (!fs.existsSync(filePath)) return DEFAULT_MODEL_SETTINGS
     const raw = fs.readFileSync(filePath, "utf8")
-    const parsed = JSON.parse(raw) as Partial<ModelSettings>
-    // explicitTransport 取自顶层（顶层是 perProvider[currentProvider] 的镜像）
+    const parsed = revealSecrets(JSON.parse(raw)) as Partial<ModelSettings>
+    // explicitTransport 取自頂層（頂層是 perProvider[currentProvider] 的鏡像）
     const explicitTransport: ModelSettings["explicitTransport"] =
       parsed.explicitTransport === "openai" || parsed.explicitTransport === "anthropic" || parsed.explicitTransport === "auto"
         ? parsed.explicitTransport
@@ -58,30 +59,30 @@ function stripThinkBlocks(text: string): string {
 }
 
 function extractJsonArray(raw: string): unknown[] | null {
-  // 第一步：去掉 markdown 代码块包裹 + think 块
+  // 第一步：去掉 markdown 代碼塊包裹 + think 塊
   let text = raw
     .replace(/```json\s*/gi, '')
     .replace(/```\s*/gi, '')
     .trim()
 
-  // 第二步：截取从第一个 [ 开始的内容（不要求结尾有 ]，防 max_tokens 截断）
+  // 第二步：截取從第一個 [ 開始的內容（不要求結尾有 ]，防 max_tokens 截斷）
   const start = text.indexOf('[')
   if (start === -1) return null
   text = text.slice(start)
 
-  // 第三步：直接尝试解析（完整数组的情况）
+  // 第三步：直接嘗試解析（完整數組的情況）
   try {
     const parsed = JSON.parse(text) as unknown[]
     if (Array.isArray(parsed)) return parsed
   } catch (_) {}
 
-  // 第四步：截断救场 —— 即使末尾 ] 缺失，把已完整的 {...} 对象逐个捞出来。
-  // 关键：用栈匹配大括号深度，避免把对象内部的 } 当成对象结束。
+  // 第四步：截斷救場 —— 即使末尾 ] 缺失，把已完整的 {...} 對象逐個撈出來。
+  // 關鍵：用棧匹配大括號深度，避免把對象內部的 } 當成對象結束。
   const results: unknown[] = []
   let i = 0
   while (i < text.length) {
     if (text[i] !== '{') { i++; continue }
-    // 找匹配的 } —— 跟踪引号和嵌套深度
+    // 找匹配的 } —— 跟蹤引號和嵌套深度
     let depth = 0
     let inStr = false
     let esc = false
@@ -95,28 +96,28 @@ function extractJsonArray(raw: string): unknown[] | null {
       if (c === '{') depth++
       else if (c === '}') {
         depth--
-        if (depth === 0) break  // 找到匹配的闭合
+        if (depth === 0) break  // 找到匹配的閉合
       }
     }
-    if (depth !== 0) break  // 这个对象被截断了，后面也不可能有完整的了
+    if (depth !== 0) break  // 這個對象被截斷了，後面也不可能有完整的了
     const objStr = text.slice(i, j + 1)
     try {
       const obj = JSON.parse(objStr)
       if (obj && typeof obj === "object") results.push(obj)
     } catch (_) {
-      // 单个对象解析失败，跳过继续找下一个
+      // 單個對象解析失敗，跳過繼續找下一個
     }
     i = j + 1
   }
 
   if (results.length > 0) {
-    console.log('[MemoryJudge] 截断救场提取成功，条数:', results.length)
+    console.log('[MemoryJudge] 截斷救場提取成功，條數:', results.length)
     return results
   }
 
-  // 第五步：修复嵌套英文引号问题（针对完整数组的情况再试一次）
+  // 第五步：修復嵌套英文引號問題（針對完整數組的情況再試一次）
   try {
-    // 给 text 补上缺失的 ] 让 JSON.parse 有机会成功
+    // 給 text 補上缺失的 ] 讓 JSON.parse 有機會成功
     const fixedText = text.replace(/("content"|"triggerText"):\s*"([\s\S]*?)(?<!\\)"/g,
       (match: string, key: string, value: string) => {
         let k = 0
@@ -124,7 +125,7 @@ function extractJsonArray(raw: string): unknown[] | null {
         return key + ': "' + cleaned + '"'
       }
     )
-    // 尝试找最后一个完整对象后补 ]
+    // 嘗試找最後一個完整對象後補 ]
     const lastBrace = fixedText.lastIndexOf('}')
     if (lastBrace > 0) {
       const candidate = fixedText.slice(0, lastBrace + 1) + ']'
@@ -136,7 +137,7 @@ function extractJsonArray(raw: string): unknown[] | null {
   return null
 }
 
-const ABSOLUTE_TERMS = ["只", "永远", "从不", "一定", "完全", "绝对", "以后都", "不再"]
+const ABSOLUTE_TERMS = ["只", "永遠", "從不", "一定", "完全", "絕對", "以後都", "不再"]
 
 function hasUnsupportedAbsolute(summary: string, evidenceQuotes: string[]): boolean {
   return ABSOLUTE_TERMS.some((term) => summary.includes(term) && !evidenceQuotes.some((quote) => quote.includes(term)))
@@ -201,7 +202,7 @@ async function callChatCompletions(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
-  // 拼 VendorConfig（settings 顶层三件套 + 镜像字段都参与）
+  // 拼 VendorConfig（settings 頂層三件套 + 鏡像字段都參與）
   const cfg: VendorConfig = {
     provider: settings.provider,
     baseUrl: settings.baseUrl,
@@ -211,10 +212,10 @@ async function callChatCompletions(
   }
 
   try {
-    // adapter 三层 transport 解析（explicitTransport → baseUrl 启发式 → capabilities fallback）
-    // —— 之前直接写 OpenAI body / Bearer header / choices[0].message.content 解析，
-    // 切到 anthropic transport 厂商（如 MiniMax / Claude）时会拿到空字符串，误判 "JSON 解析失败"。
-    // 现在交给 adapter，OpenAI / Anthropic 端点都正确。
+    // adapter 三層 transport 解析（explicitTransport → baseUrl 啟發式 → capabilities fallback）
+    // —— 之前直接寫 OpenAI body / Bearer header / choices[0].message.content 解析，
+    // 切到 anthropic transport 廠商（如 MiniMax / Claude）時會拿到空字符串，誤判 "JSON 解析失敗"。
+    // 現在交給 adapter，OpenAI / Anthropic 端點都正確。
     const adapter = getAdapterForConfig(cfg)
     const http = adapter.buildRequest({
       model: cfg.model,
@@ -233,15 +234,15 @@ async function callChatCompletions(
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({})) as Record<string, unknown>
       const errMsg = (errorData as { error?: { message?: string } }).error?.message
-      throw new Error(errMsg || `模型请求失败：HTTP ${response.status}`)
+      throw new Error(errMsg || `模型請求失敗：HTTP ${response.status}`)
     }
 
     const data = await response.json()
     const parsed = adapter.parseResponse(data)
 
-    // 记录 token 用量（统一字段，OpenAI / Anthropic adapter 都映射成 {input, output}）
+    // 記錄 token 用量（統一字段，OpenAI / Anthropic adapter 都映射成 {input, output}）
     if (parsed.usage) {
-      recordUsage(parsed.usage.input, parsed.usage.output, 1)
+      recordUsage(parsed.usage.input, parsed.usage.output, 1, settings.model)
     }
     return stripThinkBlocks(parsed.text ?? "")
   } finally {
@@ -259,85 +260,85 @@ export class MemoryJudge {
     turns: MemoryJudgeTurn[],
     conversationId: string,
   ): Promise<MemoryCandidate[]> {
-    console.log(`[MemoryJudge] 分析最近 ${turns.length} 轮对话...`)
+    console.log(`[MemoryJudge] 分析最近 ${turns.length} 輪對話...`)
 
     try {
       const settings = loadModelSettings()
       if (!settings.apiKey) {
-        console.error("[MemoryJudge] LLM 调用失败: missing api key")
-        console.log("[MemoryJudge] 本轮无值得记录的信息")
+        console.error("[MemoryJudge] LLM 調用失敗: missing api key")
+        console.log("[MemoryJudge] 本輪無值得記錄的信息")
         return []
       }
 
       const systemPrompt = [
-        "你是一个保守的记忆候选提取器，不是事实裁判，也不是用户画像改写器。",
-        "你的目标是少记错，不是多记住。",
+        "你是一個保守的記憶候選提取器，不是事實裁判，也不是用戶畫像改寫器。",
+        "你的目標是少記錯，不是多記住。",
         "",
-        "你只能提取用户明确表达、且未来确实有帮助的信息候选。",
-        "禁止把推断写成确定事实；禁止把一次性状态写成长期偏好；禁止为了输出而输出。",
-        "如果最近这些对话没有值得记的内容，必须返回空数组 []。",
+        "你只能提取用戶明確表達、且未來確實有幫助的信息候選。",
+        "禁止把推斷寫成確定事實；禁止把一次性狀態寫成長期偏好；禁止為了輸出而輸出。",
+        "如果最近這些對話沒有值得記的內容，必須返回空數組 []。",
         "",
-        "记忆层级定义：",
-        "- L0：用户稳定身份信息或核心画像。只有 certainty=explicit 且 attribution=user_explicit 才允许进入 L0。",
-        "  识别到 L0 信息时，必须同时在 field 字段里指定要写入哪个格子。",
-        "  可用的 field 值如下（只能用这些，不能自己发明）：",
+        "記憶層級定義：",
+        "- L0：用戶穩定身份信息或核心畫像。只有 certainty=explicit 且 attribution=user_explicit 才允許進入 L0。",
+        "  識別到 L0 信息時，必須同時在 field 字段裡指定要寫入哪個格子。",
+        "  可用的 field 值如下（只能用這些，不能自己發明）：",
         this.buildL0FieldPrompt(),
         "",
-        "  重要：field 的值必须严格是上方列出的英文字段名，",
+        "  重要：field 的值必須嚴格是上方列出的英文字段名，",
         "  例如 preferredName、occupation，",
-        "  不能用 nickname、name、job 等其他词。",
-        "- L1：用户近期目标或阶段性偏好，只能写近期状态，不要写成长期偏好。",
-        "- L2：具体事件、经历、局部偏好、情绪背景、待观察信息。",
+        "  不能用 nickname、name、job 等其他詞。",
+        "- L1：用戶近期目標或階段性偏好，只能寫近期狀態，不要寫成長期偏好。",
+        "- L2：具體事件、經歷、局部偏好、情緒背景、待觀察信息。",
         "",
-        "判断原则：",
-        "- 宁可漏记，不要误记",
-        "- 纯日常问候、闲聊、情绪发泄（无信息量）→ 返回空数组",
-        "- 必须是用户主动表达的信息，不是 AI 说的",
-        "- summary 必须忠于用户原话和上下文，不要自行推广范围",
-        "- 如果只是 AI 的建议、安慰、总结、推断，不要写成用户事实",
-        "- 不要把「这次」「刚刚」「这个话题里」变成长期偏好",
-        "- 不要自动使用绝对化表达：只、永远、从不、一定、完全、绝对、以后都、不再，除非用户原话明确说过这些词",
-        "- 如果 summary 中存在可能过度概括的词，必须写入 forbiddenOverclaims；有 forbiddenOverclaims 时 shouldWrite 必须是 false",
+        "判斷原則：",
+        "- 寧可漏記，不要誤記",
+        "- 純日常問候、閒聊、情緒發洩（無信息量）→ 返回空數組",
+        "- 必須是用戶主動表達的信息，不是 AI 說的",
+        "- summary 必須忠於用戶原話和上下文，不要自行推廣範圍",
+        "- 如果只是 AI 的建議、安慰、總結、推斷，不要寫成用戶事實",
+        "- 不要把「這次」「剛剛」「這個話題裡」變成長期偏好",
+        "- 不要自動使用絕對化表達：只、永遠、從不、一定、完全、絕對、以後都、不再，除非用戶原話明確說過這些詞",
+        "- 如果 summary 中存在可能過度概括的詞，必須寫入 forbiddenOverclaims；有 forbiddenOverclaims 時 shouldWrite 必須是 false",
         "",
-        "重要格式规则：",
-        "- summary 和 evidenceQuotes 字段的值里，禁止出现英文双引号 \"",
-        "- 如果内容里有引号，统一用中文引号「」替代，例如：用户希望被称为「宝宝」",
-        "- 不要用 markdown 代码块包裹 JSON，直接输出裸 JSON",
-        "- 数组第一个字符必须是 [，最后一个字符必须是 ]",
+        "重要格式規則：",
+        "- summary 和 evidenceQuotes 字段的值裡，禁止出現英文雙引號 \"",
+        "- 如果內容裡有引號，統一用中文引號「」替代，例如：用戶希望被稱為「寶寶」",
+        "- 不要用 markdown 代碼塊包裹 JSON，直接輸出裸 JSON",
+        "- 數組第一個字符必須是 [，最後一個字符必須是 ]",
         "",
-        "输出格式为 JSON 数组，禁止用 markdown 代码块包裹，直接输出裸 JSON。",
+        "輸出格式為 JSON 數組，禁止用 markdown 代碼塊包裹，直接輸出裸 JSON。",
         "",
-        "每个候选必须包含这些字段：",
+        "每個候選必須包含這些字段：",
         "{",
         "  \"layer\": \"L0\",",
         "  \"field\": \"preferredName\",",
-        "  \"summary\": \"保守、可追溯的候选摘要\",",
+        "  \"summary\": \"保守、可追溯的候選摘要\",",
         "  \"importance\": \"low|medium|high\",",
         "  \"stability\": \"one_off|situational|stable\",",
         "  \"certainty\": \"explicit|inferred|uncertain\",",
         "  \"attribution\": \"user_explicit|assistant_inferred|mixed\",",
-        "  \"evidenceQuotes\": [\"用户原话短引文，必须来自用户\"],",
-        "  \"contextSummary\": \"最近多轮上下文概括，不超过80字\",",
+        "  \"evidenceQuotes\": [\"用戶原話短引文，必須來自用戶\"],",
+        "  \"contextSummary\": \"最近多輪上下文概括，不超過80字\",",
         "  \"shouldWrite\": true,",
-        "  \"reason\": \"为什么值得记，或为什么不写\",",
+        "  \"reason\": \"為什麼值得記，或為什麼不寫\",",
         "  \"forbiddenOverclaims\": []",
         "}",
         "",
         "L1/L2 不需要 field。",
-        "inferred / uncertain 不允许进入 L0；如果还值得保留，只能放 L2，或者 shouldWrite=false。",
-        "没有值得记录的信息时，输出：[]",
-        "summary 和 evidenceQuotes 里禁止出现英文双引号，用「」替代。",
+        "inferred / uncertain 不允許進入 L0；如果還值得保留，只能放 L2，或者 shouldWrite=false。",
+        "沒有值得記錄的信息時，輸出：[]",
+        "summary 和 evidenceQuotes 裡禁止出現英文雙引號，用「」替代。",
       ].join("\n")
 
       const transcript = turns.map((turn, index) => [
-        `第 ${index + 1} 轮：`,
-        `用户：${turn.userInput}`,
+        `第 ${index + 1} 輪：`,
+        `用戶：${turn.userInput}`,
         `AI：${turn.assistantReply}`,
       ].join("\n")).join("\n\n")
 
       const userPrompt = [
         `conversationId: ${conversationId}`,
-        "最近对话：",
+        "最近對話：",
         transcript,
       ].join("\n")
 
@@ -353,8 +354,8 @@ export class MemoryJudge {
 
       const parsed = extractJsonArray(raw)
       if (!parsed) {
-        console.error("[MemoryJudge] JSON 解析失败，原始内容：\n", raw.slice(0, 200))
-        console.log("[MemoryJudge] 本轮无值得记录的信息")
+        console.error("[MemoryJudge] JSON 解析失敗，原始內容：\n", raw.slice(0, 200))
+        console.log("[MemoryJudge] 本輪無值得記錄的信息")
         return []
       }
 
@@ -365,18 +366,18 @@ export class MemoryJudge {
         .filter((item) => item.layer !== "L0" || (item.certainty === "explicit" && item.attribution === "user_explicit"))
 
       if (candidates.length === 0) {
-        console.log("[MemoryJudge] 本轮无值得记录的信息")
+        console.log("[MemoryJudge] 本輪無值得記錄的信息")
         return []
       }
 
-      console.log(`[MemoryJudge] 提取候选: ${candidates.length} 条（过滤后）`)
+      console.log(`[MemoryJudge] 提取候選: ${candidates.length} 條（過濾後）`)
       console.log(
-        `[MemoryJudge] 候选详情: ${candidates.map((item) => item.layer === "L0" && item.field ? `${item.layer}.${item.field}(\"${item.content.slice(0, 20)}\", ${item.confidence.toFixed(2)})` : `${item.layer}(\"${item.content.slice(0, 20)}\", ${item.confidence.toFixed(2)})`).join(" ")}`,
+        `[MemoryJudge] 候選詳情: ${candidates.map((item) => item.layer === "L0" && item.field ? `${item.layer}.${item.field}(\"${item.content.slice(0, 20)}\", ${item.confidence.toFixed(2)})` : `${item.layer}(\"${item.content.slice(0, 20)}\", ${item.confidence.toFixed(2)})`).join(" ")}`,
       )
       return candidates
     } catch (error) {
-      console.error("[MemoryJudge] LLM 调用失败:", error)
-      console.log("[MemoryJudge] 本轮无值得记录的信息")
+      console.error("[MemoryJudge] LLM 調用失敗:", error)
+      console.log("[MemoryJudge] 本輪無值得記錄的信息")
       return []
     }
   }

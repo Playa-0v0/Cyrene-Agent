@@ -69,9 +69,9 @@ interface ChatApi {
 /** AG-UI 事件流 API（window.agui）。 */
 const BUDGET_CHARS = 60000;
 
-/* ===== TTS 朗读按钮 SVG =====
-   静态版用单条弧线表示喇叭外溢，播放版换成三条音波竖线 + CSS 动画做波浪。
-   颜色全部 currentColor，主题色变了会跟着变；不依赖 emoji 字体。 */
+/* ===== TTS 朗讀按鈕 SVG =====
+   靜態版用單條弧線表示喇叭外溢，播放版換成三條音波豎線 + CSS 動畫做波浪。
+   顏色全部 currentColor，主題色變了會跟著變；不依賴 emoji 字體。 */
 const SPEAK_ICON_IDLE = `<svg class="msg__speak-icon msg__speak-icon--idle" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
   <path d="M3 10v4h4l5 4V6L7 10H3z" fill="currentColor"/>
   <path d="M16 8.5a4 4 0 0 1 0 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
@@ -83,8 +83,8 @@ const SPEAK_ICON_ACTIVE = `<svg class="msg__speak-icon msg__speak-icon--active" 
   <path class="msg__speak-wave msg__speak-wave--3" d="M20 5.5v13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
 </svg>`;
 
-/* ===== 复制按钮 SVG =====
-   静态版两个重叠方框（标准复制图标），复制成功版换成对勾 + 文案"已复制"。 */
+/* ===== 複製按鈕 SVG =====
+   靜態版兩個重疊方框（標準複製圖標），複製成功版換成對勾 + 文案"已複製"。 */
 const COPY_ICON_IDLE = `<svg class="msg__copy-icon msg__copy-icon--idle" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
   <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.6" fill="none"/>
   <path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
@@ -103,12 +103,12 @@ interface SchedulerEventsApi {
   onEvent: (callback: (event: unknown) => void) => () => void;
 }
 
-/** 用户选择卡片 API（window.choice）。卡片展示走 AGUI_EVENT CUSTOM，resolve 走独立 IPC。 */
+/** 用戶選擇卡片 API（window.choice）。卡片展示走 AGUI_EVENT CUSTOM，resolve 走獨立 IPC。 */
 interface ChoiceApi {
   resolve: (id: string, value: string) => Promise<unknown>;
 }
 
-/** AG-UI BaseEvent 的最小本地类型（只取我们关心的字段）。 */
+/** AG-UI BaseEvent 的最小本地類型（只取我們關心的字段）。 */
 interface AguiBaseEvent {
   type: string;
   messageId?: string;
@@ -127,7 +127,7 @@ interface AguiBaseEvent {
   value?: unknown; // CUSTOM 事件的 value
 }
 
-/** 文件摄入结果（与 main 侧 file-ingest.ts 的 Attachment 对齐）。 */
+/** 文件攝入結果（與 main 側 file-ingest.ts 的 Attachment 對齊）。 */
 type AttachmentKind = "text" | "indexed" | "empty" | "unsupported";
 
 interface Attachment {
@@ -138,7 +138,7 @@ interface Attachment {
   reason?: string;
 }
 
-/** 任务清单状态（todo_write 工具推过来的）。 */
+/** 任務清單狀態（todo_write 工具推過來的）。 */
 interface TodoItem {
   id: string;
   content: string;
@@ -178,7 +178,7 @@ const chatRailNew = document.getElementById("chat-rail-new") as HTMLButtonElemen
 const chatRailList = document.getElementById("chat-rail-list") as HTMLElement | null;
 const chatRailEmpty = document.getElementById("chat-rail-empty") as HTMLElement | null;
 
-// 旧版 localStorage key——首次启动时检测到老数据会迁移到主进程 chats 存储再清掉。
+// 舊版 localStorage key——首次啟動時檢測到老數據會遷移到主進程 chats 存儲再清掉。
 const LEGACY_STORAGE_KEY = "cyrene.chat.history.v1";
 const FRONTEND_REPLY_TIMEOUT_MS = 35000;
 
@@ -186,8 +186,8 @@ const FRONTEND_REPLY_TIMEOUT_MS = 35000;
  * Avatar source per role. Empty string = use the gradient placeholder
  * baked into the CSS background of `.msg--user .msg__avatar`.
  *
- * Model side: 昔涟的 PNG，由 CSS border-radius: 50% 自动裁圆。
- * User side: 暂留空，等设置页里上传用户头像后再把 user 改成 file:// 或 data: URL。
+ * Model side: 昔漣的 PNG，由 CSS border-radius: 50% 自動裁圓。
+ * User side: 暫留空，等設置頁裡上傳用戶頭像後再把 user 改成 file:// 或 data: URL。
  */
 const AVATAR_SRC: Record<Role, string> = {
   model: resolveAsset("avatars/cyrene-avatar.png"),
@@ -263,24 +263,24 @@ const BUILT_IN_STICKER_SRC: Record<string, string> = {
 function getStickerSrc(id: string): string | undefined {
   const raw = getStickerSrcForId(id, BUILT_IN_STICKER_SRC, enabledStickers);
   if (!raw) return undefined;
-  // 内置贴纸路径以 /stickers/ 开头（绝对路径），在 file:// 协议下会解析到磁盘根
-  // 用 resolveAsset() 转成正确的 file:// 或 http:// URL
+  // 內置貼紙路徑以 /stickers/ 開頭（絕對路徑），在 file:// 協議下會解析到磁盤根
+  // 用 resolveAsset() 轉成正確的 file:// 或 http:// URL
   if (raw.startsWith("/stickers/")) {
     return resolveAsset(raw);
   }
   return raw;
 }
 
-// 多会话改造：messages 是当前活跃 session 的消息数组（启动时为空，由 bootstrap 填充）。
-// currentSessionId 是当前正在显示的会话 id，所有持久化操作都基于它。
-// 启动期间 currentSessionId 为 null，发送按钮通过 sending 标志兜底（bootstrap 极快）。
+// 多會話改造：messages 是當前活躍 session 的消息數組（啟動時為空，由 bootstrap 填充）。
+// currentSessionId 是當前正在顯示的會話 id，所有持久化操作都基於它。
+// 啟動期間 currentSessionId 為 null，發送按鈕通過 sending 標誌兜底（bootstrap 極快）。
 const messages: Message[] = [];
 let currentSessionId: string | null = null;
 let currentModelConfig: ModelConfig | null = null;
 
 function formatModelHint(config: ModelConfig | null): string {
-  if (!config || !config.connected) return "模型未连接";
-  return `${config.model} 已连接`;
+  if (!config || !config.connected) return "模型未連接";
+  return `${config.model} 已連接`;
 }
 
 function applyModelConfig(config: ModelConfig | null): void {
@@ -309,11 +309,11 @@ async function initModelConfig(): Promise<void> {
   window.modelConfig?.onChanged((config) => applyModelConfig(config));
 }
 
-// ── 多会话存储桥接 ───────────────────────────────────────────
-// 旧版聊天记录从 localStorage 一次性迁移到主进程 chats 存储，之后整窗口
-// 所有读写都走 IPC（window.chatStore）。所有 saveHistory 调用点改成
-// saveSession，本质是把 messages 全量回写当前 session 文件。
-// 会话元数据类型用 shared 的 ChatSessionMetaUI（跟设置面板共用）。
+// ── 多會話存儲橋接 ───────────────────────────────────────────
+// 舊版聊天記錄從 localStorage 一次性遷移到主進程 chats 存儲，之後整窗口
+// 所有讀寫都走 IPC（window.chatStore）。所有 saveHistory 調用點改成
+// saveSession，本質是把 messages 全量回寫當前 session 文件。
+// 會話元數據類型用 shared 的 ChatSessionMetaUI（跟設置面板共用）。
 
 interface ChatStoreSession {
   id: string;
@@ -356,9 +356,9 @@ declare global {
   }
 }
 
-// 把渲染端 Message 数组归一化为后端能持久化的形态：
-// - 过滤空 content / 渲染中的 thinking 占位（thinking=true 时通常 content 为空，但保险起见双重过滤）
-// - 丢弃 thinking 字段（持久化层不存这种瞬态状态）
+// 把渲染端 Message 數組歸一化為後端能持久化的形態：
+// - 過濾空 content / 渲染中的 thinking 佔位（thinking=true 時通常 content 為空，但保險起見雙重過濾）
+// - 丟棄 thinking 字段（持久化層不存這種瞬態狀態）
 function toPersistableMessages(arr: Message[]): Array<{
   id: string; role: Role; content: string; at: number; sticker?: StickerId | null; ttsCacheKey?: string;
 }> {
@@ -379,11 +379,11 @@ async function saveSession(): Promise<void> {
   try {
     await window.chatStore.replaceMessages(currentSessionId, toPersistableMessages(messages));
   } catch (err) {
-    console.warn("[Cyrene Chat] saveSession 失败:", err);
+    console.warn("[Cyrene Chat] saveSession 失敗:", err);
   }
 }
 
-// 把 store 里的 ChatStoreSession 装载到当前窗口（替换 messages 数组并 render）。
+// 把 store 裡的 ChatStoreSession 裝載到當前窗口（替換 messages 數組並 render）。
 function loadSessionIntoUI(session: ChatStoreSession): void {
   currentSessionId = session.id;
   messages.length = 0;
@@ -397,17 +397,22 @@ function loadSessionIntoUI(session: ChatStoreSession): void {
       ttsCacheKey: m.ttsCacheKey,
     });
   }
-  // 上报活跃 sessionId（设置面板"删除当前会话"差异化提示用）
+  // 上報活躍 sessionId（設置面板"刪除當前會話"差異化提示用）
   void window.chatStore?.setActiveSession(session.id);
   render();
-  // 切换会话后刷新侧栏列表的活跃高亮
+  // 切換會話後刷新側欄列表的活躍高亮
   void renderRailList();
+  
+  // 通知父窗口活躍會話發生變化，以同步工作台的側欄列表高亮
+  try {
+    window.parent.postMessage({ type: "active-session-changed", sessionId: session.id }, "*");
+  } catch (err) { /* ignore */ }
 }
 
-// ── 会话侧栏（点左上角 loader 展开）──
-// 精简版：+新对话 / 列表点击切换 / 活跃高亮。改名删除留设置面板。
-// 渲染逻辑跟 settings.ts 的 renderChatSessions 同源（复用 shared 的格式化函数），
-// 但点击行为不同：这里是本地 loadSessionIntoUI，不走跨窗口 IPC，更快。
+// ── 會話側欄（點左上角 loader 展開）──
+// 精簡版：+新對話 / 列表點擊切換 / 活躍高亮。改名刪除留設置面板。
+// 渲染邏輯跟 settings.ts 的 renderChatSessions 同源（複用 shared 的格式化函數），
+// 但點擊行為不同：這裡是本地 loadSessionIntoUI，不走跨窗口 IPC，更快。
 
 async function renderRailList(): Promise<void> {
   if (!chatRailList || !window.chatStore) return;
@@ -416,7 +421,7 @@ async function renderRailList(): Promise<void> {
   try {
     sessions = await window.chatStore.list();
   } catch (err) {
-    console.warn("[Cyrene Chat] 侧栏加载会话列表失败:", err);
+    console.warn("[Cyrene Chat] 側欄加載會話列表失敗:", err);
   }
 
   chatRailList.innerHTML = "";
@@ -440,7 +445,7 @@ function buildRailItem(session: ChatSessionMetaUI): HTMLLIElement {
 
   const titleEl = document.createElement("div");
   titleEl.className = "chat__rail-title";
-  titleEl.textContent = session.title || "新对话";
+  titleEl.textContent = session.title || "新對話";
 
   const metaEl = document.createElement("div");
   metaEl.className = "chat__rail-meta";
@@ -456,7 +461,7 @@ function buildRailItem(session: ChatSessionMetaUI): HTMLLIElement {
   metaEl.appendChild(timeEl);
   metaEl.appendChild(identityEl);
 
-  // 点击列表项 = 本地切换会话（不走跨窗口 IPC，比设置面板还快）
+  // 點擊列表項 = 本地切換會話（不走跨窗口 IPC，比設置面板還快）
   li.addEventListener("click", async () => {
     if (session.id === currentSessionId) return;
     const full = await window.chatStore?.get(session.id);
@@ -468,15 +473,15 @@ function buildRailItem(session: ChatSessionMetaUI): HTMLLIElement {
   return li;
 }
 
-// loader 按钮 toggle 侧栏显隐
+// loader 按鈕 toggle 側欄顯隱
 chatStatusBtn?.addEventListener("click", () => {
   if (!chatRail) return;
   chatRail.toggleAttribute("hidden");
-  // 首次展开时拉一次列表（后续由 onChanged 持续刷新）
+  // 首次展開時拉一次列表（後續由 onChanged 持續刷新）
   if (!chatRail.hidden) void renderRailList();
 });
 
-// +新对话
+// +新對話
 chatRailNew?.addEventListener("click", async () => {
   if (!window.chatStore) return;
   try {
@@ -486,12 +491,12 @@ chatRailNew?.addEventListener("click", async () => {
       if (full) loadSessionIntoUI(full as ChatStoreSession);
     }
   } catch (err) {
-    console.warn("[Cyrene Chat] 新建会话失败:", err);
+    console.warn("[Cyrene Chat] 新建會話失敗:", err);
   }
 });
 
-// 一次性迁移：检测老 localStorage 数据 → 包成 session → 删 key。
-// 失败/没数据时静默 no-op，不影响后续 bootstrap。
+// 一次性遷移：檢測老 localStorage 數據 → 包成 session → 刪 key。
+// 失敗/沒數據時靜默 no-op，不影響後續 bootstrap。
 async function maybeMigrateLegacy(): Promise<void> {
   const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
   if (!raw) return;
@@ -510,24 +515,24 @@ async function maybeMigrateLegacy(): Promise<void> {
     }
     await window.chatStore?.migrateLegacy(normalized);
   } catch (err) {
-    console.warn("[Cyrene Chat] 旧 localStorage 迁移失败:", err);
+    console.warn("[Cyrene Chat] 舊 localStorage 遷移失敗:", err);
   } finally {
-    // 不管成功失败都清掉，避免每次启动都尝试迁移
+    // 不管成功失敗都清掉，避免每次啟動都嘗試遷移
     localStorage.removeItem(LEGACY_STORAGE_KEY);
   }
 }
 
-// 启动流程：迁移老数据 → 决定加载哪个 session → render
+// 啟動流程：遷移老數據 → 決定加載哪個 session → render
 async function bootstrap(): Promise<void> {
   if (!window.chatStore) {
-    console.warn("[Cyrene Chat] chatStore IPC 未就绪——可能是 preload 未加载");
+    console.warn("[Cyrene Chat] chatStore IPC 未就緒——可能是 preload 未加載");
     render();
     return;
   }
 
   await maybeMigrateLegacy();
 
-  // 优先级：URL ?sessionId= → 列表最新一条 → 自动建新
+  // 優先級：URL ?sessionId= → 列表最新一條 → 自動建新
   const urlSessionId = new URLSearchParams(window.location.search).get("sessionId");
   let session: ChatStoreSession | null = null;
 
@@ -554,12 +559,12 @@ function formatTime(at: number): string {
   return `${hh}:${mm}`;
 }
 
-/** 渲染左上角任务进度面板。todos 为空时收起并稍后移除。
- *  面板可收缩/展开：点击 header 或 toggle 按钮切换。 */
+/** 渲染左上角任務進度面板。todos 為空時收起並稍後移除。
+ *  面板可收縮/展開：點擊 header 或 toggle 按鈕切換。 */
 function renderTodoPanel(state: TodoState | null): void {
   let panel = document.querySelector(".todo-panel") as HTMLElement | null;
 
-  // 空清单：收起动画后移除
+  // 空清單：收起動畫後移除
   if (!state || !state.todos || state.todos.length === 0) {
     if (panel) {
       panel.classList.add("empty");
@@ -568,7 +573,7 @@ function renderTodoPanel(state: TodoState | null): void {
     return;
   }
 
-  // 首次出现：建面板
+  // 首次出現：建面板
   if (!panel) {
     panel = document.createElement("div");
     panel.className = "todo-panel";
@@ -582,9 +587,9 @@ function renderTodoPanel(state: TodoState | null): void {
   const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" style="width:0.75rem;height:0.75rem"><path fill-rule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd"/></svg>`;
 
   const priorityBadge = (p: string): string => {
-    if (p === "high") return `<span class="todo-badge todo-badge--high">高优先级</span>`;
-    if (p === "medium") return `<span class="todo-badge todo-badge--medium">中优先级</span>`;
-    if (p === "low") return `<span class="todo-badge todo-badge--low">低优先级</span>`;
+    if (p === "high") return `<span class="todo-badge todo-badge--high">高優先級</span>`;
+    if (p === "medium") return `<span class="todo-badge todo-badge--medium">中優先級</span>`;
+    if (p === "low") return `<span class="todo-badge todo-badge--low">低優先級</span>`;
     return "";
   };
 
@@ -594,13 +599,13 @@ function renderTodoPanel(state: TodoState | null): void {
     return "";
   };
 
-  // 检查当前是否已收缩（保留状态）
+  // 檢查當前是否已收縮（保留狀態）
   const wasCollapsed = panel.classList.contains("todo-panel--collapsed");
 
   panel.innerHTML = `
     <div class="todo-panel__header">
       <div>
-        <div class="todo-panel__title">📋 任务进度</div>
+        <div class="todo-panel__title">📋 任務進度</div>
         <div class="todo-panel__count">${done}/${total} 已完成</div>
       </div>
       <span class="todo-panel__toggle">${wasCollapsed ? "▸" : "▾"}</span>
@@ -625,7 +630,7 @@ function renderTodoPanel(state: TodoState | null): void {
 
   if (wasCollapsed) panel.classList.add("todo-panel--collapsed");
 
-  // 收缩/展开 toggle
+  // 收縮/展開 toggle
   const togglePanel = () => {
     if (!panel) return;
     const collapsed = panel.classList.toggle("todo-panel--collapsed");
@@ -646,7 +651,7 @@ function escapeHtml(s: string): string {
   }[c]!));
 }
 
-/** 构建用户选择卡片 DOM 元素（歧义消解器），插入聊天流让用户选选项。 */
+/** 構建用戶選擇卡片 DOM 元素（歧義消解器），插入聊天流讓用戶選選項。 */
 function buildChoiceCardEl(data: {
   id: string;
   question: string;
@@ -657,13 +662,13 @@ function buildChoiceCardEl(data: {
   card.className = "choice-card";
   card.dataset.choiceId = data.id;
 
-  // 标题
+  // 標題
   const title = document.createElement("div");
   title.className = "choice-card__title";
   title.textContent = data.question;
   card.appendChild(title);
 
-  // 选项列表
+  // 選項列表
   const list = document.createElement("div");
   list.className = "choice-card__list";
   for (const opt of data.options) {
@@ -685,7 +690,7 @@ function buildChoiceCardEl(data: {
     }
 
     btn.addEventListener("click", () => {
-      // 标记已选，禁用所有按钮
+      // 標記已選，禁用所有按鈕
       card.classList.add("choice-card--resolved");
       card.querySelectorAll<HTMLButtonElement>(".choice-card__option").forEach(b => b.disabled = true);
       btn.classList.add("choice-card__option--selected");
@@ -695,19 +700,19 @@ function buildChoiceCardEl(data: {
   }
   card.appendChild(list);
 
-  // 自定义输入
+  // 自定義輸入
   const customWrap = document.createElement("div");
   customWrap.className = "choice-card__custom";
   const customInput = document.createElement("input");
   customInput.type = "text";
   customInput.className = "choice-card__custom-input";
-  customInput.placeholder = "或输入自定义要求...";
+  customInput.placeholder = "或輸入自定義要求...";
   customWrap.appendChild(customInput);
 
   const customBtn = document.createElement("button");
   customBtn.type = "button";
   customBtn.className = "choice-card__custom-btn";
-  customBtn.textContent = "确认";
+  customBtn.textContent = "確認";
   customBtn.addEventListener("click", () => {
     const val = customInput.value.trim();
     if (!val) return;
@@ -726,7 +731,7 @@ function buildChoiceCardEl(data: {
   return card;
 }
 
-/** 构建权限审批卡片 DOM 元素（per-action 档位下工具调用前弹出）。 */
+/** 構建權限審批卡片 DOM 元素（per-action 檔位下工具調用前彈出）。 */
 function buildApprovalCardEl(req: {
   id: string;
   toolId: string;
@@ -739,7 +744,7 @@ function buildApprovalCardEl(req: {
   card.className = "approval-card";
   card.dataset.approvalId = req.id;
 
-  // 标题（带工具名 + 风险标签）
+  // 標題（帶工具名 + 風險標籤）
   const title = document.createElement("div");
   title.className = "approval-card__title";
   const toolSpan = document.createElement("span");
@@ -760,7 +765,7 @@ function buildApprovalCardEl(req: {
     card.appendChild(desc);
   }
 
-  // 参数摘要（key: value，每行一个，限 5 行防爆窗）
+  // 參數摘要（key: value，每行一個，限 5 行防爆窗）
   const argsEntries = Object.entries(req.args || {});
   if (argsEntries.length > 0) {
     const argsBlock = document.createElement("div");
@@ -782,43 +787,43 @@ function buildApprovalCardEl(req: {
     if (argsEntries.length > 5) {
       const more = document.createElement("div");
       more.className = "approval-card__args-more";
-      more.textContent = `…还有 ${argsEntries.length - 5} 个参数`;
+      more.textContent = `…還有 ${argsEntries.length - 5} 個參數`;
       argsBlock.appendChild(more);
     }
     card.appendChild(argsBlock);
   }
 
-  // 按钮行
+  // 按鈕行
   const actions = document.createElement("div");
   actions.className = "approval-card__actions";
   const denyBtn = document.createElement("button");
   denyBtn.type = "button";
   denyBtn.className = "approval-card__btn approval-card__btn--deny";
-  denyBtn.textContent = "拒绝";
+  denyBtn.textContent = "拒絕";
   const allowBtn = document.createElement("button");
   allowBtn.type = "button";
   allowBtn.className = "approval-card__btn approval-card__btn--allow";
-  allowBtn.textContent = "允许";
+  allowBtn.textContent = "允許";
   actions.appendChild(denyBtn);
   actions.appendChild(allowBtn);
   card.appendChild(actions);
 
-  // 提示行（60 秒超时）
+  // 提示行（60 秒超時）
   const note = document.createElement("div");
   note.className = "approval-card__note";
-  note.textContent = "60 秒未操作自动拒绝";
+  note.textContent = "60 秒未操作自動拒絕";
   card.appendChild(note);
 
-  // 倒计时更新（每秒刷新）
+  // 倒計時更新（每秒刷新）
   let remaining = 60;
   const tick = setInterval(() => {
     remaining -= 1;
     if (remaining <= 0) {
-      note.textContent = "已超时，自动拒绝";
+      note.textContent = "已超時，自動拒絕";
       clearInterval(tick);
       return;
     }
-    note.textContent = `${remaining} 秒后自动拒绝`;
+    note.textContent = `${remaining} 秒後自動拒絕`;
   }, 1000);
 
   const resolve = (allowed: boolean) => {
@@ -827,7 +832,7 @@ function buildApprovalCardEl(req: {
     card.classList.add(allowed ? "approval-card--allowed" : "approval-card--denied");
     denyBtn.disabled = true;
     allowBtn.disabled = true;
-    note.textContent = allowed ? "已允许" : "已拒绝";
+    note.textContent = allowed ? "已允許" : "已拒絕";
     void window.settings?.resolvePermissionApproval?.(req.id, allowed);
   };
 
@@ -837,7 +842,7 @@ function buildApprovalCardEl(req: {
   return card;
 }
 
-/** 构建天气卡片 DOM 元素（不插入，由调用方决定位置）。 */
+/** 構建天氣卡片 DOM 元素（不插入，由調用方決定位置）。 */
 function buildWeatherCardEl(data: Record<string, unknown>): HTMLElement {
   const card = document.createElement("div");
   card.className = "weather-card";
@@ -872,27 +877,27 @@ function buildWeatherCardEl(data: Record<string, unknown>): HTMLElement {
         ${data.hi != null ? `<div class="w-hilo"><span class="w-hi">↑${data.hi}°</span><span class="w-sep">|</span><span class="w-lo">↓${data.lo}°</span></div>` : ""}
       </div>
     </div>
-    <div class="w-feels">体感 ${feelsLike}°C</div>
+    <div class="w-feels">體感 ${feelsLike}°C</div>
     <div class="w-quick">
-      <div class="w-qitem"><div class="w-qicon">💧</div><div class="w-qlabel">湿度</div><div class="w-qvalue">${humidity}%</div></div>
-      <div class="w-qitem"><div class="w-qicon">💨</div><div class="w-qlabel">风力</div><div class="w-qvalue">${windScale}</div></div>
+      <div class="w-qitem"><div class="w-qicon">💧</div><div class="w-qlabel">溼度</div><div class="w-qvalue">${humidity}%</div></div>
+      <div class="w-qitem"><div class="w-qicon">💨</div><div class="w-qlabel">風力</div><div class="w-qvalue">${windScale}</div></div>
       <div class="w-qitem"><div class="w-qicon">🌧️</div><div class="w-qlabel">降水</div><div class="w-qvalue">${precip}mm</div></div>
-      <div class="w-qitem"><div class="w-qicon">📊</div><div class="w-qlabel">气压</div><div class="w-qvalue">${pressure || "—"}</div></div>
+      <div class="w-qitem"><div class="w-qicon">📊</div><div class="w-qlabel">氣壓</div><div class="w-qvalue">${pressure || "—"}</div></div>
     </div>
     <button class="w-expand" type="button">查看更多 <span class="w-arrow">▼</span></button>
     <div class="w-details">
       <div class="w-detail-grid">
-        <div class="w-ditem"><span class="w-dicon">🌡️</span><div><div class="w-dlabel">体感温度</div><div class="w-dvalue">${feelsLike}°C</div></div></div>
-        <div class="w-ditem"><span class="w-dicon">💨</span><div><div class="w-dlabel">风向风力</div><div class="w-dvalue">${windDir} ${windScale}</div></div></div>
-        <div class="w-ditem"><span class="w-dicon">🔆</span><div><div class="w-dlabel">紫外线</div><div class="w-dvalue">${uv}</div></div></div>
-        <div class="w-ditem"><span class="w-dicon">👁️</span><div><div class="w-dlabel">能见度</div><div class="w-dvalue">${visibility}</div></div></div>
-        ${aqi != null ? `<div class="w-ditem"><span class="w-dicon">🌿</span><div><div class="w-dlabel">空气质量</div><div class="w-dvalue">${aqi} ${aqiText} <span class="w-kaomoji">${kaomoji}</span></div></div></div>` : ""}
+        <div class="w-ditem"><span class="w-dicon">🌡️</span><div><div class="w-dlabel">體感溫度</div><div class="w-dvalue">${feelsLike}°C</div></div></div>
+        <div class="w-ditem"><span class="w-dicon">💨</span><div><div class="w-dlabel">風向風力</div><div class="w-dvalue">${windDir} ${windScale}</div></div></div>
+        <div class="w-ditem"><span class="w-dicon">🔆</span><div><div class="w-dlabel">紫外線</div><div class="w-dvalue">${uv}</div></div></div>
+        <div class="w-ditem"><span class="w-dicon">👁️</span><div><div class="w-dlabel">能見度</div><div class="w-dvalue">${visibility}</div></div></div>
+        ${aqi != null ? `<div class="w-ditem"><span class="w-dicon">🌿</span><div><div class="w-dlabel">空氣質量</div><div class="w-dvalue">${aqi} ${aqiText} <span class="w-kaomoji">${kaomoji}</span></div></div></div>` : ""}
       </div>
     </div>
     <div class="w-source"><span>${icon} ${String(data.source ?? "")}</span><span>${timeStr} 更新</span></div>
   `;
 
-  // 展开按钮点击切换
+  // 展開按鈕點擊切換
   const expandBtn = card.querySelector(".w-expand") as HTMLButtonElement | null;
   if (expandBtn) {
     expandBtn.addEventListener("click", (e) => {
@@ -904,7 +909,7 @@ function buildWeatherCardEl(data: Record<string, unknown>): HTMLElement {
   return card;
 }
 
-/** AQI → 颜文字。 */
+/** AQI → 顏文字。 */
 function aqiKaomojiText(aqi: number): string {
   if (aqi <= 50) return "(◕‿◕)";
   if (aqi <= 100) return "(´ー`)";
@@ -932,9 +937,77 @@ function setAvatar(slot: HTMLElement, role: Role): void {
   slot.appendChild(img);
 }
 
+function buildCodexImageHandoff(request: string): string | null {
+  const cleanRequest = request.replace(/\[sticker:[^\]]+\]/g, "").trim();
+  if (!cleanRequest) return null;
+
+  const actionPattern = /(幫我|請|想要|可以|能不能|替我|給我|來一張|做一張|生成|產生|畫|繪製|製作)/i;
+  const imagePattern = /(圖片|照片|插畫|圖像|繪圖|桌布|壁紙|頭像|立繪|角色圖|anime|image|photo|illustration)/i;
+  if (!actionPattern.test(cleanRequest) || !imagePattern.test(cleanRequest)) return null;
+
+  return [
+    "請使用 imagegen 技能直接生成圖片。",
+    "",
+    `原始要求：${cleanRequest}`,
+    "",
+    "請保留使用者指定的人物、服裝、姿勢、場景、風格與畫面比例；未指定的細節可合理補全。",
+    "若要求涉及既有角色，請以使用者在對話中提供的參考圖為準；如參考圖未隨訊息帶入，提醒使用者重新附上。",
+    "生成完成後直接顯示圖片，並提供可下載的檔案連結。",
+  ].join("\n");
+}
+
+function createCodexImageHandoffCard(request: string): HTMLElement | null {
+  const handoffPrompt = buildCodexImageHandoff(request);
+  if (!handoffPrompt) return null;
+
+  const card = document.createElement("section");
+  card.className = "codex-handoff";
+  card.setAttribute("aria-label", "交給 Codex 生成圖片");
+
+  const orbit = document.createElement("div");
+  orbit.className = "codex-handoff__orbit";
+  orbit.setAttribute("aria-hidden", "true");
+  orbit.innerHTML = "<span>CY</span><i></i><b>✦</b>";
+
+  const copy = document.createElement("div");
+  copy.className = "codex-handoff__copy";
+  const eyebrow = document.createElement("span");
+  eyebrow.className = "codex-handoff__eyebrow";
+  eyebrow.textContent = "IMAGE HANDOFF";
+  const title = document.createElement("strong");
+  title.textContent = "交給 Codex 繪製";
+  const description = document.createElement("small");
+  description.textContent = "複製完整委託後，貼到目前的 Codex 對話即可生成。";
+  copy.append(eyebrow, title, description);
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "codex-handoff__button";
+  button.textContent = "複製給 Codex";
+  button.addEventListener("click", () => {
+    void copyTextToClipboard(handoffPrompt).then((ok) => {
+      if (!ok) {
+        button.textContent = "複製失敗，請重試";
+        button.classList.add("is-error");
+        return;
+      }
+      button.textContent = "已複製 · 到 Codex 貼上";
+      button.classList.remove("is-error");
+      button.classList.add("is-copied");
+      window.setTimeout(() => {
+        button.textContent = "複製給 Codex";
+        button.classList.remove("is-copied");
+      }, 3200);
+    });
+  });
+
+  card.append(orbit, copy, button);
+  return card;
+}
+
 function render(): void {
-  // 空态：当前会话还没有消息时（新建/全清）显示"昔涟期待与你聊天哦 ✨"占位
-  // thinking 状态（昔涟主动开场/流式回复中）也算有消息，胶囊应立即消失
+  // 空態：當前會話還沒有消息時（新建/全清）顯示"昔漣期待與你聊天哦 ✨"佔位
+  // thinking 狀態（昔漣主動開場/流式回覆中）也算有消息，膠囊應立即消失
   const emptyEl = document.getElementById("chat-empty");
   const hasMessages = messages.some((m) => m.content.trim() || m.thinking);
   if (emptyEl) emptyEl.toggleAttribute("hidden", hasMessages);
@@ -968,12 +1041,31 @@ function render(): void {
       bubble.appendChild(dot2);
       bubble.appendChild(dot3);
     } else if (m.role === "user") {
-      // 用户消息：去掉 [sticker:xxx] 标记后显示纯文字
+      // 用戶消息：去掉 [sticker:xxx] 標記後顯示純文字
       const cleanText = m.content.replace(/\[sticker:[^\]]+\]/g, "").trim();
       if (cleanText) bubble.textContent = cleanText;
-      else bubble.hidden = true; // 纯表情包消息不显示气泡
+      else bubble.hidden = true; // 純表情包消息不顯示氣泡
     } else {
-      bubble.textContent = m.content;
+      // 昔漣消息：檢測是否包含 HTML 互動網頁或小遊戲
+      let textContent = m.content;
+      let htmlCode = "";
+      
+      const blockMatch = m.content.match(/```html\s*([\s\S]*?)```/i);
+      if (blockMatch) {
+        htmlCode = blockMatch[1];
+        textContent = m.content.replace(blockMatch[0], "\n\n*(昔漣已為您編寫並加載了以下互動小遊戲，可在下方直接運行遊玩哦 🎮)*\n\n");
+      } else {
+        const rawHtmlStart = m.content.indexOf("<!DOCTYPE html>");
+        if (rawHtmlStart !== -1) {
+          htmlCode = m.content.slice(rawHtmlStart);
+          textContent = m.content.slice(0, rawHtmlStart) + "\n\n*(昔漣已為您編寫並加載了以下互動小遊戲，可在下方直接運行遊玩哦 🎮)*\n\n";
+        }
+      }
+      
+      bubble.textContent = textContent;
+      if (htmlCode) {
+        (m as any).htmlCodeForSandbox = htmlCode;
+      }
     }
 
     const time = document.createElement("div");
@@ -982,16 +1074,85 @@ function render(): void {
 
     if (!bubble.hidden) body.appendChild(bubble);
 
+    if (m.role === "user" && !m.thinking) {
+      const handoffCard = createCodexImageHandoffCard(m.content);
+      if (handoffCard) body.appendChild(handoffCard);
+    }
+
+    // 如果消息帶有互動網頁或小遊戲，在氣泡下方渲染沙盒卡片
+    if ((m as any).htmlCodeForSandbox) {
+      const htmlCode = (m as any).htmlCodeForSandbox;
+      const sandboxCard = document.createElement("div");
+      sandboxCard.className = "sandbox-card";
+      
+      const header = document.createElement("div");
+      header.className = "sandbox-card__header";
+      header.innerHTML = `
+        <div class="sandbox-card__title">
+          <span class="sandbox-card__icon">🎮</span>
+          <span>昔漣的互動沙盒</span>
+        </div>
+        <div class="sandbox-card__actions">
+          <button type="button" class="sandbox-tab-btn is-active" data-tab="play">運行</button>
+          <button type="button" class="sandbox-tab-btn" data-tab="code">代碼</button>
+        </div>
+      `;
+      
+      const contentArea = document.createElement("div");
+      contentArea.className = "sandbox-card__content";
+      
+      const iframeContainer = document.createElement("div");
+      iframeContainer.className = "sandbox-play-container";
+      const sandboxIframe = document.createElement("iframe");
+      sandboxIframe.className = "sandbox-iframe";
+      sandboxIframe.sandbox.add("allow-scripts");
+      sandboxIframe.srcdoc = htmlCode;
+      iframeContainer.appendChild(sandboxIframe);
+      
+      const codeContainer = document.createElement("div");
+      codeContainer.className = "sandbox-code-container is-hidden";
+      const pre = document.createElement("pre");
+      const codeEl = document.createElement("code");
+      codeEl.textContent = htmlCode;
+      pre.appendChild(codeEl);
+      codeContainer.appendChild(pre);
+      
+      contentArea.appendChild(iframeContainer);
+      contentArea.appendChild(codeContainer);
+      
+      sandboxCard.appendChild(header);
+      sandboxCard.appendChild(contentArea);
+      
+      const tabs = header.querySelectorAll(".sandbox-tab-btn");
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          tabs.forEach(t => t.classList.remove("is-active"));
+          tab.classList.add("is-active");
+          
+          const tabType = (tab as HTMLElement).dataset.tab;
+          if (tabType === "play") {
+            iframeContainer.classList.remove("is-hidden");
+            codeContainer.classList.add("is-hidden");
+          } else {
+            iframeContainer.classList.add("is-hidden");
+            codeContainer.classList.remove("is-hidden");
+          }
+        });
+      });
+      
+      body.appendChild(sandboxCard);
+    }
+
     if (m.sticker) {
       const stickerSrc = getStickerSrc(m.sticker);
       if (stickerSrc) {
         const sticker = document.createElement("img");
         sticker.className = "msg__sticker";
         sticker.src = stickerSrc;
-        sticker.alt = m.role === "user" ? "用户表情" : "昔涟表情";
+        sticker.alt = m.role === "user" ? "用戶表情" : "昔漣表情";
         sticker.draggable = false;
-        // <img> 高度异步加载，render() 末尾的滚动会在图片撑开前就执行，
-        // 导致 sticker 底部被输入框挡住。加载完成后再补一次滚到底。
+        // <img> 高度異步加載，render() 末尾的滾動會在圖片撐開前就執行，
+        // 導致 sticker 底部被輸入框擋住。加載完成後再補一次滾到底。
         sticker.addEventListener("load", () => {
           messagesEl.scrollTop = messagesEl.scrollHeight;
         });
@@ -999,27 +1160,27 @@ function render(): void {
       }
     }
 
-    // actions 行：喇叭 / 复制 / 时间三个控件水平排在气泡下方。
-    // 没有可显示控件的消息（纯表情包 / thinking 空内容）跳过整行。
+    // actions 行：喇叭 / 複製 / 時間三個控件水平排在氣泡下方。
+    // 沒有可顯示控件的消息（純表情包 / thinking 空內容）跳過整行。
     const actions = document.createElement("div");
     actions.className = "msg__actions";
 
     let hasActionItem = false;
 
-    // model 消息加 SVG 朗读按钮（thinking 中的不显示）
+    // model 消息加 SVG 朗讀按鈕（thinking 中的不顯示）
     if (m.role === "model" && !m.thinking && m.content.trim()) {
       const speakBtn = document.createElement("button");
       speakBtn.type = "button";
       speakBtn.className = "msg__speak";
-      speakBtn.title = "朗读";
-      speakBtn.setAttribute("aria-label", "朗读这条消息");
-      // 用 SVG 而不是 emoji，颜色随主题走，播放时切到波形版
+      speakBtn.title = "朗讀";
+      speakBtn.setAttribute("aria-label", "朗讀這條消息");
+      // 用 SVG 而不是 emoji，顏色隨主題走，播放時切到波形版
       speakBtn.innerHTML = SPEAK_ICON_IDLE;
-      // 点击逻辑：正在播放则停止，否则开始朗读（避免重叠）
+      // 點擊邏輯：正在播放則停止，否則開始朗讀（避免重疊）
       speakBtn.addEventListener("click", () => {
-        console.log("[TTS] 喇叭点击, currentTtsAudio=", currentTtsAudio ? "有" : "无");
+        console.log("[TTS] 喇叭點擊, currentTtsAudio=", currentTtsAudio ? "有" : "無");
         if (currentSpeakingMsgId === m.id) {
-          // 当前消息正在播放 → 停止并复位 UI
+          // 當前消息正在播放 → 停止並復位 UI
           stopCurrentTts();
           setSpeakingMsgId(null);
         } else {
@@ -1030,14 +1191,14 @@ function render(): void {
       hasActionItem = true;
     }
 
-    // 复制按钮：user / model 都有，thinking / 空内容 / 纯表情包跳过
-    //   user 复制时去掉 [sticker:xxx] 标记，model 直接复制 content
+    // 複製按鈕：user / model 都有，thinking / 空內容 / 純表情包跳過
+    //   user 複製時去掉 [sticker:xxx] 標記，model 直接複製 content
     if (!m.thinking && m.content.trim()) {
       const copyBtn = document.createElement("button");
       copyBtn.type = "button";
       copyBtn.className = "msg__copy";
-      copyBtn.title = "复制";
-      copyBtn.setAttribute("aria-label", "复制这条消息");
+      copyBtn.title = "複製";
+      copyBtn.setAttribute("aria-label", "複製這條消息");
       copyBtn.innerHTML = COPY_ICON_IDLE;
       copyBtn.addEventListener("click", () => {
         const text = m.role === "user"
@@ -1046,12 +1207,12 @@ function render(): void {
         if (!text) return;
         void copyTextToClipboard(text).then((ok) => {
           if (!ok) return;
-          // 视觉反馈：切到对勾 + 文案"已复制"，1.5s 后复原
+          // 視覺反饋：切到對勾 + 文案"已複製"，1.5s 後復原
           copyBtn.classList.add("is-copied");
           copyBtn.innerHTML = COPY_ICON_DONE;
           const label = document.createElement("span");
           label.className = "msg__copy-label";
-          label.textContent = "已复制";
+          label.textContent = "已複製";
           copyBtn.appendChild(label);
           window.setTimeout(() => {
             copyBtn.classList.remove("is-copied");
@@ -1063,7 +1224,7 @@ function render(): void {
       hasActionItem = true;
     }
 
-    // 时间戳总是显示；哪怕只有一个时间，也用 actions 行保持视觉一致
+    // 時間戳總是顯示；哪怕只有一個時間，也用 actions 行保持視覺一致
     actions.appendChild(time);
     hasActionItem = true;
 
@@ -1098,7 +1259,7 @@ function installSchedulerEventListener(): void {
     const msg = messages.find(m => m.id === state.msgId);
     if (!msg) return;
     msg.thinking = false;
-    msg.content = state.content || state.toolLines.join("\n") || "定时任务运行中…";
+    msg.content = state.content || state.toolLines.join("\n") || "定時任務運行中…";
     render();
   };
 
@@ -1110,7 +1271,7 @@ function installSchedulerEventListener(): void {
       messages.push({
         id: `scheduler-system-${runKey}`,
         role: "model",
-        content: `⏰ 定时任务「${value?.title ?? "未命名任务"}」已触发`,
+        content: `⏰ 定時任務「${value?.title ?? "未命名任務"}」已觸發`,
         at: Date.now(),
       });
       const msgId = `scheduler-model-${runKey}`;
@@ -1128,14 +1289,14 @@ function installSchedulerEventListener(): void {
     if (!msg) return;
 
     if (event.type === "TOOL_CALL_START") {
-      state.toolLines.push(`🔧 调用中：${event.toolCallName ?? "工具"}`);
+      state.toolLines.push(`🔧 調用中：${event.toolCallName ?? "工具"}`);
       renderState(state);
     } else if (event.type === "TOOL_CALL_RESULT") {
       const preview = (event.content ?? "").slice(0, 240);
-      state.toolLines.push(`✅ 工具结果：${preview || "完成"}`);
+      state.toolLines.push(`✅ 工具結果：${preview || "完成"}`);
       renderState(state);
     } else if (event.type === "TOOL_CALL_END") {
-      state.toolLines.push("✅ 工具调用完成");
+      state.toolLines.push("✅ 工具調用完成");
       renderState(state);
     } else if (event.type === "TEXT_MESSAGE_START") {
       msg.thinking = false;
@@ -1150,7 +1311,7 @@ function installSchedulerEventListener(): void {
       streams.delete(runKey);
     } else if (event.type === "RUN_ERROR") {
       msg.thinking = false;
-      msg.content = "定时任务执行失败：" + (event.error ?? event.content ?? "未知错误");
+      msg.content = "定時任務執行失敗：" + (event.error ?? event.content ?? "未知錯誤");
       render();
       void saveSession();
       streams.delete(runKey);
@@ -1158,9 +1319,9 @@ function installSchedulerEventListener(): void {
   });
 }
 
-// ── TTS 朗读 ──
-// 从主进程加载 TTS 配置，按当前引擎调用合成并播放。
-// 自动朗读（回复完成后触发）和手动 🔊 按钮共用此函数。
+// ── TTS 朗讀 ──
+// 從主進程加載 TTS 配置，按當前引擎調用合成並播放。
+// 自動朗讀（回覆完成後觸發）和手動 🔊 按鈕共用此函數。
 
 const TEXT_MODE_MOUTH_DURATION_MS = 8000;
 const AUDIO_MOUTH_DELAY_MS = 800;
@@ -1179,7 +1340,7 @@ interface TtsSettings {
   ttsGptsovitsRefAudioPath: string;
   ttsGptsovitsPromptText: string;
   ttsGptsovitsFormat: "wav" | "mp3";
-  // 自定义云端
+  // 自定義雲端
   ttsCustomCloudEndpointUrl: string;
   ttsCustomCloudApiKey: string;
   ttsCustomCloudVoiceId: string;
@@ -1209,7 +1370,7 @@ interface TtsApi {
     speed?: number; format?: "wav" | "mp3";
     expectedCacheKey?: string;
   }) => Promise<{ base64: string; cacheKey: string; cached: boolean; format: "wav" | "mp3" }>;
-  // 自定义云端（返回 base64 + cacheKey + cached + format）
+  // 自定義雲端（返回 base64 + cacheKey + cached + format）
   synthesizeCachedCustomCloud: (payload: {
     endpointUrl: string; apiKey?: string; voiceId?: string; text: string;
     speed?: number; volume?: number; format?: "wav" | "mp3"; timeoutMs?: number;
@@ -1220,7 +1381,7 @@ interface TtsApi {
     apiKey: string; voiceAudioPath?: string; text: string; stylePrompt?: string;
     expectedCacheKey?: string;
   }) => Promise<{ base64: string; cacheKey: string; cached: boolean; format: "wav" }>;
-  // 流式合成（minimax，边推 chunk 边播）
+  // 流式合成（minimax，邊推 chunk 邊播）
   streamStart: (payload: {
     apiKey: string; voiceId: string; text: string;
     speed?: number; volume?: number; pitch?: number;
@@ -1244,16 +1405,16 @@ declare global {
   }
 }
 
-// 当前正在播放的 TTS 音频实例（全局唯一）。点新朗读前先停这个，避免重叠。
+// 當前正在播放的 TTS 音頻實例（全局唯一）。點新朗讀前先停這個，避免重疊。
 let currentTtsAudio: HTMLAudioElement | null = null;
-// 当前正在朗读的消息 ID，用于给对应消息 row 加 .is-speaking class 并切换喇叭图标。
-// null 表示没有正在播放。
+// 當前正在朗讀的消息 ID，用於給對應消息 row 加 .is-speaking class 並切換喇叭圖標。
+// null 表示沒有正在播放。
 let currentSpeakingMsgId: string | null = null;
 let speechToken = 0;
 let textMouthStarted = false;
 let ttsPlaybackSequence = 0;
 
-/** 复制文本到剪贴板，优先用现代 Clipboard API，失败时回落到 textarea+execCommand。 */
+/** 複製文本到剪貼板，優先用現代 Clipboard API，失敗時回落到 textarea+execCommand。 */
 async function copyTextToClipboard(text: string): Promise<boolean> {
   try {
     if (navigator.clipboard?.writeText) {
@@ -1261,9 +1422,9 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
       return true;
     }
   } catch {
-    // 权限被拒或无 clipboard 上下文，回落到下面
+    // 權限被拒或無 clipboard 上下文，回落到下面
   }
-  // Fallback：临时 textarea + execCommand('copy')。旧浏览器/无焦点时也能用。
+  // Fallback：臨時 textarea + execCommand('copy')。舊瀏覽器/無焦點時也能用。
   const ta = document.createElement("textarea");
   ta.value = text;
   ta.setAttribute("readonly", "");
@@ -1287,7 +1448,7 @@ function nextSpeechToken(): number {
   return speechToken;
 }
 
-/** 把正在播放的喇叭按钮切回静态 SVG，所有其他按钮恢复正常。 */
+/** 把正在播放的喇叭按鈕切回靜態 SVG，所有其他按鈕恢復正常。 */
 function syncSpeakingUi(): void {
   const prevId = currentSpeakingMsgId;
   document.querySelectorAll(".msg.is-speaking").forEach((el) => {
@@ -1305,10 +1466,14 @@ function syncSpeakingUi(): void {
   if (btn) btn.innerHTML = SPEAK_ICON_ACTIVE;
 }
 
-/** 在开始朗读某条消息前调用：清掉旧的、设上新的，并刷新 UI。 */
+/** 在開始朗讀某條消息前調用：清掉舊的、設上新的，並刷新 UI。 */
 function setSpeakingMsgId(id: string | null): void {
   currentSpeakingMsgId = id;
   syncSpeakingUi();
+  const stopBtn = document.getElementById("stop-speaking-btn");
+  if (stopBtn) {
+    stopBtn.style.display = id ? "flex" : "none";
+  }
 }
 
 function stopLive2dMouth(): void {
@@ -1318,12 +1483,12 @@ function stopLive2dMouth(): void {
 }
 
 function startTextModeMouth(): void {
-  if (textMouthStarted) return;
+  if (textMouthStarted || isStudyMode() || isGameMode()) return;
   textMouthStarted = true;
   window.live2dSpeech?.startMouth(TEXT_MODE_MOUTH_DURATION_MS);
 }
 
-/** 停止当前正在播放的 TTS 音频（如果有）。只停 audio，UI 复位由调用方决定。 */
+/** 停止當前正在播放的 TTS 音頻（如果有）。只停 audio，UI 復位由調用方決定。 */
 function stopCurrentTts(): void {
   if (currentTtsAudio) {
     currentTtsAudio.pause();
@@ -1364,7 +1529,7 @@ async function loadTtsSettings(): Promise<TtsSettings | null> {
   }
 }
 
-// 每次朗读前重新读取设置，确保设置页刚改的模型/音量/自动朗读开关即时生效。
+// 每次朗讀前重新讀取設置，確保設置頁剛改的模型/音量/自動朗讀開關即時生效。
 function waitForAudioMetadata(audio: HTMLAudioElement): Promise<number | null> {
   return new Promise((resolve) => {
     if (Number.isFinite(audio.duration) && audio.duration > 0) {
@@ -1408,14 +1573,14 @@ function playTtsBase64(
   audio.preload = "auto";
   audio.load();
   currentTtsAudio = audio;
-  // 标记喇叭 UI 进入播放态（即使没传 msgId 也清掉旧的）
+  // 標記喇叭 UI 進入播放態（即使沒傳 msgId 也清掉舊的）
   setSpeakingMsgId(msgId ?? null);
 
   audio.onended = () => {
     URL.revokeObjectURL(url);
     if (currentTtsAudio === audio) currentTtsAudio = null;
     if (speechToken === token) stopLive2dMouth();
-    // 复位喇叭 UI：仅当当前记录的就是这条消息才清，避免覆盖后启动的
+    // 復位喇叭 UI：僅噹噹前記錄的就是這條消息才清，避免覆蓋後啟動的
     if (msgId === undefined || currentSpeakingMsgId === msgId) {
       setSpeakingMsgId(null);
     }
@@ -1426,7 +1591,7 @@ function playTtsBase64(
     try {
       await audio.play();
     } catch (err) {
-      console.warn("[TTS] 播放失败:", err);
+      console.warn("[TTS] 播放失敗:", err);
       URL.revokeObjectURL(url);
       if (currentTtsAudio === audio) currentTtsAudio = null;
       if (speechToken === token) stopLive2dMouth();
@@ -1447,8 +1612,8 @@ function playTtsBase64(
 }
 
 /**
- * 流式播放 MiniMax TTS（MediaSource + SourceBuffer 边收边播）。
- * 返回 cacheKey（供回写消息）。失败时 fallback 到完整合成。
+ * 流式播放 MiniMax TTS（MediaSource + SourceBuffer 邊收邊播）。
+ * 返回 cacheKey（供回寫消息）。失敗時 fallback 到完整合成。
  */
 async function streamAndPlayCached(
   settings: TtsSettings,
@@ -1458,9 +1623,9 @@ async function streamAndPlayCached(
 ): Promise<{ cacheKey: string } | null> {
   if (!window.tts) return null;
 
-  stopCurrentTts();  // 先停当前 TTS（含 stopLive2dMouth），再拿 token，否则 token 立刻失效
+  stopCurrentTts();  // 先停當前 TTS（含 stopLive2dMouth），再拿 token，否則 token 立刻失效
   const token = nextSpeechToken();
-  const t0 = performance.now();  // 诊断时间戳基准（startPolling 闭包要用，必须在 try 外声明）
+  const t0 = performance.now();  // 診斷時間戳基準（startPolling 閉包要用，必須在 try 外聲明）
   let mediaSource: MediaSource | null = null;
   let sourceBuffer: SourceBuffer | null = null;
   let audioEl: HTMLAudioElement | null = null;
@@ -1498,7 +1663,7 @@ async function streamAndPlayCached(
     }
   };
 
-  // 轮询 flush：每 30ms 检查一次，能 append 就 append，结束且队列空就 endOfStream + resolve
+  // 輪詢 flush：每 30ms 檢查一次，能 append 就 append，結束且隊列空就 endOfStream + resolve
   const startPolling = (resolve: (v: { cacheKey: string } | null) => void) => {
     let startedPlayback = false;
     pollTimer = setInterval(() => {
@@ -1508,7 +1673,7 @@ async function streamAndPlayCached(
         finishStream(null);
         return;
       }
-      // append 队列里的 chunk（如果 sourceBuffer 空闲）
+      // append 隊列裡的 chunk（如果 sourceBuffer 空閒）
       if (sourceBuffer && !sourceBuffer.updating && chunkQueue.length > 0) {
         const chunk = chunkQueue.shift()!;
         try {
@@ -1517,20 +1682,20 @@ async function streamAndPlayCached(
           chunkQueue.unshift(chunk);
         }
       }
-      // 第一块 append 成功后（buffered 有数据）开始播放
+      // 第一塊 append 成功後（buffered 有數據）開始播放
       if (!startedPlayback && sourceBuffer && sourceBuffer.buffered.length > 0 && audioEl && audioEl.paused) {
         startedPlayback = true;
         void audioEl.play().then(() => {
-          console.log(`[TTS-Stream] play() 开始 +${Math.round(performance.now() - t0)}ms`);
+          console.log(`[TTS-Stream] play() 開始 +${Math.round(performance.now() - t0)}ms`);
           if (speechToken !== token) return;
           const estDurationMs = Math.max(2000, Array.from(text).length * 180);
           window.live2dSpeech?.startMouth(estDurationMs);
         }).catch((err) => {
-          console.warn("[TTS-Stream] play 失败:", err);
+          console.warn("[TTS-Stream] play 失敗:", err);
           markPlaybackEnded();
         });
       }
-      // 结束且队列空 → endOfStream
+      // 結束且隊列空 → endOfStream
       if (ended && chunkQueue.length === 0 && sourceBuffer && !sourceBuffer.updating && !done) {
         done = true;
         try { mediaSource?.endOfStream(); } catch { /* */ }
@@ -1545,7 +1710,7 @@ async function streamAndPlayCached(
   };
 
   try {
-    // 启动流式合成
+    // 啟動流式合成
     const startResult = await window.tts.streamStart({
       apiKey: settings.ttsMinimaxKey,
       voiceId: settings.ttsMinimaxVoiceId,
@@ -1558,13 +1723,13 @@ async function streamAndPlayCached(
     });
     console.log(`[TTS-Stream] streamStart 返回 +${Math.round(performance.now() - t0)}ms started=${startResult.started} cached=${startResult.cached}`);
 
-    // 注册监听（只注册一次）
+    // 註冊監聽（只註冊一次）
     let firstChunkAt = 0;
     offChunk = window.tts.onAudioChunk((payload) => {
       if (speechToken !== token) return;
       if (!firstChunkAt) {
         firstChunkAt = performance.now();
-        console.log(`[TTS-Stream] 第一个 chunk +${Math.round(firstChunkAt - t0)}ms`);
+        console.log(`[TTS-Stream] 第一個 chunk +${Math.round(firstChunkAt - t0)}ms`);
       }
       const bytes = Uint8Array.from(atob(payload.base64), (c) => c.charCodeAt(0));
       chunkQueue.push(bytes);
@@ -1581,13 +1746,13 @@ async function streamAndPlayCached(
       try { mediaSource?.endOfStream(); } catch { /* */ }
     });
 
-    // 设置 MediaSource + Audio
+    // 設置 MediaSource + Audio
     mediaSource = new MediaSource();
     const url = URL.createObjectURL(mediaSource);
     audioEl = new Audio(url);
     currentTtsAudio = audioEl;
 
-    window.live2dSpeech?.prepare();  // stopLive2dMouth 已在开头 stopCurrentTts 里调过
+    window.live2dSpeech?.prepare();  // stopLive2dMouth 已在開頭 stopCurrentTts 裡調過
 
     audioEl.onended = () => {
       URL.revokeObjectURL(url);
@@ -1601,29 +1766,29 @@ async function streamAndPlayCached(
       try {
         sourceBuffer = mediaSource!.addSourceBuffer("audio/mpeg");
         sourceBuffer.mode = "sequence";
-        console.log(`[TTS-Stream] sourceBuffer 创建成功`);
-        // 不立即 play——等轮询里第一块 append 成功（buffered.length>0）再 play
+        console.log(`[TTS-Stream] sourceBuffer 創建成功`);
+        // 不立即 play——等輪詢裡第一塊 append 成功（buffered.length>0）再 play
       } catch (err) {
-        console.warn("[TTS-Stream] SourceBuffer 创建失败:", err);
+        console.warn("[TTS-Stream] SourceBuffer 創建失敗:", err);
       }
     });
 
-    // 超时兜底（30s）
+    // 超時兜底（30s）
     setTimeout(() => {
       if (!done) {
         ended = true;
       }
     }, 30000);
 
-    // 等 STREAM_END + 队列 flush 完
+    // 等 STREAM_END + 隊列 flush 完
     return await new Promise<{ cacheKey: string } | null>((resolve) => {
       resolveStream = resolve;
       startPolling(resolve);
     });
   } catch (err) {
-    console.warn("[TTS] 流式启动失败:", err);
+    console.warn("[TTS] 流式啟動失敗:", err);
     cleanup();
-    return null;  // 调用方 fallback 到完整合成
+    return null;  // 調用方 fallback 到完整合成
   }
 }
 
@@ -1634,13 +1799,13 @@ async function synthesizeAndPlayCached(
 ): Promise<{ cacheKey: string } | null> {
   if (!window.tts) return null;
 
-  // 回听优先：如果旧消息有 ttsCacheKey，直接尝试读缓存文件播放，不需要任何引擎配置。
-  // 只有缓存文件不存在、需要合成新音频时才检查引擎配置。
+  // 回聽優先：如果舊消息有 ttsCacheKey，直接嘗試讀緩存文件播放，不需要任何引擎配置。
+  // 只有緩存文件不存在、需要合成新音頻時才檢查引擎配置。
   const settings = await loadTtsSettings();
   if (!settings || settings.ttsEngine === "off") return null;
 
-  // 缓存回听：按 cacheKey 前缀分发到对应引擎的 _CACHED IPC
-  // （minimax 缓存走 TTS_SYNTHESIZE_CACHED，gptsovits 缓存走 TTS_SYNTHESIZE_CACHED_GPTSOVITS）
+  // 緩存回聽：按 cacheKey 前綴分發到對應引擎的 _CACHED IPC
+  // （minimax 緩存走 TTS_SYNTHESIZE_CACHED，gptsovits 緩存走 TTS_SYNTHESIZE_CACHED_GPTSOVITS）
   if (existing?.ttsCacheKey) {
     const isGptsovitsCache = existing.ttsCacheKey.startsWith("gptsovits-");
     const isCustomCloudCache = existing.ttsCacheKey.startsWith("custom-cloud-");
@@ -1648,22 +1813,22 @@ async function synthesizeAndPlayCached(
     try {
       if (isGptsovitsCache) {
         const result = await window.tts.synthesizeCachedGptsovits({
-          baseUrl: "cache-only",        // 占位，缓存命中不会用到
-          refAudioPath: "cache-only",   // 占位
-          promptText: "cache-only",     // 占位
+          baseUrl: "cache-only",        // 佔位，緩存命中不會用到
+          refAudioPath: "cache-only",   // 佔位
+          promptText: "cache-only",     // 佔位
           text,
           speed: settings.ttsSpeed,
           format: settings.ttsGptsovitsFormat,
           expectedCacheKey: existing.ttsCacheKey,
         });
         if (result.cached) {
-          console.log("[TTS] gptsovits 缓存命中，直接播放");
+          console.log("[TTS] gptsovits 緩存命中，直接播放");
           playTtsBase64(result.base64, result.format, msgId);
           return { cacheKey: result.cacheKey };
         }
       } else if (isCustomCloudCache) {
         const result = await window.tts.synthesizeCachedCustomCloud({
-          endpointUrl: "cache-only",    // 占位，缓存命中不会用到
+          endpointUrl: "cache-only",    // 佔位，緩存命中不會用到
           apiKey: "cache-only",
           voiceId: "cache-only",
           text,
@@ -1674,7 +1839,7 @@ async function synthesizeAndPlayCached(
           expectedCacheKey: existing.ttsCacheKey,
         });
         if (result.cached) {
-          console.log("[TTS] custom-cloud 缓存命中，直接播放");
+          console.log("[TTS] custom-cloud 緩存命中，直接播放");
           playTtsBase64(result.base64, result.format, msgId);
           return { cacheKey: result.cacheKey };
         }
@@ -1687,12 +1852,12 @@ async function synthesizeAndPlayCached(
           expectedCacheKey: existing.ttsCacheKey,
         });
         if (result.cached) {
-          console.log("[TTS] mimo 缓存命中，直接播放");
+          console.log("[TTS] mimo 緩存命中，直接播放");
           playTtsBase64(result.base64, result.format, msgId);
           return { cacheKey: result.cacheKey };
         }
       } else {
-        // minimax 缓存回听（保持原逻辑）
+        // minimax 緩存回聽（保持原邏輯）
         const result = await window.tts.synthesizeCached({
           apiKey: "cache-only",
           voiceId: "cache-only",
@@ -1703,27 +1868,27 @@ async function synthesizeAndPlayCached(
           expectedCacheKey: existing.ttsCacheKey,
         });
         if (result.cached) {
-          console.log("[TTS] minimax 缓存命中，直接播放");
+          console.log("[TTS] minimax 緩存命中，直接播放");
           playTtsBase64(result.base64, result.format, msgId);
           return { cacheKey: result.cacheKey };
         }
       }
     } catch {
-      // 缓存读取失败，继续走正常合成流程
+      // 緩存讀取失敗，繼續走正常合成流程
     }
   }
 
-  // 需要合成新音频 → 按 engine 分发
+  // 需要合成新音頻 → 按 engine 分發
   if (settings.ttsEngine === "minimax") {
     if (!settings.ttsMinimaxKey || !settings.ttsMinimaxVoiceId) {
-      console.warn("[TTS] 缺少 apiKey 或 voiceId，无法合成新音频");
+      console.warn("[TTS] 缺少 apiKey 或 voiceId，無法合成新音頻");
       return null;
     }
-    // 流式优先（默认开）：边合成边播，首字延迟低；失败 fallback 完整合成
+    // 流式優先（默認開）：邊合成邊播，首字延遲低；失敗 fallback 完整合成
     if (settings.ttsStreaming) {
       const stream = await streamAndPlayCached(settings, text, existing);
       if (stream) return stream;
-      console.warn("[TTS] 流式失败，fallback 完整合成");
+      console.warn("[TTS] 流式失敗，fallback 完整合成");
     }
     try {
       const result = await window.tts.synthesizeCached({
@@ -1738,7 +1903,7 @@ async function synthesizeAndPlayCached(
       playTtsBase64(result.base64, result.format, msgId);
       return { cacheKey: result.cacheKey };
     } catch (err) {
-      console.warn("[TTS] 合成失败:", err);
+      console.warn("[TTS] 合成失敗:", err);
       return null;
     }
   }
@@ -1761,14 +1926,14 @@ async function synthesizeAndPlayCached(
       playTtsBase64(result.base64, result.format, msgId);
       return { cacheKey: result.cacheKey };
     } catch (err) {
-      console.warn("[TTS] GPT-SoVITS 合成失败:", err);
+      console.warn("[TTS] GPT-SoVITS 合成失敗:", err);
       return null;
     }
   }
 
   if (settings.ttsEngine === "custom-cloud") {
     if (!settings.ttsCustomCloudEndpointUrl) {
-      console.warn("[TTS] 缺少自定义云端 Endpoint URL");
+      console.warn("[TTS] 缺少自定義雲端 Endpoint URL");
       return null;
     }
     try {
@@ -1786,14 +1951,14 @@ async function synthesizeAndPlayCached(
       playTtsBase64(result.base64, result.format, msgId);
       return { cacheKey: result.cacheKey };
     } catch (err) {
-      console.warn("[TTS] 自定义云端合成失败:", err);
+      console.warn("[TTS] 自定義雲端合成失敗:", err);
       return null;
     }
   }
 
   if (settings.ttsEngine === "mimo") {
     if (!settings.ttsMimoKey || !settings.ttsMimoVoiceAudioPath) {
-      console.warn("[TTS] 缺少小米 MiMo API Key 或昔涟克隆音频");
+      console.warn("[TTS] 缺少小米 MiMo API Key 或昔漣克隆音頻");
       return null;
     }
     try {
@@ -1807,7 +1972,7 @@ async function synthesizeAndPlayCached(
       playTtsBase64(result.base64, result.format, msgId);
       return { cacheKey: result.cacheKey };
     } catch (err) {
-      console.warn("[TTS] 小米 MiMo 合成失败:", err);
+      console.warn("[TTS] 小米 MiMo 合成失敗:", err);
       return null;
     }
   }
@@ -1819,8 +1984,8 @@ async function speakMessage(message: Message): Promise<void> {
   ttsPlaybackSequence += 1;
   stopLive2dMouth();
   window.live2dSpeech?.prepare();
-  // 立即切 UI：不等合成，让用户能马上看到按钮进入播放态。
-  // playTtsBase64 真正开始播时会再次 setSpeakingMsgId（幂等）；如果合成失败下面 catch 里复位。
+  // 立即切 UI：不等合成，讓用戶能馬上看到按鈕進入播放態。
+  // playTtsBase64 真正開始播時會再次 setSpeakingMsgId（冪等）；如果合成失敗下面 catch 裡復位。
   setSpeakingMsgId(message.id);
   try {
     const cache = await synthesizeAndPlayCached(message.content, message, message.id);
@@ -1828,27 +1993,28 @@ async function speakMessage(message: Message): Promise<void> {
       message.ttsCacheKey = cache.cacheKey;
       void saveSession();
     } else if (currentSpeakingMsgId === message.id) {
-      // 合成失败（引擎关 / 配置缺失 / 网络报错）→ 复位 UI
-      console.warn("[TTS] 合成失败，复位喇叭按钮");
+      // 合成失敗（引擎關 / 配置缺失 / 網絡報錯）→ 復位 UI
+      console.warn("[TTS] 合成失敗，復位喇叭按鈕");
       setSpeakingMsgId(null);
     }
   } catch (err) {
-    console.warn("[TTS] speakMessage 异常:", err);
+    console.warn("[TTS] speakMessage 異常:", err);
     if (currentSpeakingMsgId === message.id) setSpeakingMsgId(null);
   }
 }
 
-// 自动朗读：检查引擎是否开启 + autoRead 开关，满足条件才朗读
-async function autoSpeakIfEnabled(text: string): Promise<{ cacheKey: string } | null> {
+// 自動朗讀：檢查引擎是否開啟 + autoRead 開關，滿足條件才朗讀
+async function autoSpeakIfEnabled(text: string, msgId?: string): Promise<{ cacheKey: string } | null> {
+  if (isStudyMode() || isGameMode()) return null;
   const settings = await loadTtsSettings();
   if (!settings || settings.ttsEngine === "off" || !settings.ttsAutoRead) return null;
   ttsPlaybackSequence += 1;
-  return await synthesizeAndPlayCached(text);
+  return await synthesizeAndPlayCached(text, undefined, msgId);
 }
 
 interface EarlyMinimaxPlayback {
   append(delta: string): void;
-  finish(fullText: string): Promise<{ cacheKey: string } | null>;
+  finish(fullText: string, msgId?: string): Promise<{ cacheKey: string } | null>;
 }
 
 function createEarlyMinimaxPlayback(): EarlyMinimaxPlayback {
@@ -1874,7 +2040,7 @@ function createEarlyMinimaxPlayback(): EarlyMinimaxPlayback {
   };
 
   const tryStart = async (text: string): Promise<void> => {
-    if (triggered) return;
+    if (triggered || isStudyMode() || isGameMode()) return;
     const cfg = await ensureSettings();
     if (!cfg || !eligible || triggered) return;
     const early = extractEarlyTtsSegment(text);
@@ -1891,20 +2057,21 @@ function createEarlyMinimaxPlayback(): EarlyMinimaxPlayback {
 
   return {
     append(delta: string): void {
-      if (triggered) return;
+      if (triggered || isStudyMode() || isGameMode()) return;
       void tryStart(delta);
     },
-    async finish(fullText: string): Promise<{ cacheKey: string } | null> {
+    async finish(fullText: string, msgId?: string): Promise<{ cacheKey: string } | null> {
+      if (isStudyMode() || isGameMode()) return null;
       const cfg = await ensureSettings();
-      if (!cfg || !eligible) return autoSpeakIfEnabled(fullText);
+      if (!cfg || !eligible) return autoSpeakIfEnabled(fullText, msgId);
 
       if (!triggered) {
-        return autoSpeakIfEnabled(fullText);
+        return autoSpeakIfEnabled(fullText, msgId);
       }
 
       const result = await playbackPromise;
       if (!result?.ok) {
-        return autoSpeakIfEnabled(fullText);
+        return autoSpeakIfEnabled(fullText, msgId);
       }
       if (result.sequence !== ttsPlaybackSequence) {
         return null;
@@ -1913,7 +2080,7 @@ function createEarlyMinimaxPlayback(): EarlyMinimaxPlayback {
       const remainder = fullText.slice(segment.length).trim();
       if (!remainder) return null;
       const rest = await streamAndPlayCached(cfg, remainder, undefined, { waitForPlaybackEnd: true });
-      return rest ? null : autoSpeakIfEnabled(fullText);
+      return rest ? null : autoSpeakIfEnabled(fullText, msgId);
     },
   };
 }
@@ -1923,7 +2090,7 @@ function autosize(): void {
   inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + "px";
 }
 
-// ── 表情包选择器 ──
+// ── 表情包選擇器 ──
 
 let enabledStickers: Array<{ id: string; src: string; description?: string }> = [];
 
@@ -1935,7 +2102,7 @@ async function loadEnabledStickers(): Promise<void> {
   }
 }
 
-/** 根据 sticker id 查语义描述 */
+/** 根據 sticker id 查語義描述 */
 function getStickerDescription(id: string): string {
   const found = enabledStickers.find((s) => s.id === id);
   return found?.description ?? id;
@@ -1946,7 +2113,7 @@ function renderStickerPicker(): void {
   if (enabledStickers.length === 0) {
     const empty = document.createElement("div");
     empty.className = "sticker-picker__empty";
-    empty.textContent = "没有可用的表情包";
+    empty.textContent = "沒有可用的表情包";
     stickerPickerGrid.appendChild(empty);
     return;
   }
@@ -1955,8 +2122,8 @@ function renderStickerPicker(): void {
     card.type = "button";
     card.className = "sticker-picker__item";
     const img = document.createElement("img");
-      // 内置贴纸 src 是 "/stickers/xxx" 绝对路径，file:// 协议下解析到磁盘根目录
-      // 走 resolveAsset() 转成正确的 file:// 或 http:// URL（与 sticker-manager 缩略图同模式）
+      // 內置貼紙 src 是 "/stickers/xxx" 絕對路徑，file:// 協議下解析到磁盤根目錄
+      // 走 resolveAsset() 轉成正確的 file:// 或 http:// URL（與 sticker-manager 縮略圖同模式）
       img.src = s.src.startsWith("/stickers/") ? resolveAsset(s.src) : s.src;
     img.alt = s.id;
     img.draggable = false;
@@ -2015,7 +2182,7 @@ function buildModelMessages(): Array<{ role: "user" | "model"; content: string }
       role: message.role,
       content: message.content.replace(/\[sticker:([^\]]+)\]/g, (_match, id) => {
         const desc = getStickerDescription(id);
-        return `（用户发送表情包：${desc}）`;
+        return `（用戶發送表情包：${desc}）`;
       }),
     }));
 }
@@ -2030,35 +2197,114 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
 }
 
 
+let currentWorkspaceStyle = "01_default.md";
+let currentWorkspaceMode = "chat";
+
+window.addEventListener("message", (e) => {
+  if (!e.data) return;
+  
+  if (e.data.type === "set-style") {
+    currentWorkspaceStyle = e.data.value;
+  }
+  if (e.data.type === "set-mode") {
+    currentWorkspaceMode = e.data.value;
+  }
+  if (e.data.type === "switch-session") {
+    const sessionId = e.data.sessionId;
+    if (sessionId && window.chatStore && sessionId !== currentSessionId) {
+      window.chatStore.get(sessionId).then((full) => {
+        if (full) loadSessionIntoUI(full as ChatStoreSession);
+      });
+    }
+  }
+  if (e.data.type === "create-session") {
+    if (window.chatStore) {
+      window.chatStore.create({ identityId: null }).then(async (session) => {
+        if (session?.id) {
+          const full = await window.chatStore.get(session.id);
+          if (full) loadSessionIntoUI(full as ChatStoreSession);
+        }
+      }).catch(err => console.error("[Chat] Failed to create session from workspace:", err));
+    }
+  }
+});
+
+if (window.chat?.onUpdateMode) {
+  window.chat.onUpdateMode((mode) => {
+    currentWorkspaceMode = mode;
+    if (window.self !== window.top) {
+      window.top.postMessage({ type: "mode-updated-by-text", value: mode }, "*");
+    } else {
+      const opts = document.querySelectorAll("#mode-dropdown .dm-opt");
+      opts.forEach((opt) => {
+        const o = opt as HTMLElement;
+        if (o.dataset.value === mode) {
+          opts.forEach((el) => el.classList.remove("is-active"));
+          o.classList.add("is-active");
+          const valEl = document.querySelector("#mode-val");
+          if (valEl) valEl.textContent = o.textContent?.trim() || "";
+        }
+      });
+    }
+  });
+}
+
 function isTalkMode(): boolean {
+  if (window.self !== window.top) {
+    return currentWorkspaceMode === "talk";
+  }
   const active = document.querySelector("#mode-dropdown .dm-opt.is-active") as HTMLElement | null;
   return active?.dataset?.value === "talk";
 }
 
+function isStudyMode(): boolean {
+  if (window.self !== window.top) {
+    return currentWorkspaceMode === "study";
+  }
+  const active = document.querySelector("#mode-dropdown .dm-opt.is-active") as HTMLElement | null;
+  return active?.dataset?.value === "study";
+}
+
+function isGameMode(): boolean {
+  if (window.self !== window.top) {
+    return currentWorkspaceMode === "game";
+  }
+  const active = document.querySelector("#mode-dropdown .dm-opt.is-active") as HTMLElement | null;
+  return active?.dataset?.value === "game";
+}
+
 function getCurrentStyle(): string {
+  if (window.self !== window.top) {
+    if (currentWorkspaceMode === "talk") return "talk";
+    if (currentWorkspaceMode === "study") return "study";
+    if (currentWorkspaceMode === "game") return "game";
+    return currentWorkspaceStyle;
+  }
   const active = document.querySelector("#style-dropdown .dm-opt.is-active") as HTMLElement | null;
   const style = (active && active.dataset && active.dataset.value) || "01_default.md";
-  // 日常聊天模式：前缀 "talk" 触发后端走 talk_system.md + tools:[]
-  return isTalkMode() ? "talk" : style;
+  if (isTalkMode()) return "talk";
+  if (isStudyMode()) return "study";
+  if (isGameMode()) return "game";
+  return style;
 }
 async function getModelReply(): Promise<ChatReplyPayload> {
   if (!window.chat?.sendMessage) {
-    throw new Error("聊天 IPC 尚未就绪，请重启应用后再试。");
+    throw new Error("聊天 IPC 尚未就緒，請重啟應用後再試。");
   }
   const payload = await withTimeout(
     window.chat.sendMessage(buildModelMessages(), getCurrentStyle()),
     FRONTEND_REPLY_TIMEOUT_MS,
-    "模型响应超时，请稍后重试。",
+    "模型響應超時，請稍後重試。",
   );
   return normalizeChatReplyPayload(payload);
 }
 
 let sending = false;
 
-// ── 快捷预设胶囊 ──────────────────────────────────────────
-// 空对话时在 empty-state 下方显示的半透明胶囊，点击后：
-// - fill 模式：预设提示词填入输入框，用户修改后发送
-// - chat 模式：昔涟主动开口（注入隐藏种子消息触发 agent）
+// ── 快捷預設膠囊 ──────────────────────────────────────────
+// 空對話時在 empty-state 下方顯示的半透明膠囊，點擊後：
+// - fill 模式：預設提示詞填入輸入框，用戶修改後發送
+// - chat 模式：昔漣主動開口（注入隱藏種子消息觸發 agent）
 
 interface QuickPreset {
   id: string;
@@ -2069,14 +2315,14 @@ interface QuickPreset {
 }
 
 const QUICK_PRESETS: QuickPreset[] = [
-  { id: "chat",     label: "和昔涟聊天", icon: "💬",  mode: "chat" },
-  { id: "schedule", label: "设置定时任务", icon: "⏰", mode: "fill", prompt: "帮我设置一个定时任务：" },
-  { id: "weather",  label: "查看天气",   icon: "🌤️", mode: "fill", prompt: "帮我查一下今天的天气" },
-  { id: "document", label: "生成文档",   icon: "📄", mode: "fill", prompt: "帮我生成一份文档：" },
-  { id: "email",    label: "发送邮件",   icon: "✉️", mode: "fill", prompt: "帮我发一封邮件：" },
+  { id: "chat",     label: "和昔漣聊天", icon: "💬",  mode: "chat" },
+  { id: "schedule", label: "設置定時任務", icon: "⏰", mode: "fill", prompt: "幫我設置一個定時任務：" },
+  { id: "weather",  label: "查看天氣",   icon: "🌤️", mode: "fill", prompt: "幫我查一下今天的天氣" },
+  { id: "document", label: "生成文檔",   icon: "📄", mode: "fill", prompt: "幫我生成一份文檔：" },
+  { id: "email",    label: "發送郵件",   icon: "✉️", mode: "fill", prompt: "幫我發一封郵件：" },
 ];
 
-/** 动态生成胶囊 DOM 并绑定点击。bootstrap 末尾调一次。 */
+/** 動態生成膠囊 DOM 並綁定點擊。bootstrap 末尾調一次。 */
 function buildQuickPresets(): void {
   const container = document.getElementById("quick-presets");
   if (!container) return;
@@ -2112,21 +2358,21 @@ function onPresetClick(preset: QuickPreset): void {
 }
 
 /**
- * 「和昔涟聊天」胶囊：让昔涟主动开口。
- * 注入隐藏种子消息触发 agent（不推入 messages 数组、不渲染），
- * 复用现有 AG-UI 流式回复机制。
+ * 「和昔漣聊天」膠囊：讓昔漣主動開口。
+ * 注入隱藏種子消息觸發 agent（不推入 messages 數組、不渲染），
+ * 複用現有 AG-UI 流式回覆機制。
  */
 async function triggerCyreneGreeting(): Promise<void> {
   if (sending || !currentSessionId) return;
 
-  // 立即隐藏空态（胶囊），不等 refreshModelConfig 异步完成
+  // 立即隱藏空態（膠囊），不等 refreshModelConfig 異步完成
   const emptyEl = document.getElementById("chat-empty");
   if (emptyEl) emptyEl.setAttribute("hidden", "");
 
   sending = true;
   sendBtn.disabled = true;
   await refreshModelConfig();
-  chatHintEl.textContent = currentModelConfig?.connected ? `${currentModelConfig.model} 思考中…` : "模型未连接";
+  chatHintEl.textContent = currentModelConfig?.connected ? `${currentModelConfig.model} 思考中…` : "模型未連接";
 
   let streamMsgId = "";
   try {
@@ -2201,7 +2447,7 @@ async function triggerCyreneGreeting(): Promise<void> {
               icon.textContent = "🔧";
               const text = document.createElement("span");
               text.className = "msg__tool-text";
-              text.textContent = "调用中：" + (event.toolCallName ?? "工具");
+              text.textContent = "調用中：" + (event.toolCallName ?? "工具");
               tip.appendChild(icon);
               tip.appendChild(text);
               bubble.appendChild(tip);
@@ -2242,7 +2488,7 @@ async function triggerCyreneGreeting(): Promise<void> {
           case "TEXT_MESSAGE_END":
             if (!autoSpeakTriggered && ttsContent.trim()) {
               autoSpeakTriggered = true;
-              pendingTtsCachePromise = earlyMinimaxPlayback.finish(ttsContent);
+              pendingTtsCachePromise = earlyMinimaxPlayback.finish(ttsContent, streamMsgId);
             }
             break;
           case "CUSTOM":
@@ -2264,25 +2510,25 @@ async function triggerCyreneGreeting(): Promise<void> {
             tryFinish();
             break;
           case "RUN_ERROR":
-            failRun(new Error(event.content || "模型请求失败"));
+            failRun(new Error(event.content || "模型請求失敗"));
             break;
           default:
             break;
         }
       } catch (err) {
-        console.error("[Chat] onEvent回调抛错:", err);
+        console.error("[Chat] onEvent回調拋錯:", err);
       }
     });
 
-    // 种子消息：不推入 messages 数组、不渲染，只作为 agent 输入触发昔涟主动开口
+    // 種子消息：不推入 messages 數組、不渲染，只作為 agent 輸入觸發昔漣主動開口
     const ack = await window.agui!.run({
-      messages: [{ role: "user", content: "[internal] 用户点击了「和昔涟聊天」，请你主动开口聊几句，像朋友打招呼一样自然开场。" }],
+      messages: [{ role: "user", content: "[internal] 用戶點擊了「和昔漣聊天」，請你主動開口聊幾句，像朋友打招呼一樣自然開場。" }],
       style: getCurrentStyle(),
       sessionId: currentSessionId || undefined,
     });
     if (!ack.success) {
       offEvent();
-      throw new Error(ack.error || "模型请求发起失败");
+      throw new Error(ack.error || "模型請求發起失敗");
     }
 
     await runDone;
@@ -2311,16 +2557,16 @@ async function triggerCyreneGreeting(): Promise<void> {
       pendingWeatherCard = null;
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : "模型请求失败";
+    const message = err instanceof Error ? err.message : "模型請求失敗";
     const msg = messages.find(m => m.id === streamMsgId);
     if (msg) {
       msg.thinking = false;
-      msg.content = "连接模型失败：" + message;
+      msg.content = "連接模型失敗：" + message;
     } else {
       messages.push({
         id: String(Date.now() + 2),
         role: "model",
-        content: "连接模型失败：" + message,
+        content: "連接模型失敗：" + message,
         at: Date.now(),
       });
     }
@@ -2337,15 +2583,15 @@ async function triggerCyreneGreeting(): Promise<void> {
 async function send(): Promise<void> {
   const text = inputEl.value.trim();
   if ((!text && attachedFiles.length === 0) || sending) return;
-  // bootstrap 极快但理论上仍有竞态：currentSessionId 为 null 时消息无处可存，
-  // 直接拦截避免丢失。正常情况下 bootstrap 会在用户首次按键前完成。
+  // bootstrap 極快但理論上仍有競態：currentSessionId 為 null 時消息無處可存，
+  // 直接攔截避免丟失。正常情況下 bootstrap 會在用戶首次按鍵前完成。
   if (!currentSessionId) {
-    console.warn("[Cyrene Chat] 会话尚未初始化完成，已忽略此次发送");
+    console.warn("[Cyrene Chat] 會話尚未初始化完成，已忽略此次發送");
     return;
   }
 
-    // Option C（临时注入）：内容不进 messages 历史，只附在 agui.run payload 传给本轮。
-    // fullUserText 只放精简 hint 进 history，不堆内容。
+    // Option C（臨時注入）：內容不進 messages 歷史，只附在 agui.run payload 傳給本輪。
+    // fullUserText 只放精簡 hint 進 history，不堆內容。
     const hintsByKind: string[] = [];
     const turnTextAttachments: { name: string; text: string }[] = [];
     let budgetUsed = 0;
@@ -2364,31 +2610,31 @@ async function send(): Promise<void> {
               budgetUsed += f.text.length;
             }
           }
-          hintsByKind.push(`📝 ${f.name}（附件，内容已注入本轮上下文）`);
+          hintsByKind.push(`📝 ${f.name}（附件，內容已注入本輪上下文）`);
           break;
         case "indexed":
-          hintsByKind.push(`📚 ${f.name}（已索引 ${f.chunks ?? 0} 段，可用 imported_docs 工具检索）`);
+          hintsByKind.push(`📚 ${f.name}（已索引 ${f.chunks ?? 0} 段，可用 imported_docs 工具檢索）`);
           break;
         case "empty":
-          hintsByKind.push(`📄 ${f.name}（为空）`);
+          hintsByKind.push(`📄 ${f.name}（為空）`);
           break;
         case "unsupported":
-          hintsByKind.push(`⚠️ ${f.name}（暂不支持：${f.reason || ""}）`);
+          hintsByKind.push(`⚠️ ${f.name}（暫不支持：${f.reason || ""}）`);
           break;
       }
     }
     if (budgetExceeded.length > 0) {
-      hintsByKind.push(`⚠️ ${budgetExceeded.join("、")} 已省略部分内容（超一轮预算）`);
+      hintsByKind.push(`⚠️ ${budgetExceeded.join("、")} 已省略部分內容（超一輪預算）`);
     }
     const fileHint = hintsByKind.length > 0
-      ? "\n\n【本轮文件】\n" + hintsByKind.join("\n")
+      ? "\n\n【本輪文件】\n" + hintsByKind.join("\n")
       : "";
-    const fullUserText = (text || (attachedFiles.length > 0 ? "请帮我看看这些文件" : "")) + fileHint;
+    const fullUserText = (text || (attachedFiles.length > 0 ? "請幫我看看這些文件" : "")) + fileHint;
 
   sending = true;
   sendBtn.disabled = true;
   await refreshModelConfig();
-  chatHintEl.textContent = currentModelConfig?.connected ? `${currentModelConfig.model} 思考中…` : "模型未连接";
+  chatHintEl.textContent = currentModelConfig?.connected ? `${currentModelConfig.model} 思考中…` : "模型未連接";
 
   const stickerMatch = fullUserText.match(/\[sticker:([^\]]+)\]/);
   const userStickerId = stickerMatch ? stickerMatch[1] : null;
@@ -2423,8 +2669,8 @@ async function send(): Promise<void> {
     let sticker: string | null = null;
     let pendingWeatherCard: Record<string, unknown> | null = null;
 
-    // 终态信号：由事件流的 RUN_FINISHED/RUN_ERROR 触发 resolve，
-    // 不依赖 invoke 的 resolve（invoke 只做 ack，可能与事件投递存在顺序竞争）。
+    // 終態信號：由事件流的 RUN_FINISHED/RUN_ERROR 觸發 resolve，
+    // 不依賴 invoke 的 resolve（invoke 只做 ack，可能與事件投遞存在順序競爭）。
     let finishRun!: () => void;
     let failRun!: (err: Error) => void;
     const runDone = new Promise<void>((resolve, reject) => {
@@ -2432,18 +2678,18 @@ async function send(): Promise<void> {
       failRun = reject;
     });
 
-    // AG-UI 事件流：订阅 window.agui.onEvent，按事件类型渲染
-    // 主进程在 FC 完成后瞬间把所有 delta 发完，渲染端用"回放队列"按固定节奏逐字显示，
-    // 营造真流式感。流式中的气泡用增量 span 追加 + CSS 渐显，不调 render() 全量重建。
+    // AG-UI 事件流：訂閱 window.agui.onEvent，按事件類型渲染
+    // 主進程在 FC 完成後瞬間把所有 delta 發完，渲染端用"回放隊列"按固定節奏逐字顯示，
+    // 營造真流式感。流式中的氣泡用增量 span 追加 + CSS 漸顯，不調 render() 全量重建。
     const deltaQueue: string[] = [];
     let playbackTimer: number | null = null;
     let runFinishedArrived = false;
-    /** 找到当前流式消息的气泡 DOM（TEXT_MESSAGE_START 时 render 过一次，带 data-msg-id）。 */
+    /** 找到當前流式消息的氣泡 DOM（TEXT_MESSAGE_START 時 render 過一次，帶 data-msg-id）。 */
     const getStreamingBubble = (): HTMLElement | null => {
       const row = messagesEl.querySelector(`[data-msg-id="${streamMsgId}"]`);
       return row ? row.querySelector(".msg__bubble") as HTMLElement : null;
     };
-    // 终态条件：RUN_FINISHED 到达 AND 回放队列空。两者都满足才 finishRun。
+    // 終態條件：RUN_FINISHED 到達 AND 回放隊列空。兩者都滿足才 finishRun。
     const tryFinish = (): void => {
       if (runFinishedArrived && deltaQueue.length === 0 && playbackTimer === null) {
         finishRun();
@@ -2455,7 +2701,7 @@ async function send(): Promise<void> {
         const next = deltaQueue.shift();
         if (next !== undefined) {
           streamContent += next;
-          // 增量追加 span 到气泡，CSS 渐显。不调 render()，避免全量重建卡顿。
+          // 增量追加 span 到氣泡，CSS 漸顯。不調 render()，避免全量重建卡頓。
           const bubble = getStreamingBubble();
           if (bubble) {
             const span = document.createElement("span");
@@ -2466,7 +2712,7 @@ async function send(): Promise<void> {
           messagesEl.scrollTop = messagesEl.scrollHeight;
           return;
         }
-        // 队列空了
+        // 隊列空了
         if (playbackTimer !== null) { clearInterval(playbackTimer); playbackTimer = null; }
         tryFinish();
       }, 40);
@@ -2477,7 +2723,7 @@ async function send(): Promise<void> {
         const msg = messages.find(m => m.id === streamMsgId);
         switch (event.type) {
           case "TOOL_CALL_START": {
-            // 工具调用开始：在 thinking 气泡里显示"🔧 调用中：xxx"，替换三个点
+            // 工具調用開始：在 thinking 氣泡裡顯示"🔧 調用中：xxx"，替換三個點
             const bubble = getStreamingBubble();
             if (bubble) {
               bubble.classList.remove("msg__bubble--thinking");
@@ -2490,7 +2736,7 @@ async function send(): Promise<void> {
               icon.textContent = "🔧";
               const text = document.createElement("span");
               text.className = "msg__tool-text";
-              text.textContent = "调用中：" + (event.toolCallName ?? "工具");
+              text.textContent = "調用中：" + (event.toolCallName ?? "工具");
               tip.appendChild(icon);
               tip.appendChild(text);
               bubble.appendChild(tip);
@@ -2498,7 +2744,7 @@ async function send(): Promise<void> {
             break;
           }
           case "TOOL_CALL_END": {
-            // 工具调用完成：把"调用中"改成"完成"，淡出准备让位给文字
+            // 工具調用完成：把"調用中"改成"完成"，淡出準備讓位給文字
             const bubble = getStreamingBubble();
             if (bubble) {
               const tip = bubble.querySelector(".msg__tool-tip");
@@ -2511,8 +2757,8 @@ async function send(): Promise<void> {
             break;
           }
           case "TEXT_MESSAGE_START":
-            // 切换 thinking 点 → 空气泡，render 一次建立 DOM（带 data-msg-id）
-            // 工具提示（若有）会被 render 重建清掉，自然过渡到文字
+            // 切換 thinking 點 → 空氣泡，render 一次建立 DOM（帶 data-msg-id）
+            // 工具提示（若有）會被 render 重建清掉，自然過渡到文字
             if (msg) { msg.thinking = false; render(); }
             break;
           case "TEXT_MESSAGE_CONTENT":
@@ -2532,25 +2778,25 @@ async function send(): Promise<void> {
             }
             break;
           case "TEXT_MESSAGE_END":
-            // 全文 delta 已收齐时，ttsContent 已经同步累加完整；UI 的 streamContent 仍按 40ms 逐字回放。
-            // 这样声音可尽早开始，且不受前端打字动画队列影响。
+            // 全文 delta 已收齊時，ttsContent 已經同步累加完整；UI 的 streamContent 仍按 40ms 逐字回放。
+            // 這樣聲音可儘早開始，且不受前端打字動畫隊列影響。
             if (!autoSpeakTriggered && ttsContent.trim()) {
               autoSpeakTriggered = true;
-              pendingTtsCachePromise = earlyMinimaxPlayback.finish(ttsContent);
+              pendingTtsCachePromise = earlyMinimaxPlayback.finish(ttsContent, streamMsgId);
             }
             break;
           case "CUSTOM":
-            // 主进程发的自定义事件：sticker / 天气卡片 / 任务清单 / 选择卡片
+            // 主進程發的自定義事件：sticker / 天氣卡片 / 任務清單 / 選擇卡片
             if (event.name === "cyrene.sticker") {
               sticker = (event.value as StickerId | null) ?? null;
             } else if (event.name === "cyrene.weather") {
-              // 暂存天气数据，等 runDone 后 render 再插入（避免 render 的 replaceChildren 清掉卡片）
-              console.log("[Chat] 收到天气卡片数据:", JSON.stringify(event.value)?.slice(0, 100));
+              // 暫存天氣數據，等 runDone 後 render 再插入（避免 render 的 replaceChildren 清掉卡片）
+              console.log("[Chat] 收到天氣卡片數據:", JSON.stringify(event.value)?.slice(0, 100));
               pendingWeatherCard = event.value as Record<string, unknown>;
             } else if (event.name === "cyrene.todos") {
               renderTodoPanel(event.value as TodoState | null);
             } else if (event.name === "cyrene.choice") {
-              // 选择卡片：立即插入聊天流（不等 runDone，因为要即时交互）
+              // 選擇卡片：立即插入聊天流（不等 runDone，因為要即時交互）
               const choiceData = event.value as { id: string; question: string; options: Array<{ label: string; value: string; description?: string }>; default?: string };
               const card = buildChoiceCardEl(choiceData);
               messagesEl.appendChild(card);
@@ -2558,24 +2804,24 @@ async function send(): Promise<void> {
             }
             break;
           case "RUN_FINISHED":
-            // 终态信号到达，但要等回放队列空才真正 finishRun（保证流式播完）
+            // 終態信號到達，但要等回放隊列空才真正 finishRun（保證流式播完）
             runFinishedArrived = true;
             tryFinish();
             break;
           case "RUN_ERROR":
-            failRun(new Error(event.content || "模型请求失败"));
+            failRun(new Error(event.content || "模型請求失敗"));
             break;
           default:
-            // TOOL_CALL_* / STEP_* 暂不在 UI 处理（骨架阶段）
+            // TOOL_CALL_* / STEP_* 暫不在 UI 處理（骨架階段）
             break;
         }
       } catch (err) {
-        console.error("[Chat] onEvent回调抛错:", err);
+        console.error("[Chat] onEvent回調拋錯:", err);
       }
     });
 
-    // invoke 只确认"已发起"，不等 Observable 结束。
-    // 真正的完成由事件流 RUN_FINISHED/RUN_ERROR 驱动（await runDone）。
+    // invoke 只確認"已發起"，不等 Observable 結束。
+    // 真正的完成由事件流 RUN_FINISHED/RUN_ERROR 驅動（await runDone）。
     const ack = await window.agui!.run({
       messages: buildModelMessages(),
       style: getCurrentStyle(),
@@ -2584,10 +2830,10 @@ async function send(): Promise<void> {
     });
     if (!ack.success) {
       offEvent();
-      throw new Error(ack.error || "模型请求发起失败");
+      throw new Error(ack.error || "模型請求發起失敗");
     }
 
-    // 等事件流终态
+    // 等事件流終態
     await runDone;
     offEvent();
 
@@ -2607,26 +2853,26 @@ async function send(): Promise<void> {
       void saveSession();
     });
     render();
-    // 天气卡片在 render 后追加到末尾（模型回复之后）
+    // 天氣卡片在 render 後追加到末尾（模型回覆之後）
     if (pendingWeatherCard) {
-      console.log("[Chat] 插入天气卡片");
+      console.log("[Chat] 插入天氣卡片");
       const card = buildWeatherCardEl(pendingWeatherCard);
       messagesEl.appendChild(card);
       messagesEl.scrollTop = messagesEl.scrollHeight;
       pendingWeatherCard = null;
     }
-    // TTS 已在 TEXT_MESSAGE_END 时触发，这里不再重复朗读
+    // TTS 已在 TEXT_MESSAGE_END 時觸發，這裡不再重複朗讀
   } catch (err) {
-    const message = err instanceof Error ? err.message : "模型请求失败";
+    const message = err instanceof Error ? err.message : "模型請求失敗";
     const msg = messages.find(m => m.id === streamMsgId);
     if (msg) {
       msg.thinking = false;
-      msg.content = "连接模型失败：" + message;
+      msg.content = "連接模型失敗：" + message;
     } else {
       messages.push({
         id: String(Date.now() + 2),
         role: "model",
-        content: "连接模型失败：" + message,
+        content: "連接模型失敗：" + message,
         at: Date.now(),
       });
     }
@@ -2641,7 +2887,7 @@ async function send(): Promise<void> {
 function clearChat(): void {
   if (sending) return;
   if (messages.length === 0) return;
-  const ok = window.confirm("清空当前对话？");
+  const ok = window.confirm("清空當前對話？");
   if (!ok) return;
   messages.length = 0;
   void saveSession();
@@ -2668,6 +2914,7 @@ formEl.addEventListener("submit", (e) => {
 inputEl.addEventListener("input", autosize);
 inputEl.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
+    if (e.isComposing) return;
     e.preventDefault();
     void send();
   }
@@ -2679,8 +2926,8 @@ const fileInput = document.getElementById("file-input") as HTMLInputElement | nu
 const attachBtn = document.getElementById("attach-btn") as HTMLButtonElement | null;
 let attachedFiles: Attachment[] = [];
 	
-// ── path-based 文件摄入 ──
-// 路径提取在 preload（webUtils.getPathForFile），renderer 不碰 Electron API。
+// ── path-based 文件攝入 ──
+// 路徑提取在 preload（webUtils.getPathForFile），renderer 不碰 Electron API。
 async function ingestDroppedFiles(files: File[]): Promise<void> {
   if (files.length === 0) return;
   attachBtn!.disabled = true;
@@ -2689,7 +2936,7 @@ async function ingestDroppedFiles(files: File[]): Promise<void> {
     if (results && results.length > 0) attachedFiles = [...attachedFiles, ...results];
     updateFileTags();
   } catch (err: unknown) {
-    window.alert("文件摄入失败：" + ((err as Error)?.message || String(err)));
+    window.alert("文件攝入失敗：" + ((err as Error)?.message || String(err)));
   } finally {
     attachBtn!.disabled = false;
     fileInput!.value = "";
@@ -2719,7 +2966,7 @@ async function ingestDroppedFiles(files: File[]): Promise<void> {
 	    const detail = f.kind === "text" ? "（附件）" :
 	      f.kind === "indexed" ? `（${f.chunks ?? 0} 段）` :
 	      f.kind === "empty" ? "（空）" :
-	      "（暂不支持）";
+	      "（暫不支持）";
 	    label.textContent = `${icon} ${f.name} ${detail}`;
 	    const btn = document.createElement("button");
 	    btn.type = "button";
@@ -2780,8 +3027,8 @@ document.addEventListener("drop", async (e) => {
   e.preventDefault();
   dragCounter = 0;
   chatEl?.classList.remove("chat--drag-over");
-  // path-based：直接把 dataTransfer.files 传 ingestDroppedFiles，
-  // main 侧 fs.statSync 判断文件/文件夹后递归展开。
+  // path-based：直接把 dataTransfer.files 傳 ingestDroppedFiles，
+  // main 側 fs.statSync 判斷文件/文件夾後遞歸展開。
   const files = e.dataTransfer?.files;
   if (files && files.length > 0) {
     void ingestDroppedFiles(Array.from(files));
@@ -2857,9 +3104,9 @@ clearBtn.addEventListener("click", clearChat);
 
 
 /* ===== Floating particles (dreamy pink motes) =====
-   在 .chat 容器底层画一组缓慢上飘的粉紫色光斑，颜色与全站 pink/violet
-   主题一致，配 twinkle 闪烁。canvas 在 HTML 里绝对定位、pointer-events:none，
-   所以不影响输入/点击/滚动。 */
+   在 .chat 容器底層畫一組緩慢上飄的粉紫色光斑，顏色與全站 pink/violet
+   主題一致，配 twinkle 閃爍。canvas 在 HTML 裡絕對定位、pointer-events:none，
+   所以不影響輸入/點擊/滾動。 */
 interface Particle {
   x: number;
   y: number;
@@ -2945,9 +3192,9 @@ if (particlesCtx) {
 }
 
 
-// 启动：迁移老 localStorage → 选会话 → render
-// 先把用户贴纸目录拉到内存，再 bootstrap 渲染历史消息——否则首屏里
-// 纯贴纸消息（气泡已隐藏）会因 enabledStickers 还没加载而渲染成空白。
+// 啟動：遷移老 localStorage → 選會話 → render
+// 先把用戶貼紙目錄拉到內存，再 bootstrap 渲染歷史消息——否則首屏裡
+// 純貼紙消息（氣泡已隱藏）會因 enabledStickers 還沒加載而渲染成空白。
 void (async () => {
   await loadEnabledStickers();
   await bootstrap();
@@ -2956,17 +3203,17 @@ void (async () => {
   void initModelConfig();
 })();
 
-// main → renderer：权限审批请求（per-action 档位下工具调用前）
-// 插入一张审批卡片到聊天流；用户点同意/拒绝后回传给主进程。
+// main → renderer：權限審批請求（per-action 檔位下工具調用前）
+// 插入一張審批卡片到聊天流；用戶點同意/拒絕後回傳給主進程。
 window.settings?.onPermissionApprovalRequest?.((req) => {
   console.log("[Cyrene/Chat] permission approval request:", req.id, req.toolId);
   const card = buildApprovalCardEl(req);
   messagesEl.appendChild(card);
-  // 滚动到底部让用户看到
+  // 滾動到底部讓用戶看到
   messagesEl.scrollTop = messagesEl.scrollHeight;
 });
 
-// main → renderer：设置面板点列表/新对话时，让窗口切到指定 session
+// main → renderer：設置面板點列表/新對話時，讓窗口切到指定 session
 window.chatStore?.onSwitchSession(async (sessionId) => {
   if (!window.chatStore) return;
   if (sessionId === currentSessionId) return;
@@ -2974,17 +3221,17 @@ window.chatStore?.onSwitchSession(async (sessionId) => {
   if (session) loadSessionIntoUI(session);
 });
 
-// 任意会话变动后 main 广播——两种处理：
-// 1. 当前活跃会话被外部删了 → fallback 到最新一条 / 自动建新
-// 2. 侧栏展开时刷新列表（别的窗口新建/改名/删除都会触发）
+// 任意會話變動後 main 廣播——兩種處理：
+// 1. 當前活躍會話被外部刪了 → fallback 到最新一條 / 自動建新
+// 2. 側欄展開時刷新列表（別的窗口新建/改名/刪除都會觸發）
 window.chatStore?.onChanged(async () => {
-  // 侧栏展开时刷新列表（收起时不浪费 DOM 写入）
+  // 側欄展開時刷新列表（收起時不浪費 DOM 寫入）
   if (chatRail && !chatRail.hidden) void renderRailList();
 
   if (!window.chatStore || !currentSessionId) return;
   const stillExists = await window.chatStore.get(currentSessionId);
   if (stillExists) return;
-  // 当前会话已被外部删除：fallback 到最新一条 / 自动建新
+  // 當前會話已被外部刪除：fallback 到最新一條 / 自動建新
   const list = await window.chatStore.list();
   let next: ChatStoreSession | null = null;
   if (list.length > 0) next = await window.chatStore.get(list[0].id);
@@ -2993,3 +3240,27 @@ window.chatStore?.onChanged(async () => {
 });
 autosize();
 inputEl.focus();
+
+if (window.self !== window.top) {
+  document.body.classList.add("is-embedded");
+}
+window.addEventListener("message", (e) => {
+  if (e.data && e.data.type === "clear-chat") {
+    clearChat();
+  }
+});
+
+// ── 停止播放熱鍵與按鈕監聽 ──
+document.getElementById("stop-speaking-btn-inner")?.addEventListener("click", () => {
+  stopCurrentTts();
+  setSpeakingMsgId(null);
+});
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if (currentSpeakingMsgId) {
+      stopCurrentTts();
+      setSpeakingMsgId(null);
+    }
+  }
+});

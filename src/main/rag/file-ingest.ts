@@ -7,22 +7,22 @@ export type AttachmentKind = "text" | "indexed" | "empty" | "unsupported";
 export interface Attachment {
   name: string;
   kind: AttachmentKind;
-  /** kind="text" 时的小文件内容 */
+  /** kind="text" 時的小文件內容 */
   text?: string;
-  /** kind="indexed" 时的 chunk 数 */
+  /** kind="indexed" 時的 chunk 數 */
   chunks?: number;
-  /** kind="unsupported" 或 indexed 失败时的原因 */
+  /** kind="unsupported" 或 indexed 失敗時的原因 */
   reason?: string;
 }
 
-/** ingestOneFile 的大文件索引回调签名。由调用方（index.ts）注入具体实现（importDocument）。 */
+/** ingestOneFile 的大文件索引回調簽名。由調用方（index.ts）注入具體實現（importDocument）。 */
 export type ImportFn = (text: string, fileName: string) => Promise<number>;
 
 // ── Thresholds ──
-/** 小文件 vs 大文件（→RAG）的分界，字符数。 */
+/** 小文件 vs 大文件（→RAG）的分界，字符數。 */
 export const SMALL_THRESHOLD = 30_000;
 
-// ── 扩展名路由 ──
+// ── 擴展名路由 ──
 const TEXT_EXTS = new Set([
   ".txt", ".md", ".markdown", ".json", ".csv", ".tsv", ".log",
   ".xml", ".yaml", ".yml",
@@ -53,8 +53,8 @@ export function isUnsupportedExt(ext: string): boolean {
 }
 
 /**
- * 判二进制：读前 8KB 中有无 null 字节。
- * 不要求读满，如果文件小于 8KB 就全读完。
+ * 判二進制：讀前 8KB 中有無 null 字節。
+ * 不要求讀滿，如果文件小於 8KB 就全讀完。
  */
 const BINARY_SCAN_BYTES = 8192;
 
@@ -66,12 +66,12 @@ export function isBinary(buf: Buffer): boolean {
   return false;
 }
 
-// ── 核心路由：处理单个文件 ──
+// ── 核心路由：處理單個文件 ──
 
 /**
- * 摄入一个文件。
- * @param filePath 绝对路径
- * @param importFn 大文件时调用的导入函数（通常为 importDocument）
+ * 攝入一個文件。
+ * @param filePath 絕對路徑
+ * @param importFn 大文件時調用的導入函數（通常為 importDocument）
  */
 export async function ingestOneFile(
   filePath: string,
@@ -90,12 +90,12 @@ export async function ingestOneFile(
   const name = path.basename(filePath);
   const ext = path.extname(filePath).toLowerCase();
 
-  // 显式不支持的类型
+  // 顯式不支持的類型
   if (isUnsupportedExt(ext)) {
-    return { name, kind: "unsupported", reason: `暂不支持的文件格式 ${ext}（MVP-0 仅支持文本）` };
+    return { name, kind: "unsupported", reason: `暫不支持的文件格式 ${ext}（MVP-0 僅支持文本）` };
   }
 
-  // 读取文件
+  // 讀取文件
   let buf: Buffer;
   try {
     buf = fs.readFileSync(filePath);
@@ -103,12 +103,12 @@ export async function ingestOneFile(
     return { name, kind: "unsupported", reason: err?.code || String(err) };
   }
 
-  // 类型判断与内容提取
-  // 文本扩展名
+  // 類型判斷與內容提取
+  // 文本擴展名
   if (isTextExt(ext)) {
-    // 二进制兜底：标题是文本但实际含 null 字节
+    // 二進制兜底：標題是文本但實際含 null 字節
     if (isBinary(buf)) {
-      return { name, kind: "unsupported", reason: `文件 ${ext} 含二进制数据，暂不支持` };
+      return { name, kind: "unsupported", reason: `文件 ${ext} 含二進制數據，暫不支持` };
     }
     const text = buf.toString("utf-8");
     if (!text.trim()) {
@@ -126,11 +126,11 @@ export async function ingestOneFile(
     return { name, kind: "text", text };
   }
 
-  // 无扩展名或未知扩展名：用 null 字节检测
+  // 無擴展名或未知擴展名：用 null 字節檢測
   if (isBinary(buf)) {
-    return { name, kind: "unsupported", reason: "二进制文件，暂不支持" };
+    return { name, kind: "unsupported", reason: "二進制文件，暫不支持" };
   }
-  // 无扩展名的文本文件
+  // 無擴展名的文本文件
   const text = buf.toString("utf-8");
   if (!text.trim()) {
     return { name, kind: "empty" };
@@ -146,18 +146,18 @@ export async function ingestOneFile(
   return { name, kind: "text", text };
 }
 
-// ── 目录递归 ──
+// ── 目錄遞歸 ──
 
 /**
- * 递归遍历目录，返回所有（非隐藏）文件的绝对路径。
- * 遇到无权限等异常时跳过该条目，不抛。
+ * 遞歸遍歷目錄，返回所有（非隱藏）文件的絕對路徑。
+ * 遇到無權限等異常時跳過該條目，不拋。
  */
 export function walkDir(dirPath: string): string[] {
   const result: string[] = [];
   try {
     const items = fs.readdirSync(dirPath);
     for (const item of items) {
-      // 跳过隐藏文件/目录（. 开头）
+      // 跳過隱藏文件/目錄（. 開頭）
       if (item.startsWith(".")) continue;
       const fullPath = path.join(dirPath, item);
       try {
@@ -168,26 +168,26 @@ export function walkDir(dirPath: string): string[] {
           result.push(fullPath);
         }
       } catch {
-        // 无权限/已删除 → 跳过
+        // 無權限/已刪除 → 跳過
       }
     }
   } catch {
-    // 无权限浏览目录 → 跳过
+    // 無權限瀏覽目錄 → 跳過
   }
   return result;
 }
 
-// ── 批量摄入 ──
+// ── 批量攝入 ──
 
 /**
- * 批量摄入多条路径（文件或目录）。
- * 目录 → walkDir 展开；重复路径去重（realpath）。
+ * 批量攝入多條路徑（文件或目錄）。
+ * 目錄 → walkDir 展開；重複路徑去重（realpath）。
  */
 export async function ingestPaths(
   paths: string[],
   importFn: ImportFn,
 ): Promise<Attachment[]> {
-  // 展开目录，同时记录每个文件的"显示名"（相对输入目录的路径）
+  // 展開目錄，同時記錄每個文件的"顯示名"（相對輸入目錄的路徑）
   const filesWithPaths: Array<{ absPath: string; displayName: string }> = [];
   for (const p of paths) {
     try {
@@ -201,7 +201,7 @@ export async function ingestPaths(
         filesWithPaths.push({ absPath: p, displayName: path.basename(p) });
       }
     } catch {
-      // 不存在 → 跳过
+      // 不存在 → 跳過
     }
   }
 
@@ -216,14 +216,14 @@ export async function ingestPaths(
         unique.push({ ...entry, absPath: real });
       }
     } catch {
-      // symlink broken → 跳过
+      // symlink broken → 跳過
     }
   }
 
   const results: Attachment[] = [];
   for (const { absPath, displayName } of unique) {
     const att = await ingestOneFile(absPath, importFn);
-    // 用保留相对路径的显示名覆盖 basename
+    // 用保留相對路徑的顯示名覆蓋 basename
     results.push({ ...att, name: displayName });
   }
   return results;

@@ -1,5 +1,5 @@
-// 主进程内的 TTS 引擎分发。仅 call-manager 调用（不经 IPC）。
-// chat/main.ts 走两个独立 IPC 通道，不用这个 dispatcher。
+// 主進程內的 TTS 引擎分發。僅 call-manager 調用（不經 IPC）。
+// chat/main.ts 走兩個獨立 IPC 通道，不用這個 dispatcher。
 
 import { synthesize as minimaxSynthesize } from "./minimax-engine";
 import { synthesize as gptsovitsSynthesize } from "./gptsovits-engine";
@@ -11,19 +11,19 @@ export interface SynthesizeByEnginePayload {
   text: string;
   speed?: number;
   volume?: number;
-  // minimax 专用
+  // minimax 專用
   apiKey?: string;
   voiceId?: string;
   model?: string;
-  // gptsovits 专用
+  // gptsovits 專用
   baseUrl?: string;
   refAudioPath?: string;
   promptText?: string;
   format?: "wav" | "mp3";
-  // custom-cloud 专用
+  // custom-cloud 專用
   endpointUrl?: string;
   timeoutMs?: number;
-  // mimo 专用
+  // mimo 專用
   voiceAudioPath?: string;
   stylePrompt?: string;
 }
@@ -34,9 +34,9 @@ export interface SynthesizeByEngineResult {
 }
 
 /**
- * 按 engine 分发到对应引擎合成。
- * 通话 TTS 不走缓存（实时性优先）。
- * engine === "off" 时抛错。
+ * 按 engine 分發到對應引擎合成。
+ * 通話 TTS 不走緩存（實時性優先）。
+ * engine === "off" 時拋錯。
  */
 export async function synthesizeByEngine(
   engine: TtsEngine,
@@ -75,7 +75,7 @@ export async function synthesizeByEngine(
 
   if (engine === "custom-cloud") {
     if (!payload.endpointUrl) {
-      throw new Error("自定义云端 TTS 未配置 endpointUrl");
+      throw new Error("自定義雲端 TTS 未配置 endpointUrl");
     }
     const result = await customCloudSynthesize({
       endpointUrl: payload.endpointUrl,
@@ -92,7 +92,7 @@ export async function synthesizeByEngine(
 
   if (engine === "mimo") {
     if (!payload.apiKey || !payload.voiceAudioPath) {
-      throw new Error("MiMo TTS 未配置 apiKey/克隆音频");
+      throw new Error("MiMo TTS 未配置 apiKey/克隆音頻");
     }
     const result = await mimoSynthesize({
       apiKey: payload.apiKey,
@@ -104,5 +104,5 @@ export async function synthesizeByEngine(
     return { audio: result.audio, format: result.format };
   }
 
-  throw new Error(`TTS 引擎未启用（engine=${engine}）`);
+  throw new Error(`TTS 引擎未啟用（engine=${engine}）`);
 }

@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { getEmbeddingProvider, EmbeddingProvider } from "./embedding";
 
-// ── 类型 ──
+// ── 類型 ──
 export interface MemoryEntry {
   id: string;
   text: string;
@@ -16,10 +16,10 @@ export interface MemoryEntry {
 
 export interface SearchResult {
   entry: MemoryEntry;
-  score: number;        // 加权后的综合分数（余弦 × weight × 衰减）
+  score: number;        // 加權後的綜合分數（餘弦 × weight × 衰減）
 }
 
-// ── 余弦相似度（嵌入已归一化，等价于点积） ──
+// ── 餘弦相似度（嵌入已歸一化，等價於點積） ──
 export function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0;
   for (let i = 0; i < a.length; i++) {
@@ -29,14 +29,14 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 // ── IVF 倒排文件索引 ──
-// 用 k-means 把向量聚成 K 个簇，搜索时只查最近的 nprobe 个簇，
-// 将 O(n) 变为 O(n / K * nprobe) ≈ O(√n)。
+// 用 k-means 把向量聚成 K 個簇，搜索時只查最近的 nprobe 個簇，
+// 將 O(n) 變為 O(n / K * nprobe) ≈ O(√n)。
 interface IvfIndex {
-  /** 簇中心向量（已归一化） */
+  /** 簇中心向量（已歸一化） */
   centroids: number[][];
-  /** 每个簇中的条目 index（指向 this.entries） */
+  /** 每個簇中的條目 index（指向 this.entries） */
   clusters: number[][];
-  /** 建索引时的条目数，用于判定是否需要重建 */
+  /** 建索引時的條目數，用於判定是否需要重建 */
   entryCount: number;
 }
 
@@ -46,17 +46,17 @@ function kmeansPlusPlusInit(
   dim: number,
 ): number[][] {
   const centroids: number[][] = [];
-  // 1. 随机选第一个中心
+  // 1. 隨機選第一個中心
   const firstIdx = Math.floor(Math.random() * vectors.length);
   centroids.push(vectors[firstIdx].slice());
 
-  // 2. 按距离平方加权选剩下的
+  // 2. 按距離平方加權選剩下的
   for (let c = 1; c < K; c++) {
     const dists = vectors.map((v) => {
       let minDist = Infinity;
       for (const cent of centroids) {
         const sim = cosineSimilarity(v, cent);
-        const d = 1 - sim; // 余弦距离 = 1 - cos
+        const d = 1 - sim; // 餘弦距離 = 1 - cos
         if (d < minDist) minDist = d;
       }
       return minDist * minDist;
@@ -124,7 +124,7 @@ function buildIvfIndex(
         const v = vectors[idx];
         for (let d = 0; d < dim; d++) sum[d] += v[d];
       }
-      // 归一化新中心
+      // 歸一化新中心
       let norm = 0;
       for (let d = 0; d < dim; d++) norm += sum[d] * sum[d];
       norm = Math.sqrt(norm);
@@ -134,7 +134,7 @@ function buildIvfIndex(
       newCentroids.push(sum);
     }
 
-    // 检查收敛
+    // 檢查收斂
     for (let c = 0; c < effectiveK; c++) {
       const sim = cosineSimilarity(newCentroids[c], centroids[c]);
       if (sim < 0.999) { changed = true; break; }
@@ -146,15 +146,15 @@ function buildIvfIndex(
   return { centroids, clusters, entryCount: entries.length };
 }
 
-// ── JSON 向量存储 ──
+// ── JSON 向量存儲 ──
 export class JsonVectorStore {
   private filePath: string;
   private entries: MemoryEntry[] = [];
   private dirty = false;
 
-  /** IVF 索引，null = 未构建或需要重建 */
+  /** IVF 索引，null = 未構建或需要重建 */
   private ivf: IvfIndex | null = null;
-  /** 搜索次数计数，达到阈值时惰性重建索引 */
+  /** 搜索次數計數，達到閾值時惰性重建索引 */
   private searchCount = 0;
 
   constructor(dbPath: string) {
@@ -187,7 +187,7 @@ export class JsonVectorStore {
 
   // ── IVF 索引管理 ──
 
-  /** 强制重建 IVF 索引 */
+  /** 強制重建 IVF 索引 */
   rebuildIndex(): void {
     const n = this.entries.length;
     if (n < 2) {
@@ -201,12 +201,12 @@ export class JsonVectorStore {
     console.log(`[RAG] IVF index rebuilt: K=${K}, entries=${n}, took ${Date.now() - t0}ms`);
   }
 
-  /** 检查是否需重建索引，每次数据库变化后调用 */
+  /** 檢查是否需重建索引，每次數據庫變化後調用 */
   private markIndexDirty(): void {
     this.ivf = null;
   }
 
-  /** 搜索前确保索引可用（惰性重建） */
+  /** 搜索前確保索引可用（惰性重建） */
   private ensureIndex(): void {
     if (this.ivf) return;
     if (this.entries.length >= 2) {
@@ -216,17 +216,17 @@ export class JsonVectorStore {
 
   // ── CRUD ──
 
-  // 添加记忆（自动去重）
+  // 添加記憶（自動去重）
   async add(
     text: string,
     source: string,
     provider: EmbeddingProvider,
     metadata?: Record<string, unknown>
   ): Promise<MemoryEntry> {
-    // 去重检查
+    // 去重檢查
     const existing = await this.search(text, source, provider, 1, 0.95);
     if (existing.length > 0) {
-      // 更新权重和时间
+      // 更新權重和時間
       existing[0].entry.weight = Math.min(existing[0].entry.weight + 0.1, 5.0);
       existing[0].entry.lastRecalledAt = Date.now();
       this.dirty = true;
@@ -253,7 +253,7 @@ export class JsonVectorStore {
     return entry;
   }
 
-  // 批量添加（用于导入文档 chunk）
+  // 批量添加（用於導入文檔 chunk）
   async addBatch(
     items: Array<{ text: string; source: string; metadata?: Record<string, unknown> }>,
     provider: EmbeddingProvider
@@ -283,6 +283,17 @@ export class JsonVectorStore {
     return results;
   }
 
+  /** 依穩定 id 刪除單一向量條目。 */
+  removeById(id: string): boolean {
+    const before = this.entries.length;
+    this.entries = this.entries.filter(entry => entry.id !== id);
+    if (this.entries.length === before) return false;
+    this.dirty = true;
+    this.markIndexDirty();
+    this.save();
+    return true;
+  }
+
   // 搜索（使用 IVF 索引加速）
   async search(
     query: string,
@@ -298,19 +309,19 @@ export class JsonVectorStore {
 
     const queryEmbedding = await embeddingProvider.embed(query);
 
-    // 确保索引已构建
+    // 確保索引已構建
     this.ensureIndex();
 
     const now = Date.now();
     const results: SearchResult[] = [];
 
     if (this.ivf && !source) {
-      // ── IVF 加速路径（无 source 过滤时） ──
+      // ── IVF 加速路徑（無 source 過濾時） ──
       const K = this.ivf.centroids.length;
-      // nprobe：搜索约 1/8 的簇（至少 2 个）
+      // nprobe：搜索約 1/8 的簇（至少 2 個）
       const nprobe = Math.max(2, Math.round(K / 8));
 
-      // 找最近的 nprobe 个簇
+      // 找最近的 nprobe 個簇
       const clusterDists: Array<{ idx: number; dist: number }> = [];
       for (let c = 0; c < K; c++) {
         const sim = cosineSimilarity(queryEmbedding, this.ivf.centroids[c]);
@@ -319,7 +330,7 @@ export class JsonVectorStore {
       clusterDists.sort((a, b) => a.dist - b.dist);
       const probeClusters = new Set(clusterDists.slice(0, nprobe).map((c) => c.idx));
 
-      // 只在选中簇内搜索
+      // 只在選中簇內搜索
       for (const clusterIdx of probeClusters) {
         for (const entryIdx of this.ivf.clusters[clusterIdx]) {
           const entry = this.entries[entryIdx];
@@ -334,12 +345,12 @@ export class JsonVectorStore {
         }
       }
     } else {
-      // ── 全量搜索路径（有 source 过滤时，或索引未就绪） ──
+      // ── 全量搜索路徑（有 source 過濾時，或索引未就緒） ──
       for (const entry of this.entries) {
         if (source && entry.source !== source) continue;
 
         const sim = cosineSimilarity(queryEmbedding, entry.embedding);
-        // 时间衰减：24h 未提及权重 ×0.95
+        // 時間衰減：24h 未提及權重 ×0.95
         const hoursSinceRecall = (now - entry.lastRecalledAt) / (1000 * 60 * 60);
         const decayFactor = Math.pow(0.95, hoursSinceRecall / 24);
         const weightedScore = sim * entry.weight * decayFactor;
@@ -350,11 +361,11 @@ export class JsonVectorStore {
       }
     }
 
-    // 排序并取 topK
+    // 排序並取 topK
     results.sort((a, b) => b.score - a.score);
     const top = results.slice(0, topK);
 
-    // 更新召回时间（仅对 topK 结果）
+    // 更新召回時間（僅對 topK 結果）
     for (const r of top) {
       r.entry.lastRecalledAt = now;
       r.entry.weight = Math.min(r.entry.weight + 0.05, 5.0);
@@ -367,7 +378,7 @@ export class JsonVectorStore {
     return top;
   }
 
-  // 清理低权重记忆
+  // 清理低權重記憶
   prune(minWeight = 0.1): number {
     const before = this.entries.length;
     this.entries = this.entries.filter((e) => e.weight >= minWeight);
@@ -377,16 +388,16 @@ export class JsonVectorStore {
     return before - this.entries.length;
   }
 
-  // 删除导入文档
+  // 刪除導入文檔
   deleteImportedDoc(importId: string, fileName?: string): number {
     const before = this.entries.length;
     this.entries = this.entries.filter((e) => {
       if (e.source !== "imported_doc") return true;
-      // 新数据：按 importId 精确匹配
+      // 新數據：按 importId 精確匹配
       if (e.metadata?.importId) {
         return e.metadata.importId !== importId;
       }
-      // 旧数据：按 fileName 匹配
+      // 舊數據：按 fileName 匹配
       if (fileName && e.metadata?.fileName === fileName) {
         return false;
       }
@@ -401,7 +412,7 @@ export class JsonVectorStore {
     return deleted;
   }
 
-  // 统计
+  // 統計
   get stats() {
     const sources: Record<string, number> = {};
     for (const e of this.entries) {

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>我們共同的筆記本</title>
+  <link rel="stylesheet" href="../ui/tokens.css" />
+  <link rel="stylesheet" href="../ui/fonts.css" />
+  <link rel="stylesheet" href="../ui/base.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Noto+Serif+TC:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./notebook.css" />
+</head>
+<body>
+  <div class="starfield"></div>
+  
+  <div class="notebook-container">
+    <header class="notebook-header">
+      <div class="notebook-header__title">
+        <span class="notebook-logo">📖</span>
+        <span class="hsr-title">AS I HAVE WRITTEN · 如我所書</span>
+      </div>
+      <button type="button" class="notebook-header__btn" id="open-notebook-btn">
+        <span>📂 外部打開</span>
+      </button>
+    </header>
+
+    <div class="notebook-body-layout">
+      <!-- 左側：章節選單 -->
+      <aside class="chapters-sidebar">
+        <div class="sidebar-title">✦ 翁法羅斯日誌 ✦</div>
+        <nav class="chapters-list" id="chapters-list-container">
+          <!-- 動態加載章節節點 -->
+        </nav>
+      </aside>
+
+      <!-- 右側：擬真日誌本 -->
+      <div class="book-workspace">
+        <main class="notebook-main">
+          <div class="book" id="book-container">
+            <!-- 書脊活頁圈線 -->
+            <div class="book-spine"></div>
+            
+            <!-- 左半頁 -->
+            <div class="book-page left-page" id="book-left-page">
+              <div class="page-content" id="left-page-content"></div>
+              <div class="page-footer">
+                <span class="page-number" id="left-page-num">1</span>
+              </div>
+            </div>
+            
+            <!-- 右半頁 -->
+            <div class="book-page right-page" id="book-right-page">
+              <div class="page-content" id="right-page-content"></div>
+              <div class="page-footer">
+                <span class="page-number" id="right-page-num">2</span>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="notebook-controls">
+          <button type="button" class="control-btn" id="prev-page-btn" aria-label="上一頁">◀</button>
+          <span class="controls-hint">點擊邊角或星芒按鈕翻頁</span>
+          <button type="button" class="control-btn" id="next-page-btn" aria-label="下一頁">▶</button>
+        </footer>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="./notebook.ts"></script>
+</body>
+</html>

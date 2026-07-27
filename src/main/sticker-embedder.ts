@@ -1,9 +1,9 @@
 // Embedding 表情包匹配引擎
-// 将语义描述转向量，对 LLM 回复做余弦相似度匹配
+// 將語義描述轉向量，對 LLM 回覆做餘弦相似度匹配
 
 import { type EmbeddingProvider } from "./rag/embedding";
 
-// ── 余弦相似度 ──
+// ── 餘弦相似度 ──
 function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0;
   let normA = 0;
@@ -17,9 +17,9 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-// ── 类型 ──
+// ── 類型 ──
 
-/** Embedding 索引中的一条 */
+/** Embedding 索引中的一條 */
 export interface StickerEmbeddingEntry {
   id: string;
   embedding: number[];
@@ -28,11 +28,11 @@ export interface StickerEmbeddingEntry {
 // ── 公共 API ──
 
 /**
- * 构建完整的 sticker embedding 索引
+ * 構建完整的 sticker embedding 索引
  * @param provider  embedding provider
- * @param builtIn   内置 sticker 描述 { id → { phrases } }
- * @param userStickers 用户 sticker 元数据 { id → { phrases } }
- * @returns 索引数组
+ * @param builtIn   內置 sticker 描述 { id → { phrases } }
+ * @param userStickers 用戶 sticker 元數據 { id → { phrases } }
+ * @returns 索引數組
  */
 export async function buildStickerEmbeddingIndex(
   provider: EmbeddingProvider,
@@ -41,7 +41,7 @@ export async function buildStickerEmbeddingIndex(
 ): Promise<StickerEmbeddingEntry[]> {
   const entries: StickerEmbeddingEntry[] = [];
 
-  // 收集所有需要转向量的文本
+  // 收集所有需要轉向量的文本
   const allIds: string[] = [];
   const allTexts: string[] = [];
 
@@ -57,7 +57,7 @@ export async function buildStickerEmbeddingIndex(
 
   if (allTexts.length === 0) return [];
 
-  // 批量转向量
+  // 批量轉向量
   const embeddings = await provider.embedBatch(allTexts);
   for (let i = 0; i < allIds.length; i++) {
     entries.push({ id: allIds[i], embedding: embeddings[i] });
@@ -67,12 +67,12 @@ export async function buildStickerEmbeddingIndex(
 }
 
 /**
- * 对查询文本做 embedding 匹配
- * @param query     LLM 回复内容（可拼接用户输入）
+ * 對查詢文本做 embedding 匹配
+ * @param query     LLM 回覆內容（可拼接用戶輸入）
  * @param provider  embedding provider
  * @param index     embedding 索引
- * @param threshold 相似度阈值 0.3~0.9
- * @returns 匹配到的 sticker id 和分数，低于阈值返回 null
+ * @param threshold 相似度閾值 0.3~0.9
+ * @returns 匹配到的 sticker id 和分數，低於閾值返回 null
  */
 export async function matchSticker(
   query: string,

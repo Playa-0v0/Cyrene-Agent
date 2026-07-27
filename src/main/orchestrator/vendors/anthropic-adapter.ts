@@ -1,6 +1,6 @@
 // Anthropic transport —— MiniMax（主推）/ Claude
-// 请求体协议：POST {baseUrl}/v1/messages（baseUrl 已含 /v1 时只加 /messages）
-// system 顶层 + messages[].content 为 content block 数组 + tools[].input_schema
+// 請求體協議：POST {baseUrl}/v1/messages（baseUrl 已含 /v1 時只加 /messages）
+// system 頂層 + messages[].content 為 content block 數組 + tools[].input_schema
 import {
   ChatMessage, ChatRequest, ChatResponse, ChatVendorAdapter,
   HttpRequest, ProviderCapability, StreamChunk, StreamEvent,
@@ -23,11 +23,11 @@ interface ContentBlock {
 }
 
 /**
- * 把统一消息翻译成 Anthropic wire messages。
- * system 抽出来单独返回（Anthropic system 是顶层字段）。
- * 关键：assistant 若带 rawAssistant（上一轮原始 content block 数组）则原样回传，
- * 保证 thinking / tool_use block 完整回灌（MiniMax 多轮强制要求）。
- * tool 结果：Anthropic 用 user 角色的 tool_result block，同轮多个合并到同一条 user message。
+ * 把統一消息翻譯成 Anthropic wire messages。
+ * system 抽出來單獨返回（Anthropic system 是頂層字段）。
+ * 關鍵：assistant 若帶 rawAssistant（上一輪原始 content block 數組）則原樣回傳，
+ * 保證 thinking / tool_use block 完整回灌（MiniMax 多輪強制要求）。
+ * tool 結果：Anthropic 用 user 角色的 tool_result block，同輪多個合併到同一條 user message。
  */
 function toWireMessages(messages: ChatMessage[]): {
   system: string | undefined;
@@ -93,9 +93,9 @@ export class AnthropicAdapter implements ChatVendorAdapter {
       messages,
       stream: req.stream ?? false,
     };
-    // temperature 只在调用方显式传时才塞进 body，让厂商用默认值避免型号约束冲突
+    // temperature 只在調用方顯式傳時才塞進 body，讓廠商用默認值避免型號約束衝突
     if (req.temperature !== undefined) body.temperature = req.temperature;
-    // system + 主动缓存（MiniMax/Claude：cache_control: ephemeral 打在 system block 上）
+    // system + 主動緩存（MiniMax/Claude：cache_control: ephemeral 打在 system block 上）
     if (system) {
       if (this.capability.cacheStrategy === "cache_control") {
         body.system = [{ type: "text", text: system, cache_control: { type: "ephemeral" } }];
@@ -153,7 +153,7 @@ export class AnthropicAdapter implements ChatVendorAdapter {
     }
 
     const stopReason = data.stop_reason ?? "end_turn";
-    // 调度层用 toolCalls.length>0 判断是否继续；finishReason 也映射成 OpenAI 习惯便于日志统一
+    // 調度層用 toolCalls.length>0 判斷是否繼續；finishReason 也映射成 OpenAI 習慣便於日誌統一
     const finishReason =
       stopReason === "tool_use" ? "tool_calls"
       : stopReason === "end_turn" ? "stop"
@@ -165,11 +165,11 @@ export class AnthropicAdapter implements ChatVendorAdapter {
       ...(text ? { content: text } : {}),
       ...(thinking ? { thinking } : {}),
       ...(toolCalls.length > 0 ? { toolCalls } : {}),
-      // 关键：原样保留 content block 数组，下一轮 buildRequest 直接回传给厂商
+      // 關鍵：原樣保留 content block 數組，下一輪 buildRequest 直接回傳給廠商
       rawAssistant: blocks,
     };
 
-    // 提取 token 用量（Anthropic 协议: input_tokens/output_tokens）
+    // 提取 token 用量（Anthropic 協議: input_tokens/output_tokens）
     const usage = data.usage
       ? { input: data.usage.input_tokens ?? 0, output: data.usage.output_tokens ?? 0 }
       : undefined;
@@ -178,7 +178,7 @@ export class AnthropicAdapter implements ChatVendorAdapter {
   }
 
   buildStreamRequest(req: ChatRequest, cfg: VendorConfig): HttpRequest {
-    // 复用 buildRequest：adapter 内部已按 req.stream 写 body，强制 stream=true
+    // 複用 buildRequest：adapter 內部已按 req.stream 寫 body，強制 stream=true
     return this.buildRequest({ ...req, stream: true }, cfg);
   }
 
@@ -198,8 +198,8 @@ export class AnthropicAdapter implements ChatVendorAdapter {
         const chunk: StreamChunk = {};
         if (d.type === "text_delta" && typeof d.text === "string") chunk.deltaText = d.text;
         if (d.type === "thinking_delta" && typeof d.thinking === "string") chunk.deltaThinking = d.thinking;
-        // 暂不实现：d.type === "input_json_delta" → 累积到 deltaToolCalls
-        // 当前三个调用点都不带 tools；未来若需要流式 tool_use 增量，单独实现 + 加测试即可。
+        // 暫不實現：d.type === "input_json_delta" → 累積到 deltaToolCalls
+        // 當前三個調用點都不帶 tools；未來若需要流式 tool_use 增量，單獨實現 + 加測試即可。
         return Object.keys(chunk).length > 0 ? chunk : null;
       }
       case "message_delta": {
@@ -215,7 +215,7 @@ export class AnthropicAdapter implements ChatVendorAdapter {
       }
       case "message_stop":
         return { done: true };
-      // 其他事件（message_start / content_block_start / content_block_stop / ping 等）静默忽略
+      // 其他事件（message_start / content_block_start / content_block_stop / ping 等）靜默忽略
       default:
         return null;
     }
@@ -224,8 +224,8 @@ export class AnthropicAdapter implements ChatVendorAdapter {
   appendToolResults(messages: ChatMessage[], results: ToolExecutionResult[]): ChatMessage[] {
     const next = messages.slice();
     for (const r of results) {
-      // 统一层一律 push role:"tool"；Anthropic 的合并（同轮 tool_result 进同一条 user message）
-      // 由 buildRequest 的 toWireMessages 负责，这里保持 transport 无关。
+      // 統一層一律 push role:"tool"；Anthropic 的合併（同輪 tool_result 進同一條 user message）
+      // 由 buildRequest 的 toWireMessages 負責，這裡保持 transport 無關。
       next.push({
         role: "tool",
         toolCallId: r.toolCall.id,
@@ -243,8 +243,8 @@ export class AnthropicAdapter implements ChatVendorAdapter {
     try {
       const req: ChatRequest = {
         model: cfg.model,
-        messages: [{ role: "user", content: "ping，请只回复两个字符：ok" }],
-        // 不传 temperature：某些模型只允许特定值，传 0 会报错
+        messages: [{ role: "user", content: "ping，請只回復兩個字符：ok" }],
+        // 不傳 temperature：某些模型只允許特定值，傳 0 會報錯
         stream: false,
       };
       const http = this.buildRequest(req, cfg);
@@ -261,7 +261,7 @@ export class AnthropicAdapter implements ChatVendorAdapter {
       }
       const data = await res.json();
       const parsed = this.parseResponse(data);
-      return { ok: true, latency, sample: parsed.text.slice(0, 80) || "(空回复)" };
+      return { ok: true, latency, sample: parsed.text.slice(0, 80) || "(空回覆)" };
     } catch (e) {
       return { ok: false, latency: Date.now() - start, error: e instanceof Error ? e.message : String(e) };
     } finally {

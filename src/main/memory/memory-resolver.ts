@@ -8,6 +8,7 @@ import type { ConflictLog, L2Memory, MemoryEvidence } from "./memory-types"
 import * as fs from "fs"
 import * as path from "path"
 import { app } from "electron"
+import { revealSecrets } from "../security/secret-vault"
 
 export type MemoryConflictResolutionType =
   | "unrelated"
@@ -80,7 +81,7 @@ function loadResolverModelSettings(): ResolverModelSettings {
   try {
     const filePath = path.join(app.getPath("userData"), "model-settings.json")
     if (!fs.existsSync(filePath)) return DEFAULT_MODEL_SETTINGS
-    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8")) as Partial<ResolverModelSettings>
+    const parsed = revealSecrets(JSON.parse(fs.readFileSync(filePath, "utf8"))) as Partial<ResolverModelSettings>
     return {
       provider: typeof parsed.provider === "string" && parsed.provider.trim() ? parsed.provider.trim() : DEFAULT_MODEL_SETTINGS.provider,
       baseUrl: typeof parsed.baseUrl === "string" && parsed.baseUrl.trim() ? parsed.baseUrl.trim() : DEFAULT_MODEL_SETTINGS.baseUrl,
@@ -183,14 +184,14 @@ export function buildResolverMessages(payload: ResolverPayload): Array<{ role: "
     `- quote: ${item.quoteSnippet}\n  conversationId: ${item.conversationId ?? "unknown"}\n  sourceStatus: ${item.sourceStatus}`
   )).join("\n")
   const userPrompt = [
-    "请判断以下两条用户记忆的关系，并只输出 JSON。",
+    "請判斷以下兩條用戶記憶的關係，並只輸出 JSON。",
     "",
-    "旧记忆：",
+    "舊記憶：",
     `summary: ${payload.oldMemory.content}`,
     "evidence:",
     evidenceLines(payload.oldEvidence) || "- none",
     "",
-    "新记忆：",
+    "新記憶：",
     `summary: ${payload.newMemory.content}`,
     "evidence:",
     evidenceLines(payload.newEvidence) || "- none",
@@ -199,11 +200,11 @@ export function buildResolverMessages(payload: ResolverPayload): Array<{ role: "
     `scoringSignals: ${JSON.stringify(payload.scoringSignals ?? {})}`,
     "",
     "JSON 格式：",
-    '{"resolutionType":"unrelated|context_difference|preference_evolution|direct_conflict|uncertain","resolvedSummary":"可选","currentSummary":"可选","historicalSummary":"可选","reason":"原因","confidence":0.0,"actions":{"createResolvedMemory":false,"oldMemoryStatus":"active|aging|archived|superseded|merged","newMemoryStatus":"active|aging|archived|superseded|merged","shouldUpdateCoreMemory":false,"shouldAskUser":false,"clarificationNeeded":false}}',
+    '{"resolutionType":"unrelated|context_difference|preference_evolution|direct_conflict|uncertain","resolvedSummary":"可選","currentSummary":"可選","historicalSummary":"可選","reason":"原因","confidence":0.0,"actions":{"createResolvedMemory":false,"oldMemoryStatus":"active|aging|archived|superseded|merged","newMemoryStatus":"active|aging|archived|superseded|merged","shouldUpdateCoreMemory":false,"shouldAskUser":false,"clarificationNeeded":false}}',
   ].join("\n")
 
   return [
-    { role: "system", content: "你是谨慎的用户记忆冲突 Resolver。你只根据 summary 和 evidence 判断，不要编造事实，只输出 JSON。" },
+    { role: "system", content: "你是謹慎的用戶記憶衝突 Resolver。你只根據 summary 和 evidence 判斷，不要編造事實，只輸出 JSON。" },
     { role: "user", content: userPrompt },
   ]
 }
@@ -236,7 +237,7 @@ export async function callResolverLLM(
   if (!response.ok) throw new Error(`resolver request failed: HTTP ${response.status}`)
   const data = await response.json()
   const parsed = adapter.parseResponse(data)
-  if (parsed.usage) recordUsage(parsed.usage.input, parsed.usage.output, 1)
+  if (parsed.usage) recordUsage(parsed.usage.input, parsed.usage.output, 1, settings.model)
   return parsed.text ?? ""
 }
 

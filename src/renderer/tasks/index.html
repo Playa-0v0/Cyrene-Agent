@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>昔涟 · 今日日程</title>
+  <title>昔漣 · 今日日程</title>
+  <script>
+    // Mark embedded pages before stylesheets load so the inner titlebar never paints.
+    if (window.self !== window.top) document.documentElement.classList.add("is-embedded");
+  </script>
   <link rel="stylesheet" href="../ui/tokens.css" />
   <link rel="stylesheet" href="../ui/fonts.css" />
   <link rel="stylesheet" href="../ui/base.css" />
@@ -15,13 +19,13 @@
       <div class="tasks__title">
         <span class="tasks__icon" aria-hidden="true">📋</span>
         <span class="tasks__name">今日日程</span>
-        <span class="tasks__hint">展示中 · 只读</span>
+        <span class="tasks__hint">展示中 · 只讀</span>
       </div>
       <div class="tasks__titlebar-actions">
         <button type="button" class="tasks__winbtn" id="min-btn" aria-label="最小化" title="最小化">
           <svg width="9" height="2" viewBox="0 0 9 2" aria-hidden="true"><rect width="9" height="2" rx="1" fill="currentColor"/></svg>
         </button>
-        <button type="button" class="tasks__winbtn tasks__winbtn--close" id="close-btn" aria-label="关闭" title="关闭">
+        <button type="button" class="tasks__winbtn tasks__winbtn--close" id="close-btn" aria-label="關閉" title="關閉">
           <svg width="9" height="9" viewBox="0 0 9 9" aria-hidden="true">
             <line x1="2" y1="2" x2="7" y2="7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
             <line x1="7" y1="2" x2="2" y2="7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
@@ -31,11 +35,11 @@
     </header>
 
     <main class="tasks__body">
-      <section class="schedule-panel" aria-label="今日日程概览">
+      <section class="schedule-panel" aria-label="今日日程概覽">
 
         <div class="schedule-count">
           <span class="schedule-count__value" id="schedule-count">0</span>
-          <span class="schedule-count__unit">个待办日程</span>
+          <span class="schedule-count__unit">個待辦日程</span>
         </div>
 
         <div class="schedule-date" id="schedule-date">📅 —</div>
@@ -55,20 +59,20 @@
           <div class="mini-chart__bars" id="mini-chart__bars"></div>
         </div>
 
-        <div class="schedule-note" id="schedule-note">📊 本周 Token 消耗趋势</div>
+        <div class="schedule-note" id="schedule-note">📊 本週 Token 消耗趨勢</div>
 
-        <section class="task-section" aria-label="定时任务列表">
-          <div class="task-section__header">⏰ 定时任务</div>
+        <section class="task-section" aria-label="定時任務列表">
+          <div class="task-section__header">⏰ 定時任務</div>
           <div class="task-list" id="task-list"></div>
         </section>
       </section>
       <footer class="schedule-footer">
-        <button type="button" class="schedule-settings-btn" id="settings-btn" aria-label="任务设置">
+        <button type="button" class="schedule-settings-btn" id="settings-btn" aria-label="任務設置">
           <span class="schedule-settings-btn__icon" aria-hidden="true">⚙️</span>
-          <span>任务设置</span>
+          <span>任務設置</span>
         </button>
         <hr class="schedule-footer__divider" />
-        <div class="schedule-footer__version">昔涟 v0.1.1</div>
+        <div class="schedule-footer__version">昔漣 v0.1.1</div>
       </footer>
     </main>
   </div>

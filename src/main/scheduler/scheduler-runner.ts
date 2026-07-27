@@ -11,6 +11,7 @@ interface RunnerDeps {
   recordHistory: (entry: ScheduledTaskHistoryEntry) => void;
   id: () => string;
   now: () => Date;
+  onSuccess?: (task: ScheduledTask, result: ScheduledRunResult) => Promise<void> | void;
 }
 
 export function createSchedulerRunner(deps: RunnerDeps) {
@@ -77,7 +78,14 @@ export function createSchedulerRunner(deps: RunnerDeps) {
         outputPreview: reply.slice(0, 160),
         effectiveToolIds,
       });
-      return { ok: true, historyId, reply, effectiveToolIds };
+      const result: ScheduledRunResult = { ok: true, historyId, reply, effectiveToolIds };
+      try {
+        await deps.onSuccess?.(task, result);
+      } catch (err) {
+        // 呈現層（例如每日儀式的氣泡/TTS）失敗，不應把已完成的 Agent 任務改判失敗。
+        console.warn("[Scheduler] success callback failed:", err instanceof Error ? err.message : err);
+      }
+      return result;
     } catch (err) {
       const finishedAt = deps.now();
       const message = err instanceof Error ? err.message : String(err);

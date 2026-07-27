@@ -1,6 +1,6 @@
-// vlm-locator —— 视觉定位调用（OpenAI 兼容多图协议）。
-// 复用 vision-captioner 的协议形态，但 prompt 改为要求返回坐标/判断 JSON，且支持多图。
-// 不复用 vision-captioner 模块本身（它写死单图+通用描述），本模块是 game-bot 定位专用。
+// vlm-locator —— 視覺定位調用（OpenAI 兼容多圖協議）。
+// 複用 vision-captioner 的協議形態，但 prompt 改為要求返回座標/判斷 JSON，且支持多圖。
+// 不復用 vision-captioner 模塊本身（它寫死單圖+通用描述），本模塊是 game-bot 定位專用。
 
 import { parseClickCoord, parseBoolAnswer, parseMatchIndex } from "./coords";
 
@@ -10,7 +10,7 @@ export interface VlmConfig {
   model: string;    // 如 Qwen/Qwen3-VL-8B-Instruct
 }
 
-/** 图片数据（不含 data: 前缀的纯 base64 + mime）。 */
+/** 圖片數據（不含 data: 前綴的純 base64 + mime）。 */
 export interface ImgData {
   base64: string;
   mime: string;
@@ -18,7 +18,7 @@ export interface ImgData {
 
 const VLM_TIMEOUT_MS = 30_000;
 
-/** 拼接 baseUrl + /chat/completions，兼容带或不带尾斜杠。 */
+/** 拼接 baseUrl + /chat/completions，兼容帶或不帶尾斜槓。 */
 function chatUrl(baseUrl: string): string {
   const t = baseUrl.trim().replace(/\/+$/, "");
   if (t.endsWith("/chat/completions")) return t;
@@ -29,7 +29,7 @@ type ContentBlock =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
 
-/** 发一次多图 chat 请求，返回助手文本。失败返回空串。 */
+/** 發一次多圖 chat 請求，返回助手文本。失敗返回空串。 */
 async function chat(config: VlmConfig, instruction: string, images: ImgData[]): Promise<string> {
   const content: ContentBlock[] = [{ type: "text", text: instruction }];
   for (const img of images) {
@@ -52,13 +52,13 @@ async function chat(config: VlmConfig, instruction: string, images: ImgData[]): 
     });
     if (!resp.ok) {
       const t = await resp.text().catch(() => "");
-      console.error("[GameBot] VLM 请求失败 HTTP", resp.status, t.slice(0, 200));
+      console.error("[GameBot] VLM 請求失敗 HTTP", resp.status, t.slice(0, 200));
       return "";
     }
     const data = await resp.json() as { choices?: Array<{ message?: { content?: string | null } }> };
     return data.choices?.[0]?.message?.content ?? "";
   } catch (err) {
-    console.error("[GameBot] VLM 请求异常:", err instanceof Error ? err.message : err);
+    console.error("[GameBot] VLM 請求異常:", err instanceof Error ? err.message : err);
     return "";
   } finally {
     clearTimeout(timer);
@@ -66,9 +66,9 @@ async function chat(config: VlmConfig, instruction: string, images: ImgData[]): 
 }
 
 /**
- * 定位点击：参考小图（目标元素）+ 当前截图 → 返回目标在当前截图的屏幕坐标。
- * images 顺序：先参考图后当前截图。screenW/H 用于归一化转像素。
- * 未找到或失败返回 null。
+ * 定位點擊：參考小圖（目標元素）+ 當前截圖 → 返回目標在當前截圖的屏幕座標。
+ * images 順序：先參考圖後當前截圖。screenW/H 用於歸一化轉像素。
+ * 未找到或失敗返回 null。
  */
 export async function locate(
   config: VlmConfig,
@@ -79,18 +79,18 @@ export async function locate(
   screenH: number,
 ): Promise<{ x: number; y: number } | null> {
   const instruction =
-    "以下是参考图（要找的目标元素）和当前游戏屏幕截图。" +
-    (targetDesc ? "目标描述：" + targetDesc + "。" : "") +
-    "请在当前截图中找到与参考图相同或相似的目标元素，返回其中心位置。" +
-    "坐标系为 0-1000 归一化（左上 0,0，右下 1000,1000）。" +
+    "以下是參考圖（要找的目標元素）和當前遊戲屏幕截圖。" +
+    (targetDesc ? "目標描述：" + targetDesc + "。" : "") +
+    "請在當前截圖中找到與參考圖相同或相似的目標元素，返回其中心位置。" +
+    "座標系為 0-1000 歸一化（左上 0,0，右下 1000,1000）。" +
     "只返回 JSON：{\"x\":<0-1000>,\"y\":<0-1000>}，不要任何其他文字。";
-  // 顺序：参考图在前，当前截图最后
+  // 順序：參考圖在前，當前截圖最後
   const text = await chat(config, instruction, [...refImgs, screenImg]);
   if (!text) return null;
   return parseClickCoord(text, screenW, screenH);
 }
 
-/** 状态判断：当前截图（可选参考图）+ 问题 → 布尔。无法判断返回 null。 */
+/** 狀態判斷：當前截圖（可選參考圖）+ 問題 → 布爾。無法判斷返回 null。 */
 export async function check(
   config: VlmConfig,
   screenImg: ImgData,
@@ -105,7 +105,7 @@ export async function check(
   return parseBoolAnswer(text);
 }
 
-/** 多图比对：当前截图 + 多张参考图 → 匹配的参考图序号（0-based）。无法判断返回 null。 */
+/** 多圖比對：當前截圖 + 多張參考圖 → 匹配的參考圖序號（0-based）。無法判斷返回 null。 */
 export async function compare(
   config: VlmConfig,
   screenImg: ImgData,
@@ -113,8 +113,8 @@ export async function compare(
   ask: string,
 ): Promise<number | null> {
   const instruction =
-    ask + "\n参考图按顺序编号 0,1,2...。请找出与当前截图匹配的参考图序号。" +
-    "只返回 JSON：{\"match\":<序号>}，不要任何其他文字。";
+    ask + "\n參考圖按順序編號 0,1,2...。請找出與當前截圖匹配的參考圖序號。" +
+    "只返回 JSON：{\"match\":<序號>}，不要任何其他文字。";
   const text = await chat(config, instruction, [...refImgs, screenImg]);
   if (!text) return null;
   return parseMatchIndex(text, refImgs.length);

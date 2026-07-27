@@ -7,45 +7,45 @@ export interface WorldbookEntry {
   id: string;
   keywords: string[];
   content: string;
-  priority: number;          // 作者重要性；v3.4 仅作排序 tiebreaker，不参与 DMAE 打分
-  permanent: boolean;        // 常驻：始终注入 Prompt，不进 DMAE
+  priority: number;          // 作者重要性；v3.4 僅作排序 tiebreaker，不參與 DMAE 打分
+  permanent: boolean;        // 常駐：始終注入 Prompt，不進 DMAE
   enabled: boolean;
-  intrinsicValue: number;    // ★ 长期价值基准（固定）；v3.4 参与 Floor（首次激活基线）和 Resistance（遗忘抵抗），不参与 Reward
-  linkTriggers: string[];    // 连带触发词（One-Shot 一次性）：本条目被用户命中时，连带触发这些关键词对应的条目；[] 表示无
+  intrinsicValue: number;    // ★ 長期價值基準（固定）；v3.4 參與 Floor（首次激活基線）和 Resistance（遺忘抵抗），不參與 Reward
+  linkTriggers: string[];    // 連帶觸發詞（One-Shot 一次性）：本條目被用戶命中時，連帶觸發這些關鍵詞對應的條目；[] 表示無
 }
 
 // ── DMAE runtime state (per entry, keyed by entry.id) ──
-// 注意：state 不挂 WorldbookEntry 上——loadFromDirectory 会整表替换 this.entries，
-// 挂上面会在重载时丢失。这里独立维护一张状态表。
+// 注意：state 不掛 WorldbookEntry 上——loadFromDirectory 會整表替換 this.entries，
+// 掛上面會在重載時丟失。這裡獨立維護一張狀態表。
 export interface EntryState {
   activation: number;     // 0..MaxScore
-  userSilence: number;    // 距上次用户命中的轮数
-  modelSilence: number;   // 距上次模型命中的轮数
-  // 无 state 字段——由 (activation, threshold) 派生（业务层负责，updateActivation 不碰阈值）
+  userSilence: number;    // 距上次用戶命中的輪數
+  modelSilence: number;   // 距上次模型命中的輪數
+  // 無 state 字段——由 (activation, threshold) 派生（業務層負責，updateActivation 不碰閾值）
 }
 
 export type DmaeState = "Active" | "Dormant" | "Archived";
 
-// ── DMAE 可调参数（v4.0 规范）──
-// 任何参数都只是默认值，不是结论。所有参数以后都通过 Simulator 调整。
+// ── DMAE 可調參數（v4.0 規範）──
+// 任何參數都只是默認值，不是結論。所有參數以後都通過 Simulator 調整。
 // v4.0 公式:
-//   Ru = Bu × (1 + γ · ln(1+U_old))   [仅 userHit]
-//   Rm = Bm × e^(−λ·U_old)             [仅 modelHit + Active, 实现层 clamp 保证 Rm < D]
+//   Ru = Bu × (1 + γ · ln(1+U_old))   [僅 userHit]
+//   Rm = Bm × e^(−λ·U_old)             [僅 modelHit + Active, 實現層 clamp 保證 Rm < D]
 //   D  = (α·U_new² + β·M_new²) / √I
 export interface DmaeParams {
   maxScore: number;             // 100：物理上界
-  promptThreshold: number;      // 30：>= 此值进 Prompt（业务层用）
-  /** 用户基础奖励：每次 userHit 至少涨多少 */
-  userRewardBase: number;       // Bu = 20（v4.0 默认）
-  /** 久别重逢增益：ln(1+U_old) 的系数，γ 越大久别奖励越猛 */
-  wakeGamma: number;            // γ = 0.5（v4.0 默认）
-  /** 模型基础奖励：modelHit + Active 时最多给多少 */
-  modelRewardBase: number;      // Bm = 8（v4.0 默认）
-  /** 模型奖励衰减率：U_old 越大 Rm 越快趋近 0 */
-  wakeLambda: number;           // λ = 0.3（v4.0 默认）
-  /** 用户沉默权重：U 不提时衰减多快（按"8 轮跌破"目标反推 = 1.5） */
+  promptThreshold: number;      // 30：>= 此值進 Prompt（業務層用）
+  /** 用戶基礎獎勵：每次 userHit 至少漲多少 */
+  userRewardBase: number;       // Bu = 20（v4.0 默認）
+  /** 久別重逢增益：ln(1+U_old) 的係數，γ 越大久別獎勵越猛 */
+  wakeGamma: number;            // γ = 0.5（v4.0 默認）
+  /** 模型基礎獎勵：modelHit + Active 時最多給多少 */
+  modelRewardBase: number;      // Bm = 8（v4.0 默認）
+  /** 模型獎勵衰減率：U_old 越大 Rm 越快趨近 0 */
+  wakeLambda: number;           // λ = 0.3（v4.0 默認）
+  /** 用戶沉默權重：U 不提時衰減多快（按"8 輪跌破"目標反推 = 1.5） */
   decayAlpha: number;           // α = 1.5
-  /** 模型沉默权重：M 不复述时衰减多快（需满足 α > β） */
+  /** 模型沉默權重：M 不復述時衰減多快（需滿足 α > β） */
   decayBeta: number;            // β = 0.3
 }
 
@@ -60,7 +60,7 @@ export const DEFAULT_DMAE_PARAMS: DmaeParams = {
   decayBeta: 0.3,
 };
 
-// ── 策略接口（v4.0 框架固化，以后不再改）──
+// ── 策略接口（v4.0 框架固化，以後不再改）──
 export interface RewardContext {
   entry: WorldbookEntry;
   snap: { activation: number; userSilence: number; modelSilence: number };
@@ -68,17 +68,17 @@ export interface RewardContext {
 }
 export interface DecayContext {
   entry: WorldbookEntry;
-  snap: { userSilence: number; modelSilence: number };  // 更新后值
+  snap: { userSilence: number; modelSilence: number };  // 更新後值
   params: DmaeParams;
 }
 
 export interface RewardStrategy {
-  // v4.0 §4：用户命中奖励。Ru = Bu × (1 + γ·ln(1+U_old))
-  // 仅当 userHit 时主循环才调用。
+  // v4.0 §4：用戶命中獎勵。Ru = Bu × (1 + γ·ln(1+U_old))
+  // 僅當 userHit 時主循環才調用。
   userReward(ctx: RewardContext): number;
 
-  // v4.0 §5：模型维护奖励。Rm = Bm × e^(−λ·U_old)
-  // 仅当 modelHit 时主循环才调用（且 state==Active），主循环负责 clamp 保证 Rm < D。
+  // v4.0 §5：模型維護獎勵。Rm = Bm × e^(−λ·U_old)
+  // 僅當 modelHit 時主循環才調用（且 state==Active），主循環負責 clamp 保證 Rm < D。
   modelReward(ctx: RewardContext): number;
 }
 
@@ -86,17 +86,17 @@ export interface DecayStrategy {
   compute(ctx: DecayContext): number;
 }
 
-// ── v4.0 默认 Reward 策略 ──
+// ── v4.0 默認 Reward 策略 ──
 // Ru = Bu × (1 + γ · ln(1 + U_old))     [v4.0 §4]
-//   - 连续命中 → 至少 Bu
-//   - 沉默越久 → ln(1+U) 越大 → 久别重逢奖励越猛
-//   - ln 单调递增 + 增长变缓 → 永远不会暴涨（避免无限分）
+//   - 連續命中 → 至少 Bu
+//   - 沉默越久 → ln(1+U) 越大 → 久別重逢獎勵越猛
+//   - ln 單調遞增 + 增長變緩 → 永遠不會暴漲（避免無限分）
 //
 // Rm = Bm × e^(−λ · U_old)             [v4.0 §5]
 //   - U_old=0 → 最大 Bm
-//   - U_old 越大 → 指数衰减 → 模型话语权越小
-//   - Active gating 由主循环控制（v4.0 §5 要求 "当前 Activation ≥ PromptThreshold"）
-//   - Rm<D clamp 由主循环控制（v4.0 §8/§9 不变量）
+//   - U_old 越大 → 指數衰減 → 模型話語權越小
+//   - Active gating 由主循環控制（v4.0 §5 要求 "當前 Activation ≥ PromptThreshold"）
+//   - Rm<D clamp 由主循環控制（v4.0 §8/§9 不變量）
 export class DefaultRewardStrategy implements RewardStrategy {
   userReward(ctx: RewardContext): number {
     const { snap, params } = ctx;
@@ -107,11 +107,11 @@ export class DefaultRewardStrategy implements RewardStrategy {
     return params.modelRewardBase * Math.exp(-params.wakeLambda * snap.userSilence);
   }
 }
-// I 不参与（避免高价值条目既涨得快又忘得慢而天然霸榜）。
+// I 不參與（避免高價值條目既漲得快又忘得慢而天然霸榜）。
 
-// ── v3.4 默认 Decay 策略 ──
-// Decay = (α·US² + β·MS²) / sqrt(I)   [I 仅在 Resistance：高 I = 抵抗强 = 忘得慢]
-// 平方 → 累计加速遗忘 §8.1；除以 sqrt(I) → "价值决定忘得多慢，而不是爱得多深"。
+// ── v3.4 默認 Decay 策略 ──
+// Decay = (α·US² + β·MS²) / sqrt(I)   [I 僅在 Resistance：高 I = 抵抗強 = 忘得慢]
+// 平方 → 累計加速遺忘 §8.1；除以 sqrt(I) → "價值決定忘得多慢，而不是愛得多深"。
 export class QuadraticResistanceDecay implements DecayStrategy {
   compute(ctx: DecayContext): number {
     const { entry, snap, params } = ctx;
@@ -123,8 +123,8 @@ export class QuadraticResistanceDecay implements DecayStrategy {
   }
 }
 
-// ── 状态派生（纯函数，业务层 + 策略层共用）──
-// <=0 → Archived；>= threshold → Active；之间 → Dormant
+// ── 狀態派生（純函數，業務層 + 策略層共用）──
+// <=0 → Archived；>= threshold → Active；之間 → Dormant
 export function deriveState(activation: number, threshold: number): DmaeState {
   if (activation <= 0) return "Archived";
   if (activation >= threshold) return "Active";
@@ -136,7 +136,7 @@ export interface WorldbookManagerOptions {
   params?: Partial<DmaeParams>;
   rewardStrategy?: RewardStrategy;
   decayStrategy?: DecayStrategy;
-  stateFile?: string;   // v1 持久化 seam：传了也暂时只 load/save 空实现，重启回 0
+  stateFile?: string;   // v1 持久化 seam：傳了也暫時只 load/save 空實現，重啟回 0
   debug?: boolean;
 }
 
@@ -144,7 +144,7 @@ export class WorldbookManager {
   private entries: WorldbookEntry[] = [];
   private worldbookDir: string;
   private state = new Map<string, EntryState>();
-  // ── One-Shot cascade：本轮用户命中后连带触发的条目（不入 DMAE 状态表，只本轮有效）──
+  // ── One-Shot cascade：本輪用戶命中後連帶觸發的條目（不入 DMAE 狀態表，只本輪有效）──
   private lastCascadeEntries: WorldbookEntry[] = [];
   private params: DmaeParams;
   private rewardStrategy: RewardStrategy;
@@ -152,10 +152,10 @@ export class WorldbookManager {
   private stateFile?: string;
   private debug: boolean;
 
-  // 终态注入上限（详见 worldbook-constants.ts）
+  // 終態注入上限（詳見 worldbook-constants.ts）
   private static readonly MAX_ACTIVE = WORLDBOOK_CONSTANTS.MAX_ACTIVE;
 
-  // .md 未写 intrinsic value 时的 fallback（详见 worldbook-constants.ts）
+  // .md 未寫 intrinsic value 時的 fallback（詳見 worldbook-constants.ts）
   private static readonly DEFAULT_INTRINSIC_VALUE = WORLDBOOK_CONSTANTS.DEFAULT_INTRINSIC_VALUE;
 
   constructor(worldbookDir: string, options?: WorldbookManagerOptions) {
@@ -191,8 +191,8 @@ export class WorldbookManager {
 
     this.entries = allEntries;
 
-    // 初始化 DMAE 状态：每条非常驻条目 activation=0（Archived 冷态）
-    // 常驻条目不进 DMAE（始终注入），不给它们分配状态。
+    // 初始化 DMAE 狀態：每條非常駐條目 activation=0（Archived 冷態）
+    // 常駐條目不進 DMAE（始終注入），不給它們分配狀態。
     this.state.clear();
     for (const e of this.entries) {
       if (e.enabled && !e.permanent) {
@@ -200,14 +200,14 @@ export class WorldbookManager {
       }
     }
 
-    // v1 持久化 seam：预留，暂为空（重启回 0）
+    // v1 持久化 seam：預留，暫為空（重啟回 0）
     this.loadState();
 
     console.log(`[Worldbook] loaded ${allEntries.length} entries from ${files.length} files; DMAE state initialized for ${this.state.size} non-permanent entries`);
   }
 
-  // 从内存 entries 加载（不读 fs）：simulator / 测试用。
-  // 复用 loadFromDirectory 的状态初始化逻辑，保证 sim 和生产用同一套初始化路径。
+  // 從內存 entries 加載（不讀 fs）：simulator / 測試用。
+  // 複用 loadFromDirectory 的狀態初始化邏輯，保證 sim 和生產用同一套初始化路徑。
   loadFromEntries(entries: WorldbookEntry[]): void {
     this.entries = entries;
     this.state.clear();
@@ -220,13 +220,13 @@ export class WorldbookManager {
   }
 
   // Parse markdown format:
-  // ## 条目名
-  // - 触发词: 词1, 词2, 词3
-  // - 常驻: 是
-  // - 优先级: 200
-  // - 内在价值: 60                ← v3.4 新名（与 初始分/initial_score/intrinsic_value 兼容）
+  // ## 條目名
+  // - 觸發詞: 詞1, 詞2, 詞3
+  // - 常駐: 是
+  // - 優先級: 200
+  // - 內在價值: 60                ← v3.4 新名（與 初始分/initial_score/intrinsic_value 兼容）
   //
-  // 内容段落...
+  // 內容段落...
   // ---
   private parseMarkdown(content: string, fileName: string): WorldbookEntry[] {
     const entries: WorldbookEntry[] = [];
@@ -258,34 +258,40 @@ export class WorldbookManager {
       while (i < lines.length) {
         const metaLine = lines[i].trim();
 
-        if (metaLine.startsWith("- 触发词:") || metaLine.startsWith("- 触发词：")) {
-          const val = metaLine.replace(/^-\s*触发词[：:]/, "").trim();
+        if (metaLine.startsWith("- 觸發詞:") || metaLine.startsWith("- 觸發詞：") ||
+            metaLine.startsWith("- 触发词:") || metaLine.startsWith("- 触发词：")) {
+          const val = metaLine.replace(/^-\s*(觸發詞|触发词)[：:]/, "").trim();
           keywords = val.split(/[,，、]/).map((k) => k.trim()).filter(Boolean);
           i++;
-        } else if (metaLine.startsWith("- 常驻:")) {
-          const val = metaLine.replace(/^-\s*常驻:/, "").trim();
-          permanent = val === "是" || val === "yes" || val === "true";
+        } else if (metaLine.startsWith("- 常駐:") || metaLine.startsWith("- 常驻:") ||
+                   metaLine.startsWith("- 常駐：") || metaLine.startsWith("- 常驻：")) {
+          const val = metaLine.replace(/^-\s*(常駐|常驻)[：:]/, "").trim();
+          permanent = val === "是" || val === "yes" || val === "true" || val === "是" || val === "yes" || val === "true";
           i++;
-        } else if (metaLine.startsWith("- 优先级:")) {
-          const val = metaLine.replace(/^-\s*优先级:/, "").trim();
+        } else if (metaLine.startsWith("- 優先級:") || metaLine.startsWith("- 優先級：") ||
+                   metaLine.startsWith("- 优先级:") || metaLine.startsWith("- 优先级：")) {
+          const val = metaLine.replace(/^-\s*(優先級|优先级)[：:]/, "").trim();
           priority = parseInt(val) || 5;
           i++;
         } else if (
           metaLine.startsWith("- 初始分:") || metaLine.startsWith("- 初始分：") ||
           metaLine.startsWith("- initial_score:") || metaLine.startsWith("- initial_score：") ||
+          metaLine.startsWith("- 內在價值:") || metaLine.startsWith("- 內在價值：") ||
           metaLine.startsWith("- 内在价值:") || metaLine.startsWith("- 内在价值：") ||
           metaLine.startsWith("- intrinsic_value:") || metaLine.startsWith("- intrinsic_value：")
         ) {
-          const val = metaLine.replace(/^-\s*(初始分|initial_score|内在价值|intrinsic_value)[：:]/, "").trim();
+          const val = metaLine.replace(/^-\s*(初始分|initial_score|內在價值|内在价值|intrinsic_value)[：:]/, "").trim();
           const parsed = parseFloat(val);
           intrinsicValue = Number.isFinite(parsed) ? parsed : WorldbookManager.DEFAULT_INTRINSIC_VALUE;
           i++;
-        } else if (metaLine.startsWith("- 连带触发词:") || metaLine.startsWith("- 连带触发词：") ||
+        } else if (metaLine.startsWith("- 連帶觸發詞:") || metaLine.startsWith("- 連帶觸發詞：") ||
+                   metaLine.startsWith("- 连带触发词:") || metaLine.startsWith("- 连带触发词：") ||
+                   metaLine.startsWith("- 連帶觸發:") || metaLine.startsWith("- 連帶觸發：") ||
                    metaLine.startsWith("- 连带触发:") || metaLine.startsWith("- 连带触发：") ||
                    metaLine.startsWith("- link_triggers:") || metaLine.startsWith("- link_triggers：")) {
-          const val = metaLine.replace(/^-\s*(连带触发词|连带触发|link_triggers)[：:]/, "").trim();
-          // "无" / "无" / "" 表示不连带
-          if (val && val !== "无" && val !== "无" && val !== "none" && val !== "-") {
+          const val = metaLine.replace(/^-\s*(連帶觸發詞|连带触发词|連帶觸發|连带触发|link_triggers)[：:]/, "").trim();
+          // "無" / "无" / "" 表示不連帶
+          if (val && val !== "無" && val !== "无" && val !== "none" && val !== "-") {
             linkTriggers = val.split(/[,，、]/).map((k) => k.trim()).filter(Boolean);
           }
           i++;
@@ -336,15 +342,15 @@ export class WorldbookManager {
     return entries;
   }
 
-  // ── DMAE 打分层：每轮更新所有条目的 Activation/US/MS ──
+  // ── DMAE 打分層：每輪更新所有條目的 Activation/US/MS ──
   // v3.4 收口公式：
-  //   reward = userHit ? rewardGain × Wake(US_old) × Eff(A_old) : 0   (I 不参与 Reward)
-  //   decay  = (α·US_new² + β·MS_new²) / sqrt(I)                       (I 仅在 Resistance)
+  //   reward = userHit ? rewardGain × Wake(US_old) × Eff(A_old) : 0   (I 不參與 Reward)
+  //   decay  = (α·US_new² + β·MS_new²) / sqrt(I)                       (I 僅在 Resistance)
   //   A_new  = clamp(A_old + reward - decay, 0, MaxScore)
-  //   if userHit && A_old 状态 == Archived: A_new = max(A_new, I)      (★ 仅 Archived 复活时 floor；I 参与 Floor 基线)
-  // MS 语义：距离最近一次"进入上下文"的轮数（userHit 或 modelHit 都重置），不是"模型有没有说过"
-  // ModelHit：只重置 msNew = 0，不给任何 reward（模型没有兴趣表达权 §7.3/§7.4）
-  // Snapshot 语义：每条 entry 独立、先读旧值再统一写，互不影响（DMAE §4/§11.1）。
+  //   if userHit && A_old 狀態 == Archived: A_new = max(A_new, I)      (★ 僅 Archived 復活時 floor；I 參與 Floor 基線)
+  // MS 語義：距離最近一次"進入上下文"的輪數（userHit 或 modelHit 都重置），不是"模型有沒有說過"
+  // ModelHit：只重置 msNew = 0，不給任何 reward（模型沒有興趣表達權 §7.3/§7.4）
+  // Snapshot 語義：每條 entry 獨立、先讀舊值再統一寫，互不影響（DMAE §4/§11.1）。
   updateActivation(userText: string, modelText: string): void {
     const user = userText ?? "";
     const model = modelText ?? "";
@@ -352,7 +358,7 @@ export class WorldbookManager {
     const max = params.maxScore;
     const changed: Array<{ id: string; aOld: number; aNew: number; reason: string }> = [];
 
-    // ── 第一遍：收集本轮所有 userHit 条目 id（cascade 通道用，DMAE 主循环也要）──
+    // ── 第一遍：收集本輪所有 userHit 條目 id（cascade 通道用，DMAE 主循環也要）──
     const userHitEntryIds = new Set<string>();
     for (const entry of this.entries) {
       if (!entry.enabled || entry.permanent) continue;
@@ -380,36 +386,36 @@ export class WorldbookManager {
 
       // ─ silence update ─
       const usNew = userHit ? 0 : usOld + 1;
-      // MS = 距离最近一次"进入上下文"的轮数。用户主动提 OR 模型自然提都属于"进入上下文"，
-      // 所以 userHit 也重置 ms——否则用户连续提但模型不复述时 ms 累积导致 decay 上升、A 反而下降。
+      // MS = 距離最近一次"進入上下文"的輪數。用戶主動提 OR 模型自然提都屬於"進入上下文"，
+      // 所以 userHit 也重置 ms——否則用戶連續提但模型不復述時 ms 累積導致 decay 上升、A 反而下降。
       const msNew = (userHit || modelHit) ? 0 : msOld + 1;
 
-      // ─ positive: user reward（仅 userHit，I 不参与） ─
+      // ─ positive: user reward（僅 userHit，I 不參與） ─
       const userReward = userHit
         ? this.rewardStrategy.userReward({ entry, snap: { activation: aOld, userSilence: usOld, modelSilence: msOld }, params })
         : 0;
 
-      // ─ negative: decay（I 仅在 Resistance） ─
+      // ─ negative: decay（I 僅在 Resistance） ─
       const decay = this.decayStrategy.compute({
         entry,
         snap: { userSilence: usNew, modelSilence: msNew },
         params,
       });
 
-      // ─ positive: model reward（仅 modelHit + Active gating） ─
-      // v4.0 §5：Rm = Bm·e^(-λ·U_old)，仅当 A ≥ PromptThreshold 时给分
-      // v4.0 §8 不变量：Rm < D 严格成立，由主循环 clamp 保证（避免 Rm ≥ D 时仍能涨分）
+      // ─ positive: model reward（僅 modelHit + Active gating） ─
+      // v4.0 §5：Rm = Bm·e^(-λ·U_old)，僅當 A ≥ PromptThreshold 時給分
+      // v4.0 §8 不變量：Rm < D 嚴格成立，由主循環 clamp 保證（避免 Rm ≥ D 時仍能漲分）
       let modelReward = 0;
       if (modelHit && deriveState(aOld, params.promptThreshold) === WORLDBOOK_CONSTANTS.STATES.ACTIVE) {
         const rawRm = this.rewardStrategy.modelReward({ entry, snap: { activation: aOld, userSilence: usOld, modelSilence: msOld }, params });
-        // 不变量 clamp：Rm = min(Rm, D - ε)
+        // 不變量 clamp：Rm = min(Rm, D - ε)
         modelReward = Math.max(0, Math.min(rawRm, decay - WORLDBOOK_CONSTANTS.EPSILON));
       }
 
       // ─ commit ─
       let aNew = aOld + userReward + modelReward - decay;
       aNew = Math.max(0, aNew);
-      // ★ Floor 仅在 Archived 复活时触发（避免高价值条目每次命中都 floor 让 Decay/Wake 失效）
+      // ★ Floor 僅在 Archived 復活時觸發（避免高價值條目每次命中都 floor 讓 Decay/Wake 失效）
       if (userHit && deriveState(aOld, params.promptThreshold) === WORLDBOOK_CONSTANTS.FLOOR_TRIGGER_STATE) {
         aNew = Math.max(aNew, entry.intrinsicValue);
       }
@@ -436,12 +442,12 @@ export class WorldbookManager {
       }
     }
 
-    // ── One-Shot 联动触发（不入 DMAE 状态表，只本轮有效）──
-    // 规则：只有 userHit 的条目才有连带触发权；cascade 目标不再级联（1 层封顶）。
-    // 防死循环 3 条硬约束：
-    //   1. 1 层封顶：cascade 只从 userHit 触发，cascade 目标不会再 cascade
-    //   2. userHit 拦截：cascade 目标已在 userHit 列表则跳过（已被主动激活）
-    //   3. cascade 集合去重：同条目本轮只 cascade 一次
+    // ── One-Shot 聯動觸發（不入 DMAE 狀態表，只本輪有效）──
+    // 規則：只有 userHit 的條目才有連帶觸發權；cascade 目標不再級聯（1 層封頂）。
+    // 防死循環 3 條硬約束：
+    //   1. 1 層封頂：cascade 只從 userHit 觸發，cascade 目標不會再 cascade
+    //   2. userHit 攔截：cascade 目標已在 userHit 列表則跳過（已被主動激活）
+    //   3. cascade 集合去重：同條目本輪只 cascade 一次
     this.lastCascadeEntries = [];
     const cascadeInjected = new Set<string>();
     for (const entry of this.entries) {
@@ -449,16 +455,16 @@ export class WorldbookManager {
       if (entry.linkTriggers.length === 0) continue;
       if (entry.permanent || !entry.enabled) continue;
 
-      // 找 linkTriggers 对应的子条目（关键词命中）
+      // 找 linkTriggers 對應的子條目（關鍵詞命中）
       const targets = this.entries.filter(e =>
         e.enabled && !e.permanent &&
         e.keywords.some(kw => entry.linkTriggers.includes(kw))
       );
 
       for (const target of targets) {
-        // 硬约束 2：跳过 userHit
+        // 硬約束 2：跳過 userHit
         if (userHitEntryIds.has(target.id)) continue;
-        // 硬约束 3：cascade 去重
+        // 硬約束 3：cascade 去重
         if (cascadeInjected.has(target.id)) continue;
 
         cascadeInjected.add(target.id);
@@ -471,13 +477,13 @@ export class WorldbookManager {
     }
   }
 
-  // 取本轮 One-Shot cascade 触发的条目（仅供 orchestrator 注入用，不进 DMAE 状态表）
+  // 取本輪 One-Shot cascade 觸發的條目（僅供 orchestrator 注入用，不進 DMAE 狀態表）
   getCascadeEntries(): WorldbookEntry[] {
     return [...this.lastCascadeEntries];
   }
 
-  // ── 业务层：阈值门控 + 注入 ──
-  // deriveState(activation, promptThreshold)=="Active" 的条目注入；按 activation 降序、priority 降序 tiebreak、截 MAX_ACTIVE。
+  // ── 業務層：閾值門控 + 注入 ──
+  // deriveState(activation, promptThreshold)=="Active" 的條目注入；按 activation 降序、priority 降序 tiebreak、截 MAX_ACTIVE。
   getActiveEntries(promptThreshold?: number): string[] {
     const th = promptThreshold ?? this.params.promptThreshold;
     const active = this.entries
@@ -498,15 +504,15 @@ export class WorldbookManager {
     if (this.debug && active.length > 0) {
       console.log(`[Worldbook/DMAE] active entries injected: ${active.length} (threshold=${th})`);
     }
-    // 返回带条目标题的完整内容（模型需要知道这段设定在说谁）
+    // 返回帶條目標題的完整內容（模型需要知道這段設定在說誰）
     return active.map((e) => {
-      // 从 entry.id 还原可读标题：wb_<file>_<title> → <title>
+      // 從 entry.id 還原可讀標題：wb_<file>_<title> → <title>
       const title = e.id.replace(/^wb_[^_]+_/, "").replace(/_/g, " ");
       return `【${title}】\n${e.content}`;
     });
   }
 
-  // Get permanent entries (常驻) — always included, bypass DMAE
+  // Get permanent entries (常駐) — always included, bypass DMAE
   getPermanentEntries(): string[] {
     return this.entries
       .filter((e) => e.enabled && e.permanent)
@@ -529,7 +535,7 @@ export class WorldbookManager {
     return this.entries.length;
   }
 
-  // ── 只读访问器（simulator / 调试用）──
+  // ── 只讀訪問器（simulator / 調試用）──
   getEntries(): readonly WorldbookEntry[] {
     return this.entries;
   }
@@ -538,11 +544,11 @@ export class WorldbookManager {
     return this.state.get(id);
   }
 
-  // ── 持久化 seam（v1 no-op；后续接 JsonVectorStore 同款 sync JSON）──
+  // ── 持久化 seam（v1 no-op；後續接 JsonVectorStore 同款 sync JSON）──
   private loadState(): void {
     if (!this.stateFile) return;
     // TODO v1.1: fs.readFileSync(this.stateFile) → 反序列化到 this.state
-    // 暂不落盘，重启回 0（已确认 v1 接受）
+    // 暫不落盤，重啟回 0（已確認 v1 接受）
   }
 
   private saveState(): void {

@@ -16,18 +16,25 @@
       display: block;
       width: 100%; height: 100%;
     }
-    /* Opener 主动开口气泡 */
+    /* Opener 主動開口氣泡 */
     #opener-bubble {
       position: absolute;
-      bottom: 60%;
-      left: 50%;
+      bottom: 64%;
+      left: 58%;
       transform: translateX(-50%);
-      max-width: 280px;
+      width: max-content;
+      min-width: 220px;
+      max-width: min(310px, calc(100vw - 24px));
       padding: 10px 16px;
-      background: rgba(255, 255, 255, 0.95);
+      background: rgba(204, 188, 251, 0.96);
       border-radius: 16px;
       font-size: 14px;
-      color: #333;
+      line-height: 1.55;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-align: left;
+      text-wrap: pretty;
+      color: #df5da9;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
       opacity: 0;
       transition: opacity 0.3s ease;
@@ -43,9 +50,50 @@
       left: 50%;
       transform: translateX(-50%);
       border: 8px solid transparent;
-      border-top-color: rgba(255, 255, 255, 0.95);
+      border-top-color: rgba(204, 188, 251, 0.96);
       border-bottom: 0;
     }
+    #pet-chat-form {
+      position: absolute;
+      left: 50%;
+      bottom: 54px;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      width: min(244px, calc(100% - 48px));
+      padding: 4px;
+      border: 1px solid rgba(197, 125, 236, 0.48);
+      border-radius: 18px;
+      background: rgba(24, 14, 31, 0.88);
+      box-shadow: 0 8px 28px rgba(20, 7, 27, 0.28);
+      backdrop-filter: blur(12px);
+      z-index: 20;
+    }
+    #pet-chat-form[hidden] { display: none; }
+    #pet-chat-input {
+      min-width: 0;
+      flex: 1;
+      height: 30px;
+      padding: 0 8px;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: #fff;
+      font: 13px/1.2 system-ui, sans-serif;
+      user-select: text;
+    }
+    #pet-chat-input::placeholder { color: rgba(233, 216, 240, 0.62); }
+    #pet-chat-submit {
+      width: 30px;
+      height: 30px;
+      border: 0;
+      border-radius: 13px;
+      background: linear-gradient(135deg, #a855f7, #ec4899);
+      color: #fff;
+      font-size: 17px;
+      cursor: pointer;
+    }
+    #pet-chat-submit:disabled { opacity: 0.5; cursor: wait; }
   </style>
   <link rel="stylesheet" href="./ui/tokens.css" />
   <link rel="stylesheet" href="./ui/fonts.css" />
@@ -55,7 +103,11 @@
 </head>
 <body>
   <canvas id="live2d-canvas"></canvas>
-  <div id="opener-bubble" hidden></div>
+  <div id="opener-bubble" role="status" aria-live="polite" hidden></div>
+  <form id="pet-chat-form" aria-label="和昔漣快速對話" hidden>
+    <input id="pet-chat-input" type="text" maxlength="500" autocomplete="off" placeholder="和昔漣說話…" aria-label="輸入訊息" />
+    <button id="pet-chat-submit" type="submit" aria-label="送出訊息">↑</button>
+  </form>
   <script type="module" src="./main.ts"></script>
 </body>
 </html>

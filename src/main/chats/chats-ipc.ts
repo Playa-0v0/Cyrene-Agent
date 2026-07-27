@@ -1,11 +1,11 @@
-// 聊天会话 IPC 桥接：把 chats-store 的纯数据 API 暴露给渲染进程。
+// 聊天會話 IPC 橋接：把 chats-store 的純數據 API 暴露給渲染進程。
 //
-// 写操作成功后会向**所有**渲染窗口广播 `chats:changed`，以便：
-// - 设置中心 💬聊天面板刷新列表；
-// - 聊天窗口在标题被改名等情况下同步显示。
+// 寫操作成功後會向**所有**渲染窗口廣播 `chats:changed`，以便：
+// - 設置中心 💬聊天面板刷新列表；
+// - 聊天窗口在標題被改名等情況下同步顯示。
 //
-// 注意：`chats:open-in-chat-window` 涉及 BrowserWindow 创建逻辑，
-// 由 src/main/index.ts 自行注册，不在本模块；本模块只管纯数据操作。
+// 注意：`chats:open-in-chat-window` 涉及 BrowserWindow 創建邏輯，
+// 由 src/main/index.ts 自行註冊，不在本模塊；本模塊只管純數據操作。
 
 import { BrowserWindow, ipcMain } from "electron";
 import { IPC } from "../../shared/ipc-channels";
@@ -18,7 +18,7 @@ function broadcastChanged(): void {
     try {
       win.webContents.send(IPC.CHATS_CHANGED);
     } catch {
-      // 某些刚创建/未 ready 的窗口 send 可能抛错，忽略即可
+      // 某些剛創建/未 ready 的窗口 send 可能拋錯，忽略即可
     }
   }
 }
@@ -97,5 +97,5 @@ export function registerChatsIpc(): void {
   );
 }
 
-// 给 main/index.ts 用的便捷 broadcast（删除当前活跃会话后由 index.ts 调一次）。
+// 給 main/index.ts 用的便捷 broadcast（刪除當前活躍會話後由 index.ts 調一次）。
 export { broadcastChanged as broadcastChatsChanged };

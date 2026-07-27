@@ -1,5 +1,5 @@
-// Skill 注册表 —— 镜像 ToolRegistry 的 Map + 单例模式。
-// 启动时由 initSkills 灌入扫描结果；getBody/getReference 懒加载 + 缓存。
+// Skill 註冊表 —— 鏡像 ToolRegistry 的 Map + 單例模式。
+// 啟動時由 initSkills 灌入掃描結果；getBody/getReference 懶加載 + 緩存。
 
 import * as fs from "fs";
 import * as path from "path";
@@ -32,9 +32,9 @@ export class SkillRegistry {
   }
 
   /**
-   * 懒加载 SKILL.md 正文（去掉 frontmatter）+ 缓存。
-   * 运行时只读不改，缓存安全（见 spec 5.4：编辑已加载 skill 正文需重启）。
-   * 返回 null 表示 skill 不存在或读取失败。
+   * 懶加載 SKILL.md 正文（去掉 frontmatter）+ 緩存。
+   * 運行時只讀不改，緩存安全（見 spec 5.4：編輯已加載 skill 正文需重啟）。
+   * 返回 null 表示 skill 不存在或讀取失敗。
    */
   getBody(id: string): string | null {
     const cached = this.bodyCache.get(id);
@@ -43,7 +43,7 @@ export class SkillRegistry {
     if (!s) return null;
     try {
       const raw = fs.readFileSync(s.bodyPath, "utf8");
-      // 复用 scanner 的 gray-matter 解析剥离 frontmatter，避免与 scanner 正则分叉（BOM/多行 ---）
+      // 複用 scanner 的 gray-matter 解析剝離 frontmatter，避免與 scanner 正則分叉（BOM/多行 ---）
       const parsed = parseSkillFrontmatter(raw);
       const body = parsed ? parsed.body : raw.trim();
       this.bodyCache.set(id, body);
@@ -54,9 +54,9 @@ export class SkillRegistry {
   }
 
   /**
-   * 读 references 附件。
-   * 路径穿越防护：ref 必须命中扫描阶段缓存的 references 清单，且不含路径分隔符/..，
-   * 否则拒绝（返回 null）。不直接拿 ref 拼路径。
+   * 讀 references 附件。
+   * 路徑穿越防護：ref 必須命中掃描階段緩存的 references 清單，且不含路徑分隔符/..，
+   * 否則拒絕（返回 null）。不直接拿 ref 拼路徑。
    */
   getReference(id: string, ref: string): string | null {
     const s = this.skills.get(id);
@@ -72,5 +72,5 @@ export class SkillRegistry {
   }
 }
 
-// 全局单例
+// 全局單例
 export const skillRegistry = new SkillRegistry();

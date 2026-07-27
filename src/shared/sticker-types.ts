@@ -1,6 +1,6 @@
-// 表情包系统的共享类型（main / renderer 共用）
+// 表情包系統的共享類型（main / renderer 共用）
 
-/** 内置表情包 ID 列表（用于渲染端判断来源） */
+/** 內置表情包 ID 列表（用於渲染端判斷來源） */
 export const BUILT_IN_STICKER_IDS = [
   "playful",
   "love-happy",
@@ -56,13 +56,13 @@ export const BUILT_IN_STICKER_IDS = [
   "please",
 ] as const;
 
-/** 内置 sticker ID 的 union 类型 */
+/** 內置 sticker ID 的 union 類型 */
 export type BuiltInStickerId = (typeof BUILT_IN_STICKER_IDS)[number];
 
-/** 任意表情包 ID（内置 ID 或用户自定义字符串） */
+/** 任意表情包 ID（內置 ID 或用戶自定義字符串） */
 export type AnyStickerId = string;
 
-/** 用户新增 sticker 的元数据（存于 userData/sticker-manifest.json） */
+/** 用戶新增 sticker 的元數據（存於 userData/sticker-manifest.json） */
 export interface UserStickerMeta {
   id: string;
   file: string;
@@ -71,7 +71,7 @@ export interface UserStickerMeta {
   createdAt: number;
 }
 
-/** 表情包管理窗口用的配置项 */
+/** 表情包管理窗口用的配置項 */
 export interface StickerConfigItem {
   id: string;
   src: string;

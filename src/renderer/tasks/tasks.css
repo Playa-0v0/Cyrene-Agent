@@ -2,7 +2,7 @@
    Cyrene schedule window (read-only display)
    Uses the project pink/violet glass style; the reference HTML only
    informs layout density, not colors or visual language.
-   柱状图/用量进度条样式抽到 ../ui/chart.css，与 settings 共享。
+   柱狀圖/用量進度條樣式抽到 ../ui/chart.css，與 settings 共享。
    ============================================================ */
 @import "../ui/chart.css";
 
@@ -26,7 +26,7 @@ body {
   margin: 0;
   border-radius: 24px;
   overflow: hidden;
-  /* 与 sidebar 一致：经典主题下三层暗紫微光，避免"两坨紫"挤左上/右上 */
+  /* 與 sidebar 一致：經典主題下三層暗紫微光，避免"兩坨紫"擠左上/右上 */
   background:
     radial-gradient(circle at 18% 8%, var(--rb-bg-elevated) 0%, transparent 38%),
     radial-gradient(circle at 88% 22%, var(--rb-bg-3) 0%, transparent 38%),
@@ -153,12 +153,12 @@ body {
   border-radius: 2px;
 }
 
-/* ── 今日日程窗口专属样式 ────────────────────────────────────
-   柱状图/用量进度条的基础外观在 ../ui/chart.css 共享。
-   这里只覆盖 tasks 窗口特有的：电流感进度条、今日柱标记、空态。
+/* ── 今日日程窗口專屬樣式 ────────────────────────────────────
+   柱狀圖/用量進度條的基礎外觀在 ../ui/chart.css 共享。
+   這裡只覆蓋 tasks 窗口特有的：電流感進度條、今日柱標記、空態。
    ──────────────────────────────────────────────────────────── */
 
-/* 用量进度条：拉满 + 电流流动动画（tasks 窗口无预算概念，进度条恒为 100%） */
+/* 用量進度條：拉滿 + 電流流動動畫（tasks 窗口無預算概念，進度條恆為 100%） */
 .usage-bar {
   position: relative;
   height: 8px;
@@ -182,10 +182,10 @@ body {
   .usage-bar__fill { animation: none; }
 }
 
-/* 未来柱：占位但无填充，仅显示星期标签 */
+/* 未來柱：佔位但無填充，僅顯示星期標籤 */
 .chart-bar--future::before { display: none; }
 
-/* 任务空态 */
+/* 任務空態 */
 .task-empty {
   padding: 14px 10px;
   text-align: center;
@@ -223,7 +223,7 @@ body {
   line-height: 1;
   letter-spacing: -1px;
   color: var(--rb-text-strong);
-  /* 粉色光晕收紧到 8px 模糊，避免在 40px 字符上糊成白光 */
+  /* 粉色光暈收緊到 8px 模糊，避免在 40px 字符上糊成白光 */
   text-shadow: 0 0 8px rgba(236, 72, 153, 0.5);
 }
 
@@ -246,7 +246,7 @@ body {
   border: 1px solid var(--rb-border-soft);
 }
 
-/* 用量区块容器布局（tasks 窗口特有）；柱状图/进度条内部样式见 ../ui/chart.css */
+/* 用量區塊容器佈局（tasks 窗口特有）；柱狀圖/進度條內部樣式見 ../ui/chart.css */
 .schedule-usage {
   display: grid;
   gap: 10px;
@@ -369,4 +369,9 @@ body {
   text-align: center;
   letter-spacing: 0.4px;
   user-select: none;
+}
+
+html.is-embedded .tasks__titlebar,
+body.is-embedded .tasks__titlebar {
+  display: none !important;
 }

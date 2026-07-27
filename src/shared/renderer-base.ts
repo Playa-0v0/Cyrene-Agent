@@ -1,30 +1,30 @@
 /**
- * Renderer 资源路径 helper
+ * Renderer 資源路徑 helper
  *
- * 问题：vite base './' + electron loadFile → file:// 协议下
- *   fetch("/models/cyrene/...") 解析到磁盘根目录，不是 dist/renderer/。
+ * 問題：vite base './' + electron loadFile → file:// 協議下
+ *   fetch("/models/cyrene/...") 解析到磁盤根目錄，不是 dist/renderer/。
  *
- * 方案：用 document.baseURI + import.meta.env.BASE_URL 计算 renderer 根目录，
- *   然后拼路径。dev 模式和子目录窗口都能正确解析。
+ * 方案：用 document.baseURI + import.meta.env.BASE_URL 計算 renderer 根目錄，
+ *   然後拼路徑。dev 模式和子目錄窗口都能正確解析。
  */
 
 let cachedBase = "";
 
 function computeRendererBase(): string {
-  const viteBase = import.meta.env.BASE_URL; // dev: "/"  生产: "./"
-  const docBase = document.baseURI;          // 当前 HTML 文件的 URL
+  const viteBase = import.meta.env.BASE_URL; // dev: "/"  生產: "./"
+  const docBase = document.baseURI;          // 當前 HTML 文件的 URL
 
-  // 用 URL.resolve 计算：new URL(relative, base)
+  // 用 URL.resolve 計算：new URL(relative, base)
   // dev 模式：new URL("/", "http://localhost:5173/chat/index.html")
   //   → http://localhost:5173/  ✅ renderer 根
-  // 生产根窗口：new URL("./", "file:///.../dist/renderer/index.html")
+  // 生產根窗口：new URL("./", "file:///.../dist/renderer/index.html")
   //   → file:///.../dist/renderer/  ✅
-  // 生产 chat 窗口：new URL("./", "file:///.../dist/renderer/chat/index.html")
+  // 生產 chat 窗口：new URL("./", "file:///.../dist/renderer/chat/index.html")
   //   → file:///.../dist/renderer/chat/  ❌ 要再往上
   let root = new URL(viteBase, docBase).href;
 
-  // 生产模式下 vite base 是 "./"，子目录窗口需要往上走一级
-  // 检测：如果 root 末尾是 chat/ sidebar/ tasks/ settings/ call/ sticker-manager/，往上走
+  // 生產模式下 vite base 是 "./"，子目錄窗口需要往上走一級
+  // 檢測：如果 root 末尾是 chat/ sidebar/ tasks/ settings/ call/ sticker-manager/，往上走
   if (viteBase === "./") {
     const subDirs = ["chat/", "sidebar/", "tasks/", "settings/", "call/", "sticker-manager/"];
     for (const sub of subDirs) {
@@ -39,8 +39,8 @@ function computeRendererBase(): string {
 }
 
 /**
- * 返回 renderer 根目录的 URL（末尾带 /）。
- * 第一次调用时计算，之后缓存。
+ * 返回 renderer 根目錄的 URL（末尾帶 /）。
+ * 第一次調用時計算，之後緩存。
  */
 export function getRendererBase(): string {
   if (!cachedBase) {
@@ -54,6 +54,6 @@ export function getRendererBase(): string {
  * 解析成完整的 file:// 或 http:// URL。
  */
 export function resolveAsset(assetPath: string): string {
-  const clean = assetPath.replace(/^\/+/, ""); // 去掉前导 /
+  const clean = assetPath.replace(/^\/+/, ""); // 去掉前導 /
   return getRendererBase() + clean;
 }

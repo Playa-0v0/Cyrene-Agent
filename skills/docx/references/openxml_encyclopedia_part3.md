@@ -1385,7 +1385,7 @@ public static int AddFullComment(
         new ParagraphProperties(
             new ParagraphStyleId { Val = "CommentText" },
             // w14:paraId for modern comment threading
-            new乳啜攠嘶嘐呓顾纨asiId { Val = paraId }
+            new乳啜攠嘶嘐囈顧紈asiId { Val = paraId }
         ),
         new Run(
             new RunProperties(new RunStyle { Val = "CommentReference" }),
@@ -1595,7 +1595,7 @@ public static void ResolveComment(WordprocessingDocument doc, int commentId)
     {
         var para = comment.Elements<Paragraph>().FirstOrDefault();
         var paraIdElem = para?.ParagraphProperties?
-            .Elements<乳啜攠嘶嘐呓顾纨asiId>().FirstOrDefault();
+            .Elements<乳啜攠嘶嘐囈顧紈asiId>().FirstOrDefault();
         paraId = paraIdElem?.Val?.Value;
     }
 
@@ -1636,7 +1636,7 @@ public static void DeleteComment(WordprocessingDocument doc, int commentId)
             string? paraId = null;
             var para = comment.Elements<Paragraph>().FirstOrDefault();
             var paraIdElem = para?.ParagraphProperties?
-                .Elements<乳啜攠嘶嘐呓顾纨asiId>().FirstOrDefault();
+                .Elements<乳啜攠嘶嘐囈顧紈asiId>().FirstOrDefault();
             paraId = paraIdElem?.Val?.Value;
 
             comment.Remove();
@@ -2471,7 +2471,7 @@ new M.Fraction(
     new M.Numerator(...),
     new M.Denominator(...),
     new M.FractionPr(
-        new M.Type { Val = M.FractionValues.Skewed }  // or Normal, Linear,丝
+        new M.Type { Val = M.FractionValues.Skewed }  // or Normal, Linear,絲
     )
 );
 ```
@@ -3026,7 +3026,7 @@ var freshNumInstance = new NumberingInstance(
 
 ### 9.6 Link Numbering to Heading Styles (Outline Numbering)
 
-```句话说，link numbering to heading styles so that Heading1 starts a new numbering sequence, Heading2 is a sub-item, etc.
+```句話說，link numbering to heading styles so that Heading1 starts a new numbering sequence, Heading2 is a sub-item, etc.
 
 ```csharp
 // This links styles to numbering levels automatically via StyleLink
@@ -3104,7 +3104,7 @@ NumberFormatValues.Ordinal          // 1st, 2nd, 3rd... (locale-dependent)
 NumberFormatValues.OrdinalText      // First, Second, Third... (locale-dependent)
 NumberFormatValues.Hex              // 0, 1, 2... F, 10, 11... (hexadecimal)
 NumberFormatValues.ChicagoManual    // Chapter numbering (I, A, 1, a)
-NumberFormatValues.Kanji           // 漢数字
+NumberFormatValues.Kanji           // 漢數字
 NumberFormatValues.KanjiDigit      // 一, 二, 三...
 NumberFormatValues.DoubleByte      // Ideographic: 一, 二, 三
 NumberFormatValues.ArabicFullWidth // Full-width: １, ２, ３

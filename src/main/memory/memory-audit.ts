@@ -29,7 +29,7 @@ export interface MemoryAuditSummary {
   byCode: Record<string, number>
 }
 
-const ABSOLUTE_TERMS = ["只", "永远", "从不", "一定", "完全", "绝对", "以后都", "不再"]
+const ABSOLUTE_TERMS = ["只", "永遠", "從不", "一定", "完全", "絕對", "以後都", "不再"]
 
 function hasEvidenceForTerm(term: string, evidence: MemoryEvidence[]): boolean {
   return evidence.some((item) => item.quoteSnippet.includes(term))
@@ -50,8 +50,8 @@ function addResolutionLinkFinding(findings: MemoryAuditFinding[], memory: L2Memo
     code: "broken_resolution_link",
     severity: "warning",
     l2Id: memory.id,
-    message: `L2 ${memory.id} 的 ${field} 为空，历史解析链不完整。`,
-    suggestion: "人工复核该条记忆是否应保持当前状态，或补齐/清理解析链路。",
+    message: `L2 ${memory.id} 的 ${field} 為空，歷史解析鏈不完整。`,
+    suggestion: "人工複核該條記憶是否應保持當前狀態，或補齊/清理解析鏈路。",
     details: { status: memory.status, field },
   })
 }
@@ -70,8 +70,8 @@ export function auditMemoryStore(store: MemoryStore): MemoryAuditFinding[] {
         code: "empty_evidence_chain",
         severity: "warning",
         l2Id: memory.id,
-        message: `L2 ${memory.id} 没有 evidenceIds，无法回看原始依据。`,
-        suggestion: "把它列入人工复核清单；若内容无法追溯，建议降权或归档。",
+        message: `L2 ${memory.id} 沒有 evidenceIds，無法回看原始依據。`,
+        suggestion: "把它列入人工複核清單；若內容無法追溯，建議降權或歸檔。",
       })
     } else if (hasMissingEvidence(memory, evidenceById)) {
       findings.push({
@@ -79,7 +79,7 @@ export function auditMemoryStore(store: MemoryStore): MemoryAuditFinding[] {
         severity: "error",
         l2Id: memory.id,
         message: `L2 ${memory.id} 引用了不存在的 evidenceId。`,
-        suggestion: "检查 memory.json 历史迁移结果；缺失证据的高层记忆不要自动提升到核心画像。",
+        suggestion: "檢查 memory.json 歷史遷移結果；缺失證據的高層記憶不要自動提升到核心畫像。",
         details: { evidenceIds: memory.evidenceIds },
       })
     }
@@ -92,8 +92,8 @@ export function auditMemoryStore(store: MemoryStore): MemoryAuditFinding[] {
         code: "absolute_overclaim",
         severity: "warning",
         l2Id: memory.id,
-        message: `L2 ${memory.id} 含绝对化表达，但证据原文没有对应词。`,
-        suggestion: "人工复核是否为模型推断过度；必要时改写为更窄、更有上下文的 L2。",
+        message: `L2 ${memory.id} 含絕對化表達，但證據原文沒有對應詞。`,
+        suggestion: "人工複核是否為模型推斷過度；必要時改寫為更窄、更有上下文的 L2。",
         details: { terms: overclaimedTerms },
       })
     }
@@ -103,8 +103,8 @@ export function auditMemoryStore(store: MemoryStore): MemoryAuditFinding[] {
         code: "active_conflict_marker",
         severity: "warning",
         l2Id: memory.id,
-        message: `L2 ${memory.id} 仍为 ${memory.status}，但保留 conflictWith 标记。`,
-        suggestion: "检查对应 conflict log 是否已 resolved；若已解析，清理旧冲突标记或调整状态。",
+        message: `L2 ${memory.id} 仍為 ${memory.status}，但保留 conflictWith 標記。`,
+        suggestion: "檢查對應 conflict log 是否已 resolved；若已解析，清理舊衝突標記或調整狀態。",
         details: { conflictWith: memory.conflictWith, status: memory.status },
       })
     }
@@ -114,8 +114,8 @@ export function auditMemoryStore(store: MemoryStore): MemoryAuditFinding[] {
         code: "stale_sync_status",
         severity: "info",
         l2Id: memory.id,
-        message: `L2 ${memory.id} 仍处于 pending_sync 且没有 ragId。`,
-        suggestion: "下次启动同步任务时优先补偿；若内容已过期可直接归档。",
+        message: `L2 ${memory.id} 仍處於 pending_sync 且沒有 ragId。`,
+        suggestion: "下次啟動同步任務時優先補償；若內容已過期可直接歸檔。",
       })
     }
 

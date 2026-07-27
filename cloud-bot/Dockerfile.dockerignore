@@ -1,0 +1,12 @@
+.git
+.github
+.cyrene-cache
+.playwright-mcp
+city-web
+cloud-bot/node_modules
+cloud-bot/dist
+cloud-bot/.env
+dist
+models
+scratch
+*.log

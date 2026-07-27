@@ -84,8 +84,8 @@ body {
   min-width: 0;
 }
 
-/* 胶囊容器：把「昔涟 · 状态」框成一组，玻璃拟态半透明胶囊，
-   视觉上跟 loader 区分开，又不抢 loader。 */
+/* 膠囊容器：把「昔漣 · 狀態」框成一組，玻璃擬態半透明膠囊，
+   視覺上跟 loader 區分開，又不搶 loader。 */
 .chat__title-meta {
   display: inline-flex;
   align-items: center;
@@ -105,22 +105,22 @@ body {
   text-shadow: 0 0 16px rgba(236, 72, 153, 0.24);
 }
 
-/* 名字与状态之间的分隔点：弱化，不抢名字 */
+/* 名字與狀態之間的分隔點：弱化，不搶名字 */
 .chat__name-sep {
   color: var(--rb-text-faint);
   font-size: 13px;
   user-select: none;
 }
 
-/* 状态文字：胶囊背景由 .chat__title-meta 承载，这里只管文字色 */
+/* 狀態文字：膠囊背景由 .chat__title-meta 承載，這裡只管文字色 */
 .chat__hint {
   font: var(--rb-text-micro);
   color: var(--rb-text-muted);
   white-space: nowrap;
 }
 
-/* 左上角触发按钮：内嵌旋转 loader 动画，点击调出会话侧栏（侧栏逻辑后续接入）。
-   loader 来自 Uiverse.io，配色改成粉紫系跟主题统一，用 --size 缩到 30px 塞进标题栏。 */
+/* 左上角觸發按鈕：內嵌旋轉 loader 動畫，點擊調出會話側欄（側欄邏輯後續接入）。
+   loader 來自 Uiverse.io，配色改成粉紫系跟主題統一，用 --size 縮到 30px 塞進標題欄。 */
 .chat__status-btn {
   -webkit-app-region: no-drag;
   flex: 0 0 auto;
@@ -144,7 +144,7 @@ body {
   --color-four: var(--rb-violet-600);
   --color-five: var(--rb-pink-300);
   --time-animation: 2s;
-  --size: 0.3; /* 100px × 0.3 = 30px，跟其他标题栏按钮一致 */
+  --size: 0.3; /* 100px × 0.3 = 30px，跟其他標題欄按鈕一致 */
   position: relative;
   border-radius: 50%;
   transform: scale(var(--size));
@@ -327,9 +327,9 @@ body {
   box-shadow: 0 0 20px rgba(236, 72, 153, 0.56), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
-/* ===== Body: 会话侧栏 + (标题栏/消息区) 横向行容器 =====
-   侧栏贯穿从顶到底（含标题栏高度），标题栏+消息流整体在侧栏右侧；
-   输入框/file-tags 留在 body 外，保持全宽不动。 */
+/* ===== Body: 會話側欄 + (標題欄/消息區) 橫向行容器 =====
+   側欄貫穿從頂到底（含標題欄高度），標題欄+消息流整體在側欄右側；
+   輸入框/file-tags 留在 body 外，保持全寬不動。 */
 .chat__body {
   position: relative;
   z-index: 1;
@@ -338,7 +338,7 @@ body {
   min-height: 0;
 }
 
-/* 右侧纵向列：标题栏 + 消息区（含空态遮罩） */
+/* 右側縱向列：標題欄 + 消息區（含空態遮罩） */
 .chat__main {
   position: relative;
   display: flex;
@@ -348,8 +348,8 @@ body {
   min-height: 0;
 }
 
-/* 会话侧栏（点左上角 loader 展开）。默认 hidden，挤压式占 240px。
-   玻璃拟态背景 + 右边框分隔，跟 settings 导航栏风格一致。 */
+/* 會話側欄（點左上角 loader 展開）。默認 hidden，擠壓式佔 240px。
+   玻璃擬態背景 + 右邊框分隔，跟 settings 導航欄風格一致。 */
 .chat__rail {
   flex: 0 0 240px;
   display: flex;
@@ -359,7 +359,7 @@ body {
   background: rgba(255, 255, 255, 0.04);
   border-right: 1px solid var(--rb-border-soft);
   overflow: hidden;
-  z-index: 2; /* 压过 .chat__empty-state 的 absolute 遮罩，保证侧栏不被空态盖住 */
+  z-index: 2; /* 壓過 .chat__empty-state 的 absolute 遮罩，保證側欄不被空態蓋住 */
 }
 
 .chat__rail[hidden] {
@@ -629,8 +629,8 @@ body {
   padding: 0 4px;
 }
 
-/* actions 行：喇叭 + 复制 + 时间 水平排，气泡下方。
-   在 .msg--user 下由父 .msg__body 的 align-items: flex-end 自动推到右边。 */
+/* actions 行：喇叭 + 複製 + 時間 水平排，氣泡下方。
+   在 .msg--user 下由父 .msg__body 的 align-items: flex-end 自動推到右邊。 */
 .msg__actions {
   display: flex;
   flex-direction: row;
@@ -638,9 +638,9 @@ body {
   gap: 6px;
 }
 
-/* model 消息朗读按钮 — 用 SVG 图标，主题色用 currentColor
-   默认保持可见（0.7 透明度），hover/active 加深。播放态由 .msg.is-speaking .msg__speak 控制。
-   形状：圆角正方形（不是圆），跟其他小图标按钮（attach / sticker-btn）视觉一致。 */
+/* model 消息朗讀按鈕 — 用 SVG 圖標，主題色用 currentColor
+   默認保持可見（0.7 透明度），hover/active 加深。播放態由 .msg.is-speaking .msg__speak 控制。
+   形狀：圓角正方形（不是圓），跟其他小圖標按鈕（attach / sticker-btn）視覺一致。 */
 .msg__speak {
   flex: 0 0 auto;
   width: 26px;
@@ -665,7 +665,7 @@ body {
   color: var(--rb-text-default);
 }
 
-/* 播放中状态：父级 .msg 被加 .is-speaking class */
+/* 播放中狀態：父級 .msg 被加 .is-speaking class */
 .msg.is-speaking .msg__speak {
   opacity: 1;
   background: var(--rb-pink-50);
@@ -674,15 +674,15 @@ body {
   box-shadow: 0 0 0 3px var(--rb-pink-100);
 }
 
-/* 静态喇叭图标：换肤时跟着 currentColor 走，不写死颜色 */
+/* 靜態喇叭圖標：換膚時跟著 currentColor 走，不寫死顏色 */
 .msg__speak-icon {
   display: block;
   pointer-events: none;
 }
 
-/* 三条音波的波浪动画：
-   每条 path 用 transform-origin: center 做 scaleY 脉冲，
-   错相位延迟形成连续的"声波"效果。波浪颜色全部 currentColor。 */
+/* 三條音波的波浪動畫：
+   每條 path 用 transform-origin: center 做 scaleY 脈衝，
+   錯相位延遲形成連續的"聲波"效果。波浪顏色全部 currentColor。 */
 .msg__speak-wave {
   transform-box: fill-box;
   transform-origin: center;
@@ -702,9 +702,9 @@ body {
   .msg__speak-wave { animation: none; }
 }
 
-/* ── 消息复制按钮 ──
-   跟喇叭按钮同样的圆角正方形小方块，但默认可见度更低（0.55），避免视觉太抢。
-   user / model 消息都挂，复制后图标变 ✓ + 文案"已复制"，1.5s 复原。 */
+/* ── 消息複製按鈕 ──
+   跟喇叭按鈕同樣的圓角正方形小方塊，但默認可見度更低（0.55），避免視覺太搶。
+   user / model 消息都掛，複製後圖標變 ✓ + 文案"已複製"，1.5s 復原。 */
 .msg__copy {
   flex: 0 0 auto;
   height: 26px;
@@ -742,7 +742,7 @@ body {
   white-space: nowrap;
 }
 
-/* 复制成功态：图标变绿勾，背景变浅绿，按钮自动扩宽容纳文案 */
+/* 複製成功態：圖標變綠勾，背景變淺綠，按鈕自動擴寬容納文案 */
 .msg__copy.is-copied {
   opacity: 1;
   color: #15803d;
@@ -751,8 +751,160 @@ body {
   padding: 0 9px;
 }
 
+/* ── Cy → Codex 圖像委託票 ── */
+.codex-handoff {
+  position: relative;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  width: min(520px, calc(100vw - 132px));
+  margin-top: 7px;
+  padding: 10px 11px;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--rb-border-strong) 74%, #c084fc 26%);
+  background:
+    radial-gradient(circle at 14% 10%, rgba(244, 114, 182, 0.16), transparent 34%),
+    linear-gradient(115deg, rgba(35, 20, 52, 0.92), rgba(20, 17, 38, 0.88));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 10px 28px rgba(14, 8, 29, 0.22);
+}
 
-/* ── 文件上传按钮 ── */
+.codex-handoff::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.08) 48%, transparent 76%);
+  transform: translateX(-110%);
+  animation: codex-ticket-shimmer 5.5s ease-in-out infinite;
+}
+
+.codex-handoff__orbit {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  color: #f5d0fe;
+}
+
+.codex-handoff__orbit::before,
+.codex-handoff__orbit::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(244, 114, 182, 0.7);
+  border-radius: 50%;
+  transform: rotate(32deg) scaleY(0.46);
+}
+
+.codex-handoff__orbit::after {
+  border-color: rgba(125, 211, 252, 0.62);
+  transform: rotate(-32deg) scaleY(0.46);
+}
+
+.codex-handoff__orbit span {
+  position: relative;
+  z-index: 1;
+  font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.06em;
+}
+
+.codex-handoff__orbit i,
+.codex-handoff__orbit b {
+  position: absolute;
+  z-index: 2;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #f472b6;
+  box-shadow: 0 0 8px #f472b6;
+}
+
+.codex-handoff__orbit i { top: 4px; right: 6px; }
+.codex-handoff__orbit b {
+  right: 1px;
+  bottom: 3px;
+  width: auto;
+  height: auto;
+  color: #7dd3fc;
+  background: transparent;
+  box-shadow: none;
+  font-size: 9px;
+}
+
+.codex-handoff__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.codex-handoff__eyebrow {
+  color: #d8b4fe;
+  font: 700 8px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.15em;
+}
+
+.codex-handoff__copy strong {
+  color: #fff7fd;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.codex-handoff__copy small {
+  overflow: hidden;
+  color: rgba(241, 229, 245, 0.66);
+  font-size: 10px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-handoff__button {
+  position: relative;
+  z-index: 1;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(251, 207, 232, 0.28);
+  border-radius: 10px;
+  color: #fff;
+  background: linear-gradient(135deg, #a855f7, #ec4899);
+  box-shadow: 0 5px 16px rgba(190, 24, 93, 0.2);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.18s ease, filter 0.18s ease, background 0.18s ease;
+}
+
+.codex-handoff__button:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.codex-handoff__button:active { transform: translateY(0) scale(0.98); }
+.codex-handoff__button:focus-visible { outline: 2px solid #7dd3fc; outline-offset: 2px; }
+.codex-handoff__button.is-copied { background: linear-gradient(135deg, #0f766e, #22c55e); }
+.codex-handoff__button.is-error { background: linear-gradient(135deg, #b91c1c, #ef4444); }
+
+@keyframes codex-ticket-shimmer {
+  0%, 72% { transform: translateX(-110%); }
+  88%, 100% { transform: translateX(110%); }
+}
+
+@media (max-width: 720px) {
+  .codex-handoff {
+    grid-template-columns: 38px minmax(0, 1fr);
+    width: min(420px, calc(100vw - 78px));
+  }
+  .codex-handoff__button { grid-column: 1 / -1; width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .codex-handoff::after { animation: none; }
+  .codex-handoff__button { transition: none; }
+}
+
+
+/* ── 文件上傳按鈕 ── */
 .chat__attach {
   flex: 0 0 auto;
   width: 40px;
@@ -783,7 +935,7 @@ body {
   color: var(--rb-text-on-pink);
 }
 
-/* ── 表情包按钮 ── */
+/* ── 表情包按鈕 ── */
 .chat__sticker-btn {
   flex: 0 0 auto;
   width: 40px;
@@ -814,7 +966,7 @@ body {
   color: var(--rb-text-on-pink);
 }
 
-/* ── 表情包选择面板 ── */
+/* ── 表情包選擇面板 ── */
 .sticker-picker {
   position: absolute;
   bottom: 72px;
@@ -871,7 +1023,7 @@ body {
   padding: 24px 0;
 }
 
-/* ── 文件预览标签 ── */
+/* ── 文件預覽標籤 ── */
 .chat__file-tag {
   display: inline-flex;
   align-items: center;
@@ -995,7 +1147,7 @@ body {
 
 /* Drag & drop visual feedback */
 .chat--drag-over::after {
-  content: "📂 松开放入文件";
+  content: "📂 鬆開放入文件";
   position: absolute;
   inset: 0;
   display: grid;
@@ -1134,7 +1286,7 @@ body {
   30% { opacity: 1; }
 }
 
-/* 流式逐字渐显：每个字 span 从透明淡入，营造打字机渐显感 */
+/* 流式逐字漸顯：每個字 span 從透明淡入，營造打字機漸顯感 */
 .msg__char {
   display: inline;
   animation: char-fade-in 200ms ease-out;
@@ -1145,7 +1297,7 @@ body {
   to { opacity: 1; }
 }
 
-/* 工具调用提示：FC 循环里模型调工具时，气泡显示"🔧 调用中：xxx" */
+/* 工具調用提示：FC 循環裡模型調工具時，氣泡顯示"🔧 調用中：xxx" */
 .msg__tool-tip {
   display: flex;
   align-items: center;
@@ -1164,12 +1316,12 @@ body {
   letter-spacing: 0.02em;
 }
 
-/* 工具完成：淡出，准备让位给文字流 */
+/* 工具完成：淡出，準備讓位給文字流 */
 .msg__tool-tip--done {
   opacity: 0.4;
 }
 
-/* ── 天气卡片（天气工具返回结构化数据时渲染）── */
+/* ── 天氣卡片（天氣工具返回結構化數據時渲染）── */
 .weather-card {
   border-radius: 18px;
   overflow: hidden;
@@ -1253,7 +1405,7 @@ body {
   background: #eeacd2;
 }
 
-/* 展开按钮 */
+/* 展開按鈕 */
 .weather-card .w-expand {
   display: flex; align-items: center; justify-content: center; gap: 6px;
   padding: 8px; cursor: pointer; width: 100%; border: none;
@@ -1265,7 +1417,7 @@ body {
 .weather-card .w-expand .w-arrow { transition: transform 0.3s; font-size: 9px; }
 .weather-card.expanded .w-expand .w-arrow { transform: rotate(180deg); }
 
-/* 展开详情区 */
+/* 展開詳情區 */
 .weather-card .w-details {
   max-height: 0; overflow: hidden;
   transition: max-height 0.35s ease;
@@ -1286,7 +1438,7 @@ body {
 .weather-card .w-dvalue { font-size: 13px; font-weight: 600; color: var(--rb-text-strong); }
 .weather-card .w-kaomoji { font-size: 14px; margin-left: 3px; }
 
-/* 空态：当前会话无消息时显示（设置面板"+新对话"或删除清空后的过渡态） */
+/* 空態：當前會話無消息時顯示（設置面板"+新對話"或刪除清空後的過渡態） */
 .chat__empty-state {
   position: absolute;
   inset: 0;
@@ -1316,7 +1468,7 @@ body {
   letter-spacing: 0.5px;
 }
 
-/* 快捷预设胶囊：空对话时显示在 empty-state 文本下方，水平居中折行 */
+/* 快捷預設膠囊：空對話時顯示在 empty-state 文本下方，水平居中折行 */
 .chat__quick-presets {
   display: flex;
   flex-wrap: wrap;
@@ -1324,7 +1476,7 @@ body {
   gap: 10px;
   max-width: 420px;
   margin-top: 8px;
-  pointer-events: auto; /* 父容器 #chat-empty 是 pointer-events:none，必须单独开启 */
+  pointer-events: auto; /* 父容器 #chat-empty 是 pointer-events:none，必須單獨開啟 */
 }
 
 .chat__preset {
@@ -1361,7 +1513,7 @@ body {
   white-space: nowrap;
 }
 
-/* ── 任务进度面板（todo_write 工具触发，顶部居中浮层，毛玻璃风格）── */
+/* ── 任務進度面板（todo_write 工具觸發，頂部居中浮層，毛玻璃風格）── */
 .todo-panel {
   position: absolute;
   top: 66px;
@@ -1393,7 +1545,7 @@ body {
   pointer-events: none;
 }
 
-/* 收缩态：隐藏 body（分隔线+进度条+列表），只留 header */
+/* 收縮態：隱藏 body（分隔線+進度條+列表），只留 header */
 .todo-panel--collapsed .todo-panel__body {
   max-height: 0;
   opacity: 0;
@@ -1451,7 +1603,7 @@ body {
   color: rgba(255,255,255,0.9);
 }
 
-/* 分隔线 */
+/* 分隔線 */
 .todo-panel__divider {
   width: 100%;
   height: 1px;
@@ -1460,7 +1612,7 @@ body {
   margin: 0;
 }
 
-/* 进度条 */
+/* 進度條 */
 .todo-panel__progress {
   display: flex;
   align-items: center;
@@ -1489,7 +1641,7 @@ body {
   white-space: nowrap;
 }
 
-/* 任务列表 */
+/* 任務列表 */
 .todo-list {
   display: flex;
   flex-direction: column;
@@ -1566,7 +1718,7 @@ body {
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
-/* ── 用户选择卡片（歧义消解器：模糊需求时弹卡片让用户选）── */
+/* ── 用戶選擇卡片（歧義消解器：模糊需求時彈卡片讓用戶選）── */
 .choice-card {
   margin: 4px 0 8px 46px;
   padding: 14px 16px;
@@ -1680,14 +1832,14 @@ body {
   cursor: default;
 }
 
-/* 已解决状态：整卡片变暗 */
+/* 已解決狀態：整卡片變暗 */
 .choice-card--resolved {
   opacity: 0.6;
 }
 
 /* ============================================================
-   权限审批卡片（per-action 档位下，工具调用前弹出让用户确认）
-   默认（经典 + 抛光粉共享暗色） + 珠光白主题特殊样式
+   權限審批卡片（per-action 檔位下，工具調用前彈出讓用戶確認）
+   默認（經典 + 拋光粉共享暗色） + 珠光白主題特殊樣式
    ============================================================ */
 @keyframes approval-fade-in {
   from { opacity: 0; transform: translateY(8px); }
@@ -1843,7 +1995,7 @@ body {
   border-color: rgba(255,90,120,0.32);
 }
 
-/* ── 珠光白主题（白底粉/黑 accent）── */
+/* ── 珠光白主題（白底粉/黑 accent）── */
 [data-ui-theme="pearl-white"] .approval-card {
   background: rgba(255,255,255,0.86);
   border: 1.5px solid rgba(255,143,184,0.32);
@@ -1942,4 +2094,167 @@ body {
 
 [data-ui-theme="pearl-white"] .approval-card--denied {
   border-color: rgba(220,40,80,0.36);
+}
+
+html.is-embedded .chat__titlebar,
+body.is-embedded .chat__titlebar {
+  display: none !important;
+}
+
+/* ── 昔漣互動沙盒樣式 ── */
+.sandbox-card {
+  margin-top: 12px;
+  background: rgba(15, 12, 28, 0.6);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  max-width: 100%;
+}
+
+.sandbox-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(168, 85, 247, 0.1);
+  border-bottom: 1px solid rgba(168, 85, 247, 0.15);
+}
+
+.sandbox-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.sandbox-card__icon {
+  font-size: 16px;
+}
+
+.sandbox-card__actions {
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px;
+  border-radius: 8px;
+}
+
+.sandbox-tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sandbox-tab-btn:hover {
+  color: #fff;
+}
+
+.sandbox-tab-btn.is-active {
+  background: rgba(168, 85, 247, 0.35);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.2);
+}
+
+.sandbox-card__content {
+  position: relative;
+  width: 100%;
+  background: #000;
+}
+
+.sandbox-play-container {
+  width: 100%;
+  height: 400px;
+  position: relative;
+}
+
+.sandbox-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+
+.sandbox-code-container {
+  width: 100%;
+  height: 400px;
+  overflow: auto;
+  padding: 16px;
+  box-sizing: border-box;
+  background: #0d0b18;
+}
+
+.sandbox-code-container pre {
+  margin: 0;
+  padding: 0;
+  font-family: 'Fira Code', Consolas, Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #a78bfa;
+}
+
+.sandbox-code-container code {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.is-hidden {
+  display: none !important;
+}
+
+/* ===== Stop speaking floating button ===== */
+.chat__stop-speaking {
+  position: absolute;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.stop-speaking-btn-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  background: rgba(244, 63, 94, 0.85); /* Vibrant pink/rose red */
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 16px rgba(244, 63, 94, 0.35);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stop-speaking-btn-inner:hover {
+  background: rgba(244, 63, 94, 1);
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(244, 63, 94, 0.5);
+}
+
+.stop-speaking-icon {
+  flex-shrink: 0;
+  animation: pulse-stop 1.5s infinite;
+}
+
+@keyframes pulse-stop {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.9); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
 }

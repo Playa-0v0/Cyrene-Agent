@@ -1,16 +1,16 @@
-# 批注系统指南（4 文件架构）
+# 批註系統指南（4 文件架構）
 
 ## 概述
 
-Word 批注需要在**四个 XML 文件**之间协调，外加 `document.xml`、`[Content_Types].xml` 和 `document.xml.rels` 中的引用。
+Word 批註需要在**四個 XML 文件**之間協調，外加 `document.xml`、`[Content_Types].xml` 和 `document.xml.rels` 中的引用。
 
 ---
 
-## 四个批注文件
+## 四個批註文件
 
-### 1. `word/comments.xml` — 批注主内容
+### 1. `word/comments.xml` — 批註主內容
 
-包含实际的批注文本：
+包含實際的批註文本：
 
 ```xml
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -24,18 +24,18 @@ Word 批注需要在**四个 XML 文件**之间协调，外加 `document.xml`、
         <w:annotationRef />
       </w:r>
       <w:r>
-        <w:t>此处需要澄清。</w:t>
+        <w:t>此處需要澄清。</w:t>
       </w:r>
     </w:p>
   </w:comment>
 </w:comments>
 ```
 
-关键属性：`w:id`（唯一整数）、`w:author`、`w:date`（ISO 8601）、`w:initials`。
+關鍵屬性：`w:id`（唯一整數）、`w:author`、`w:date`（ISO 8601）、`w:initials`。
 
-### 2. `word/commentsExtended.xml` — W15 扩展
+### 2. `word/commentsExtended.xml` — W15 擴展
 
-将批注链接到段落并追踪已解决状态：
+將批註鏈接到段落並追蹤已解決狀態：
 
 ```xml
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -44,12 +44,12 @@ Word 批注需要在**四个 XML 文件**之间协调，外加 `document.xml`、
 </w15:commentsEx>
 ```
 
-- `w15:paraId` — 匹配 `comments.xml` 中批注段落的 `w14:paraId`
-- `w15:done` — `"0"` = 未解决，`"1"` = 已解决
+- `w15:paraId` — 匹配 `comments.xml` 中批註段落的 `w14:paraId`
+- `w15:done` — `"0"` = 未解決，`"1"` = 已解決
 
 ### 3. `word/commentsIds.xml` — 持久 ID 映射
 
-提供在跨文档复制/粘贴后仍能存活的持久 ID：
+提供在跨文檔複製/粘貼後仍能存活的持久 ID：
 
 ```xml
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -58,12 +58,12 @@ Word 批注需要在**四个 XML 文件**之间协调，外加 `document.xml`、
 </w16cid:commentsIds>
 ```
 
-- `w16cid:paraId` — 与 `w15:paraId` 相同
-- `w16cid:durableId` — 全局唯一标识符（8 位十六进制）
+- `w16cid:paraId` — 與 `w15:paraId` 相同
+- `w16cid:durableId` — 全局唯一標識符（8 位十六進制）
 
-### 4. `word/commentsExtensible.xml` — W16 扩展
+### 4. `word/commentsExtensible.xml` — W16 擴展
 
-现代批注扩展（用于较新版本的 Word）：
+現代批註擴展（用於較新版本的 Word）：
 
 ```xml
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -76,12 +76,12 @@ Word 批注需要在**四个 XML 文件**之间协调，外加 `document.xml`、
 
 ## document.xml 中的引用
 
-批注通过三个元素锚定在文档内容中：
+批註通過三個元素錨定在文檔內容中：
 
 ```xml
 <w:p>
   <w:commentRangeStart w:id="1" />
-  <w:r><w:t>此文本带有一条批注。</w:t></w:r>
+  <w:r><w:t>此文本帶有一條批註。</w:t></w:r>
   <w:commentRangeEnd w:id="1" />
   <w:r>
     <w:rPr><w:rStyle w:val="CommentReference" /></w:rPr>
@@ -90,15 +90,15 @@ Word 批注需要在**四个 XML 文件**之间协调，外加 `document.xml`、
 </w:p>
 ```
 
-- `w:commentRangeStart` — 标记被批注文本的起始位置
-- `w:commentRangeEnd` — 标记被批注文本的结束位置
-- `w:commentReference` — 可见的批注标记（上标数字），放在范围结束之后的一个 run 中
+- `w:commentRangeStart` — 標記被批註文本的起始位置
+- `w:commentRangeEnd` — 標記被批註文本的結束位置
+- `w:commentReference` — 可見的批註標記（上標數字），放在範圍結束之後的一個 run 中
 
-三者的 `w:id` 必须与 `comments.xml` 中的 `w:id` 匹配。
+三者的 `w:id` 必須與 `comments.xml` 中的 `w:id` 匹配。
 
 ---
 
-## 内容类型注册
+## 內容類型註冊
 
 添加到 `[Content_Types].xml`：
 
@@ -115,7 +115,7 @@ Word 批注需要在**四个 XML 文件**之间协调，外加 `document.xml`、
 
 ---
 
-## 关系注册
+## 關係註冊
 
 添加到 `word/_rels/document.xml.rels`：
 
@@ -132,30 +132,30 @@ Word 批注需要在**四个 XML 文件**之间协调，外加 `document.xml`、
 
 ---
 
-## 分步：添加新批注
+## 分步：添加新批註
 
-1. **选择唯一的批注 ID**（扫描现有 `w:id` 值，使用最大值 + 1）
-2. **生成 paraId**（8 字符十六进制，如 `"1A2B3C4D"`）和 durableId（8 位十六进制）
-3. **添加到 `comments.xml`**：创建带内容的 `w:comment` 元素
-4. **添加到 `commentsExtended.xml`**：创建带 `paraId`、`done="0"` 的 `w15:commentEx`
-5. **添加到 `commentsIds.xml`**：创建带 `paraId` 和 `durableId` 的 `w16cid:commentId`
-6. **添加到 `commentsExtensible.xml`**：创建带 `durableId` 和 `dateUtc` 的 `w16cex:commentExtensible`
-7. **添加到 `document.xml`**：在目标文本周围插入 `w:commentRangeStart`、`w:commentRangeEnd` 和 `w:commentReference`
-8. **验证 `[Content_Types].xml`** 和 `document.xml.rels` 是否包含全部 4 个文件的条目
+1. **選擇唯一的批註 ID**（掃描現有 `w:id` 值，使用最大值 + 1）
+2. **生成 paraId**（8 字符十六進制，如 `"1A2B3C4D"`）和 durableId（8 位十六進制）
+3. **添加到 `comments.xml`**：創建帶內容的 `w:comment` 元素
+4. **添加到 `commentsExtended.xml`**：創建帶 `paraId`、`done="0"` 的 `w15:commentEx`
+5. **添加到 `commentsIds.xml`**：創建帶 `paraId` 和 `durableId` 的 `w16cid:commentId`
+6. **添加到 `commentsExtensible.xml`**：創建帶 `durableId` 和 `dateUtc` 的 `w16cex:commentExtensible`
+7. **添加到 `document.xml`**：在目標文本週圍插入 `w:commentRangeStart`、`w:commentRangeEnd` 和 `w:commentReference`
+8. **驗證 `[Content_Types].xml`** 和 `document.xml.rels` 是否包含全部 4 個文件的條目
 
 ---
 
-## 分步：添加回复
+## 分步：添加回復
 
-回复是其段落的 `w14:paraId` 链接到父批注的批注：
+回覆是其段落的 `w14:paraId` 鏈接到父批註的批註：
 
-1. 在 `comments.xml` 中创建带新 `w:id` 的新 `w:comment`
+1. 在 `comments.xml` 中創建帶新 `w:id` 的新 `w:comment`
 2. 在 `commentsExtended.xml` 中添加 `w15:commentEx`：
    - `w15:paraId` = 新段落 ID
-   - `w15:paraIdParent` = 被回复批注的 `paraId`
+   - `w15:paraIdParent` = 被回覆批註的 `paraId`
    - `w15:done="0"`
-3. 在 `commentsIds.xml` 和 `commentsExtensible.xml` 中添加条目
-4. 在 `document.xml` 中，回复不需要自己的范围标记——它共享父批注的范围
+3. 在 `commentsIds.xml` 和 `commentsExtensible.xml` 中添加條目
+4. 在 `document.xml` 中，回覆不需要自己的範圍標記——它共享父批註的範圍
 
 ```xml
 <!-- 在 commentsExtended.xml 中 -->
@@ -164,28 +164,28 @@ Word 批注需要在**四个 XML 文件**之间协调，外加 `document.xml`、
 
 ---
 
-## 分步：解决批注
+## 分步：解決批註
 
-将批注的 `w15:commentEx` 条目的 `w15:done` 设为 `"1"`：
+將批註的 `w15:commentEx` 條目的 `w15:done` 設為 `"1"`：
 
 ```xml
 <!-- 之前 -->
 <w15:commentEx w15:paraId="1A2B3C4D" w15:done="0" />
 
-<!-- 之后 -->
+<!-- 之後 -->
 <w15:commentEx w15:paraId="1A2B3C4D" w15:done="1" />
 ```
 
-这会将批注（及其所有回复）标记为已解决。批注仍可见，但在 Word 中显示为灰色。
+這會將批註（及其所有回覆）標記為已解決。批註仍可見，但在 Word 中顯示為灰色。
 
 ---
 
-## 最小可用批注
+## 最小可用批註
 
-一个可用的批注至少需要：
+一個可用的批註至少需要：
 1. 包含 `w:comment` 元素的 `comments.xml`
-2. 包含范围标记和引用的 `document.xml`
-3. `document.xml.rels` 中的关系
-4. `[Content_Types].xml` 中的内容类型
+2. 包含範圍標記和引用的 `document.xml`
+3. `document.xml.rels` 中的關係
+4. `[Content_Types].xml` 中的內容類型
 
-扩展文件（`commentsExtended`、`commentsIds`、`commentsExtensible`）是可选的，但建议使用以完全兼容现代 Word。
+擴展文件（`commentsExtended`、`commentsIds`、`commentsExtensible`）是可選的，但建議使用以完全兼容現代 Word。

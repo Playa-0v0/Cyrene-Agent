@@ -1,51 +1,51 @@
-# 场景 A：从零创建新 DOCX
+# 場景 A：從零創建新 DOCX
 
-## 何时使用
+## 何時使用
 
-以下情况使用场景 A：
-- 用户没有现有文件，想要一份全新的文档
-- 用户提供了内容（文本、表格、图片），希望将其组装成 DOCX
-- 用户指定了文档类型（报告、信函、备忘录、学术论文）或描述了自定义版式
+以下情況使用場景 A：
+- 用戶沒有現有文件，想要一份全新的文檔
+- 用戶提供了內容（文本、表格、圖片），希望將其組裝成 DOCX
+- 用戶指定了文檔類型（報告、信函、備忘錄、學術論文）或描述了自定義版式
 
-不要使用的情形：用户已有一个想要修改的 DOCX（→ 场景 B），或想要重新设计现有文档的样式（→ 场景 C）。
+不要使用的情形：用戶已有一個想要修改的 DOCX（→ 場景 B），或想要重新設計現有文檔的樣式（→ 場景 C）。
 
 ---
 
 ## 分步工作流
 
-### 1. 确定文档类型
+### 1. 確定文檔類型
 
-从用户请求中询问或推断文档类型：
+從用戶請求中詢問或推斷文檔類型：
 
-| 类型 | 典型信号 |
+| 類型 | 典型信號 |
 |------|----------------|
-| 报告（Report） | "报告"、"分析"、"白皮书"、带标题的章节 |
-| 信函（Letter） | "信"、"敬启者"、地址块、称呼 |
-| 备忘录（Memo） | "备忘录"、To/From/Subject 字段 |
-| 学术（Academic） | "论文"、"文章"、"毕业论文"、提及 APA/MLA/Chicago |
-| 自定义（Custom） | 以上都不是，或用户指定了精确格式 |
+| 報告（Report） | "報告"、"分析"、"白皮書"、帶標題的章節 |
+| 信函（Letter） | "信"、"敬啟者"、地址塊、稱呼 |
+| 備忘錄（Memo） | "備忘錄"、To/From/Subject 字段 |
+| 學術（Academic） | "論文"、"文章"、"畢業論文"、提及 APA/MLA/Chicago |
+| 自定義（Custom） | 以上都不是，或用戶指定了精確格式 |
 
-### 2. 收集内容需求
+### 2. 收集內容需求
 
-从用户处收集：
-- 标题和副标题（如有）
-- 作者/组织
-- 章节结构（标题和嵌套层级）
-- 每节的正文内容
-- 表格（表头 + 行）
-- 图片（文件路径或占位符）
-- 特殊元素：目录、页码、水印、页眉/页脚
+從用戶處收集：
+- 標題和副標題（如有）
+- 作者/組織
+- 章節結構（標題和嵌套層級）
+- 每節的正文內容
+- 表格（表頭 + 行）
+- 圖片（文件路徑或佔位符）
+- 特殊元素：目錄、頁碼、水印、頁眉/頁腳
 
-### 3. 选择样式集
+### 3. 選擇樣式集
 
-根据文档类型，加载匹配的样式 XML 资源：
-- 报告 → `assets/styles/default_styles.xml` 或 `assets/styles/corporate_styles.xml`
-- 学术 → `assets/styles/academic_styles.xml`
-- 信函/备忘录/自定义 → `assets/styles/default_styles.xml`（带覆盖）
+根據文檔類型，加載匹配的樣式 XML 資源：
+- 報告 → `assets/styles/default_styles.xml` 或 `assets/styles/corporate_styles.xml`
+- 學術 → `assets/styles/academic_styles.xml`
+- 信函/備忘錄/自定義 → `assets/styles/default_styles.xml`（帶覆蓋）
 
-### 4. 配置页面设置
+### 4. 配置頁面設置
 
-根据文档类型默认值（见下方）或用户覆盖设置 `w:sectPr` 值。
+根據文檔類型默認值（見下方）或用戶覆蓋設置 `w:sectPr` 值。
 
 ```xml
 <w:sectPr>
@@ -55,18 +55,18 @@
 </w:sectPr>
 ```
 
-### 5. 构建文档结构
+### 5. 構建文檔結構
 
-组装 `word/document.xml`：
-1. 以 `w:body` 作为根容器
-2. 用标题样式的段落（`w:p`）作为章节标题
-3. 用 `Normal` 样式的正文段落
-4. 按需添加表格、图片和其他元素
-5. 最后的 `w:sectPr` 作为 `w:body` 的最后一个子元素
+組裝 `word/document.xml`：
+1. 以 `w:body` 作為根容器
+2. 用標題樣式的段落（`w:p`）作為章節標題
+3. 用 `Normal` 樣式的正文段落
+4. 按需添加表格、圖片和其他元素
+5. 最後的 `w:sectPr` 作為 `w:body` 的最後一個子元素
 
-### 6. 应用排版默认值
+### 6. 應用排版默認值
 
-在 `styles.xml` 的 `w:docDefaults` 下设置文档级默认值：
+在 `styles.xml` 的 `w:docDefaults` 下設置文檔級默認值：
 ```xml
 <w:docDefaults>
   <w:rPrDefault>
@@ -84,124 +84,124 @@
 </w:docDefaults>
 ```
 
-### 7. 添加复杂元素
+### 7. 添加複雜元素
 
-参见下方"复杂元素指南"部分。
+參見下方"複雜元素指南"部分。
 
-### 8. 运行验证管道
+### 8. 運行驗證管道
 
 ```
 dotnet run ... validate --xsd wml-subset.xsd
-dotnet run ... validate --xsd business-rules.xsd   # 若应用了模板
+dotnet run ... validate --xsd business-rules.xsd   # 若應用了模板
 ```
 
 ---
 
-## 文档类型默认值
+## 文檔類型默認值
 
-### 报告
-| 属性 | 值 |
+### 報告
+| 屬性 | 值 |
 |----------|-------|
-| 正文字体 | Calibri 11pt |
-| 标题字体 | Calibri Light |
-| H1 / H2 / H3 / H4 字号 | 28pt / 24pt / 18pt / 14pt |
-| 标题颜色 | #2F5496（企业蓝） |
-| 页边距 | 四边各 1 英寸（1440 DXA） |
-| 页面尺寸 | A4（11906 × 16838 DXA） |
-| 行距 | 单倍（line="240"） |
-| 段距 | 正文段前 0pt，段后 8pt |
+| 正文字體 | Calibri 11pt |
+| 標題字體 | Calibri Light |
+| H1 / H2 / H3 / H4 字號 | 28pt / 24pt / 18pt / 14pt |
+| 標題顏色 | #2F5496（企業藍） |
+| 頁邊距 | 四邊各 1 英寸（1440 DXA） |
+| 頁面尺寸 | A4（11906 × 16838 DXA） |
+| 行距 | 單倍（line="240"） |
+| 段距 | 正文段前 0pt，段後 8pt |
 
 ### 信函
-| 属性 | 值 |
+| 屬性 | 值 |
 |----------|-------|
-| 字体 | Calibri 11pt |
-| 页面尺寸 | Letter（12240 × 15840 DXA） |
-| 页边距 | 四边各 1 英寸 |
-| 结构 | 日期 → 地址 → 称呼 → 正文 → 结尾 → 签名 |
-| 行距 | 单倍 |
+| 字體 | Calibri 11pt |
+| 頁面尺寸 | Letter（12240 × 15840 DXA） |
+| 頁邊距 | 四邊各 1 英寸 |
+| 結構 | 日期 → 地址 → 稱呼 → 正文 → 結尾 → 簽名 |
+| 行距 | 單倍 |
 
-### 备忘录
-| 属性 | 值 |
+### 備忘錄
+| 屬性 | 值 |
 |----------|-------|
-| 字体 | Arial 11pt |
-| 页面尺寸 | Letter |
-| 页边距 | 0.75 英寸（1080 DXA） |
-| 页眉 | "MEMO" 居中、粗体、16pt |
-| 字段 | To、From、Date、Subject（标签粗体，值用制表符对齐） |
+| 字體 | Arial 11pt |
+| 頁面尺寸 | Letter |
+| 頁邊距 | 0.75 英寸（1080 DXA） |
+| 頁眉 | "MEMO" 居中、粗體、16pt |
+| 字段 | To、From、Date、Subject（標籤粗體，值用製表符對齊） |
 
-### 学术
-| 属性 | 值 |
+### 學術
+| 屬性 | 值 |
 |----------|-------|
-| 字体 | Times New Roman 12pt |
-| 行距 | 双倍（line="480"） |
-| 页边距 | 四边各 1 英寸 |
-| 页面尺寸 | Letter |
-| 标题 | 粗体、同字体，H1/H2/H3 为 14/13/12pt |
-| 首行缩进 | 0.5 英寸（720 DXA） |
-| 标题颜色 | 黑色（无颜色） |
+| 字體 | Times New Roman 12pt |
+| 行距 | 雙倍（line="480"） |
+| 頁邊距 | 四邊各 1 英寸 |
+| 頁面尺寸 | Letter |
+| 標題 | 粗體、同字體，H1/H2/H3 為 14/13/12pt |
+| 首行縮進 | 0.5 英寸（720 DXA） |
+| 標題顏色 | 黑色（無顏色） |
 
 ---
 
-## 内容配置 JSON 格式
+## 內容配置 JSON 格式
 
-CLI `create` 命令接受一个 JSON 配置：
+CLI `create` 命令接受一個 JSON 配置：
 
 ```json
 {
   "type": "report",
-  "title": "季度营收分析",
+  "title": "季度營收分析",
   "subtitle": "2026 年第一季度",
-  "author": "财务团队",
+  "author": "財務團隊",
   "pageSize": "A4",
   "margins": { "top": 1440, "right": 1440, "bottom": 1440, "left": 1440 },
   "sections": [
     {
-      "heading": "执行摘要",
+      "heading": "執行摘要",
       "level": 1,
       "content": [
-        { "type": "paragraph", "text": "营收同比增长 12%..." },
+        { "type": "paragraph", "text": "營收同比增長 12%..." },
         {
           "type": "table",
-          "headers": ["地区", "营收", "增长"],
+          "headers": ["地區", "營收", "增長"],
           "rows": [
             ["北美", "$4.2M", "+15%"],
-            ["欧洲", "$2.8M", "+8%"],
-            ["亚太", "$1.9M", "+18%"]
+            ["歐洲", "$2.8M", "+8%"],
+            ["亞太", "$1.9M", "+18%"]
           ]
         },
-        { "type": "image", "path": "charts/revenue.png", "width": "5in", "alt": "营收图表" }
+        { "type": "image", "path": "charts/revenue.png", "width": "5in", "alt": "營收圖表" }
       ]
     },
     {
-      "heading": "详细分析",
+      "heading": "詳細分析",
       "level": 1,
       "content": [
-        { "type": "paragraph", "text": "按产品线细分..." }
+        { "type": "paragraph", "text": "按產品線細分..." }
       ]
     }
   ]
 }
 ```
 
-支持的内容类型：
-- `paragraph` — 正文文本（应用 Normal 样式）
-- `table` — 表头 + 行（应用 TableGrid 样式）
-- `image` — 内嵌图片，可控制宽高
-- `list` — 项目符号或编号列表项
-- `pageBreak` — 强制分页
+支持的內容類型：
+- `paragraph` — 正文文本（應用 Normal 樣式）
+- `table` — 表頭 + 行（應用 TableGrid 樣式）
+- `image` — 內嵌圖片，可控制寬高
+- `list` — 項目符號或編號列表項
+- `pageBreak` — 強制分頁
 
 ---
 
-## 复杂元素指南
+## 複雜元素指南
 
-### 目录
+### 目錄
 
-插入一个 TOC 域代码。Word 在打开文件时会更新实际条目：
+插入一個 TOC 域代碼。Word 在打開文件時會更新實際條目：
 
 ```xml
 <w:p>
   <w:pPr><w:pStyle w:val="TOCHeading" /></w:pPr>
-  <w:r><w:t>目录</w:t></w:r>
+  <w:r><w:t>目錄</w:t></w:r>
 </w:p>
 <w:p>
   <w:r>
@@ -214,7 +214,7 @@ CLI `create` 命令接受一个 JSON 配置：
     <w:fldChar w:fldCharType="separate" />
   </w:r>
   <w:r>
-    <w:t>[目录 — 请更新以填充]</w:t>
+    <w:t>[目錄 — 請更新以填充]</w:t>
   </w:r>
   <w:r>
     <w:fldChar w:fldCharType="end" />
@@ -222,9 +222,9 @@ CLI `create` 命令接受一个 JSON 配置：
 </w:p>
 ```
 
-### 页脚中的页码
+### 頁腳中的頁碼
 
-添加一个页脚部件（`word/footer1.xml`）并在 `w:sectPr` 中引用它：
+添加一個頁腳部件（`word/footer1.xml`）並在 `w:sectPr` 中引用它：
 
 ```xml
 <!-- 在 footer1.xml 中 -->
@@ -253,7 +253,7 @@ CLI `create` 命令接受一个 JSON 配置：
 
 ### 水印
 
-添加一个带形状（置于文字之后）的页眉部件：
+添加一個帶形狀（置於文字之後）的頁眉部件：
 
 ```xml
 <w:hdr>
@@ -274,11 +274,11 @@ CLI `create` 命令接受一个 JSON 配置：
 
 ---
 
-## 创建后检查清单
+## 創建後檢查清單
 
-1. **验证** — 依据 `wml-subset.xsd`：所有元素顺序正确，必需属性存在
-2. **合并相邻 run** — 格式相同的相邻 run 合并以保持 XML 整洁
-3. **验证关系** — document.xml 中的每个 `r:id` 在 `document.xml.rels` 中都有匹配条目
-4. **检查内容类型** — 包中的每个部件都在 `[Content_Types].xml` 中注册
-5. **预览** — 在 Word 或 LibreOffice 中打开以视觉确认版式
-6. **文件大小** — 确认图片大小合理（每张超过 2MB 则压缩）
+1. **驗證** — 依據 `wml-subset.xsd`：所有元素順序正確，必需屬性存在
+2. **合併相鄰 run** — 格式相同的相鄰 run 合併以保持 XML 整潔
+3. **驗證關係** — document.xml 中的每個 `r:id` 在 `document.xml.rels` 中都有匹配條目
+4. **檢查內容類型** — 包中的每個部件都在 `[Content_Types].xml` 中註冊
+5. **預覽** — 在 Word 或 LibreOffice 中打開以視覺確認版式
+6. **文件大小** — 確認圖片大小合理（每張超過 2MB 則壓縮）

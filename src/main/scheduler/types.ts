@@ -18,6 +18,10 @@ export interface ScheduledTask {
   lastFiredAt?: string;
   toolMode: SchedulerToolMode;
   allowedToolIds: string[];
+  /** 系統功能建立的任務來源；存在時由該功能管理，不應在通用編輯器修改。 */
+  managedBy?: "daily-ritual";
+  /** 每日陪伴儀式的時段識別。 */
+  ritualId?: "morning" | "afternoon" | "evening";
   createdAt: string;
   updatedAt: string;
 }
@@ -29,6 +33,8 @@ export interface NewScheduledTaskInput {
   schedule: ScheduleConfig;
   toolMode?: SchedulerToolMode;
   allowedToolIds?: string[];
+  managedBy?: "daily-ritual";
+  ritualId?: "morning" | "afternoon" | "evening";
 }
 
 export type ScheduledTaskPatch = Partial<Pick<

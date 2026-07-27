@@ -27,6 +27,8 @@ coverage/
 verify-*.js
 verify-*.png
 verify-*.html
+.cyrene-cache/
+.playwright-mcp/
 
 # Debug previews / scratch files generated during UI work
 cyrene-*-preview.html

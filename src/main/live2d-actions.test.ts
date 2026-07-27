@@ -61,7 +61,7 @@ describe("findAction", () => {
   });
 
   it("returns undefined for an unknown alias", () => {
-    expect(findAction("挥手")).toBeUndefined();
+    expect(findAction("揮手")).toBeUndefined();
     expect(findAction("definitely-not-an-alias")).toBeUndefined();
   });
 

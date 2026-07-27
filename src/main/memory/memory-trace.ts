@@ -29,6 +29,6 @@ export function appendMemoryTrace(event: MemoryTraceEvent): void {
     }
     fs.appendFileSync(filePath, `${JSON.stringify(entry)}\n`, "utf8")
   } catch (err) {
-    console.warn("[MemoryTrace] 写入失败:", err)
+    console.warn("[MemoryTrace] 寫入失敗:", err)
   }
 }

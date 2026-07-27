@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// tool-registry 通过 ../rag/index 间接 import electron；这里 stub 掉避免 electron 二进制检查
+// tool-registry 通過 ../rag/index 間接 import electron；這裡 stub 掉避免 electron 二進制檢查
 vi.mock("electron", () => ({
 	app: { getPath: vi.fn(() => "/tmp") },
 }));
 
-// mock 整个 SDK,在测试里不需要真连
+// mock 整個 SDK,在測試裡不需要真連
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
 	Client: vi.fn(),
 }));
@@ -42,7 +42,7 @@ import { toolRegistry } from "./tool-registry";
 describe("mcp-adapter transport split", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		// 清空 registry,避免互相污染
+		// 清空 registry,避免互相汙染
 		for (const t of toolRegistry.getAllTools()) toolRegistry.unregister(t.id);
 	});
 

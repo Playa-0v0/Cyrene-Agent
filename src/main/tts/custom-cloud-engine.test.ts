@@ -7,7 +7,7 @@ afterEach(() => {
 
 describe("custom-cloud-engine synthesize", () => {
   it("rejects missing endpointUrl", async () => {
-    await expect(synthesize({ endpointUrl: "", text: "hello" })).rejects.toThrow(/自定义云端 TTS 地址/);
+    await expect(synthesize({ endpointUrl: "", text: "hello" })).rejects.toThrow(/自定義雲端 TTS 地址/);
   });
 
   it("rejects missing text", async () => {

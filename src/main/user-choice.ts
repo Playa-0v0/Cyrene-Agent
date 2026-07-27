@@ -1,29 +1,29 @@
-// 用户选择往返机制 —— 仿 permission.ts 的 requestApproval 模式。
-// 工具执行中调 requestUserChoice()，阻塞等待用户在聊天卡片里选一个选项。
+// 用戶選擇往返機制 —— 仿 permission.ts 的 requestApproval 模式。
+// 工具執行中調 requestUserChoice()，阻塞等待用戶在聊天卡片裡選一個選項。
 //
-// 数据流：
-//   工具 execute → requestUserChoice() → 通过回调发 CUSTOM 事件给渲染端
-//   → 渲染端显示选项卡片 → 用户点选项 → invoke(IPC.CHOICE_RESOLVE) 回传
-//   → main 查 pending map → resolve Promise → 工具拿到用户选择继续执行
+// 數據流：
+//   工具 execute → requestUserChoice() → 通過回調發 CUSTOM 事件給渲染端
+//   → 渲染端顯示選項卡片 → 用戶點選項 → invoke(IPC.CHOICE_RESOLVE) 回傳
+//   → main 查 pending map → resolve Promise → 工具拿到用戶選擇繼續執行
 //
-// 回调注入模式（仿 weatherCardCallback）：main/index.ts 启动时注入一个
-// (cardData) => void 回调，user-choice.ts 持有它，工具调用时触发。
-// 这样避免直接 import electron/index.ts 造成循环依赖。
+// 回調注入模式（仿 weatherCardCallback）：main/index.ts 啟動時注入一個
+// (cardData) => void 回調，user-choice.ts 持有它，工具調用時觸發。
+// 這樣避免直接 import electron/index.ts 造成循環依賴。
 
 import { ipcMain } from "electron";
 import { IPC } from "../shared/ipc-channels";
 
 const LOG_PREFIX = "[UserChoice]";
-const CHOICE_TIMEOUT_MS = 120_000; // 2 分钟超时，给用户足够思考时间
+const CHOICE_TIMEOUT_MS = 120_000; // 2 分鐘超時，給用戶足夠思考時間
 
-/** 选项结构。 */
+/** 選項結構。 */
 export interface ChoiceOption {
   label: string;
   value: string;
   description?: string;
 }
 
-/** 发给渲染端的卡片数据。 */
+/** 發給渲染端的卡片數據。 */
 export interface ChoiceCardData {
   id: string;
   question: string;
@@ -39,17 +39,17 @@ interface PendingChoice {
 const pendingChoices = new Map<string, PendingChoice>();
 let choiceCounter = 0;
 
-/** 注入的卡片回调：由 index.ts 启动时设置，把 ChoiceCardData 包成 CUSTOM 事件发给渲染端。 */
+/** 注入的卡片回調：由 index.ts 啟動時設置，把 ChoiceCardData 包成 CUSTOM 事件發給渲染端。 */
 let choiceCardSender: ((card: ChoiceCardData) => void) | null = null;
 
-/** index.ts 启动时调用，注入卡片发送回调。 */
+/** index.ts 啟動時調用，注入卡片發送回調。 */
 export function setChoiceCardSender(sender: (card: ChoiceCardData) => void): void {
   choiceCardSender = sender;
 }
 
 /**
- * 发起一次用户选择请求，阻塞等待用户在聊天卡片里选一个选项。
- * 超时（120s）返回 defaultValue 或空串。
+ * 發起一次用戶選擇請求，阻塞等待用戶在聊天卡片裡選一個選項。
+ * 超時（120s）返回 defaultValue 或空串。
  */
 export function requestUserChoice(
   question: string,
@@ -61,38 +61,38 @@ export function requestUserChoice(
 
     const timer = setTimeout(() => {
       pendingChoices.delete(id);
-      console.warn(LOG_PREFIX, "选择超时（" + CHOICE_TIMEOUT_MS + "ms），使用默认值:", defaultValue ?? "(空)");
+      console.warn(LOG_PREFIX, "選擇超時（" + CHOICE_TIMEOUT_MS + "ms），使用默認值:", defaultValue ?? "(空)");
       resolve(defaultValue ?? "");
     }, CHOICE_TIMEOUT_MS);
 
     pendingChoices.set(id, { resolve, timer });
 
     const payload: ChoiceCardData = { id, question, options, default: defaultValue };
-    console.log(LOG_PREFIX, "发送选择请求:", id, question);
+    console.log(LOG_PREFIX, "發送選擇請求:", id, question);
 
     if (choiceCardSender) {
       choiceCardSender(payload);
     } else {
-      // 没注入回调（理论上不会发生），直接返回默认值
+      // 沒注入回調（理論上不會發生），直接返回默認值
       clearTimeout(timer);
       pendingChoices.delete(id);
-      console.warn(LOG_PREFIX, "未注入卡片回调，使用默认值");
+      console.warn(LOG_PREFIX, "未注入卡片回調，使用默認值");
       resolve(defaultValue ?? "");
     }
   });
 }
 
-/** 注册 CHOICE_RESOLVE handler（main 启动时调一次）。 */
+/** 註冊 CHOICE_RESOLVE handler（main 啟動時調一次）。 */
 export function registerChoiceIpc(): void {
   ipcMain.handle(IPC.CHOICE_RESOLVE, (_event, payload: { id: string; value: string }) => {
     const pending = pendingChoices.get(payload?.id);
     if (!pending) {
-      console.warn(LOG_PREFIX, "选择回传未匹配到 pending:", payload?.id);
+      console.warn(LOG_PREFIX, "選擇回傳未匹配到 pending:", payload?.id);
       return { ok: false };
     }
     clearTimeout(pending.timer);
     pendingChoices.delete(payload.id);
-    console.log(LOG_PREFIX, "用户选择:", payload.id, "→", payload.value);
+    console.log(LOG_PREFIX, "用戶選擇:", payload.id, "→", payload.value);
     pending.resolve(payload.value);
     return { ok: true };
   });

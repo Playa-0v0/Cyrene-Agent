@@ -1,6 +1,6 @@
 /* ============================================================
    Cyrene sidebar (status / feeling / model / settings)
-   跟 chat.css 同款：粉紫玻璃质感 + 同一套设计 token
+   跟 chat.css 同款：粉紫玻璃質感 + 同一套設計 token
    ============================================================ */
 
 html, body { height: 100%; }
@@ -95,7 +95,7 @@ body {
 
 .sidebar__icon-btn,
 .sidebar__winbtn {
-  /* titlebar 整体是 drag 区，按钮必须 no-drag 否则点击被拖拽吞掉 */
+  /* titlebar 整體是 drag 區，按鈕必須 no-drag 否則點擊被拖拽吞掉 */
   -webkit-app-region: no-drag;
   display: grid;
   place-items: center;

@@ -21,7 +21,7 @@ describe("play-live2d-action handler", () => {
     expect(channel).toBe(IPC.LIVE2D_PLAY_ACTION);
     expect(payload).toEqual({
       kind: "motion",
-      group: "动作#6",
+      group: "動作#6",
       motionName: "Wink~",
     });
   });
@@ -29,19 +29,19 @@ describe("play-live2d-action handler", () => {
   it("emits IPC with a resolved expression target for a valid alias", async () => {
     const deps = makeDeps();
     const handler = createPlayLive2DActionHandler(deps);
-    const result = await handler({ name: "戴墨镜" }, undefined);
+    const result = await handler({ name: "戴墨鏡" }, undefined);
 
     expect(JSON.parse(result)).toMatchObject({ ok: true });
     expect(deps.sendToLive2DWindow.mock.calls[0][1]).toEqual({
       kind: "expression",
-      name: "墨镜",
+      name: "墨鏡",
     });
   });
 
   it("returns unknown_action and never sends IPC for an invalid alias", async () => {
     const deps = makeDeps();
     const handler = createPlayLive2DActionHandler(deps);
-    const result = await handler({ name: "挥手" }, undefined);
+    const result = await handler({ name: "揮手" }, undefined);
 
     expect(JSON.parse(result)).toMatchObject({ ok: false, error: "unknown_action" });
     expect(Array.isArray((JSON.parse(result) as { available: string[] }).available)).toBe(true);
@@ -70,7 +70,7 @@ describe("play-live2d-action handler", () => {
   it("available list matches the catalog aliases", async () => {
     const deps = makeDeps();
     const handler = createPlayLive2DActionHandler(deps);
-    const result = JSON.parse(await handler({ name: "挥手" }, undefined)) as { available: string[] };
+    const result = JSON.parse(await handler({ name: "揮手" }, undefined)) as { available: string[] };
     for (const a of LIVE2D_ACTIONS) {
       expect(result.available).toContain(a.alias);
     }

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>昔涟 · 语音通话</title>
+  <title>昔漣 · 語音通話</title>
   <link rel="stylesheet" href="../ui/tokens.css" />
   <link rel="stylesheet" href="../ui/fonts.css" />
   <link rel="stylesheet" href="../ui/base.css" />
@@ -12,51 +12,99 @@
 <body>
   <div class="call">
     <canvas class="call__particles" id="particles" aria-hidden="true"></canvas>
+    <div class="call__aurora call__aurora--top" aria-hidden="true"></div>
+    <div class="call__aurora call__aurora--bottom" aria-hidden="true"></div>
+
     <div class="call__body">
-      <!-- 自定义标题栏 -->
       <header class="call__titlebar">
-        <span class="call__title">语音通话</span>
-        <button type="button" class="call__close" id="close-btn" title="挂断">✕</button>
+        <div class="call__brand">
+          <span class="call__brand-mark" aria-hidden="true"></span>
+          <span>CYRENE / VOICE LINK</span>
+        </div>
+        <button type="button" class="call__close" id="close-btn" title="結束通話" aria-label="結束通話">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>
+        </button>
       </header>
 
-      <!-- 状态文字 -->
-      <div class="call__status" id="call-status">正在连接...</div>
+      <main class="call__main">
+        <section class="call__identity" aria-label="通話對象">
+          <div class="call__name-row">
+            <h1 class="call__name">昔漣</h1>
+            <span class="call__presence" aria-hidden="true"></span>
+          </div>
+          <div class="call__meta">
+            <span class="call__status" id="call-status" aria-live="polite">正在連接...</span>
+            <span class="call__meta-divider" aria-hidden="true"></span>
+            <span class="call__duration" id="call-duration" hidden>00:00</span>
+          </div>
+        </section>
 
-      <!-- 头衔区：昔涟名字 + 在线指示 -->
-      <div class="call__identity">
-        <span class="call__name">昔涟</span>
-        <span class="call__presence" aria-hidden="true"></span>
-      </div>
+        <section class="call__share-preview" id="share-preview" hidden aria-label="分享畫面預覽">
+          <video id="share-video" autoplay muted playsinline></video>
+          <div class="call__share-shade" aria-hidden="true"></div>
+          <div class="call__share-badge">
+            <span class="call__share-live-dot" aria-hidden="true"></span>
+            畫面分享中
+          </div>
+        </section>
 
-      <!-- 通话时长（接通后开始计时，hangup 后停止；display 控制可见性） -->
-      <div class="call__duration" id="call-duration" hidden>00:00</div>
+        <section class="call__visual" aria-label="通話音訊狀態">
+          <div class="call__orbit call__orbit--outer" aria-hidden="true"></div>
+          <div class="call__orbit call__orbit--inner" aria-hidden="true"></div>
+          <div class="call__avatar-zone" id="avatar-zone">
+            <div class="call__avatar-ring" id="avatar-ring"><span></span></div>
+            <canvas class="call__waveform" id="waveform-canvas"></canvas>
+            <div class="call__avatar-frame">
+              <img class="call__avatar" src="/avatars/cyrene-avatar.png" alt="昔漣" draggable="false" />
+            </div>
+          </div>
+        </section>
 
-      <!-- 头像 + 电波环 + 音量波形（同一区域） -->
-      <div class="call__avatar-zone" id="avatar-zone">
-        <div class="call__avatar-ring" id="avatar-ring">
-          <span></span>
+        <div class="call__signal">
+          <div class="call__mic-wave" id="mic-wave" aria-hidden="true">
+            <div class="call__mic-wave-bar"></div>
+            <div class="call__mic-wave-bar"></div>
+            <div class="call__mic-wave-bar"></div>
+            <div class="call__mic-wave-bar"></div>
+          </div>
+          <span id="signal-label">語音連線已加密</span>
         </div>
-        <canvas class="call__waveform" id="waveform-canvas"></canvas>
-        <img class="call__avatar" src="/avatars/cyrene-avatar.png" alt="昔涟" draggable="false" />
-      </div>
 
-      <!-- 转写区（可关闭，只显示当前一轮） -->
-      <div class="call__transcript" id="transcript" hidden></div>
+        <div class="call__transcript" id="transcript" hidden></div>
+        <form class="call__text-backup" id="text-backup-form" aria-label="文字輸入備援">
+          <input id="text-backup-input" type="text" maxlength="500" placeholder="麥克風不方便時，在這裡輸入…" autocomplete="off" />
+          <button type="submit" aria-label="送出文字">↵</button>
+        </form>
+      </main>
 
-      <!-- 底部：柱状胶囊波形 + 挂断键 -->
-      <div class="call__actions">
-        <div class="call__mic-wave" id="mic-wave">
-          <div class="call__mic-wave-bar"></div>
-          <div class="call__mic-wave-bar"></div>
-          <div class="call__mic-wave-bar"></div>
-          <div class="call__mic-wave-bar"></div>
-        </div>
-        <button class="call__hangup" id="hangup-btn" title="挂断">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.965.965 0 0 1-.29-.7c0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.7 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48a.965.965 0 0 1-.71.29c-.27 0-.52-.1-.7-.28a11.27 11.27 0 0 0-2.67-1.85.996.996 0 0 1-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/>
-          </svg>
+      <footer class="call__controls" aria-label="通話控制">
+        <button class="call__control" id="mute-btn" type="button" aria-pressed="false" title="麥克風靜音">
+          <span class="call__control-icon">
+            <svg class="icon-mic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 1 0-7 0v6a3.5 3.5 0 0 0 3.5 3.5Z"/><path d="M5.5 11.5v.5a6.5 6.5 0 0 0 13 0v-.5M12 18.5V22M9 22h6"/></svg>
+            <svg class="icon-mic-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 9v3a3 3 0 0 0 4.78 2.41M15 10.35V6a3 3 0 0 0-5.77-1.16M5.5 11.5v.5a6.5 6.5 0 0 0 10.47 5.14M18.5 11.5v.5a6.45 6.45 0 0 1-.72 2.97M12 18.5V22M9 22h6M3 3l18 18"/></svg>
+          </span>
+          <span class="call__control-label" id="mute-label">靜音</span>
         </button>
-      </div>
+
+        <button class="call__control call__control--hangup" id="hangup-btn" type="button" title="結束通話" aria-label="結束通話">
+          <span class="call__control-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15.8c2.2-1.9 4.86-2.85 8-2.85s5.8.95 8 2.85l-2.45 3.1a1 1 0 0 1-1.27.25l-2.05-1.11a1 1 0 0 1-.52-.88v-1.02a11.4 11.4 0 0 0-3.42 0v1.02a1 1 0 0 1-.52.88l-2.05 1.11a1 1 0 0 1-1.27-.25L4 15.8Z"/></svg>
+          </span>
+          <span class="call__control-label">結束</span>
+        </button>
+
+        <button class="call__control" id="ptt-btn" type="button" aria-pressed="false" title="按住說話">
+          <span class="call__control-icon call__ptt-icon">◉</span>
+          <span class="call__control-label" id="ptt-label">按住說話</span>
+        </button>
+
+        <button class="call__control" id="share-btn" type="button" aria-pressed="false" title="分享畫面">
+          <span class="call__control-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4M9 10l3-3 3 3M12 7v6"/></svg>
+          </span>
+          <span class="call__control-label" id="share-label">分享畫面</span>
+        </button>
+      </footer>
     </div>
   </div>
 

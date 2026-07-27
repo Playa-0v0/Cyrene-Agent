@@ -1,5 +1,5 @@
-// 桌宠气泡 controller：监听 onShowBubble + 显示气泡 + 播 wav + prepare/mouthStart/mouthStop
-// 复用 chat/main.ts playTtsBase64 的口型同步思路。荡秋千随 MOUTH_START 自动触发（SpeakingMotionController）。
+// 桌寵氣泡 controller：監聽 onShowBubble + 顯示氣泡 + 播 wav + prepare/mouthStart/mouthStop
+// 複用 chat/main.ts playTtsBase64 的口型同步思路。盪鞦韆隨 MOUTH_START 自動觸發（SpeakingMotionController）。
 import { IPC } from "../../shared/ipc-channels";
 
 const BUBBLE_HOLD_MS = 7000;
@@ -19,22 +19,18 @@ export class OpenerBubbleController {
     return window.live2dSpeech.onShowBubble((payload) => this.handle(payload));
   }
 
-  private handle(payload: { text: string; audioBase64: string; format: "wav" | "mp3"; durationMs: number; sceneId: string; itemId: string }): void {
+  public show(payload: { text: string; audioBase64?: string; format?: "wav" | "mp3"; durationMs?: number; sceneId?: string; itemId?: string }): void {
     if (!this.bubbleEl) return;
     this.stopCurrent();
 
-    // 显示气泡文字
-    this.bubbleEl.textContent = payload.text;
-    this.bubbleEl.hidden = false;
-    this.bubbleEl.classList.add("opener-bubble--show");
-
-    // 点击气泡 = 接话
-    this.bubbleEl.onclick = () => {
-      window.openerBridge?.feedback({ type: "clicked", sceneId: payload.sceneId, itemId: payload.itemId });
-    };
-
-    // prepare（停当前 motion + 嘴动 reset）
+    // prepare（停當前 motion + 嘴動 reset）
     window.live2dSpeech?.prepare();
+
+    // 每日儀式即使未啟用 TTS，也要能以文字氣泡出現。
+    if (!payload.audioBase64) {
+      this.reveal(payload);
+      return;
+    }
 
     // 播 wav
     const mime = payload.format === "wav" ? "audio/wav" : "audio/mp3";
@@ -52,16 +48,40 @@ export class OpenerBubbleController {
     };
 
     void audio.play().then(() => {
-      // 播放开始 → 嘴动 + 荡秋千（startMouth 自动连带 speakingMotion）
-      window.live2dSpeech?.startMouth(payload.durationMs);
+      // 音訊真正開始播放時才顯示字幕，避免文字比聲音早出現。
+      this.reveal(payload, false);
+      const durationMs = Number.isFinite(audio.duration)
+        ? Math.round(audio.duration * 1000)
+        : Number(payload.durationMs ?? 0);
+      window.live2dSpeech?.startMouth(durationMs);
       this.mouthStopTimer = setTimeout(() => {
         window.live2dSpeech?.stopMouth();
-      }, payload.durationMs + 500);
+      }, durationMs + 500);
     }).catch((err) => {
-      console.warn("[OpenerBubble] 播放失败:", err);
+      console.warn("[OpenerBubble] 播放失敗:", err);
       URL.revokeObjectURL(url);
-      this.fadeOut();
+      this.reveal(payload);
     });
+  }
+
+  private handle(payload: { text: string; audioBase64: string; format: "wav" | "mp3"; durationMs: number; sceneId: string; itemId: string }): void {
+    this.show(payload);
+  }
+
+  private reveal(
+    payload: { text: string; sceneId?: string; itemId?: string },
+    scheduleFade = true,
+  ): void {
+    if (!this.bubbleEl) return;
+    this.bubbleEl.textContent = payload.text;
+    this.bubbleEl.hidden = false;
+    this.bubbleEl.classList.add("opener-bubble--show");
+    this.bubbleEl.onclick = payload.sceneId && payload.itemId
+      ? () => window.openerBridge?.feedback({ type: "clicked", sceneId: payload.sceneId!, itemId: payload.itemId! })
+      : null;
+    if (scheduleFade) {
+      this.fadeTimer = setTimeout(() => this.fadeOut(), BUBBLE_HOLD_MS + Math.min(8000, payload.text.length * 80));
+    }
   }
 
   private fadeOut(): void {

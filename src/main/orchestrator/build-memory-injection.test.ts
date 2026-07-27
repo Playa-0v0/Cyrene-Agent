@@ -43,7 +43,7 @@ describe("buildMemoryInjection", () => {
   it("records injected user memory l2 ids from RAG metadata", async () => {
     ragMock.searchMemoryEntries.mockResolvedValue([{
       id: "rag_run",
-      text: "用户喜欢跑步",
+      text: "用戶喜歡跑步",
       createdAt: Date.now(),
       score: 0.8,
       metadata: { l2Id: "l2_run" },
@@ -52,7 +52,7 @@ describe("buildMemoryInjection", () => {
 
     const context = await buildMemoryInjection("跑步")
 
-    expect(context).toContain("用户喜欢跑步")
+    expect(context).toContain("用戶喜歡跑步")
     expect(wasRecentlyInjectedMemory("l2_run")).toBe(true)
     expect(ragMock.searchMemoryEntries).toHaveBeenCalledWith("跑步", "user_memory", 5)
   })

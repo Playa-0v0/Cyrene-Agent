@@ -1,13 +1,13 @@
-// 任务清单 store —— todo_write 工具背后的持久化层。
+// 任務清單 store —— todo_write 工具背後的持久化層。
 //
-// 设计：
-// - 内存里持有当前 TodoState，每次 setTodos 持久化到 userData/current-todos.json
-// - 监听者模式：主进程其他模块（index.ts）订阅变化，转发 CUSTOM 事件给渲染端
-// - 启动时 loadTodos() 从磁盘恢复上次未完成的任务（跨重启延续）
+// 設計：
+// - 內存裡持有當前 TodoState，每次 setTodos 持久化到 userData/current-todos.json
+// - 監聽者模式：主進程其他模塊（index.ts）訂閱變化，轉發 CUSTOM 事件給渲染端
+// - 啟動時 loadTodos() 從磁盤恢復上次未完成的任務（跨重啟延續）
 //
 // 不做的事：
-// - 不做多清单/多会话隔离（当前产品形态只有一个活跃清单够用）
-// - 不做历史版本（覆盖写，简单稳定）
+// - 不做多清單/多會話隔離（當前產品形態只有一個活躍清單夠用）
+// - 不做歷史版本（覆蓋寫，簡單穩定）
 
 import * as fs from "fs";
 import * as path from "path";
@@ -46,7 +46,7 @@ function persist(): void {
   }
 }
 
-/** 启动时调一次，从磁盘恢复未完成的任务。 */
+/** 啟動時調一次，從磁盤恢復未完成的任務。 */
 export function loadTodos(): void {
   if (loaded) return;
   loaded = true;
@@ -55,16 +55,16 @@ export function loadTodos(): void {
     const parsed = JSON.parse(raw) as TodoState;
     if (parsed && Array.isArray(parsed.todos)) {
       current = parsed;
-      console.log("[TodoStore] 恢复 " + current.todos.length + " 条未完成任务");
+      console.log("[TodoStore] 恢復 " + current.todos.length + " 條未完成任務");
     }
   } catch {
     current = { ...EMPTY_STATE };
   }
 }
 
-/** 整体覆盖写（todo_write 工具调这个）。返回更新后的 state。 */
+/** 整體覆蓋寫（todo_write 工具調這個）。返回更新後的 state。 */
 export function setTodos(todos: TodoItem[]): TodoState {
-  // 轻量校验：丢掉字段不全的项
+  // 輕量校驗：丟掉字段不全的項
   const valid = todos.filter(t => t && typeof t.id === "string" && typeof t.content === "string");
   current = { todos: valid, updatedAt: Date.now() };
   persist();
@@ -86,7 +86,7 @@ export function clearTodos(): void {
   }
 }
 
-/** 订阅变化。返回取消订阅函数。 */
+/** 訂閱變化。返回取消訂閱函數。 */
 export function onTodosChange(cb: (s: TodoState) => void): () => void {
   listeners.push(cb);
   return () => { listeners = listeners.filter(l => l !== cb); };

@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>昔漣 · 工作台</title>
+  <script type="module" crossorigin src="../assets/workspace-NE7vxyVj.js"></script>
+  <link rel="modulepreload" crossorigin href="../assets/base-CbynX6G5.js">
+  <link rel="stylesheet" crossorigin href="../assets/base-DacNE79P.css">
+  <link rel="stylesheet" crossorigin href="../assets/workspace-Bsu48T_5.css">
+</head>
+<body>
+  <div class="workspace">
+    <!-- 左側導航欄 -->
+    <aside class="sidebar">
+      <div class="sidebar__brand">
+        <img class="sidebar__logo" src="../avatars/cyrene-avatar.png" alt="昔漣" />
+        <div class="sidebar__brand-text">
+          <span class="sidebar__brand-name">昔漣</span>
+          <span class="sidebar__brand-sub">Cyrene Agent</span>
+        </div>
+      </div>
+      
+      <nav class="sidebar__nav">
+        <button type="button" class="sidebar__tab is-active" data-tab="chat">
+          <span class="sidebar__tab-icon">💬</span>
+          <span class="sidebar__tab-text">閒聊</span>
+        </button>
+        <button type="button" class="sidebar__tab" data-tab="tasks">
+          <span class="sidebar__tab-icon">📋</span>
+          <span class="sidebar__tab-text">任務</span>
+        </button>
+        <button type="button" class="sidebar__tab" data-tab="memory">
+          <span class="sidebar__tab-icon">🧠</span>
+          <span class="sidebar__tab-text">記憶與知識</span>
+        </button>
+        <button type="button" class="sidebar__tab" data-tab="notebook">
+          <span class="sidebar__tab-icon">📖</span>
+          <span class="sidebar__tab-text">共同的筆記本</span>
+        </button>
+        <button type="button" class="sidebar__tab" data-tab="exam">
+          <span class="sidebar__tab-icon">📝</span>
+          <span class="sidebar__tab-text">考試模式</span>
+        </button>
+        <button type="button" class="sidebar__tab" data-tab="game-room">
+          <span class="sidebar__tab-icon">🎮</span>
+          <span class="sidebar__tab-text">昔漣的遊戲房</span>
+        </button>
+        <button type="button" class="sidebar__tab" data-tab="channels">
+          <span class="sidebar__tab-icon">🌐</span>
+          <span class="sidebar__tab-text">外部應用</span>
+        </button>
+        <button type="button" class="sidebar__tab" data-tab="stickers">
+          <span class="sidebar__tab-icon">🖼️</span>
+          <span class="sidebar__tab-text">繪圖</span>
+        </button>
+        <button type="button" class="sidebar__tab" data-tab="settings">
+          <span class="sidebar__tab-icon">⚙️</span>
+          <span class="sidebar__tab-text">設置</span>
+        </button>
+      </nav>
+
+      <div class="sidebar__sessions">
+        <div class="sidebar__sessions-header">
+          <span>最近對話</span>
+          <button type="button" class="sidebar__sessions-new" id="sidebar-new-session-btn" title="新對話">+</button>
+        </div>
+        <ul class="sidebar__sessions-list" id="sidebar-sessions-list"></ul>
+      </div>
+
+      <div class="sidebar__footer">
+        <div class="sidebar__status-pill">
+          <span class="sidebar__status-dot"></span>
+          <span class="sidebar__status-text" id="agent-core-status">Agent Core 載入中</span>
+          <span class="sidebar__status-count" id="agent-session-count">0 個會話</span>
+        </div>
+      </div>
+    </aside>
+
+    <div class="session-context-menu" id="session-context-menu" role="menu" aria-label="對話選單" hidden>
+      <div class="session-context-menu__title" id="session-context-title">對話</div>
+      <button type="button" role="menuitem" data-session-action="rename">
+        <span aria-hidden="true">✎</span><span>更改標題</span><kbd>R</kbd>
+      </button>
+      <button type="button" role="menuitem" class="is-danger" data-session-action="delete">
+        <span aria-hidden="true">⌫</span><span>刪除對話</span><kbd>⌘⌫</kbd>
+      </button>
+    </div>
+
+    <div class="session-delete-overlay" id="session-delete-overlay" hidden>
+      <section class="session-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="session-delete-title" aria-describedby="session-delete-copy">
+        <div class="session-delete-dialog__mark" aria-hidden="true">⌫</div>
+        <div>
+          <h2 id="session-delete-title">刪除這段對話？</h2>
+          <p id="session-delete-copy">刪除後無法復原。</p>
+        </div>
+        <div class="session-delete-dialog__actions">
+          <button type="button" id="session-delete-cancel">保留對話</button>
+          <button type="button" class="is-danger" id="session-delete-confirm">刪除</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- 中間主內容區域 -->
+    <main class="main-content">
+      <header class="titlebar">
+        <div class="titlebar__left">
+          <span class="titlebar__mode">陪伴模式</span>
+          <span class="titlebar__divider">|</span>
+          <span class="titlebar__model-status" id="header-model-status">加載中...</span>
+        </div>
+
+        <div class="titlebar__dropdowns">
+          <!-- 模式選擇 -->
+          <div class="ws-dropdown" id="ws-mode-dropdown">
+            <span class="ws-dropdown__label">模式</span>
+            <span class="ws-dropdown__value" id="ws-mode-val">協作</span>
+            <svg class="ws-dropdown__arrow" width="8" height="5" viewBox="0 0 8 5"><path d="M1 1l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+            <div class="ws-dropdown__menu" id="ws-mode-menu">
+              <div class="ws-dropdown__item is-active" data-value="chat">協作</div>
+              <div class="ws-dropdown__item" data-value="talk">日常聊天</div>
+              <div class="ws-dropdown__item" data-value="study">學習模式</div>
+              <div class="ws-dropdown__item" data-value="game">遊戲模式</div>
+            </div>
+          </div>
+
+          <!-- 風格選擇 -->
+          <div class="ws-dropdown" id="ws-style-dropdown">
+            <span class="ws-dropdown__label">風格</span>
+            <span class="ws-dropdown__value" id="ws-style-val">🌸 溫柔 · 和善</span>
+            <svg class="ws-dropdown__arrow" width="8" height="5" viewBox="0 0 8 5"><path d="M1 1l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+            <div class="ws-dropdown__menu" id="ws-style-menu">
+              <div class="ws-dropdown__item is-active" data-value="01_default.md">🌸 溫柔 · 和善</div>
+              <div class="ws-dropdown__item" data-value="02_lively.md">✨ 元氣 · 活潑</div>
+              <div class="ws-dropdown__item" data-value="03_healing.md">🌿 治癒 · 安心</div>
+              <div class="ws-dropdown__item" data-value="04_focused.md">📖 知性 · 認真</div>
+              <div class="ws-dropdown__item" data-value="05_sweet.md">💕 撒嬌 · 黏人</div>
+            </div>
+          </div>
+
+          <!-- 推理選擇 -->
+          <div class="ws-dropdown" id="ws-reasoning-dropdown">
+            <span class="ws-dropdown__label">推理</span>
+            <span class="ws-dropdown__value" id="ws-reasoning-val">Auto · 自動</span>
+            <svg class="ws-dropdown__arrow" width="8" height="5" viewBox="0 0 8 5"><path d="M1 1l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+            <div class="ws-dropdown__menu" id="ws-reasoning-menu">
+              <div class="ws-dropdown__item" data-value="custom">Custom · 自定義</div>
+              <div class="ws-dropdown__item is-active" data-value="auto">Auto · 自動</div>
+              <div class="ws-dropdown__item" data-value="low">Low · 低</div>
+              <div class="ws-dropdown__item" data-value="medium">Medium · 中</div>
+              <div class="ws-dropdown__item" data-value="high">High · 高</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="titlebar__actions" aria-label="視窗控制">
+          <button type="button" class="titlebar__winbtn" id="min-btn" aria-label="隱藏" title="隱藏">
+            <svg width="10" height="2" viewBox="0 0 10 2" aria-hidden="true"><rect width="10" height="2" rx="1" fill="currentColor"/></svg>
+          </button>
+          <button type="button" class="titlebar__winbtn" id="max-btn" aria-label="放大或還原" title="放大／還原">
+            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+              <rect x="1.5" y="1.5" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>
+            </svg>
+          </button>
+          <button type="button" class="titlebar__winbtn titlebar__winbtn--close" id="close-btn" aria-label="關閉" title="關閉">
+            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+              <line x1="2" y1="2" x2="8" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              <line x1="8" y1="2" x2="2" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+      <div class="content-frame-container">
+        <iframe class="content-frame" id="content-iframe" src="../chat/index.html"></iframe>
+      </div>
+    </main>
+
+    <!-- 右側資訊面板 -->
+    <aside class="info-panel">
+      <div class="info-panel__header">陪伴信息 <span class="online-status-dot"></span><span class="online-status-text">在線</span></div>
+      
+      <div class="info-panel__tabs">
+        <span class="info-tab is-active">概覽</span>
+        <span class="info-tab">日程</span>
+        <span class="info-tab">狀態</span>
+      </div>
+
+      <div class="profile-card">
+        <img class="profile-card__avatar" src="../avatars/cyrene-avatar.png" alt="昔漣" />
+        <div class="profile-card__text">
+          <div class="profile-card__name">昔漣</div>
+          <div class="profile-card__status-hint" id="online-label">剛睡醒 · 心情平靜</div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <!-- 昔漣互動停靠槽 (移至今日概覽上方，夾在profile與概覽中間) -->
+        <div class="pet-dock-slot" id="pet-slot">
+          <div class="pet-dock-slot__hint" id="pet-dock-hint">點擊召回昔漣 🌸</div>
+        </div>
+
+        <!-- 今日概覽分頁內容容器 -->
+        <div class="stats-tab-content" style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
+          <!-- 狀態 / 心情 面板 (恢復為兩格) -->
+          <div class="overview-item-card">
+            <span class="overview-item-card__icon" id="ws-status-emoji">⚙️</span>
+            <span class="overview-item-card__text" id="ws-status-val">狀態：請到設置裡開啟</span>
+          </div>
+
+          <div class="overview-item-card">
+            <span class="overview-item-card__icon" id="ws-feeling-emoji">⚙️</span>
+            <span class="overview-item-card__text" id="ws-feeling-val">心情：請到設置裡開啟</span>
+          </div>
+
+          <!-- 正在餵養面板 -->
+          <div class="overview-feed-card">
+            <div class="overview-feed-card__header">🍰 正在餵養：Custom</div>
+            <div class="overview-feed-card__buttons">
+              <button type="button" class="feed-btn" id="panel-chat-btn">
+                <span>💬 打開聊天</span>
+              </button>
+              <button type="button" class="feed-btn" id="panel-call-btn">
+                <span>📞 語音通話</span>
+              </button>
+              <button type="button" class="feed-btn" id="panel-model-btn">
+                <span>⇄ 切換模型</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 接下來 (日程) -->
+        <div class="next-card" id="schedule-tab-content">
+          <!-- 待辦日程標題 -->
+          <div class="schedule-header" id="schedule-summary">
+            <div class="schedule-count-box">
+              <span class="schedule-count-num" id="schedule-todo-count">0</span>
+              <span class="schedule-count-label">個待辦日程</span>
+            </div>
+            <div class="schedule-date-pill">
+              <span id="schedule-date-text">📅 2026年7月12日 · 週日</span>
+            </div>
+          </div>
+
+          <!-- Token 用量卡片 -->
+          <div class="token-usage-card">
+            <div class="token-usage-header">
+              <span class="token-usage-title">⚡ Token 用量</span>
+              <span class="token-usage-num" id="token-usage-today-val">0</span>
+            </div>
+            <div class="token-progress-bar">
+              <div class="token-progress-fill" id="token-progress-fill-bar" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <!-- Token 趨勢圖表 -->
+          <div class="token-chart-container">
+            <div class="token-chart-header">
+              <div class="token-avg-pill" id="token-avg-val">日均 0K</div>
+            </div>
+            <div class="token-chart-bars" id="token-chart-bars-list">
+              <div class="chart-bar-item" data-day="0">
+                <div class="chart-bar-fill-wrapper">
+                  <div class="chart-bar-fill" style="height: 0%;"></div>
+                </div>
+                <span class="chart-bar-label">週日</span>
+              </div>
+              <div class="chart-bar-item" data-day="1">
+                <div class="chart-bar-fill-wrapper">
+                  <div class="chart-bar-fill" style="height: 0%;"></div>
+                </div>
+                <span class="chart-bar-label">週一</span>
+              </div>
+              <div class="chart-bar-item" data-day="2">
+                <div class="chart-bar-fill-wrapper">
+                  <div class="chart-bar-fill" style="height: 0%;"></div>
+                </div>
+                <span class="chart-bar-label">週二</span>
+              </div>
+              <div class="chart-bar-item" data-day="3">
+                <div class="chart-bar-fill-wrapper">
+                  <div class="chart-bar-fill" style="height: 0%;"></div>
+                </div>
+                <span class="chart-bar-label">週三</span>
+              </div>
+              <div class="chart-bar-item" data-day="4">
+                <div class="chart-bar-fill-wrapper">
+                  <div class="chart-bar-fill" style="height: 0%;"></div>
+                </div>
+                <span class="chart-bar-label">週四</span>
+              </div>
+              <div class="chart-bar-item" data-day="5">
+                <div class="chart-bar-fill-wrapper">
+                  <div class="chart-bar-fill" style="height: 0%;"></div>
+                </div>
+                <span class="chart-bar-label">週五</span>
+              </div>
+              <div class="chart-bar-item" data-day="6">
+                <div class="chart-bar-fill-wrapper">
+                  <div class="chart-bar-fill" style="height: 0%;"></div>
+                </div>
+                <span class="chart-bar-label">週六</span>
+              </div>
+            </div>
+            <div class="token-chart-footer" id="token-chart-peak-desc">
+              📊 本周 Token 消耗趨勢 | 峰值 0K (週日)
+            </div>
+          </div>
+
+          <!-- 每日陪伴通話統計（桌面通話與 Discord 語音陪伴） -->
+          <section class="call-usage-section" aria-labelledby="call-usage-title">
+            <div class="call-usage-card">
+              <div class="call-usage-heading">
+                <div>
+                  <div class="call-usage-title" id="call-usage-title">📞 陪伴通話</div>
+                  <div class="call-usage-caption" id="call-usage-source-detail">今日 · 桌面 0 分鐘 · Discord 0 分鐘</div>
+                </div>
+                <div class="call-usage-num" id="call-usage-today-val">0 分鐘</div>
+              </div>
+              <div class="call-live-indicator" id="call-live-indicator" hidden>
+                <span class="call-live-dot"></span>
+                通話計時中
+              </div>
+            </div>
+
+            <div class="call-chart-header">
+              <span class="call-chart-label">本週通話時間</span>
+              <span class="call-avg-pill" id="call-avg-val">日均 0 分鐘</span>
+            </div>
+            <div class="call-chart-bars" id="call-chart-bars-list">
+              <div class="call-chart-bar-item" data-day="0"><div class="call-chart-bar-track"><div class="call-chart-bar-fill"></div></div><span>週日</span></div>
+              <div class="call-chart-bar-item" data-day="1"><div class="call-chart-bar-track"><div class="call-chart-bar-fill"></div></div><span>週一</span></div>
+              <div class="call-chart-bar-item" data-day="2"><div class="call-chart-bar-track"><div class="call-chart-bar-fill"></div></div><span>週二</span></div>
+              <div class="call-chart-bar-item" data-day="3"><div class="call-chart-bar-track"><div class="call-chart-bar-fill"></div></div><span>週三</span></div>
+              <div class="call-chart-bar-item" data-day="4"><div class="call-chart-bar-track"><div class="call-chart-bar-fill"></div></div><span>週四</span></div>
+              <div class="call-chart-bar-item" data-day="5"><div class="call-chart-bar-track"><div class="call-chart-bar-fill"></div></div><span>週五</span></div>
+              <div class="call-chart-bar-item" data-day="6"><div class="call-chart-bar-track"><div class="call-chart-bar-fill"></div></div><span>週六</span></div>
+            </div>
+            <div class="call-chart-footer" id="call-chart-peak-desc">🎙️ 本週尚無通話紀錄</div>
+          </section>
+
+          <div class="schedule-divider"></div>
+
+          <!-- 定時任務 -->
+          <div class="tasks-section">
+            <div class="tasks-section-header">⏰ 定時任務</div>
+            <div class="card-empty-content" id="next-task-label">
+              暫無已啟用定時任務
+            </div>
+          </div>
+        </div>
+
+
+
+        <!-- 連接狀態 -->
+        <div class="conn-card">
+          <div class="card-header">
+            <span>連接狀態</span>
+            <span class="card-header__link">管理</span>
+          </div>
+          <div class="conn-list" id="connection-status-list">
+            <div class="card-empty-content">正在讀取連接狀態…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-panel__footer">
+        <button type="button" class="action-btn action-btn--reset" id="reset-btn">
+          <span>⚙️ 全部設置</span>
+        </button>
+      </div>
+    </aside>
+  </div>
+</body>
+</html>

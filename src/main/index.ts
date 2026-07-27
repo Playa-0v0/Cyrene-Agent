@@ -1,12 +1,14 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, shell, dialog, protocol, net } from "electron";
+import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, shell, dialog, protocol, net, desktopCapturer } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
 import { createHash } from "crypto";
+import * as zlib from "zlib";
 import { pathToFileURL } from "url";
 import { IPC } from "../shared/ipc-channels";
+import { compactPetReply } from "./pet-chat";
 import { STATUS_KEYWORDS } from "./status-keywords";
-import { initRAG, buildMemoryContext, addMemory, importDocument, switchEmbeddingModel, deleteImportedDoc } from "./rag";
+import { initRAG, buildMemoryContext, addMemory, removeMemory, importDocument, switchEmbeddingModel, deleteImportedDoc } from "./rag";
 import { getEmbeddingProvider, getSceneEmbeddingProvider } from "./rag/embedding";
 import { ingestPaths } from "./rag/file-ingest";
 import { buildAlwaysOnContext, buildMemoryInjection, runFunctionCallingLoop, scheduleMemoryWrite } from "./orchestrator";
@@ -19,51 +21,64 @@ import { getCapability } from "./orchestrator/vendors/capabilities";
 import type { VisionConfig } from "./orchestrator/vision-captioner";
 import { toolRegistry, type ToolDefinition } from "./orchestrator/tool-registry";
 import type { ToolRiskLevel } from "./permission";
+import { toTraditionalTaiwan } from "./utils/opencc";
 import { loadChannelsSettings } from "./channels/settings-store";
-// 触发 built-in-tools 的副作用注册（fetch_url / run_shell / install_mcp_server）
+import { channelManager } from "./channels/manager";
+// 觸發 built-in-tools 的副作用註冊（fetch_url / run_shell / install_mcp_server）
 import "./orchestrator/built-in-tools";
-// 触发 fs-tools 的副作用注册（read_file / list_dir / write_file / read_image）
+// 觸發 fs-tools 的副作用註冊（read_file / list_dir / write_file / read_image）
 import "./orchestrator/fs-tools";
 import { initMcpManager, addMcpServer, removeMcpServer, listMcpServers, pruneMcpServersByIds } from "./orchestrator/mcp-manager";
 import { syncPlaywrightMcp, PLAYWRIGHT_MCP_ID, REMOVED_BUILTIN_MCP_IDS } from "./sync-mcp-builtin";
 import { buildEnvironmentContext } from "./orchestrator/environment";
 import { initPermissionFromDisk, registerPermissionIpc, getCurrentLevel } from "./permission";
 import { registerChoiceIpc, setChoiceCardSender } from "./user-choice";
-import { enqueueLLMTask } from "./llm-queue";
+import { enqueueLLMTask, getLLMQueueStatus } from "./llm-queue";
 import { getEmbeddingStatus, downloadEmbeddingModel, deleteEmbeddingModel } from "./embedding-manager";
 import { BUILT_IN_STICKER_DESCRIPTIONS } from "./sticker-descriptions";
 import { buildStickerEmbeddingIndex, matchSticker } from "./sticker-embedder";
 import type { StickerEmbeddingEntry } from "./sticker-embedder";
 import { buildSceneIndex } from "./scene-embedder";
 import type { SceneIndex } from "./scene-embedder";
-import { loadUserStickerManifest, addUserSticker, deleteUserSticker, getAllStickerConfig, isStickerIdTaken, getStickersDir } from "./sticker-storage";
+import { loadUserStickerManifest, addUserSticker, deleteUserSticker, getAllStickerConfig, isStickerIdTaken, getStickersDir, resolveStickerImagePath } from "./sticker-storage";
 import { parseLocalStickerFileFromUrl, resolveLocalStickerPath } from "./sticker-protocol";
 import { normalizeWindowVisibilitySettings } from "./window-visibility-settings";
 import type { StickerConfigItem } from "../shared/sticker-types";
 import { initReranker, getRerankerInstallStatus } from "./rag/reranker";
 import { memoryStore } from "./memory/memory-store"
-import type { L0Profile, L1Profile } from "./memory/memory-types";
+import type { L0Profile, L1Profile, MemoryEvidence } from "./memory/memory-types";
+import { entityGraph } from "./memory/entity-graph";
+import { buildMemoryGraphView } from "./memory/memory-views";
 import { registerChatsIpc } from "./chats/chats-ipc";
-import { recordUsage, getUsage, flush as flushTokenUsage } from "./token-usage-store";
+import { recordUsage, getUsage, getUsageByModel, flush as flushTokenUsage } from "./token-usage-store";
+import { getCallUsage, flushCallUsage } from "./call-usage-store";
 import { uploadFile as ttsUploadFile, cloneVoice as ttsCloneVoice, synthesize as ttsSynthesize } from "./tts/minimax-engine";
 import { synthesize as gptsovitsSynthesize } from "./tts/gptsovits-engine";
 import { synthesize as customCloudSynthesize } from "./tts/custom-cloud-engine";
 import { synthesize as mimoSynthesize } from "./tts/mimo-engine";
 import { synthesizeByEngine } from "./tts/tts-dispatcher";
-import { startOpener, stopOpener, setLive2dWindow, reloadManifest, handleBubbleClick, handleChatWindowOpened, testFire } from "./opener/opener-runner";
+import { startOpener, stopOpener, configureOpener, setLive2dWindow, reloadManifest, handleBubbleClick, handleChatWindowOpened, testFire, showGeneratedBubble, getOpenerStatus } from "./opener/opener-runner";
+import type { OpenerRuntimeConfig } from "./opener/opener-types";
 import { registerAgUiIpc, type AguiRunInput } from "./agui-bridge";
-import { setWeatherConfig, setSearchConfig, loadTodos, onTodosChange, setDelegateSettings } from "./orchestrator/built-in-tools";
+import { setWeatherConfig, setSearchConfig, loadTodos, onTodosChange, setDelegateSettings, getCurrentTodos } from "./orchestrator/built-in-tools";
 import { registerRecallHistoryTool } from "./orchestrator/history-tools";
 import { registerDocumentTools } from "./orchestrator/document-tools";
 import { registerLifeTools, setTranslateConfig } from "./orchestrator/life-tools";
 import { registerTravelTools, setTravelConfig } from "./orchestrator/travel-tools";
 import { registerEmailTools, setEmailConfig } from "./orchestrator/email-tools";
 import { setAsrConfig } from "./asr/volcano-asr-engine";
-import { setCallWindow, registerCallIpc, setCallSettings, stopCall } from "./call/call-manager";
+import { setCallWindow, registerCallIpc, setCallSettings, stopCall, transcribeCallPcm } from "./call/call-manager";
 import { initSkills, skillRegistry, buildSkillCatalog, parseSlashCommand, setSkillEnabled, listSkillsForUi } from "./skills";
 import { initGameBot } from "./game-bot";
+import { initGameRoom } from "./game-room";
 import { initChannels, shutdownChannels } from "./channels/init";
 import { setDispatcherBuildAndRunAgent, setDispatcherSynthesizeTts, setDispatcherBroadcastChat, setDispatcherLoadRecentHistory } from "./channels/dispatcher";
+import { setDiscordVoiceServices } from "./channels/adapters/discord/voice-call";
+import {
+  getSharedNotebookPath,
+  onSharedNotebookChanged,
+  recordDiscordToolActionsInNotebook,
+} from "./channels/adapters/discord/notebook-activity";
 import {
   buildAgentRunOptions,
   onAgentRunFinished,
@@ -77,18 +92,32 @@ import { SchedulerEngine } from "./scheduler/scheduler-engine";
 import { createSchedulerRunner } from "./scheduler/scheduler-runner";
 import { registerSchedulerIpc } from "./scheduler/scheduler-ipc";
 import type { ScheduledTask } from "./scheduler/types";
+import { getDailyRitualPrompt, isDailyRitualTask, syncDailyRitualTasks } from "./rituals/daily-rituals";
+import { BackupManager } from "./security/backup-manager";
+import { getVaultStatus, migrateFilesToVault, protectSecrets, redactSecrets, revealSecrets } from "./security/secret-vault";
+import { getAgentActivities, getAgentActivitySummary } from "./agent-activity-store";
+import { transcribeOfflineWhisper } from "./asr/offline-whisper-engine";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let chatWindow: BrowserWindow | null = null;
 let sidebarWindow: BrowserWindow | null = null;
+let sidebarRestoreBounds: { x: number; y: number; width: number; height: number } | null = null;
+let isSidebarExpanded = false;
+
+onSharedNotebookChanged(() => {
+  if (sidebarWindow && !sidebarWindow.isDestroyed()) {
+    sidebarWindow.webContents.send("shared-notebook:changed");
+  }
+});
 let tasksWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
 let stickerManagerWindow: BrowserWindow | null = null;
 let callWindow: BrowserWindow | null = null;
 let schedulerEngine: SchedulerEngine | null = null;
-// 聊天窗口当前活跃的会话 id（通过 IPC 由聊天窗口上报）；
-// 设置面板"删除当前会话"差异化提示用。聊天窗口关闭时由 closed 事件置 null。
+let backupManager: BackupManager | null = null;
+// 聊天窗口當前活躍的會話 id（通過 IPC 由聊天窗口上報）；
+// 設置面板"刪除當前會話"差異化提示用。聊天窗口關閉時由 closed 事件置 null。
 let activeChatSessionId: string | null = null;
 
 const isDev = process.env.VITE_DEV === "1";
@@ -100,10 +129,10 @@ function appendMinimaxTtsLog(entry: Record<string, unknown>): void {
     const logFile = path.join(logDir, "minimax-tts.log");
     fs.appendFileSync(logFile, JSON.stringify(entry, null, 2) + "\n", "utf8");
     if (entry.phase === "request.begin") {
-      console.log("[TTS MiniMax] 诊断日志:", logFile);
+      console.log("[TTS MiniMax] 診斷日誌:", logFile);
     }
   } catch (err) {
-    console.warn("[TTS MiniMax] 写诊断日志失败:", err);
+    console.warn("[TTS MiniMax] 寫診斷日誌失敗:", err);
   }
 }
 
@@ -114,10 +143,10 @@ function appendGptsovitsTtsLog(entry: Record<string, unknown>): void {
     const logFile = path.join(logDir, "gptsovits-tts.log");
     fs.appendFileSync(logFile, JSON.stringify(entry, null, 2) + "\n", "utf8");
     if (entry.phase === "request.begin") {
-      console.log("[TTS GPT-SoVITS] 诊断日志:", logFile);
+      console.log("[TTS GPT-SoVITS] 診斷日誌:", logFile);
     }
   } catch (err) {
-    console.warn("[TTS GPT-SoVITS] 写诊断日志失败:", err);
+    console.warn("[TTS GPT-SoVITS] 寫診斷日誌失敗:", err);
   }
 }
 
@@ -128,10 +157,10 @@ function appendCustomCloudTtsLog(entry: Record<string, unknown>): void {
     const logFile = path.join(logDir, "custom-cloud-tts.log");
     fs.appendFileSync(logFile, JSON.stringify(entry, null, 2) + "\n", "utf8");
     if (entry.phase === "request.begin") {
-      console.log("[TTS CustomCloud] 诊断日志:", logFile);
+      console.log("[TTS CustomCloud] 診斷日誌:", logFile);
     }
   } catch (err) {
-    console.warn("[TTS CustomCloud] 写诊断日志失败:", err);
+    console.warn("[TTS CustomCloud] 寫診斷日誌失敗:", err);
   }
 }
 
@@ -142,10 +171,10 @@ function appendMimoTtsLog(entry: Record<string, unknown>): void {
     const logFile = path.join(logDir, "mimo-tts.log");
     fs.appendFileSync(logFile, JSON.stringify(entry, null, 2) + "\n", "utf8");
     if (entry.phase === "request.begin") {
-      console.log("[TTS MiMo] 诊断日志:", logFile);
+      console.log("[TTS MiMo] 診斷日誌:", logFile);
     }
   } catch (err) {
-    console.warn("[TTS MiMo] 写诊断日志失败:", err);
+    console.warn("[TTS MiMo] 寫診斷日誌失敗:", err);
   }
 }
 
@@ -155,7 +184,7 @@ function getTtsCacheDir(): string {
 
 function assertTtsCacheKey(cacheKey: string): string {
   if (!/^(minimax|gptsovits|custom-cloud|mimo)-[a-f0-9]{64}$/.test(cacheKey)) {
-    throw new Error("非法 TTS 缓存 key");
+    throw new Error("非法 TTS 緩存 key");
   }
   return cacheKey;
 }
@@ -248,42 +277,42 @@ function getTtsCachePath(cacheKey: string, format: "mp3" | "wav" | "pcm" = "mp3"
   return path.join(getTtsCacheDir(), `${safeKey}.${ext}`);
 }
 
-// 单个厂商的可缓存配置：用户切到别的厂商再切回来，这三个字段从这里恢复。
+// 單個廠商的可緩存配置：用戶切到別的廠商再切回來，這三個字段從這裡恢復。
 interface ProviderProfile {
   baseUrl: string;
   model: string;
   apiKey: string;
   displayName?: string;
   /**
-   * 用户在 settings 显式指定的 transport；"auto" = 按 baseUrl 启发式 + capabilities fallback。
-   * resolveTransport() 负责把 "auto" 解析为具体 transport。
-   * 不存 = 等价于 "auto"。
+   * 用戶在 settings 顯式指定的 transport；"auto" = 按 baseUrl 啟發式 + capabilities fallback。
+   * resolveTransport() 負責把 "auto" 解析為具體 transport。
+   * 不存 = 等價於 "auto"。
    */
   explicitTransport?: "openai" | "anthropic" | "auto";
 }
 
 /**
- * 厂商名变更映射：旧 providerName → 新 providerName。
+ * 廠商名變更映射：舊 providerName → 新 providerName。
  *
- * 触发时机：UI 上为了对齐"英文名（中文公司名）"格式重命名了 preset 后，
- * 已存盘的 model-settings.json 里 provider 字段（以及 perProvider 字典的键）
- * 仍是旧名；normalize 阶段做一次性迁移，把旧名的 perProvider 数据搬到新名下，
- * provider 字段也改写为新名。迁移后写盘一次即清除痕迹。
+ * 觸發時機：UI 上為了對齊"英文名（中文公司名）"格式重命名了 preset 後，
+ * 已存盤的 model-settings.json 裡 provider 字段（以及 perProvider 字典的鍵）
+ * 仍是舊名；normalize 階段做一次性遷移，把舊名的 perProvider 數據搬到新名下，
+ * provider 字段也改寫為新名。遷移後寫盤一次即清除痕跡。
  *
- * 后续如果再次重命名，**只追加键值对**，不要删除老条目，避免回归。
+ * 後續如果再次重命名，**只追加鍵值對**，不要刪除老條目，避免迴歸。
  */
 const PROVIDER_RENAMES: Record<string, string> = {
   "MiniMax": "MiniMax（稀宇科技）",
   "DeepSeek": "DeepSeek（深度求索）",
-  "智谱 GLM": "GLM（智谱）",
-  "通义千问（DashScope）": "Qwen（通义千问）",
+  "智譜 GLM": "GLM（智譜）",
+  "通義千問（DashScope）": "Qwen（通義千問）",
   "火山 Agent-Plan": "火山 AgentPlan（火山引擎）",
 };
 
 /**
  * 把 perProvider 字典 + currentProvider 字段一起套用 PROVIDER_RENAMES。
- * - 旧名 → 新名：直接搬数据；如果新名已存在数据，旧名的不覆盖（保护"已用新名存过"的情况）。
- * - 不在映射表里的键：原样保留。
+ * - 舊名 → 新名：直接搬數據；如果新名已存在數據，舊名的不覆蓋（保護"已用新名存過"的情況）。
+ * - 不在映射表裡的鍵：原樣保留。
  */
 function migrateProviderRenames(
   currentProvider: string,
@@ -293,8 +322,8 @@ function migrateProviderRenames(
   for (const [key, value] of Object.entries(perProvider)) {
     const newKey = PROVIDER_RENAMES[key] ?? key;
     if (next[newKey]) {
-      // 新名已经有数据（说明用户已经在新名下存过），旧名的本地副本保留为最近一次更新优先：
-      // 这里取保守路线 → 不覆盖 next[newKey]，旧名直接丢弃。
+      // 新名已經有數據（說明用戶已經在新名下存過），舊名的本地副本保留為最近一次更新優先：
+      // 這裡取保守路線 → 不覆蓋 next[newKey]，舊名直接丟棄。
       console.log("[Cyrene] provider rename: drop legacy", key, "→ kept", newKey);
       continue;
     }
@@ -310,19 +339,19 @@ function migrateProviderRenames(
 interface ModelSettings {
   mode: "auto" | "manual";
   provider: string;
-  // 用户给模型起的自定义昵称，留空时状态栏用厂商 shortName。
+  // 用戶給模型起的自定義暱稱，留空時狀態欄用廠商 shortName。
   displayName?: string;
   baseUrl: string;
   model: string;
   apiKey: string;
   /**
-   * 当前厂商的 explicitTransport 镜像（顶层字段是 perProvider[currentProvider] 的视图）。
-   * 详见 ProviderProfile.explicitTransport。
+   * 當前廠商的 explicitTransport 鏡像（頂層字段是 perProvider[currentProvider] 的視圖）。
+   * 詳見 ProviderProfile.explicitTransport。
    */
   explicitTransport?: "openai" | "anthropic" | "auto";
-  // 按厂商缓存：currentProvider 之外的厂商配置也保留在这里，切回来时回填。
-  // 真值（source of truth）是 perProvider；顶层 baseUrl/model/apiKey 是当前厂商那一份的展开镜像，
-  // 仅为兼容现有 main 进程里大量直接读 settings.baseUrl 等代码而保留。
+  // 按廠商緩存：currentProvider 之外的廠商配置也保留在這裡，切回來時回填。
+  // 真值（source of truth）是 perProvider；頂層 baseUrl/model/apiKey 是當前廠商那一份的展開鏡像，
+  // 僅為兼容現有 main 進程裡大量直接讀 settings.baseUrl 等代碼而保留。
   perProvider: Record<string, ProviderProfile>;
   runtimeSync: "off" | "local" | "llm";
   stickerEnabled: boolean;
@@ -330,11 +359,11 @@ interface ModelSettings {
   stickerSimilarityThreshold: number;
   rerankerMode: "light" | "standard" | "none";
   embeddingModel: "minilm" | "bgem3";
-  // 视觉模型配置（可选）。undefined 或未启用 = 不支持看图，read_image 诚实拒绝。
+  // 視覺模型配置（可選）。undefined 或未啟用 = 不支持看圖，read_image 誠實拒絕。
   vision?: VisionModelConfig;
 }
 
-/** 视觉模型配置。syncWithMain=true 时三字段不落盘，运行时强制从主配置读。 */
+/** 視覺模型配置。syncWithMain=true 時三字段不落盤，運行時強制從主配置讀。 */
 interface VisionModelConfig {
   syncWithMain: boolean;
   baseUrl: string;
@@ -349,7 +378,7 @@ interface UserProfile {
   birthday: string;
   timezone: string;
   avatarPath: string;
-  /** 默认城市（用于天气等需要地理定位的工具，没填则模型会问用户） */
+  /** 默認城市（用於天氣等需要地理定位的工具，沒填則模型會問用戶） */
   defaultCity: string;
 }
 
@@ -360,11 +389,13 @@ interface GeneralSettings {
   soundVolume: number;
   petAlwaysOnTop: boolean;
   petVisible: boolean;
-  /** 桌宠缩放因子：1.0=默认，0.5~2.0，窗口与模型同步等比缩放。 */
+  /** 桌寵獨立在桌面上時，在下方顯示快速文字輸入列。 */
+  petChatInputEnabled: boolean;
+  /** 桌寵縮放因子：1.0=默認，0.5~2.0，窗口與模型同步等比縮放。 */
   petZoom: number;
-  /** 桌宠窗口 X 坐标，未保存时为 undefined */
+  /** 桌寵窗口 X 座標，未保存時為 undefined */
   petWindowX?: number;
-  /** 桌宠窗口 Y 坐标，未保存时为 undefined */
+  /** 桌寵窗口 Y 座標，未保存時為 undefined */
   petWindowY?: number;
   sidebarVisible: boolean;
   tasksVisible: boolean;
@@ -379,16 +410,16 @@ interface GeneralSettings {
   // MiniMax
   ttsMinimaxKey: string;
   ttsMinimaxVoiceId: string;
-  /** MiniMax 合成模型：speech-2.8-hd(高保真¥3.5/万字符) | speech-2.8-turbo(极速¥2.0/万字符) */
+  /** MiniMax 合成模型：speech-2.8-hd(高保真¥3.5/萬字符) | speech-2.8-turbo(極速¥2.0/萬字符) */
   ttsMinimaxModel: "speech-2.8-hd" | "speech-2.8-turbo";
-  /** MiniMax 流式播放（边合成边播，首字延迟低）；false=完整合成收完再播 */
+  /** MiniMax 流式播放（邊合成邊播，首字延遲低）；false=完整合成收完再播 */
   ttsStreaming: boolean;
   // GPT-SoVITS（本地）
   ttsGptsovitsBaseUrl: string;
   ttsGptsovitsRefAudioPath: string;
   ttsGptsovitsPromptText: string;
   ttsGptsovitsFormat: "wav" | "mp3";
-  // 自定义云端 TTS
+  // 自定義雲端 TTS
   ttsCustomCloudEndpointUrl: string;
   ttsCustomCloudApiKey: string;
   ttsCustomCloudVoiceId: string;
@@ -398,60 +429,79 @@ interface GeneralSettings {
   ttsMimoKey: string;
   ttsMimoVoiceAudioPath: string;
   ttsMimoStylePrompt: string;
-  /** 天气源：open-meteo(免配置默认) | amap(高德,需填key) */
+  /** 天氣源：open-meteo(免配置默認) | amap(高德,需填key) */
   weatherSource: "open-meteo" | "amap";
-  /** 天气插件是否启用（开关） */
+  /** 天氣插件是否啟用（開關） */
   weatherEnabled: boolean;
-  /** 高德天气 key（https://lbs.amap.com 注册 Web服务 key） */
+  /** 高德天氣 key（https://lbs.amap.com 註冊 Web服務 key） */
   amapKey: string;
-  /** 🚗出行工具是否启用 */
+  /** 🚗出行工具是否啟用 */
   travelEnabled: boolean;
-  /** 🖥️ 浏览器自动化（Playwright MCP）是否启用。默认 false，需用户手动开启。 */
+  /** 🖥️ 瀏覽器自動化（Playwright MCP）是否啟用。默認 false，需用戶手動開啟。 */
   playwrightMcpEnabled: boolean;
-  // 联网搜索：选哪个搜索源 + 对应 key
+  // 聯網搜索：選哪個搜索源 + 對應 key
   searchEngine: "off" | "bocha" | "tavily" | "minimax";
   searchBochaKey: string;
   searchTavilyKey: string;
   searchMinimaxKey: string;
-  /** ✉️邮件发送插件是否启用 */
+  /** ✉️郵件發送插件是否啟用 */
   emailEnabled: boolean;
-  /** SMTP 主机，如 smtp.qq.com */
+  /** SMTP 主機，如 smtp.qq.com */
   emailSmtpHost: string;
   /** SMTP 端口，如 465（SSL）/ 587（STARTTLS） */
   emailSmtpPort: number;
-  /** 使用 SSL/TLS（465 通常 true，587 通常 false；用户可覆盖） */
+  /** 使用 SSL/TLS（465 通常 true，587 通常 false；用戶可覆蓋） */
   emailSmtpSecure: boolean;
-  /** 发件邮箱地址 */
+  /** 發件郵箱地址 */
   emailSmtpUser: string;
-  /** SMTP 授权码（非邮箱登录密码） */
+  /** SMTP 授權碼（非郵箱登錄密碼） */
   emailSmtpPass: string;
-  /** 发件人显示名（可选） */
+  /** 發件人顯示名（可選） */
   emailFromName: string;
-  /** 🎧ASR 服务商：off(关闭) | aliyun(阿里云) | local(本地,占位) */
-  asrEngine: "off" | "aliyun" | "local";
-  /** 阿里云智能语音交互 AppKey */
+  /** 🎧ASR 服務商：off(關閉) | aliyun(阿里雲) | local(Groq Whisper) | web-speech(瀏覽器內建) */
+  asrEngine: "off" | "aliyun" | "local" | "web-speech";
+  /** 阿里雲智能語音交互 AppKey */
   asrAliyunAppKey: string;
-  /** 阿里云 RAM AccessKey ID */
+  /** 阿里雲 RAM AccessKey ID */
   asrAliyunAccessKeyId: string;
-  /** 阿里云 RAM AccessKey Secret */
+  /** 阿里雲 RAM AccessKey Secret */
   asrAliyunAccessKeySecret: string;
-  /** ASR 识别语言：zh(中文) | en(英文) | auto(自动) */
+  /** ASR 識別語言：zh(中文) | en(英文) | auto(自動) */
   asrLanguage: "zh" | "en" | "auto";
-  /** VAD 静默检测阈值（毫秒），500~2000，默认 1000 */
+  /** VAD 靜默檢測閾值（毫秒），500~2000，默認 1000 */
   asrVadSilenceMs: number;
-  /** 通话中显示文字转写 */
+  /** 通話中顯示文字轉寫 */
   asrShowTranscript: boolean;
-  /** Opener 主动开口档位 */
+  /** 雲端辨識失敗時自動改用本機 Whisper */
+  asrFallbackToLocal: boolean;
+  /** 按住說話模式，避免環境噪音誤觸 */
+  asrPushToTalk: boolean;
+  /** Opener 主動開口檔位 */
   openerMode: "off" | "quiet" | "normal" | "lively";
+  openerQuietStart: string;
+  openerQuietEnd: string;
+  openerDailyLimit: number;
+  openerRoutineEnabled: boolean;
+  openerBreaksEnabled: boolean;
+  openerWeatherEnabled: boolean;
+  /** 每日陪伴儀式總開關與三個時段。 */
+  dailyRitualEnabled: boolean;
+  dailyRitualVoice: boolean;
+  dailyRitualMorningEnabled: boolean;
+  dailyRitualMorningTime: string;
+  dailyRitualAfternoonEnabled: boolean;
+  dailyRitualAfternoonTime: string;
+  dailyRitualEveningEnabled: boolean;
+  dailyRitualEveningTime: string;
 }
 
 
 interface PublicModelConfig {
   mode: "auto" | "manual";
   provider: string;
-  // 用户自定义昵称；留空时状态栏用 shortName
+  // 用戶自定義暱稱；留空時狀態欄用 shortName
   displayName?: string;
-  // 厂商短名（去括号后缀），状态栏"正在喂养"的兜底显示
+  // 廠商短名（去括號後綴），狀態欄"正在餵養"的兜底顯示
   shortName: string;
   model: string;
   connected: boolean;
@@ -460,8 +510,8 @@ interface PublicModelConfig {
   rerankerMode: "light" | "standard" | "none";
 }
 
-type RuntimeStatus = "陪伴中" | "思考中" | "工作中" | "聆听中" | "提醒中" | "离线";
-type RuntimeFeeling = "平静" | "开心" | "温柔" | "激动" | "撒娇" | "担心" | "难过" | "感动" | "害羞";
+type RuntimeStatus = "陪伴中" | "思考中" | "工作中" | "聆聽中" | "提醒中" | "離線";
+type RuntimeFeeling = "平靜" | "開心" | "溫柔" | "激動" | "撒嬌" | "擔心" | "難過" | "感動" | "害羞";
 type StickerSize = "small" | "standard" | "large";
 
 interface RuntimeState {
@@ -476,19 +526,119 @@ interface ChatReplyPayload {
   sticker: string | null;
 }
 
-const RUNTIME_STATUSES: RuntimeStatus[] = ["陪伴中", "思考中", "工作中", "聆听中", "提醒中", "离线"];
-const RUNTIME_FEELINGS: RuntimeFeeling[] = ["平静", "开心", "温柔", "激动", "撒娇", "担心", "难过", "感动", "害羞"];
-const CHAT_REQUEST_TIMEOUT_MS = 300000; // FC 总预算：20 轮 × 推理模型 ~10-15s 需 300s 余量
+const RUNTIME_STATUSES: RuntimeStatus[] = ["陪伴中", "思考中", "工作中", "聆聽中", "提醒中", "離線"];
+const RUNTIME_FEELINGS: RuntimeFeeling[] = ["平靜", "開心", "溫柔", "激動", "撒嬌", "擔心", "難過", "感動", "害羞"];
+const CHAT_REQUEST_TIMEOUT_MS = 300000; // FC 總預算：20 輪 × 推理模型 ~10-15s 需 300s 餘量
 
-/** 桌宠窗口的基础尺寸（zoom=1.0 时）。缩放因子改变窗口与模型尺寸，二者同步。 */
+/** 桌寵窗口的基礎尺寸（zoom=1.0 時）。縮放因子改變窗口與模型尺寸，二者同步。 */
 const PET_WINDOW_BASE_WIDTH = 400;
 const PET_WINDOW_BASE_HEIGHT = 500;
 
-/** 任务栏 / 托盘图标路径（相对于 dist/main/main/）。所有窗口共用同一个 .ico。 */
+let lastSlotBounds: { x: number; y: number; width: number; height: number } | null = null;
+let isPetDocked = true;
+let isPetTextInputActive = false;
+let isProgrammaticMoving = false;
+let isPetDragging = false;
+let pendingPetPosition: { x: number; y: number } | null = null;
+
+function applyPetWindowLevel(settings: GeneralSettings): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (isPetDocked || isPetTextInputActive || !settings.petAlwaysOnTop) {
+    mainWindow.setAlwaysOnTop(false);
+    return;
+  }
+  mainWindow.setAlwaysOnTop(true, "screen-saver");
+}
+
+/**
+ * Turn the docked pet into an independent desktop window before a drag moves
+ * it.  Relying on BrowserWindow's `move` event is too late on macOS: a child
+ * window can remain constrained to its parent and never produce the first
+ * useful move event.
+ */
+function undockPet(restoreSize = true): void {
+  if (!mainWindow || mainWindow.isDestroyed() || !isPetDocked) return;
+
+  isPetDocked = false;
+  isProgrammaticMoving = false;
+  const settings = loadGeneralSettings();
+  mainWindow.setParentWindow(null);
+  // Resizing a BrowserWindow while a pointer is down cancels pointer capture
+  // on macOS. During a drag, keep the docked size until pointerup.
+  if (restoreSize) applyPetZoom(settings.petZoom || 1.0);
+  applyPetWindowLevel(settings);
+  syncPetChatInputVisibility(settings);
+
+  if (sidebarWindow && !sidebarWindow.isDestroyed()) {
+    try {
+      sidebarWindow.webContents.send("workspace:pet-dock-changed", false);
+    } catch { /* window may be closing */ }
+  }
+}
+
+function updatePetDockPosition(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!sidebarWindow || sidebarWindow.isDestroyed() || !sidebarWindow.isVisible()) return;
+  if (!lastSlotBounds) return;
+
+  const settings = loadGeneralSettings();
+  syncPetChatInputVisibility(settings);
+
+  if (isPetDocked) {
+    // 停靠時：縮小比例為 0.45 左右，使桌寵完美契合小型卡片邊框
+    applyPetZoom(0.45);
+    // 建立父子視窗關係：使桌寵視窗永遠位於工作台視窗之上，但會跟隨工作台一起被其他應用（如 Chrome）遮擋
+    if (sidebarWindow && !sidebarWindow.isDestroyed()) {
+      mainWindow.setParentWindow(sidebarWindow);
+    }
+    applyPetWindowLevel(settings);
+    // The dock slot is an intentional interaction surface. Per-pixel
+    // click-through can race with mousedown here (especially after a window
+    // resize), causing the drag gesture never to receive pointerdown.
+    mainWindow.setIgnoreMouseEvents(false);
+  } else {
+    // 未停靠時：恢復用戶在設置頁面保存的常規縮放因子
+    applyPetZoom(settings.petZoom || 1.0);
+    // 解除父子視窗關係，使桌寵成為獨立的桌面小工具
+    mainWindow.setParentWindow(null);
+    // 拖出時：恢復常規桌寵的置頂狀態
+    applyPetWindowLevel(settings);
+    return; // 不繼續跟隨工作台移動
+  }
+
+  const sidebarBounds = sidebarWindow.getBounds();
+  let petWidth = 0;
+  let petHeight = 0;
+
+  if (isPetDocked) {
+    petWidth = Math.round(PET_WINDOW_BASE_WIDTH * 0.45);
+    petHeight = Math.round(PET_WINDOW_BASE_HEIGHT * 0.45);
+  } else {
+    const petBounds = mainWindow.getBounds();
+    petWidth = petBounds.width;
+    petHeight = petBounds.height;
+  }
+  
+  const targetX = sidebarBounds.x + lastSlotBounds.x + (lastSlotBounds.width - petWidth) / 2;
+  const targetY = sidebarBounds.y + lastSlotBounds.y + lastSlotBounds.height - petHeight + 16;
+  
+  isProgrammaticMoving = true;
+  mainWindow.setBounds({
+    x: Math.round(targetX),
+    y: Math.round(targetY),
+    width: petWidth,
+    height: petHeight
+  });
+  setTimeout(() => {
+    isProgrammaticMoving = false;
+  }, 150);
+}
+
+/** 任務欄 / 托盤圖標路徑（相對於 dist/main/main/）。所有窗口共用同一個 .ico。 */
 const APP_ICON_PATH = path.join(__dirname, "..", "..", "..", "assets", "tray-icon.ico");
 let runtimeState: RuntimeState = {
     status: "陪伴中",
-    feeling: "平静",
+    feeling: "平靜",
     expression: 0,
     updatedAt: Date.now(),
   };
@@ -497,7 +647,7 @@ let stickerEmbeddingIndex: StickerEmbeddingEntry[] | null = null;
 let sceneEmbeddingIndex: SceneIndex | null = null;
 const DEFAULT_MODEL_SETTINGS: ModelSettings = {
   mode: "auto",
-  // 默认厂商改为 MiniMax（v1 vendor adapter 第一个落地的），DeepSeek 已从 v1 清单移除。
+  // 默認廠商改為 MiniMax（v1 vendor adapter 第一個落地的），DeepSeek 已從 v1 清單移除。
   provider: "MiniMax（稀宇科技）",
   baseUrl: "https://api.minimaxi.com/anthropic",
   model: "MiniMax-M3",
@@ -518,6 +668,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   soundVolume: 70,
   petAlwaysOnTop: true,
   petVisible: true,
+  petChatInputEnabled: false,
   petZoom: 1,
   sidebarVisible: true,
   tasksVisible: true,
@@ -543,7 +694,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   ttsCustomCloudTimeoutMs: 30000,
   ttsMimoKey: "",
   ttsMimoVoiceAudioPath: "",
-  ttsMimoStylePrompt: "温柔、自然、略带亲近感，像在轻声陪用户聊天。",
+  ttsMimoStylePrompt: "溫柔、自然、略帶親近感，像在輕聲陪用戶聊天。",
   weatherSource: "open-meteo",
   weatherEnabled: false,
   amapKey: "",
@@ -567,7 +718,23 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   asrLanguage: "zh",
   asrVadSilenceMs: 1000,
   asrShowTranscript: false,
+  asrFallbackToLocal: true,
+  asrPushToTalk: false,
   openerMode: "off",
+  openerQuietStart: "23:00",
+  openerQuietEnd: "07:00",
+  openerDailyLimit: 4,
+  openerRoutineEnabled: true,
+  openerBreaksEnabled: true,
+  openerWeatherEnabled: true,
+  dailyRitualEnabled: false,
+  dailyRitualVoice: true,
+  dailyRitualMorningEnabled: true,
+  dailyRitualMorningTime: "08:00",
+  dailyRitualAfternoonEnabled: true,
+  dailyRitualAfternoonTime: "15:00",
+  dailyRitualEveningEnabled: true,
+  dailyRitualEveningTime: "22:30",
 };
 
 function getSettingsPath(): string {
@@ -634,11 +801,16 @@ interface ImportedDocItem {
 }
 
 async function loadMemoryPanelData() {
-  const [l0, l1, l2] = await Promise.all([
-    memoryStore.getL0(),
-    memoryStore.getL1(),
-    memoryStore.getAllL2(),
-  ]);
+  const store = await memoryStore.load();
+  const l0 = store.l0;
+  const l1 = store.l1;
+  const l2 = [...store.l2];
+  const evidenceByMemory = new Map<string, MemoryEvidence[]>();
+  for (const evidence of store.evidence ?? []) {
+    const group = evidenceByMemory.get(evidence.memoryId) ?? [];
+    group.push(evidence);
+    evidenceByMemory.set(evidence.memoryId, group);
+  }
 
   let importedDocs: ImportedDocItem[] = [];
   const ragStorePath = getRagStorePath();
@@ -655,9 +827,9 @@ async function loadMemoryPanelData() {
       const docsMap = new Map<string, ImportedDocItem>();
       for (const entry of entries) {
         if (entry.source !== "imported_doc") continue;
-        const fileName = entry.metadata?.fileName || "未命名文档";
+        const fileName = entry.metadata?.fileName || "未命名文檔";
         const importId = entry.metadata?.importId as string | undefined;
-        // 新数据按 importId 分组，旧数据按 fileName 分组
+        // 新數據按 importId 分組，舊數據按 fileName 分組
         const key = importId || "legacy:" + fileName;
         const existing = docsMap.get(key);
         if (existing) {
@@ -682,10 +854,49 @@ async function loadMemoryPanelData() {
   return {
     l0,
     l1,
-    l2: l2.sort((a, b) => b.createdAt - a.createdAt),
+    l2: l2
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map(memory => ({
+        id: memory.id,
+        content: memory.content,
+        triggerText: memory.triggerText,
+        status: memory.status,
+        weight: memory.weight,
+        createdAt: memory.createdAt,
+        lastAccessedAt: memory.lastAccessedAt,
+        accessCount: memory.accessCount,
+        isPinned: memory.isPinned,
+        sourceConversationId: memory.sourceConversationId,
+        isSummary: Boolean(memory.isSummary),
+        conflictCount: memory.conflictWith?.length ?? 0,
+        supersededBy: memory.supersededBy,
+        mergedInto: memory.mergedInto,
+        evidence: (evidenceByMemory.get(memory.id) ?? []).map(evidence => ({
+          id: evidence.id,
+          quoteSnippet: evidence.quoteSnippet,
+          contextBeforeSnippet: evidence.contextBeforeSnippet,
+          contextAfterSnippet: evidence.contextAfterSnippet,
+          conversationId: evidence.conversationId,
+          createdAt: evidence.createdAt,
+          sourceStatus: evidence.sourceStatus,
+        })),
+      })),
+    graph: buildMemoryGraphView(entityGraph.snapshot(), l2, l0.preferredName || l0.nickname || "你"),
     importedDocs,
-    reflections: [] as MemoryPanelItem[],
+    reflections: (store.reflectionLogs ?? [])
+      .slice()
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map(log => ({
+        id: log.id,
+        title: log.type === "compression" ? "記憶整理" : log.type === "l0_update" ? "長期畫像更新" : "近期狀態更新",
+        body: log.summary,
+        meta: `${formatMemoryPanelDate(log.createdAt)}${log.details ? ` · ${log.details}` : ""}`,
+      })) as MemoryPanelItem[],
   };
+}
+
+function formatMemoryPanelDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleString("zh-TW", { dateStyle: "medium", timeStyle: "short" });
 }
 
 function getStickerSettingsPath(): string {
@@ -694,11 +905,11 @@ function getStickerSettingsPath(): string {
 
 /**
  * normalize 流程：
- *   1. 先清洗顶层基础字段（mode/provider/runtimeSync/...）
- *   2. 再清洗 perProvider 字典：忽略非法键、缺失字段补默认值、apiKey 不在这里强制 trim 留作下一步
- *   3. 旧 schema 兼容：若 perProvider 中没有 currentProvider 那一份，把顶层 baseUrl/model/apiKey 当作首次迁移塞进去
- *   4. 用 perProvider[currentProvider] 反向展开成顶层 baseUrl/model/apiKey 镜像
- *      → 真值（source of truth）是 perProvider；顶层只是当前厂商配置的视图
+ *   1. 先清洗頂層基礎字段（mode/provider/runtimeSync/...）
+ *   2. 再清洗 perProvider 字典：忽略非法鍵、缺失字段補默認值、apiKey 不在這裡強制 trim 留作下一步
+ *   3. 舊 schema 兼容：若 perProvider 中沒有 currentProvider 那一份，把頂層 baseUrl/model/apiKey 當作首次遷移塞進去
+ *   4. 用 perProvider[currentProvider] 反向展開成頂層 baseUrl/model/apiKey 鏡像
+ *      → 真值（source of truth）是 perProvider；頂層只是當前廠商配置的視圖
  */
 function normalizeProviderProfile(input: Partial<ProviderProfile> | null | undefined): ProviderProfile {
   const explicitTransport: ProviderProfile["explicitTransport"] =
@@ -714,18 +925,18 @@ function normalizeProviderProfile(input: Partial<ProviderProfile> | null | undef
   };
 }
 
-/** 清洗视觉模型配置。syncWithMain=true 时三字段不保留（运行时从主配置读）。 */
+/** 清洗視覺模型配置。syncWithMain=true 時三字段不保留（運行時從主配置讀）。 */
 function normalizeVisionConfig(input: Partial<VisionModelConfig> | undefined): VisionModelConfig | undefined {
   if (!input || typeof input !== "object") return undefined;
   const syncWithMain = input.syncWithMain === true;
   if (syncWithMain) {
-    // syncWithMain=true：强制忽略三字段（即便手动编辑配置文件写了也忽略），运行时从主配置读
+    // syncWithMain=true：強制忽略三字段（即便手動編輯配置文件寫了也忽略），運行時從主配置讀
     return { syncWithMain: true, baseUrl: "", apiKey: "", model: "" };
   }
   const baseUrl = typeof input.baseUrl === "string" ? input.baseUrl.trim() : "";
   const apiKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";
   const model = typeof input.model === "string" ? input.model.trim() : "";
-  // 三项全空 = 未启用
+  // 三項全空 = 未啟用
   if (!baseUrl && !apiKey && !model) return undefined;
   return { syncWithMain: false, baseUrl, apiKey, model };
 }
@@ -736,7 +947,7 @@ function normalizeModelSettings(input: Partial<ModelSettings> | null | undefined
     ? input.provider.trim()
     : DEFAULT_MODEL_SETTINGS.provider;
 
-  // perProvider 清洗：跳过非对象、非法键
+  // perProvider 清洗：跳過非對象、非法鍵
   const rawPerProvider = (input as ModelSettings | undefined)?.perProvider;
   let perProvider: Record<string, ProviderProfile> = {};
   if (rawPerProvider && typeof rawPerProvider === "object") {
@@ -746,24 +957,24 @@ function normalizeModelSettings(input: Partial<ModelSettings> | null | undefined
     }
   }
 
-  // 厂商重命名迁移：把旧 provider 名在字典里和当前 provider 字段一并改成新名。
-  // 必须在"旧 schema 兼容回填"之前做，否则会用旧名先创建一份僵尸数据。
+  // 廠商重命名遷移：把舊 provider 名在字典裡和當前 provider 字段一併改成新名。
+  // 必須在"舊 schema 兼容回填"之前做，否則會用舊名先創建一份殭屍數據。
   ({ provider, perProvider } = migrateProviderRenames(provider, perProvider));
 
-  // 旧 schema 兼容：v1 之前的 model-config.json 没有 perProvider 字段，
-  // 但有顶层 baseUrl/model/apiKey 三件套。首次升级时把它们当作 currentProvider 那一份回填。
+  // 舊 schema 兼容：v1 之前的 model-config.json 沒有 perProvider 字段，
+  // 但有頂層 baseUrl/model/apiKey 三件套。首次升級時把它們當作 currentProvider 那一份回填。
   if (!perProvider[provider]) {
     perProvider[provider] = normalizeProviderProfile({
       baseUrl: typeof input?.baseUrl === "string" ? input.baseUrl : "",
       model: typeof input?.model === "string" ? input.model : "",
       apiKey: typeof input?.apiKey === "string" ? input.apiKey : "",
     });
-    // 如果迁移后这一份完全是空的（用户从来没配过），再给个默认 baseUrl/model（便于 UI 第一次显示）
+    // 如果遷移後這一份完全是空的（用戶從來沒配過），再給個默認 baseUrl/model（便於 UI 第一次顯示）
     if (!perProvider[provider].baseUrl) perProvider[provider].baseUrl = DEFAULT_MODEL_SETTINGS.baseUrl;
     if (!perProvider[provider].model) perProvider[provider].model = DEFAULT_MODEL_SETTINGS.model;
   }
 
-  // 顶层镜像：用 perProvider[provider] 展开
+  // 頂層鏡像：用 perProvider[provider] 展開
   const profile = perProvider[provider];
 
   return {
@@ -792,7 +1003,7 @@ function loadModelSettings(): ModelSettings {
     const filePath = getSettingsPath();
     if (!fs.existsSync(filePath)) return DEFAULT_MODEL_SETTINGS;
     const raw = fs.readFileSync(filePath, "utf8");
-    return normalizeModelSettings(JSON.parse(raw) as Partial<ModelSettings>);
+    return normalizeModelSettings(revealSecrets(JSON.parse(raw)) as Partial<ModelSettings>);
   } catch (err) {
     console.error("[Cyrene] load settings failed:", err);
     return DEFAULT_MODEL_SETTINGS;
@@ -800,11 +1011,11 @@ function loadModelSettings(): ModelSettings {
 }
 
 /**
- * 加载视觉模型配置，解析 syncWithMain 并做 supportsVision 检查。
- * 返回 null = 未启用视觉（read_image 据此诚实拒绝）。
+ * 加載視覺模型配置，解析 syncWithMain 並做 supportsVision 檢查。
+ * 返回 null = 未啟用視覺（read_image 據此誠實拒絕）。
  *
- * syncWithMain=true 时：从主配置读 baseUrl/key/model，并检查主模型 supportsVision——
- * 若主模型非视觉，返回 null（避免把非视觉模型当视觉模型硬调导致运行时错误让用户困惑）。
+ * syncWithMain=true 時：從主配置讀 baseUrl/key/model，並檢查主模型 supportsVision——
+ * 若主模型非視覺，返回 null（避免把非視覺模型當視覺模型硬調導致運行時錯誤讓用戶困惑）。
  */
 export function loadVisionConfig(): VisionConfig | null {
   const settings = loadModelSettings();
@@ -812,41 +1023,41 @@ export function loadVisionConfig(): VisionConfig | null {
   if (!v) return null;
 
   if (v.syncWithMain) {
-    // 从主配置读
+    // 從主配置讀
     const cap = getCapability(settings.provider);
     if (!cap?.supportsVision) {
-      console.warn("[Vision] syncWithMain=true 但主模型不支持视觉，视为未启用");
+      console.warn("[Vision] syncWithMain=true 但主模型不支持視覺，視為未啟用");
       return null;
     }
     if (!settings.apiKey || !settings.model) return null;
-    // 视觉 baseUrl：优先用 visionBaseUrl（主配走 Anthropic 入口时视觉需走 OpenAI 入口），
-    // 没标就用主配置 baseUrl。这样用户勾"同步"就能用，不用手动改 URL。
+    // 視覺 baseUrl：優先用 visionBaseUrl（主配走 Anthropic 入口時視覺需走 OpenAI 入口），
+    // 沒標就用主配置 baseUrl。這樣用戶勾"同步"就能用，不用手動改 URL。
     const visionBaseUrl = cap.visionBaseUrl || settings.baseUrl;
     return { baseUrl: visionBaseUrl, apiKey: settings.apiKey, model: settings.model };
   }
 
-  // 独立配置
+  // 獨立配置
   if (!v.baseUrl || !v.apiKey || !v.model) return null;
   return { baseUrl: v.baseUrl, apiKey: v.apiKey, model: v.model };
 }
 
 /**
- * 保存逻辑：
- *   - 渲染端发来的 settings 既可能带顶层 baseUrl/model/apiKey（旧调用方式），
- *     也可能带 perProvider（新调用方式，未来可扩展）。
- *   - 写盘前先把"顶层那三件套"折叠回 perProvider[provider]，保证真值落到字典里。
- *   - normalizeModelSettings 再把 perProvider[provider] 展开成顶层镜像，写盘 = 双视图一致。
+ * 保存邏輯：
+ *   - 渲染端發來的 settings 既可能帶頂層 baseUrl/model/apiKey（舊調用方式），
+ *     也可能帶 perProvider（新調用方式，未來可擴展）。
+ *   - 寫盤前先把"頂層那三件套"摺疊回 perProvider[provider]，保證真值落到字典裡。
+ *   - normalizeModelSettings 再把 perProvider[provider] 展開成頂層鏡像，寫盤 = 雙視圖一致。
  */
 function saveModelSettings(settings: Partial<ModelSettings>): ModelSettings {
   const existing = loadModelSettings();
   const merged: Partial<ModelSettings> = { ...existing, ...settings };
 
-  // currentProvider 优先取传入的、再取已有的
+  // currentProvider 優先取傳入的、再取已有的
   const currentProvider = (typeof settings.provider === "string" && settings.provider.trim())
     ? settings.provider.trim()
     : existing.provider;
 
-  // 起点：复制现有 perProvider，再 merge 传入的 perProvider
+  // 起點：複製現有 perProvider，再 merge 傳入的 perProvider
   const perProvider: Record<string, ProviderProfile> = { ...(existing.perProvider ?? {}) };
   if (settings.perProvider && typeof settings.perProvider === "object") {
     for (const [key, value] of Object.entries(settings.perProvider)) {
@@ -854,9 +1065,9 @@ function saveModelSettings(settings: Partial<ModelSettings>): ModelSettings {
     }
   }
 
-  // 把传入的顶层三件套折叠到 currentProvider 下（这是渲染端目前主要的写入路径）
+  // 把傳入的頂層三件套摺疊到 currentProvider 下（這是渲染端目前主要的寫入路徑）
   const incomingProfile = perProvider[currentProvider] ?? normalizeProviderProfile(null);
-  // explicitTransport：渲染端新下拉框字段。传 "openai" | "anthropic" | "auto" 都接受；传 undefined 视为 "auto"。
+  // explicitTransport：渲染端新下拉框字段。傳 "openai" | "anthropic" | "auto" 都接受；傳 undefined 視為 "auto"。
   const incomingExplicitTransport: ProviderProfile["explicitTransport"] =
     settings.explicitTransport === "openai" || settings.explicitTransport === "anthropic" || settings.explicitTransport === "auto"
       ? settings.explicitTransport
@@ -877,7 +1088,7 @@ function saveModelSettings(settings: Partial<ModelSettings>): ModelSettings {
   const final = normalizeModelSettings(merged);
   const filePath = getSettingsPath();
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(final, null, 2), "utf8");
+  fs.writeFileSync(filePath, JSON.stringify(protectSecrets(final), null, 2), { encoding: "utf8", mode: 0o600 });
   return final;
 }
 
@@ -895,6 +1106,10 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
     const num = typeof value === "number" ? value : Number(value);
     return Number.isFinite(num) ? Math.max(1000, Math.min(120000, Math.round(num))) : fallback;
   };
+  const normalizeTime = (value: unknown, fallback: string) => {
+    const text = typeof value === "string" ? value.trim() : "";
+    return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(text) ? text : fallback;
+  };
   return {
     musicEnabled: Boolean(input?.musicEnabled),
     musicVolume: clamp(input?.musicVolume, DEFAULT_GENERAL_SETTINGS.musicVolume),
@@ -902,6 +1117,9 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
     soundVolume: clamp(input?.soundVolume, DEFAULT_GENERAL_SETTINGS.soundVolume),
     petAlwaysOnTop: input?.petAlwaysOnTop === undefined ? DEFAULT_GENERAL_SETTINGS.petAlwaysOnTop : Boolean(input.petAlwaysOnTop),
     petVisible: input?.petVisible === undefined ? DEFAULT_GENERAL_SETTINGS.petVisible : Boolean(input.petVisible),
+    petChatInputEnabled: input?.petChatInputEnabled === undefined
+      ? DEFAULT_GENERAL_SETTINGS.petChatInputEnabled
+      : Boolean(input.petChatInputEnabled),
     petZoom: typeof input?.petZoom === "number" ? Math.max(0.5, Math.min(2, input.petZoom)) : DEFAULT_GENERAL_SETTINGS.petZoom,
     petWindowX: typeof input?.petWindowX === "number" && isFinite(input.petWindowX)
       ? Math.round(input.petWindowX) : undefined,
@@ -934,7 +1152,7 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
     searchBochaKey: typeof input?.searchBochaKey === "string" ? input.searchBochaKey : "",
     searchTavilyKey: typeof input?.searchTavilyKey === "string" ? input.searchTavilyKey : "",
     searchMinimaxKey: typeof input?.searchMinimaxKey === "string" ? input.searchMinimaxKey : "",
-    // 邮件（SMTP）配置
+    // 郵件（SMTP）配置
     emailEnabled: Boolean(input?.emailEnabled),
     emailSmtpHost: typeof input?.emailSmtpHost === "string" ? input.emailSmtpHost : "",
     emailSmtpPort: clampPort(input?.emailSmtpPort, DEFAULT_GENERAL_SETTINGS.emailSmtpPort),
@@ -944,9 +1162,9 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
     emailSmtpUser: typeof input?.emailSmtpUser === "string" ? input.emailSmtpUser : "",
     emailSmtpPass: typeof input?.emailSmtpPass === "string" ? input.emailSmtpPass : "",
     emailFromName: typeof input?.emailFromName === "string" ? input.emailFromName : "",
-    // ASR（语音识别）配置
-    asrEngine: ["off", "aliyun", "local"].includes(String(input?.asrEngine))
-      ? (input!.asrEngine as "off" | "aliyun" | "local")
+    // ASR（語音識別）配置
+    asrEngine: ["off", "aliyun", "local", "web-speech"].includes(String(input?.asrEngine))
+      ? (input!.asrEngine as "off" | "aliyun" | "local" | "web-speech")
       : "off",
     asrAliyunAppKey: typeof input?.asrAliyunAppKey === "string" ? input.asrAliyunAppKey : "",
     asrAliyunAccessKeyId: typeof input?.asrAliyunAccessKeyId === "string" ? input.asrAliyunAccessKeyId : "",
@@ -958,9 +1176,27 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
       ? Math.max(300, Math.min(30000, Math.round(input.asrVadSilenceMs)))
       : DEFAULT_GENERAL_SETTINGS.asrVadSilenceMs,
     asrShowTranscript: Boolean(input?.asrShowTranscript),
+    asrFallbackToLocal: input?.asrFallbackToLocal === undefined ? true : Boolean(input.asrFallbackToLocal),
+    asrPushToTalk: Boolean(input?.asrPushToTalk),
     openerMode: ["off", "quiet", "normal", "lively"].includes(String(input?.openerMode))
       ? (input!.openerMode as "off" | "quiet" | "normal" | "lively")
       : "off",
+    openerQuietStart: normalizeTime(input?.openerQuietStart, DEFAULT_GENERAL_SETTINGS.openerQuietStart),
+    openerQuietEnd: normalizeTime(input?.openerQuietEnd, DEFAULT_GENERAL_SETTINGS.openerQuietEnd),
+    openerDailyLimit: typeof input?.openerDailyLimit === "number"
+      ? Math.max(1, Math.min(12, Math.round(input.openerDailyLimit)))
+      : DEFAULT_GENERAL_SETTINGS.openerDailyLimit,
+    openerRoutineEnabled: input?.openerRoutineEnabled === undefined ? true : Boolean(input.openerRoutineEnabled),
+    openerBreaksEnabled: input?.openerBreaksEnabled === undefined ? true : Boolean(input.openerBreaksEnabled),
+    openerWeatherEnabled: input?.openerWeatherEnabled === undefined ? true : Boolean(input.openerWeatherEnabled),
+    dailyRitualEnabled: Boolean(input?.dailyRitualEnabled),
+    dailyRitualVoice: input?.dailyRitualVoice === undefined ? true : Boolean(input.dailyRitualVoice),
+    dailyRitualMorningEnabled: input?.dailyRitualMorningEnabled === undefined ? true : Boolean(input.dailyRitualMorningEnabled),
+    dailyRitualMorningTime: normalizeTime(input?.dailyRitualMorningTime, DEFAULT_GENERAL_SETTINGS.dailyRitualMorningTime),
+    dailyRitualAfternoonEnabled: input?.dailyRitualAfternoonEnabled === undefined ? true : Boolean(input.dailyRitualAfternoonEnabled),
+    dailyRitualAfternoonTime: normalizeTime(input?.dailyRitualAfternoonTime, DEFAULT_GENERAL_SETTINGS.dailyRitualAfternoonTime),
+    dailyRitualEveningEnabled: input?.dailyRitualEveningEnabled === undefined ? true : Boolean(input.dailyRitualEveningEnabled),
+    dailyRitualEveningTime: normalizeTime(input?.dailyRitualEveningTime, DEFAULT_GENERAL_SETTINGS.dailyRitualEveningTime),
     ttsGptsovitsBaseUrl: typeof input?.ttsGptsovitsBaseUrl === "string" ? input.ttsGptsovitsBaseUrl : DEFAULT_GENERAL_SETTINGS.ttsGptsovitsBaseUrl,
     ttsGptsovitsRefAudioPath: typeof input?.ttsGptsovitsRefAudioPath === "string" ? input.ttsGptsovitsRefAudioPath : "",
     ttsGptsovitsPromptText: typeof input?.ttsGptsovitsPromptText === "string" ? input.ttsGptsovitsPromptText : "",
@@ -980,7 +1216,7 @@ function loadGeneralSettings(): GeneralSettings {
   try {
     const filePath = getGeneralSettingsPath();
     if (!fs.existsSync(filePath)) return DEFAULT_GENERAL_SETTINGS;
-    return normalizeGeneralSettings(JSON.parse(fs.readFileSync(filePath, "utf8")) as Partial<GeneralSettings>);
+    return normalizeGeneralSettings(revealSecrets(JSON.parse(fs.readFileSync(filePath, "utf8"))) as Partial<GeneralSettings>);
   } catch (err) {
     console.error("[Cyrene] load general settings failed:", err);
     return DEFAULT_GENERAL_SETTINGS;
@@ -988,16 +1224,23 @@ function loadGeneralSettings(): GeneralSettings {
 }
 
 function applyGeneralSettings(settings: GeneralSettings): void {
-  mainWindow?.setAlwaysOnTop(settings.petAlwaysOnTop, settings.petAlwaysOnTop ? "screen-saver" : "normal");
+  applyPetWindowLevel(settings);
   if (settings.petVisible) mainWindow?.show();
   else mainWindow?.hide();
-  app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin });
-  applyPetZoom(settings.petZoom);
+  // 未簽名的開發版 Electron 在 macOS 呼叫此 API 會固定被系統拒絕並輸出
+  // platform_util_mac 錯誤；正式封裝版才有可註冊的登入項目。
+  if (!isDev) app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin });
+  applyPetZoom(isPetDocked ? 0.45 : settings.petZoom);
+  syncPetChatInputVisibility(settings);
+}
+
+function syncPetChatInputVisibility(settings = loadGeneralSettings()): void {
+  sendToLive2DWindow(IPC.PET_CHAT_INPUT_VISIBILITY, settings.petChatInputEnabled && !isPetDocked);
 }
 
 /**
- * 按缩放因子调整桌宠窗口尺寸，并通知渲染进程重算模型 scale。
- * 窗口与模型同步等比缩放，比例不变，故模型始终塞满窗口、不被裁剪。
+ * 按縮放因子調整桌寵窗口尺寸，並通知渲染進程重算模型 scale。
+ * 窗口與模型同步等比縮放，比例不變，故模型始終塞滿窗口、不被裁剪。
  */
 function applyPetZoom(zoom: number): void {
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -1012,7 +1255,7 @@ function saveGeneralSettings(settings: Partial<GeneralSettings>): GeneralSetting
   const normalized = normalizeGeneralSettings({ ...before, ...settings });
   const filePath = getGeneralSettingsPath();
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(normalized, null, 2), "utf8");
+  fs.writeFileSync(filePath, JSON.stringify(protectSecrets(normalized), null, 2), { encoding: "utf8", mode: 0o600 });
   applyGeneralSettings(normalized);
   syncBuiltInToolToggles(normalized);
   if (before.uiTheme !== normalized.uiTheme) {
@@ -1026,20 +1269,65 @@ function syncBuiltInToolToggles(settings: GeneralSettings): void {
   toolRegistry.setEnabled("plan_trip", settings.travelEnabled);
 }
 
+async function synthesizeDailyRitual(text: string, settings: GeneralSettings): Promise<{ base64: string; format: "wav" | "mp3" } | null> {
+  if (!settings.dailyRitualVoice || settings.ttsEngine === "off") return null;
+  try {
+    const result = await synthesizeByEngine(settings.ttsEngine, {
+      text: text.slice(0, 500),
+      speed: settings.ttsSpeed,
+      volume: settings.ttsVolume,
+      apiKey: settings.ttsEngine === "mimo"
+        ? settings.ttsMimoKey
+        : settings.ttsEngine === "custom-cloud"
+          ? settings.ttsCustomCloudApiKey
+          : settings.ttsMinimaxKey,
+      voiceId: settings.ttsEngine === "custom-cloud" ? settings.ttsCustomCloudVoiceId : settings.ttsMinimaxVoiceId,
+      model: settings.ttsMinimaxModel,
+      baseUrl: settings.ttsGptsovitsBaseUrl,
+      refAudioPath: settings.ttsGptsovitsRefAudioPath,
+      promptText: settings.ttsGptsovitsPromptText,
+      endpointUrl: settings.ttsCustomCloudEndpointUrl,
+      timeoutMs: settings.ttsCustomCloudTimeoutMs,
+      voiceAudioPath: settings.ttsMimoVoiceAudioPath,
+      stylePrompt: settings.ttsMimoStylePrompt,
+      format: settings.ttsEngine === "gptsovits" ? settings.ttsGptsovitsFormat : settings.ttsEngine === "custom-cloud" ? settings.ttsCustomCloudFormat : "mp3",
+    });
+    return { base64: result.audio.toString("base64"), format: result.format };
+  } catch (err) {
+    console.warn("[DailyRitual] TTS 合成失敗，改用文字氣泡:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+function toOpenerRuntimeConfig(settings: GeneralSettings): OpenerRuntimeConfig {
+  let city = "";
+  try { city = loadUserProfile().defaultCity || ""; } catch { /* profile 尚未初始化 */ }
+  return {
+    mode: settings.openerMode === "off" ? "normal" : settings.openerMode,
+    quietStart: settings.openerQuietStart,
+    quietEnd: settings.openerQuietEnd,
+    dailyLimit: settings.openerDailyLimit,
+    routineEnabled: settings.openerRoutineEnabled,
+    breaksEnabled: settings.openerBreaksEnabled,
+    weatherEnabled: settings.openerWeatherEnabled,
+    city,
+  };
+}
+
 /** MiniMax 搜索 MCP Server 的固定 ID。 */
 const MINIMAX_SEARCH_MCP_ID = "minimax-web-search";
 
 /**
- * 同步搜索 MCP Server：选 MiniMax+有key→注册连接，否则→移除断开。
- * 在 TTS_SAVE_SETTINGS 检测到搜索配置变化时调用。
+ * 同步搜索 MCP Server：選 MiniMax+有key→註冊連接，否則→移除斷開。
+ * 在 TTS_SAVE_SETTINGS 檢測到搜索配置變化時調用。
  */
 async function syncVolcanoSearchMcp(settings: GeneralSettings): Promise<void> {
-  // ── MiniMax（PyPI包，不依赖GitHub，推荐）──
+  // ── MiniMax（PyPI包，不依賴GitHub，推薦）──
   const minimaxEnable = settings.searchEngine === "minimax" && settings.searchMinimaxKey.trim().length > 0;
   const minimaxExists = listMcpServers().some(s => s.id === MINIMAX_SEARCH_MCP_ID);
 
   if (minimaxEnable && !minimaxExists) {
-    console.log("[Cyrene] 注册 MiniMax 搜索 MCP Server...");
+    console.log("[Cyrene] 註冊 MiniMax 搜索 MCP Server...");
     try {
       const result = await addMcpServer({
         id: MINIMAX_SEARCH_MCP_ID,
@@ -1053,18 +1341,18 @@ async function syncVolcanoSearchMcp(settings: GeneralSettings): Promise<void> {
         },
       });
       if (result.ok) {
-        console.log("[Cyrene] MiniMax 搜索 MCP 注册成功，工具:", result.toolIds?.join(", "));
+        console.log("[Cyrene] MiniMax 搜索 MCP 註冊成功，工具:", result.toolIds?.join(", "));
       } else {
-        console.error("[Cyrene] MiniMax 搜索 MCP 注册失败:", result.error);
+        console.error("[Cyrene] MiniMax 搜索 MCP 註冊失敗:", result.error);
       }
     } catch (err) {
-      console.error("[Cyrene] MiniMax 搜索 MCP 注册异常:", err);
+      console.error("[Cyrene] MiniMax 搜索 MCP 註冊異常:", err);
     }
   } else if (!minimaxEnable && minimaxExists) {
     console.log("[Cyrene] 移除 MiniMax 搜索 MCP Server...");
-    try { await removeMcpServer(MINIMAX_SEARCH_MCP_ID); } catch (err) { console.error("[Cyrene] MiniMax 搜索 MCP 移除异常:", err); }
+    try { await removeMcpServer(MINIMAX_SEARCH_MCP_ID); } catch (err) { console.error("[Cyrene] MiniMax 搜索 MCP 移除異常:", err); }
   } else if (minimaxEnable && minimaxExists) {
-    console.log("[Cyrene] MiniMax 搜索 key 变化，重新注册 MCP Server...");
+    console.log("[Cyrene] MiniMax 搜索 key 變化，重新註冊 MCP Server...");
     try {
       await removeMcpServer(MINIMAX_SEARCH_MCP_ID);
       await addMcpServer({
@@ -1073,7 +1361,7 @@ async function syncVolcanoSearchMcp(settings: GeneralSettings): Promise<void> {
         args: ["minimax-coding-plan-mcp", "-y"],
         env: { MINIMAX_API_KEY: settings.searchMinimaxKey.trim(), MINIMAX_API_HOST: "https://api.minimaxi.com" },
       });
-    } catch (err) { console.error("[Cyrene] MiniMax 搜索 MCP 重新注册异常:", err); }
+    } catch (err) { console.error("[Cyrene] MiniMax 搜索 MCP 重新註冊異常:", err); }
   }
 }
 
@@ -1088,7 +1376,7 @@ function loadStickerSettings(): Record<string, boolean> {
     console.error("[Cyrene] load sticker settings failed:", err);
   }
 
-  // 把所有 id 归一化为 boolean（默认 true）
+  // 把所有 id 歸一化為 boolean（默認 true）
   const result: Record<string, boolean> = {};
   for (const id of Object.keys(raw)) {
     result[id] = raw[id] !== false;
@@ -1114,13 +1402,13 @@ function getStickerManagerConfig(): StickerConfigItem[] {
   return getAllStickerConfig(stickerSettings);
 }
 
-// ── 多面板自适应布局 ──────────────────────────────────────────────
+// ── 多面板自適應佈局 ──────────────────────────────────────────────
 
 interface PanelLayout { x: number; y: number; }
 
 /**
- * 将窗口位置 clamp 到 workArea 内，保证至少 minVisibleW × minVisibleH 可见。
- * 允许窗口部分超出屏幕（可正可负），但可见区域不少于指定阈值。
+ * 將窗口位置 clamp 到 workArea 內，保證至少 minVisibleW × minVisibleH 可見。
+ * 允許窗口部分超出屏幕（可正可負），但可見區域不少於指定閾值。
  */
 function clampWindowToWorkArea(
   pos: PanelLayout,
@@ -1145,13 +1433,13 @@ function clampWindowToWorkArea(
 }
 
 /**
- * 计算多面板自适应布局。
+ * 計算多面板自適應佈局。
  *
  * 策略：
  * - 水平排列：totalWidth <= workArea.width → 三面板水平居中
- * - 阶梯排列：totalWidth > workArea.width → sidebar/tasks 贴右边缘并垂直错开
+ * - 階梯排列：totalWidth > workArea.width → sidebar/tasks 貼右邊緣並垂直錯開
  *
- * 所有窗口均 clampWindowToWorkArea 保证至少 120×80 可见。
+ * 所有窗口均 clampWindowToWorkArea 保證至少 120×80 可見。
  */
 function computePanelLayout(
   workArea: { x: number; y: number; width: number; height: number },
@@ -1178,20 +1466,20 @@ function computePanelLayout(
     return positions;
   }
 
-  // 阶梯排列：总宽超屏
-  // chat: 居中（clamp 后）
+  // 階梯排列：總寬超屏
+  // chat: 居中（clamp 後）
   const chatPos = clampWindowToWorkArea(
     { x: workArea.x + Math.floor((workArea.width - panels[0].width) / 2), y: baseY },
     panels[0],
     workArea,
   );
 
-  // sidebar: 优先 chat 右侧有 gap；不够则贴 workArea 右边缘
+  // sidebar: 優先 chat 右側有 gap；不夠則貼 workArea 右邊緣
   const sidebarMaxX = workArea.x + workArea.width - panels[1].width;
   const sidebarX = Math.min(chatPos.x + panels[0].width + gap, sidebarMaxX);
   const sidebarPos = clampWindowToWorkArea({ x: sidebarX, y: baseY }, panels[1], workArea);
 
-  // tasks: 贴右边缘，y 与 sidebar 错开 48px
+  // tasks: 貼右邊緣，y 與 sidebar 錯開 48px
   const tasksX = Math.min(sidebarPos.x, sidebarMaxX);
   const tasksY = clampWindowToWorkArea(
     { x: tasksX, y: sidebarPos.y + 48 },
@@ -1202,8 +1490,8 @@ function computePanelLayout(
   return [chatPos, sidebarPos, tasksY];
 }
 
-// 计算 chat / sidebar / tasks 三个窗口的初始位置。
-// 规则：优先鼠标所在 display；窗口自适应 workArea，保证至少 120×80 可见。
+// 計算 chat / sidebar / tasks 三個窗口的初始位置。
+// 規則：優先鼠標所在 display；窗口自適應 workArea，保證至少 120×80 可見。
 function computeLayout(): {
   chat: PanelLayout;
   sidebar: PanelLayout;
@@ -1334,14 +1622,14 @@ function extractJsonPayload(text: string): unknown | null {
 
 // feeling → Live2D 表情索引
 const feelingToExpression: Record<string, number> = {
-  "平静": 0,
-  "开心": 6,
-  "温柔": 0,
-  "激动": 3,
-  "撒娇": 5,
-  "担心": 2,
-  "难过": 0,
-  "感动": 4,
+  "平靜": 0,
+  "開心": 6,
+  "溫柔": 0,
+  "激動": 3,
+  "撒嬌": 5,
+  "擔心": 2,
+  "難過": 0,
+  "感動": 4,
   "害羞": 5,
 };
 
@@ -1354,8 +1642,8 @@ function inferRuntimeState(
 
   const text = userInput + llmReply;
 
-  if (STATUS_KEYWORDS["聆听中"].test(text)) {
-    return { status: "聆听中" };
+  if (STATUS_KEYWORDS["聆聽中"].test(text)) {
+    return { status: "聆聽中" };
   }
 
   if (STATUS_KEYWORDS["思考中"].test(text)) {
@@ -1370,7 +1658,7 @@ function parseObserverFeeling(text: string): string | null {
   if (!payload || typeof payload !== "object") return null;
   const record = payload as Record<string, unknown>;
   const feeling = typeof record.feeling === "string" ? record.feeling : null;
-  const validFeelings = ["平静","开心","温柔","激动","撒娇","担心","难过","感动","害羞"];
+  const validFeelings = ["平靜","開心","溫柔","激動","撒嬌","擔心","難過","感動","害羞"];
   return feeling && validFeelings.includes(feeling) ? feeling : null;
 }
 
@@ -1387,11 +1675,26 @@ function normalizeChatMessages(input: unknown): Array<{ role: "system" | "user" 
       if (!item || typeof item !== "object") return null;
       const record = item as Partial<ChatRequestMessage>;
       if (typeof record.content !== "string" || !record.content.trim()) return null;
+      
+      // Filter out connection failure system logs from history context
+      if (record.content.includes("連接模型失敗：模型請求失敗")) return null;
+      
       const role = record.role === "user" || record.role === "system" ? record.role : "assistant";
-      return { role, content: stripThinkBlocks(record.content).trim() };
+      let content = stripThinkBlocks(record.content).trim();
+      
+      // Truncate massive messages (like long game code generated earlier) to save tokens
+      if (content.length > 800) {
+        if (content.includes("<!DOCTYPE html>") || content.includes("<html") || content.includes("style>")) {
+          content = "[此處已為您省略昔漣編寫的網頁/遊戲代碼以節省 Token 空間，棋盤小遊戲運行正常]";
+        } else {
+          content = content.slice(0, 800) + "... (此處長對話已省略)";
+        }
+      }
+      
+      return { role, content };
     })
     .filter((item): item is { role: "system" | "user" | "assistant"; content: string } => item !== null)
-    .slice(-24);
+    .slice(-12);
 }
 
 function getApiLogPath(): string {
@@ -1437,7 +1740,7 @@ async function callChatCompletionsStream(
   const _startTime = Date.now();
   console.log(`[TIMING] ${label} START timeout=${timeoutMs}ms msgLen=${messages.length} sysLen=${messages[0]?.content?.length ?? 0}`);
 
-  // 拼 VendorConfig（settings 顶层三件套 + 镜像字段都参与）
+  // 拼 VendorConfig（settings 頂層三件套 + 鏡像字段都參與）
   const cfg: VendorConfig = {
     provider: settings.provider,
     baseUrl: settings.baseUrl,
@@ -1447,9 +1750,9 @@ async function callChatCompletionsStream(
   };
 
   try {
-    // adapter 三层 transport 解析（explicitTransport → baseUrl 启发式 → capabilities fallback）
+    // adapter 三層 transport 解析（explicitTransport → baseUrl 啟發式 → capabilities fallback）
     const adapter = getAdapterForConfig(cfg);
-    // adapter 的 buildStreamRequest 内部已写 stream=true + 拼 transport 相关的 headers/body
+    // adapter 的 buildStreamRequest 內部已寫 stream=true + 拼 transport 相關的 headers/body
     const http = adapter.buildStreamRequest({
       model: cfg.model,
       messages,
@@ -1467,18 +1770,18 @@ async function callChatCompletionsStream(
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({})) as Record<string, unknown>;
       const errMsg = (errorData as { error?: { message?: string } }).error?.message;
-      throw new Error(errMsg || `模型请求失败：HTTP ${response.status}`);
+      throw new Error(errMsg || `模型請求失敗：HTTP ${response.status}`);
     }
 
     if (!response.body) {
-      throw new Error("响应体为空，不支持流式读取");
+      throw new Error("響應體為空，不支持流式讀取");
     }
 
     let fullText = "";
     const visibleFilter = createVisibleStreamFilter();
 
-    // Reader 层切分字节流 → StreamEvent；adapter 解析为 StreamChunk
-    // 半行拼接、event 块切分等状态由 createSseReader 内部维护，adapter 保持纯函数无状态。
+    // Reader 層切分字節流 → StreamEvent；adapter 解析為 StreamChunk
+    // 半行拼接、event 塊切分等狀態由 createSseReader 內部維護，adapter 保持純函數無狀態。
     for await (const event of createSseReader(adapter, response.body)) {
       const chunk = adapter.parseStreamEvent(event);
       if (!chunk) continue;
@@ -1487,9 +1790,9 @@ async function callChatCompletionsStream(
         const visibleDelta = visibleFilter.push(chunk.deltaText);
         if (visibleDelta) onChunk(visibleDelta);
       }
-      // thinking 累积但不入可见流（stripThinkBlocks 末尾统一剥）
+      // thinking 累積但不入可見流（stripThinkBlocks 末尾統一剝）
       if (chunk.usage) {
-        recordUsage(chunk.usage.input, chunk.usage.output, 1);
+        recordUsage(chunk.usage.input, chunk.usage.output, 1, settings.model);
       }
       if (chunk.done) break;
     }
@@ -1506,7 +1809,7 @@ async function callChatCompletionsStream(
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
       console.log(`[TIMING] ${label} TIMEOUT at ${Date.now() - _startTime}ms`);
-      throw new Error("模型请求超时，请稍后重试。");
+      throw new Error("模型請求超時，請稍後重試。");
     }
     console.log(`[TIMING] ${label} ERROR at ${Date.now() - _startTime}ms: ${err instanceof Error ? err.message : err}`);
     throw err;
@@ -1538,35 +1841,45 @@ function loadPromptFile(filename: string): string {
 }
 
 /**
- * 诊断：确认 WorldBook active entries 是否真正进入最终 system prompt，
- * 以及在什么位置。不预设结论——先看数据再判断是 lost-in-middle、
- * 被后续 prompt 覆盖、还是根本没拼进去。
+ * 診斷：確認 WorldBook active entries 是否真正進入最終 system prompt，
+ * 以及在什麼位置。不預設結論——先看數據再判斷是 lost-in-middle、
+ * 被後續 prompt 覆蓋、還是根本沒拼進去。
  */
 function logWorldbookInjection(alwaysOnContext: string, systemContent: string): void {
-  const marker = "【已激活的世界知识】";
+  const marker = "【已激活的世界知識】";
   if (alwaysOnContext && alwaysOnContext.includes(marker)) {
     const wbStart = systemContent.indexOf(marker);
     console.log("[Worldbook/Diag] ────────────────────────");
     console.log(`[Worldbook/Diag] systemContent total length: ${systemContent.length}`);
     console.log(`[Worldbook/Diag] alwaysOnContext length: ${alwaysOnContext.length}`);
     console.log(`[Worldbook/Diag] ${marker} 在 systemContent 中的偏移: ${wbStart} / ${systemContent.length} (${((wbStart / systemContent.length) * 100).toFixed(1)}%)`);
-    console.log(`[Worldbook/Diag] ${marker} 之后剩余内容: ${systemContent.length - wbStart} 字符`);
+    console.log(`[Worldbook/Diag] ${marker} 之後剩餘內容: ${systemContent.length - wbStart} 字符`);
     const beforeWb = systemContent.slice(Math.max(0, wbStart - 200), wbStart);
     const wbSlice = systemContent.slice(wbStart, Math.min(wbStart + alwaysOnContext.length + 200, systemContent.length));
     console.log(`[Worldbook/Diag] ── 注入前 200 字 ──\n${beforeWb.slice(-200)}`);
-    console.log(`[Worldbook/Diag] ── 注入内容 + 后 200 字 ──\n${wbSlice.slice(0, 800)}`);
+    console.log(`[Worldbook/Diag] ── 注入內容 + 後 200 字 ──\n${wbSlice.slice(0, 800)}`);
     console.log("[Worldbook/Diag] ────────────────────────");
   } else {
-    console.log("[Worldbook/Diag] 本轮无世界知识注入（alwaysOnContext 为空或不含标记）");
+    console.log("[Worldbook/Diag] 本輪無世界知識注入（alwaysOnContext 為空或不含標記）");
   }
 }
 
 function buildSystemPrompt(styleFile: string): string {
   const parts: string[] = [];
 
-  // styleFile 以 "talk" 开头时走纯聊天模式：用 talk_system.md 替换 system.md（不调工具）
+  // styleFile 以 "talk" 開頭時走純聊天模式，以 "study" 開頭時走學習模式，以 "game" 開頭時走遊戲模式
   const isTalkMode = styleFile.startsWith("talk");
-  const system = loadPromptFile(isTalkMode ? "talk_system.md" : "system.md");
+  const isStudyMode = styleFile.startsWith("study");
+  const isGameMode = styleFile.startsWith("game");
+  const system = loadPromptFile(
+    isTalkMode
+      ? "talk_system.md"
+      : isStudyMode
+        ? "study_system.md"
+        : isGameMode
+          ? "game_system.md"
+          : "system.md"
+  );
   if (system) parts.push(system);
   
   const identity = loadPromptFile("identity.md");
@@ -1578,8 +1891,8 @@ function buildSystemPrompt(styleFile: string): string {
   const canon = loadPromptFile("canon_quotes.md");
   if (canon) parts.push(canon);
   
-  // 纯聊天模式不加载 style 文件（talk_system.md 已包含完整规则）
-  if (!isTalkMode) {
+  // 純聊天模式與遊戲模式不加載額外的 styles/ 文件
+  if (!isTalkMode && !isGameMode) {
     const style = loadPromptFile("styles/" + styleFile);
     if (style) parts.push(style);
   }
@@ -1588,10 +1901,10 @@ function buildSystemPrompt(styleFile: string): string {
 }
 
 /**
- * /命令拦截：命中 /skill-id（且 skill 存在+启用）则返回 system 激活段
- * （正文注入 system，user message 原样，不污染 memory，见 spec 6.3）。
- * 命中但 skill 不存在/未启用 → 改写该 user 消息为提示，返回 ""。
- * 未命中 → 返回 ""（放行，不误吞其他 /命令）。
+ * /命令攔截：命中 /skill-id（且 skill 存在+啟用）則返回 system 激活段
+ * （正文注入 system，user message 原樣，不汙染 memory，見 spec 6.3）。
+ * 命中但 skill 不存在/未啟用 → 改寫該 user 消息為提示，返回 ""。
+ * 未命中 → 返回 ""（放行，不誤吞其他 /命令）。
  */
 function resolveSlashActivation<T extends { role: string; content: string }>(messages: T[]): string {
   let lastUserIdx = -1;
@@ -1613,9 +1926,9 @@ function resolveSlashActivation<T extends { role: string; content: string }>(mes
     }
     return "";
   }
-  // skill 不存在/未启用：替换该 user 消息为提示
-  const available = skillRegistry.getEnabled().map(s => s.id).join(", ") || "(无)";
-  messages[lastUserIdx] = { ...lastUser, content: `[系统提示：skill 未启用或不存在: ${parsed.skillId}。可用 skill: ${available}]` } as T;
+  // skill 不存在/未啟用：替換該 user 消息為提示
+  const available = skillRegistry.getEnabled().map(s => s.id).join(", ") || "(無)";
+  messages[lastUserIdx] = { ...lastUser, content: `[系統提示：skill 未啟用或不存在: ${parsed.skillId}。可用 skill: ${available}]` } as T;
   return "";
 }
 
@@ -1640,16 +1953,16 @@ async function observeRuntimeState(
     .slice(-6)
     .map((message) => ({ role: message.role, content: message.content }));
 
-  // 入 LLM 后台队列：和 MemoryJudge 串行执行，避免并发触发限流；
-  // 限流自动退避 5s 重试 1 次。.catch 吞错误，不影响主流程。
-  enqueueLLMTask("心情观察器", async () => {
+  // 入 LLM 後臺隊列：和 MemoryJudge 串行執行，避免併發觸發限流；
+  // 限流自動退避 5s 重試 1 次。.catch 吞錯誤，不影響主流程。
+  enqueueLLMTask("心情觀察器", async () => {
     const _obsStart = Date.now();
-    console.log(`[TIMING] 心情观察器 SENDING request`);
+    console.log(`[TIMING] 心情觀察器 SENDING request`);
     const observerContent = await callChatCompletions(settings, [
       {
         role: "system",
         content:
-          '你是一个情绪分析器。以下是昔涟的完整人格设定：\n\n' + loadSoulFeelingContext() + '\n\n根据以上人格设定和以下对话，判断昔涟当前的心情状态。可选心情值（只能选其中一个）：平静 / 开心 / 温柔 / 激动 / 撒娇 / 担心 / 难过 / 感动 / 害羞。只返回 JSON，不要任何多余文字：{"feeling": "心情值"}。判断规则：以最后一轮对话为主，之前几轮为辅；判断的是昔涟的心情，不是用户的心情；无法判断时返回 平静。',
+          '你是一個情緒分析器。以下是昔漣的完整人格設定：\n\n' + loadSoulFeelingContext() + '\n\n根據以上人格設定和以下對話，判斷昔漣當前的心情狀態。可選心情值（只能選其中一個）：平靜 / 開心 / 溫柔 / 激動 / 撒嬌 / 擔心 / 難過 / 感動 / 害羞。只返回 JSON，不要任何多餘文字：{"feeling": "心情值"}。判斷規則：以最後一輪對話為主，之前幾輪為輔；判斷的是昔漣的心情，不是用戶的心情；無法判斷時返回 平靜。',
       },
       {
         role: "user",
@@ -1657,8 +1970,8 @@ async function observeRuntimeState(
           recentDialogue,
         }),
       },
-    ], undefined, 30000, "心情观察器");
-    console.log(`[TIMING] 心情观察器 OK in ${Date.now() - _obsStart}ms raw=${observerContent?.slice(0, 100)}`);
+    ], undefined, 30000, "心情觀察器");
+    console.log(`[TIMING] 心情觀察器 OK in ${Date.now() - _obsStart}ms raw=${observerContent?.slice(0, 100)}`);
     const feeling = parseObserverFeeling(observerContent);
     if (feeling) {
       const smoothed = smoothFeeling(feelingScores, feeling);
@@ -1671,23 +1984,64 @@ async function observeRuntimeState(
   }).catch((err) => {
     console.warn("[Cyrene] observe runtime failed; keeping current feeling:", err);
   });
-  // 标注未使用的参数，避免 lint 警告
+  // 標註未使用的參數，避免 lint 警告
   void latestUserText;
+}
+
+function isEnglishText(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  
+  const cleanText = trimmed
+    .replace(/<@!?\d+>/g, "")
+    .replace(/[0-9\s\p{P}\p{S}]/gu, "");
+  if (!cleanText) return false;
+
+  const englishChars = (cleanText.match(/[a-zA-Z]/g) || []).length;
+  const chineseChars = (cleanText.match(/[\u4e00-\u9fa5]/g) || []).length;
+
+  return englishChars > 0 && englishChars > chineseChars * 2;
 }
 
 async function requestModelReply(inputMessages: unknown, styleFile = "01_default.md"): Promise<ChatReplyPayload> {
   const settings = loadModelSettings();
   if (!settings.apiKey) {
-    throw new Error("还没有填写 API Key，请先在设置里保存 API 配置。");
+    throw new Error("還沒有填寫 API Key，請先在設置裡保存 API 配置。");
   }
 
   const messages = normalizeChatMessages(inputMessages);
   if (messages.length === 0) {
-    throw new Error("没有可发送的聊天内容。");
+    throw new Error("沒有可發送的聊天內容。");
   }
-  const latestUserText = messages.filter((message) => message.role === "user").at(-1)?.content ?? "";
+  let latestUserText = messages.filter((message) => message.role === "user").at(-1)?.content ?? "";
 
-  // 1. 构建 always-on 上下文（世界书 + L0/L1 画像）
+  // 根據語意動態切換模式：如果用戶稱呼「昔漣老師」切至學習模式；若稱呼「昔漣」且無「昔漣老師」切回一般模式
+  let activeStyle = styleFile;
+  const isGameQuery = ["攻略", "遊戲", "打法", "配隊"].some(k => latestUserText.includes(k));
+  if (latestUserText.includes("昔漣老師")) {
+    activeStyle = "study";
+    for (const win of BrowserWindow.getAllWindows()) {
+      try { win.webContents.send("chat:update-mode", "study"); } catch { /* ignore */ }
+    }
+  } else if (latestUserText.includes("昔漣")) {
+    activeStyle = "01_default.md";
+    for (const win of BrowserWindow.getAllWindows()) {
+      try { win.webContents.send("chat:update-mode", "collab"); } catch { /* ignore */ }
+    }
+  } else if (isGameQuery) {
+    activeStyle = "game";
+    for (const win of BrowserWindow.getAllWindows()) {
+      try { win.webContents.send("chat:update-mode", "game"); } catch { /* ignore */ }
+    }
+  } else if (isEnglishText(latestUserText)) {
+    activeStyle = "study";
+    for (const win of BrowserWindow.getAllWindows()) {
+      try { win.webContents.send("chat:update-mode", "study"); } catch { /* ignore */ }
+    }
+  }
+  styleFile = activeStyle;
+
+  // 1. 構建 always-on 上下文（世界書 + L0/L1 畫像）
   let alwaysOnContext = "";
   try {
     alwaysOnContext = await buildAlwaysOnContext(latestUserText, messages);
@@ -1695,7 +2049,23 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
     console.warn("[Cyrene] always-on context build failed:", err);
   }
 
-  // 1.1 自动注入相关记忆（L2 + 导入文档），让模型无需调 tool 也能感知
+  // 1.05 遊戲模式專用：自動提前進行聯網小紅書搜尋並注入事實上下文，防止模型工具調用失敗
+  if (styleFile === "game" || isGameQuery) {
+    try {
+      const webSearchTool = toolRegistry.getById("web_search");
+      if (webSearchTool) {
+        console.log(`[Cyrene] Game mode proactive search for: "${latestUserText}"`);
+        const searchResult = await webSearchTool.execute({ query: latestUserText + " site:xiaohongshu.com" });
+        if (searchResult) {
+          alwaysOnContext += `\n\n【聯網小紅書即時搜尋參考資料】\n${searchResult}\n`;
+        }
+      }
+    } catch (err) {
+      console.warn("[Cyrene] Proactive game search failed:", err);
+    }
+  }
+
+  // 1.1 自動注入相關記憶（L2 + 導入文檔），讓模型無需調 tool 也能感知
   let memoryInjection = "";
   try {
     memoryInjection = await buildMemoryInjection(latestUserText);
@@ -1703,9 +2073,9 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
     console.warn("[Cyrene] memory injection failed:", err);
   }
 
-  // 1.5 环境上下文（Step 1）：当前日期 / OS / 桌面真实路径 / 权限档位 / 工具可用情况 / 模型视觉能力
-  // 放在 always-on 之后、system prompt 末尾，让模型最近读到的就是机器事实，
-  // 降低"桌面在哪"这类低级幻觉。失败不影响主流程。
+  // 1.5 環境上下文（Step 1）：當前日期 / OS / 桌面真實路徑 / 權限檔位 / 工具可用情況 / 模型視覺能力
+  // 放在 always-on 之後、system prompt 末尾，讓模型最近讀到的就是機器事實，
+  // 降低"桌面在哪"這類低級幻覺。失敗不影響主流程。
   let environmentContext = "";
   try {
     const profile = loadUserProfile();
@@ -1717,11 +2087,11 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
     console.warn("[Cyrene] environment context build failed:", err);
   }
 
-  // system prompt 拼装顺序：事实层在前，人格层在后，skill 清单 + /命令激活放最后。
-  // /命令拦截：命中 /skill-id 则当轮 system 注入 skill 正文（user message 原样，不污染 memory）
+  // system prompt 拼裝順序：事實層在前，人格層在後，skill 清單 + /命令激活放最後。
+  // /命令攔截：命中 /skill-id 則當輪 system 注入 skill 正文（user message 原樣，不汙染 memory）
   const skillCatalog = buildSkillCatalog(skillRegistry.getEnabled());
   const skillActivation = resolveSlashActivation(messages);
-  // 语气硬注入：embedding 匹配场景，强制注入语气规则 + 场景参考样本（必须遵守，优先级最高）
+  // 語氣硬注入：embedding 匹配場景，強制注入語氣規則 + 場景參考樣本（必須遵守，優先級最高）
   let toneInjection = "";
   const sceneProvider = getSceneEmbeddingProvider();
   if (sceneProvider && sceneEmbeddingIndex) {
@@ -1731,8 +2101,8 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
       console.error("[Cyrene] tone injection failed:", err);
     }
   }
-  // 注入顺序：环境 → 人格设定 → skill → 记忆 → ★已激活世界知识（放最后、最靠近 user message）
-  // 世界知识放最后：LLM 对靠近 user 的信息权重更高；且避免被 system.md 的"不知道不要编"规则覆盖
+  // 注入順序：環境 → 人格設定 → skill → 記憶 → ★已激活世界知識（放最後、最靠近 user message）
+  // 世界知識放最後：LLM 對靠近 user 的信息權重更高；且避免被 system.md 的"不知道不要編"規則覆蓋
   const systemContent =
     (environmentContext ? environmentContext + "\n\n" : "") +
     buildSystemPrompt(styleFile) +
@@ -1742,10 +2112,10 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
     (alwaysOnContext ? alwaysOnContext + "\n\n" : "") +
     toneInjection;
 
-  // ── 诊断：WorldBook 注入验证 ──
+  // ── 診斷：WorldBook 注入驗證 ──
   logWorldbookInjection(alwaysOnContext, systemContent);
 
-  // 2. Function Calling 循环：模型自己决定调不调工具、调哪个
+  // 2. Function Calling 循環：模型自己決定調不調工具、調哪個
   const fcMessages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }> = [
     { role: "system", content: systemContent },
     ...messages,
@@ -1761,28 +2131,32 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
     );
     chatContent = fcResult.reply;
 
-    // 工具执行日志
+    // 工具執行日誌
     if (fcResult.toolResults.length > 0) {
-      console.log("[Cyrene] Function Calling 使用了 " + fcResult.toolResults.length + " 个工具:",
+      console.log("[Cyrene] Function Calling 使用了 " + fcResult.toolResults.length + " 個工具:",
         fcResult.toolResults.map(tr => tr.toolId).join(", "));
     }
   } catch (err) {
-    console.error("[Cyrene] Function Calling 失败，降级为普通对话", err);
-    // 降级：不带 tools 的普通 LLM 调用
+    console.error("[Cyrene] Function Calling 失敗，降級為普通對話", err);
+    // 降級：不帶 tools 的普通 LLM 調用
     chatContent = await callChatCompletions(
       settings,
       fcMessages as Array<{ role: "system" | "user" | "assistant"; content: string }>,
       undefined,
       CHAT_REQUEST_TIMEOUT_MS,
-      "主聊天（降级）",
+      "主聊天（降級）",
     );
   }
 
-  if (!chatContent) {
-    throw new Error("模型没有返回有效回复。");
+  if (chatContent) {
+    chatContent = toTraditionalTaiwan(chatContent);
   }
 
-  // 发送流式事件（非流式模式下一次性发送）
+  if (!chatContent) {
+    throw new Error("模型沒有返回有效回覆。");
+  }
+
+  // 發送流式事件（非流式模式下一次性發送）
   if (chatWindow && !chatWindow.isDestroyed()) {
     chatWindow.webContents.send("chat:stream-chunk", chatContent);
   }
@@ -1801,6 +2175,7 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
     if (provider) {
       const matchResult = await matchSticker(chatContent + "\n" + latestUserText, provider, stickerEmbeddingIndex, settings.stickerSimilarityThreshold);
       sticker = matchResult?.id ?? null;
+      if (sticker && loadStickerSettings()[sticker] === false) sticker = null;
     }
   }
 
@@ -1818,15 +2193,15 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
   return { reply: chatContent, sticker };
 }
 
-// 厂商短名映射（与 settings.ts 的 MODEL_PRESETS.shortName 镜像，需手动同步）。
-// 状态栏"正在喂养"在用户没填昵称时用这个兜底。
+// 廠商短名映射（與 settings.ts 的 MODEL_PRESETS.shortName 鏡像，需手動同步）。
+// 狀態欄"正在餵養"在用戶沒填暱稱時用這個兜底。
 const PROVIDER_SHORT_NAMES: Record<string, string> = {
   "MiniMax（稀宇科技）": "MiniMax",
   "DeepSeek（深度求索）": "DeepSeek",
   "火山 AgentPlan（火山引擎）": "火山",
-  "GLM（智谱）": "GLM",
+  "GLM（智譜）": "GLM",
   "Kimi（月之暗面）": "Kimi",
-  "Qwen（通义千问）": "Qwen",
+  "Qwen（通義千問）": "Qwen",
   "ChatGPT（OpenAI）": "ChatGPT",
   "Claude（Anthropic）": "Claude",
 };
@@ -1912,7 +2287,7 @@ function createWindow(): void {
     const display = screen.getDisplayMatching(targetBounds);
     const wa = display.workArea;
 
-    // 窗口与 workArea 交集至少 80x80 才使用保存的坐标
+    // 窗口與 workArea 交集至少 80x80 才使用保存的座標
     const interW =
       Math.min(targetBounds.x + PET_W, wa.x + wa.width) -
       Math.max(targetBounds.x, wa.x);
@@ -1925,8 +2300,8 @@ function createWindow(): void {
       restoreY = settings.petWindowY;
     } else {
       console.log(
-        "[Cyrene] 桌宠保存位置已离屏（仅 " +
-          interW + "x" + interH + " 可见），使用默认位置",
+        "[Cyrene] 桌寵保存位置已離屏（僅 " +
+          interW + "x" + interH + " 可見），使用默認位置",
       );
     }
   }
@@ -1956,29 +2331,42 @@ function createWindow(): void {
     mainWindow.loadFile(path.join(__dirname, "..", "..", "renderer", "index.html"));
   }
 
+  mainWindow.webContents.on("did-finish-load", () => {
+    const settings = loadGeneralSettings();
+    const activeZoom = isPetDocked ? 0.45 : settings.petZoom;
+    sendToLive2DWindow(IPC.PET_ZOOM, activeZoom);
+  });
+
   if (!isDev) {
     mainWindow.setIgnoreMouseEvents(true, { forward: true });
   }
 
+  mainWindow.on("move", () => {
+    // OS-level move event listener is kept for general position tracking if needed.
+    // Accidental undocking is disabled here to prevent race conditions during parent window moves.
+    // Detaching/undocking is handled cleanly by the pointerup event ('WINDOW_SET_DRAGGING') in renderer.
+  });
+
   applyGeneralSettings(loadGeneralSettings());
 
-  // Opener 主动开口：注入桌宠窗口 + 启动 tick
+  // Opener 主動開口：注入桌寵窗口 + 啟動 tick
   setLive2dWindow(mainWindow);
   reloadManifest();
   const initOpener = () => {
     const s = loadGeneralSettings();
     stopOpener();
-    if (s.openerMode !== "off") startOpener(s.openerMode);
+    configureOpener(toOpenerRuntimeConfig(s));
+    if (s.openerMode !== "off") startOpener(toOpenerRuntimeConfig(s));
   };
   initOpener();
 
-  // 注入天气工具配置获取器：每次工具执行时实时读 key/默认城市
-  // （用户改了设置不用重启就能生效）
+  // 注入天氣工具配置獲取器：每次工具執行時實時讀 key/默認城市
+  // （用戶改了設置不用重啟就能生效）
   setWeatherConfig(
     () => loadUserProfile().defaultCity,
     () => loadGeneralSettings().weatherSource,
     () => loadGeneralSettings().amapKey,
-    // 天气卡片回调：工具拿到结构化数据后，发 Custom 事件给聊天窗口渲染卡片
+    // 天氣卡片回調：工具拿到結構化數據後，發 Custom 事件給聊天窗口渲染卡片
     (card) => {
       if (chatWindow && !chatWindow.isDestroyed()) {
         chatWindow.webContents.send(IPC.AGUI_EVENT, {
@@ -1991,7 +2379,7 @@ function createWindow(): void {
     () => loadGeneralSettings().weatherEnabled,
   );
 
-  // 注入用户选择卡片回调：工具调 ask_user_choice 时发 Custom 事件给聊天窗口
+  // 注入用戶選擇卡片回調：工具調 ask_user_choice 時發 Custom 事件給聊天窗口
   setChoiceCardSender((cardData) => {
     if (chatWindow && !chatWindow.isDestroyed()) {
       chatWindow.webContents.send(IPC.AGUI_EVENT, {
@@ -2002,17 +2390,17 @@ function createWindow(): void {
     }
   });
 
-  // 注入搜索配置获取器
+  // 注入搜索配置獲取器
   setSearchConfig(
     () => loadGeneralSettings().searchEngine,
     () => loadGeneralSettings().searchBochaKey,
     () => loadGeneralSettings().searchTavilyKey,
   );
 
-  // 注入出行工具 amapKey 获取器（复用 GeneralSettings 中的 amapKey）
+  // 注入出行工具 amapKey 獲取器（複用 GeneralSettings 中的 amapKey）
   setTravelConfig(() => loadGeneralSettings().amapKey, () => loadGeneralSettings().travelEnabled);
 
-  // 注入邮件工具 SMTP 配置获取器（每次执行实时读 GeneralSettings）
+  // 注入郵件工具 SMTP 配置獲取器（每次執行實時讀 GeneralSettings）
   setEmailConfig(
     () => loadGeneralSettings().emailEnabled,
     () => loadGeneralSettings().emailSmtpHost,
@@ -2023,18 +2411,18 @@ function createWindow(): void {
     () => loadGeneralSettings().emailFromName,
   );
 
-  // 注入 ASR 配置获取器（通话功能用，实时读 GeneralSettings）
+  // 注入 ASR 配置獲取器（通話功能用，實時讀 GeneralSettings）
   setAsrConfig(() => {
     const s = loadGeneralSettings();
-    if (s.asrEngine !== "aliyun") return null;
-    return { appKey: s.asrAliyunAppKey, accessKeyId: s.asrAliyunAccessKeyId, accessKeySecret: s.asrAliyunAccessKeySecret, language: s.asrLanguage, engine: s.asrEngine };
+    if (s.asrEngine !== "aliyun" && s.asrEngine !== "local" && s.asrEngine !== "web-speech") return null;
+    return { appKey: s.asrAliyunAppKey, accessKeyId: s.asrAliyunAccessKeyId, accessKeySecret: s.asrAliyunAccessKeySecret, language: s.asrLanguage, engine: s.asrEngine, fallbackToLocal: s.asrFallbackToLocal };
   });
 
-  // 注入通话模型/TTS 配置获取器
+  // 注入通話模型/TTS 配置獲取器
   setCallSettings(
     () => {
       const s = loadModelSettings();
-      return { provider: s.provider, baseUrl: s.baseUrl, model: s.model, apiKey: s.apiKey };
+      return { provider: s.provider, baseUrl: s.baseUrl, model: s.model, apiKey: s.apiKey, perProvider: s.perProvider };
     },
     () => {
       const s = loadGeneralSettings();
@@ -2057,23 +2445,23 @@ function createWindow(): void {
         ttsMimoStylePrompt: s.ttsMimoStylePrompt,
       };
     },
-    // 通话专用 system prompt 构建器（时间+常驻+记忆+phone人设+skill+语气，不要环境上下文）
+    // 通話專用 system prompt 構建器（時間+常駐+記憶+phone人設+skill+語氣，不要環境上下文）
     async (userText: string) => {
       const messages = [{ role: "user" as const, content: userText }];
 
-      // ① 时间日期
+      // ① 時間日期
       const now = new Date();
-      const timeStr = `当前时间：${now.toLocaleDateString("zh-CN")} ${now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`;
+      const timeStr = `當前時間：${now.toLocaleDateString("zh-CN")} ${now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`;
 
-      // ② 常驻上下文（世界书 + L0/L1 画像）
+      // ② 常駐上下文（世界書 + L0/L1 畫像）
       let alwaysOnContext = "";
       try { alwaysOnContext = await buildAlwaysOnContext(userText, messages); } catch { /* ignore */ }
 
-      // ③ 记忆注入
+      // ③ 記憶注入
       let memoryInjection = "";
       try { memoryInjection = await buildMemoryInjection(userText); } catch { /* ignore */ }
 
-      // ④ 通话专用人设 prompt
+      // ④ 通話專用人設 prompt
       const phoneParts: string[] = [];
       const phoneSystem = loadPromptFile("phone_system.md");
       if (phoneSystem) phoneParts.push(phoneSystem);
@@ -2087,11 +2475,11 @@ function createWindow(): void {
       if (phoneStyle) phoneParts.push(phoneStyle);
       const phonePrompt = phoneParts.join("\n\n---\n\n");
 
-      // ⑤ Skill 约束
+      // ⑤ Skill 約束
       const skillCatalog = buildSkillCatalog(skillRegistry.getEnabled());
       const skillActivation = resolveSlashActivation(messages);
 
-      // ⑥ 语气注入
+      // ⑥ 語氣注入
       let toneInjection = "";
       const sceneProvider = getSceneEmbeddingProvider();
       if (sceneProvider && sceneEmbeddingIndex) {
@@ -2106,24 +2494,24 @@ function createWindow(): void {
         skillActivation +
         toneInjection;
     },
-    // 天气快捷处理：正则匹配到天气关键词 → 调 weather 工具的 execute
+    // 天氣快捷處理：正則匹配到天氣關鍵詞 → 調 weather 工具的 execute
     async (userText: string) => {
       try {
         const weatherTool = toolRegistry.getById("weather");
         if (!weatherTool) return null;
-        // 提取城市名（简单匹配：XX天气 / XX的天气）
-        const cityMatch = userText.match(/([北京上海广州深圳成都杭州南京武汉西安重庆天津苏州长沙郑州青岛大连沈阳哈尔滨长春济南太原合肥南昌福州昆明贵阳拉萨乌鲁木齐呼和浩特]+)/);
+        // 提取城市名（簡單匹配：XX天氣 / XX的天氣）
+        const cityMatch = userText.match(/([北京上海廣州深圳成都杭州南京武漢西安重慶天津蘇州長沙鄭州青島大連瀋陽哈爾濱長春濟南太原合肥南昌福州昆明貴陽拉薩烏魯木齊呼和浩特]+)/);
         const city = cityMatch?.[1] ?? "";
         const result = await weatherTool.execute({ city }, undefined);
         return result;
       } catch (err) {
-        console.warn("[Call] 天气查询失败:", err);
+        console.warn("[Call] 天氣查詢失敗:", err);
         return null;
       }
     },
   );
 
-  // 注入子代理 LLM 配置（delegate_task 工具用，复用主模型配置）
+  // 注入子代理 LLM 配置（delegate_task 工具用，複用主模型配置）
   setDelegateSettings(() => {
     const s = loadModelSettings();
     return { provider: s.provider, baseUrl: s.baseUrl, model: s.model, apiKey: s.apiKey };
@@ -2136,68 +2524,7 @@ function createWindow(): void {
 
 
 function createChatWindow(sessionId?: string): void {
-  if (chatWindow && !chatWindow.isDestroyed()) {
-    chatWindow.show();
-    chatWindow.focus();
-    handleChatWindowOpened();  // Opener 响应窗口内打开 chat = 接话
-    // 窗口已存在：通过事件让渲染进程切到目标会话（不重 load）
-    if (sessionId) {
-      chatWindow.webContents.send(IPC.CHATS_SWITCH_SESSION, sessionId);
-    }
-    return;
-  }
-
-  const layout = computeLayout();
-  chatWindow = new BrowserWindow({
-    x: layout.chat.x,
-    y: layout.chat.y,
-    width: 1280,
-    height: 760,
-    minWidth: 960,
-    minHeight: 540,
-    title: "Cyrene · 聊天",
-    icon: APP_ICON_PATH,
-    backgroundColor: "#00000000",
-    autoHideMenuBar: true,
-    show: false,
-    frame: false,
-    transparent: true,
-    resizable: true,
-    webPreferences: {
-      preload: path.join(__dirname, "..", "..", "preload", "preload", "index.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  });
-
-  // 通过 URL query 把目标 sessionId 带给渲染进程（首次加载用），
-  // 后续切换走 CHATS_SWITCH_SESSION 事件，避免重新加载页面。
-  const queryString = sessionId ? "?sessionId=" + encodeURIComponent(sessionId) : "";
-  if (isDev) {
-    chatWindow.loadURL("http://localhost:5173/chat/" + queryString);
-  } else {
-    chatWindow.loadFile(
-      path.join(__dirname, "..", "..", "renderer", "chat", "index.html"),
-      sessionId ? { search: queryString } : undefined,
-    );
-  }
-
-  chatWindow.once("ready-to-show", () => {
-    chatWindow?.show();
-    handleChatWindowOpened();  // Opener 响应窗口内打开 chat = 接话
-  });
-
-  chatWindow.on("closed", () => {
-    chatWindow = null;
-    // 聊天窗口关闭后清空活跃 sessionId 广播，让设置面板的"删除当前会话"
-    // 提示文案恢复成普通的"确定删除？"
-    activeChatSessionId = null;
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (win.isDestroyed()) continue;
-      try { win.webContents.send(IPC.CHATS_ACTIVE_SESSION_CHANGED, null); } catch { /* ignore */ }
-    }
-  });
+  createSidebarWindow();
 }
 
 function createSidebarWindow(): void {
@@ -2207,151 +2534,80 @@ function createSidebarWindow(): void {
     return;
   }
 
-  const layout = computeLayout();
+  const display = screen.getPrimaryDisplay();
+  const { x: dx, y: dy, width: dw, height: dh } = display.workArea;
+  const width = 1200;
+  const height = 800;
+
   sidebarWindow = new BrowserWindow({
-    x: layout.sidebar.x,
-    y: layout.sidebar.y,
-    width: 320,
-    height: 760,
-    minWidth: 56,
-    minHeight: 540,
-    title: "昔涟 · 状态",
+    x: dx + Math.max(0, Math.floor((dw - width) / 2)),
+    y: dy + Math.max(0, Math.floor((dh - height) / 2)),
+    width,
+    height,
+    minWidth: 960,
+    minHeight: 600,
+    title: "昔漣 · 工作台",
     icon: APP_ICON_PATH,
-    backgroundColor: "#00000000",
+    backgroundColor: "#130a1c",
     autoHideMenuBar: true,
     show: false,
     frame: false,
-    transparent: true,
+    transparent: false,
     resizable: true,
     webPreferences: {
       preload: path.join(__dirname, "..", "..", "preload", "preload", "index.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      nodeIntegrationInSubFrames: true,
       sandbox: false,
     },
   });
 
+  // 統一指針以滿足 TypeScript 類型推斷與現有 IPC 視窗控制
+  chatWindow = sidebarWindow;
+  tasksWindow = sidebarWindow;
+  settingsWindow = sidebarWindow;
+
   if (isDev) {
-    sidebarWindow.loadURL("http://localhost:5173/sidebar/");
+    sidebarWindow.loadURL("http://localhost:5173/workspace/");
   } else {
     sidebarWindow.loadFile(
-      path.join(__dirname, "..", "..", "renderer", "sidebar", "index.html")
+      path.join(__dirname, "..", "..", "renderer", "workspace", "index.html")
     );
   }
 
   sidebarWindow.once("ready-to-show", () => {
     sidebarWindow?.show();
+    // 初始位置同步
+    setTimeout(() => {
+      updatePetDockPosition();
+    }, 500);
+  });
+
+  sidebarWindow.on("move", () => {
+    updatePetDockPosition();
+  });
+
+  sidebarWindow.on("resize", () => {
+    updatePetDockPosition();
   });
 
   sidebarWindow.on("closed", () => {
     sidebarWindow = null;
+    sidebarRestoreBounds = null;
+    isSidebarExpanded = false;
+    chatWindow = null;
+    tasksWindow = null;
+    settingsWindow = null;
   });
 }
 
 function createTasksWindow(): void {
-  if (tasksWindow && !tasksWindow.isDestroyed()) {
-    tasksWindow.show();
-    tasksWindow.focus();
-    return;
-  }
-
-  const layout = computeLayout();
-  tasksWindow = new BrowserWindow({
-    x: layout.tasks.x,
-    y: layout.tasks.y,
-    width: 320,
-    height: 760,
-    minHeight: 540,
-    title: "昔涟 · 今日日程",
-    icon: APP_ICON_PATH,
-    backgroundColor: "#00000000",
-    autoHideMenuBar: true,
-    show: false,
-    frame: false,
-    transparent: true,
-    resizable: true,
-    webPreferences: {
-      preload: path.join(__dirname, "..", "..", "preload", "preload", "index.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  });
-
-  if (isDev) {
-    tasksWindow.loadURL("http://localhost:5173/tasks/");
-  } else {
-    tasksWindow.loadFile(
-      path.join(__dirname, "..", "..", "renderer", "tasks", "index.html")
-    );
-  }
-
-  tasksWindow.once("ready-to-show", () => {
-    tasksWindow?.show();
-  });
-
-  tasksWindow.on("closed", () => {
-    tasksWindow = null;
-  });
+  createSidebarWindow();
 }
 
 function createSettingsWindow(section?: string): void {
-  if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.show();
-    settingsWindow.focus();
-    // 窗口已存在：发事件让 settings 页切标签（loadURL 不会重新触发）
-    if (section) {
-      settingsWindow.webContents.send(IPC.SETTINGS_SWITCH_SECTION, section);
-    }
-    return;
-  }
-
-  const display = screen.getPrimaryDisplay();
-  const { x: dx, y: dy, width: dw, height: dh } = display.workArea;
-  const width = 1060;
-  const height = 920;
-  settingsWindow = new BrowserWindow({
-    x: dx + Math.max(0, Math.floor((dw - width) / 2)),
-    y: dy + Math.max(0, Math.floor((dh - height) / 2)),
-    width,
-    height,
-    minWidth: 920,
-    minHeight: 580,
-    title: "昔涟 · 设置",
-    icon: APP_ICON_PATH,
-    backgroundColor: "#00000000",
-    autoHideMenuBar: true,
-    show: false,
-    frame: false,
-    transparent: true,
-    resizable: true,
-    webPreferences: {
-      preload: path.join(__dirname, "..", "..", "preload", "preload", "index.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  });
-
-  attachExternalLinkHandler(settingsWindow);
-
-  const hash = section ? `#${section}` : "";
-  if (isDev) {
-    settingsWindow.loadURL("http://localhost:5173/settings/" + hash);
-  } else {
-    settingsWindow.loadFile(
-      path.join(__dirname, "..", "..", "renderer", "settings", "index.html"),
-      { hash: section || "" }
-    );
-  }
-
-  settingsWindow.once("ready-to-show", () => {
-    settingsWindow?.show();
-  });
-
-  settingsWindow.on("closed", () => {
-    settingsWindow = null;
-  });
+  createSidebarWindow();
 }
 async function createStickerManagerWindow(): Promise<{ ok: boolean; error?: string }> {
   if (stickerManagerWindow && !stickerManagerWindow.isDestroyed()) {
@@ -2421,7 +2677,7 @@ async function createStickerManagerWindow(): Promise<{ ok: boolean; error?: stri
   return { ok: true };
 }
 
-/** 创建通话窗口（450×800 竖屏，语音通话）。 */
+/** 創建通話窗口（直式語音通話，支援系統畫面分享選擇器）。 */
 function createCallWindow(): void {
   if (callWindow && !callWindow.isDestroyed()) {
     callWindow.show();
@@ -2431,8 +2687,8 @@ function createCallWindow(): void {
 
   const display = screen.getPrimaryDisplay();
   const { width: dw, height: dh } = display.workArea;
-  const CALL_W = 420;
-  const CALL_H = 800;
+  const CALL_W = 440;
+  const CALL_H = 820;
   const cx = Math.max(0, Math.floor((dw - CALL_W) / 2));
   const cy = Math.max(0, Math.floor((dh - CALL_H) / 2));
 
@@ -2443,7 +2699,7 @@ function createCallWindow(): void {
     height: CALL_H,
     minWidth: 420,
     minHeight: 600,
-    title: "Cyrene · 语音通话",
+    title: "Cyrene · 語音通話",
     icon: APP_ICON_PATH,
     backgroundColor: "#00000000",
     autoHideMenuBar: true,
@@ -2459,6 +2715,22 @@ function createCallWindow(): void {
     },
   });
 
+  // 優先使用 macOS / Chromium 原生分享選擇器；較舊環境沒有系統選擇器時，
+  // Electron 仍會透過 handler 提供主要螢幕，避免 getDisplayMedia 直接失敗。
+  callWindow.webContents.session.setDisplayMediaRequestHandler(async (_request, callback) => {
+    try {
+      const sources = await desktopCapturer.getSources({
+        types: ["screen", "window"],
+        thumbnailSize: { width: 0, height: 0 },
+      });
+      const source = sources.find((item) => item.id.startsWith("screen:")) ?? sources[0];
+      callback(source ? { video: source } : {});
+    } catch (error) {
+      console.error("[Call] 無法取得畫面分享來源:", error);
+      callback({});
+    }
+  }, { useSystemPicker: true });
+
   if (isDev) {
     callWindow.loadURL("http://localhost:5173/call/");
   } else {
@@ -2466,7 +2738,16 @@ function createCallWindow(): void {
   }
 
   callWindow.once("ready-to-show", () => {
-    callWindow?.show();
+    if (callWindow && !callWindow.isDestroyed()) {
+      callWindow.show();
+      if (isDev && process.env.CYRENE_CALL_DEVTOOLS === "1") {
+        callWindow.webContents.openDevTools({ mode: "detach" });
+      }
+    }
+  });
+
+  callWindow.webContents.on("console-message", (event, level, message, line, sourceId) => {
+    console.log(`[CallRenderer] ${message} (${path.basename(sourceId)}:${line})`);
   });
 
   callWindow.on("closed", () => {
@@ -2475,7 +2756,7 @@ function createCallWindow(): void {
     setCallWindow(null);
   });
 
-  // 绑定给 call-manager
+  // 綁定給 call-manager
   setCallWindow(callWindow);
 }
 
@@ -2485,15 +2766,15 @@ function createTray(): void {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: "打开状态面板",
+      label: "打開狀態面板",
       click: () => { createSidebarWindow(); },
     },
     {
-      label: "设置",
+      label: "設置",
       click: () => { createSettingsWindow(); },
     },
     {
-      label: "显示/隐藏桌宠",
+      label: "顯示/隱藏桌寵",
       click: () => {
         if (mainWindow) {
           mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show();
@@ -2513,8 +2794,19 @@ function createTray(): void {
 
 ipcMain.handle(IPC.WINDOW_SET_INTERACTIVE, (_event, interactive: boolean) => {
   if (mainWindow) {
+    // While docked, keep the compact pet window interactive across its whole
+    // rectangle. Once undocked, transparent pixels may pass through again.
+    if (isPetDocked) {
+      mainWindow.setIgnoreMouseEvents(false);
+      return;
+    }
     mainWindow.setIgnoreMouseEvents(!interactive, { forward: true });
   }
+});
+
+ipcMain.on(IPC.WINDOW_SET_TEXT_INPUT_ACTIVE, (_event, active: boolean) => {
+  isPetTextInputActive = Boolean(active);
+  applyPetWindowLevel(loadGeneralSettings());
 });
 
 ipcMain.on(IPC.WINDOW_MOVE, (_event, dx: number, dy: number) => {
@@ -2529,8 +2821,13 @@ ipcMain.on(IPC.WINDOW_MOVE_TO, (_event, x: number, y: number) => {
   const rx = Math.round(x);
   const ry = Math.round(y);
   mainWindow.setPosition(rx, ry, false);
-  // 拖拽结束或 setPosition 时保存位置
-  void saveGeneralSettings({ petWindowX: rx, petWindowY: ry });
+  pendingPetPosition = { x: rx, y: ry };
+  // During pointer drag, saving settings would call applyGeneralSettings(),
+  // which resizes the window and cancels the active pointer capture.
+  if (!isPetDragging) {
+    void saveGeneralSettings({ petWindowX: rx, petWindowY: ry });
+    pendingPetPosition = null;
+  }
 });
 
 /**
@@ -2560,6 +2857,28 @@ ipcMain.on(IPC.WINDOW_MOVE_TO, (_event, x: number, y: number) => {
  */
 ipcMain.on(IPC.WINDOW_SET_DRAGGING, (_event, isDragging: boolean) => {
   if (!mainWindow) return;
+  // Keep the parent relationship for the entire pointer gesture. On macOS,
+  // changing a BrowserWindow's parent while the button is down cancels the
+  // renderer's pointer capture, so the pet appears impossible to drag.
+  isPetDragging = isDragging;
+  if (isDragging) {
+    pendingPetPosition = null;
+  } else {
+    // pointerup has already completed in the renderer; it is now safe to
+    // detach, restore the configured size, and promote the pet to topmost.
+    if (isPetDocked && pendingPetPosition) undockPet();
+    else if (!isPetDocked) {
+      const settings = loadGeneralSettings();
+      applyPetZoom(settings.petZoom || 1.0);
+    }
+    if (pendingPetPosition) {
+      void saveGeneralSettings({
+        petWindowX: pendingPetPosition.x,
+        petWindowY: pendingPetPosition.y,
+      });
+      pendingPetPosition = null;
+    }
+  }
   mainWindow.setOpacity(isDragging ? 0.99 : 1.0);
 });
 
@@ -2628,8 +2947,43 @@ ipcMain.on(IPC.CHAT_TOGGLE_MAXIMIZE, () => {
 ipcMain.handle(IPC.CHAT_IS_MAXIMIZED, () => {
   return chatWindow?.isMaximized() ?? false;
 });
-ipcMain.handle(IPC.CHAT_SEND_MESSAGE, async (_event, messages: unknown) => {
-  return requestModelReply(messages);
+ipcMain.handle(IPC.CHAT_SEND_MESSAGE, async (_event, messages: unknown, style: unknown) => {
+  return requestModelReply(messages, typeof style === "string" ? style : undefined);
+});
+
+const petChatHistory: Array<{ role: "user" | "assistant"; content: string }> = [];
+
+ipcMain.handle(IPC.PET_CHAT_INPUT_VISIBILITY, () => {
+  const settings = loadGeneralSettings();
+  return settings.petChatInputEnabled && !isPetDocked;
+});
+
+ipcMain.handle(IPC.PET_CHAT_SEND, async (_event, rawText: unknown) => {
+  const text = typeof rawText === "string" ? rawText.trim().slice(0, 500) : "";
+  if (!text) throw new Error("請先輸入想說的話。");
+
+  const result = await requestModelReply([
+    {
+      role: "system",
+      content: "這是桌寵快捷對話。只回覆一個很短、自然的繁體中文段落，最多兩句、70 個中文字內；直接回答，不要舞台動作、括號描寫、標題、條列、Markdown 或換行。這項限制只適用本次桌寵快捷對話。",
+    },
+    ...petChatHistory.slice(-10),
+    { role: "user", content: text },
+  ]);
+  const reply = compactPetReply(result.reply);
+  petChatHistory.push({ role: "user", content: text }, { role: "assistant", content: reply });
+  if (petChatHistory.length > 12) petChatHistory.splice(0, petChatHistory.length - 12);
+
+  const settings = loadGeneralSettings();
+  const speech = settings.ttsAutoRead && settings.ttsEngine !== "off"
+    ? await synthesizeDailyRitual(reply, { ...settings, dailyRitualVoice: true })
+    : null;
+  return {
+    text: reply,
+    audioBase64: speech?.base64 ?? "",
+    format: speech?.format ?? "mp3",
+    durationMs: Math.max(1800, Math.min(18000, reply.length * 180)),
+  };
 });
 
 ipcMain.handle(IPC.CHAT_INGEST_FILES, async (_event, paths: unknown) => {
@@ -2651,7 +3005,23 @@ ipcMain.on(IPC.SIDEBAR_CLOSE, () => {
   sidebarWindow?.close();
 });
 
-// 状态栏窗口置顶 toggle：返回切换后的新状态（true=已置顶）
+ipcMain.on(IPC.SIDEBAR_TOGGLE_MAXIMIZE, () => {
+  if (!sidebarWindow || sidebarWindow.isDestroyed()) return;
+
+  if (isSidebarExpanded && sidebarRestoreBounds) {
+    sidebarWindow.setBounds(sidebarRestoreBounds, true);
+    sidebarRestoreBounds = null;
+    isSidebarExpanded = false;
+    return;
+  }
+
+  sidebarRestoreBounds = sidebarWindow.getBounds();
+  const display = screen.getDisplayMatching(sidebarRestoreBounds);
+  sidebarWindow.setBounds(display.workArea, true);
+  isSidebarExpanded = true;
+});
+
+// 狀態欄窗口置頂 toggle：返回切換後的新狀態（true=已置頂）
 ipcMain.handle(IPC.SIDEBAR_TOGGLE_ALWAYS_ON_TOP, () => {
   if (!sidebarWindow) return false;
   const next = !sidebarWindow.isAlwaysOnTop();
@@ -2669,6 +3039,46 @@ ipcMain.on(IPC.SIDEBAR_OPEN_SETTINGS, (_event, section?: string) => {
 
 ipcMain.on(IPC.SIDEBAR_OPEN_CALL, () => {
   createCallWindow();
+});
+
+ipcMain.on(IPC.SIDEBAR_SET_PET_DOCK_VISIBLE, (_event, visible: boolean) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const settings = loadGeneralSettings();
+  // Only a pet that is still inside the workspace dock follows tab
+  // visibility. An undocked desktop pet remains visible independently.
+  if (isPetDocked) {
+    if (visible && settings.petVisible) {
+      mainWindow.showInactive();
+      updatePetDockPosition();
+    } else {
+      mainWindow.hide();
+    }
+  } else if (settings.petVisible && !mainWindow.isVisible()) {
+    mainWindow.showInactive();
+  }
+});
+
+ipcMain.handle("sidebar:read-shared-notebook", async () => {
+  const filePath = getSharedNotebookPath();
+  try {
+    if (fs.existsSync(filePath)) {
+      return fs.readFileSync(filePath, "utf-8");
+    }
+  } catch (err) {
+    console.error("Failed to read shared notebook:", err);
+  }
+  return "";
+});
+
+ipcMain.handle("sidebar:open-shared-notebook", async () => {
+  const filePath = getSharedNotebookPath();
+  try {
+    await shell.openPath(filePath);
+    return true;
+  } catch (err) {
+    console.error("Failed to open shared notebook:", err);
+  }
+  return false;
 });
 
 ipcMain.on(IPC.TASKS_MINIMIZE, () => {
@@ -2702,6 +3112,51 @@ ipcMain.handle(IPC.SETTINGS_SAVE_GENERAL, (_event, settings: Partial<GeneralSett
   return saveGeneralSettings(settings);
 });
 
+function vaultFiles(): string[] {
+  return [getSettingsPath(), getGeneralSettingsPath()];
+}
+
+ipcMain.handle(IPC.SECURITY_GET_STATUS, () => getVaultStatus(vaultFiles()));
+ipcMain.handle(IPC.SECURITY_MIGRATE, () => migrateFilesToVault(vaultFiles()));
+ipcMain.handle(IPC.BACKUP_GET_CONFIG, () => backupManager?.getConfig());
+ipcMain.handle(IPC.BACKUP_SAVE_CONFIG, (_event, patch: { autoEnabled?: boolean; retentionDays?: 7 | 30 }) => {
+  if (!backupManager) throw new Error("備份服務尚未啟動");
+  const config = backupManager.saveConfig(patch ?? {});
+  if (config.autoEnabled) backupManager.runAutoBackupIfDue();
+  return config;
+});
+ipcMain.handle(IPC.BACKUP_CREATE, async (_event, categories: unknown) => {
+  if (!backupManager) throw new Error("備份服務尚未啟動");
+  const stamp = new Date().toISOString().slice(0, 10);
+  const saveOptions: Electron.SaveDialogOptions = {
+    title: "建立昔漣時間膠囊",
+    defaultPath: path.join(app.getPath("documents"), `昔漣備份-${stamp}.cybackup`),
+    filters: [{ name: "昔漣備份", extensions: ["cybackup"] }],
+  };
+  const result = settingsWindow ? await dialog.showSaveDialog(settingsWindow, saveOptions) : await dialog.showSaveDialog(saveOptions);
+  if (result.canceled || !result.filePath) return null;
+  return backupManager.create(result.filePath.endsWith(".cybackup") ? result.filePath : `${result.filePath}.cybackup`, categories);
+});
+ipcMain.handle(IPC.BACKUP_PICK_INSPECT, async () => {
+  if (!backupManager) throw new Error("備份服務尚未啟動");
+  const openOptions: Electron.OpenDialogOptions = {
+    title: "選擇昔漣備份",
+    properties: ["openFile"],
+    filters: [{ name: "昔漣備份", extensions: ["cybackup"] }],
+  };
+  const result = settingsWindow ? await dialog.showOpenDialog(settingsWindow, openOptions) : await dialog.showOpenDialog(openOptions);
+  if (result.canceled || !result.filePaths[0]) return null;
+  return backupManager.inspect(result.filePaths[0]);
+});
+ipcMain.handle(IPC.BACKUP_RESTORE, (_event, payload: { filePath?: string; categories?: unknown }) => {
+  if (!backupManager || !payload?.filePath) throw new Error("請先選擇備份檔");
+  return backupManager.restore(payload.filePath, payload.categories);
+});
+ipcMain.on(IPC.SECURITY_RESTART_APP, () => {
+  app.relaunch();
+  app.exit(0);
+});
+
 ipcMain.on(IPC.SETTINGS_OPEN_SIDEBAR, () => {
   createSidebarWindow();
 });
@@ -2720,7 +3175,7 @@ ipcMain.on(IPC.SETTINGS_CLOSE_TASKS, () => {
 
 ipcMain.on(IPC.SETTINGS_SET_PET_ALWAYS_ON_TOP, (_event, value: boolean) => {
   const saved = saveGeneralSettings({ ...loadGeneralSettings(), petAlwaysOnTop: Boolean(value) });
-  mainWindow?.setAlwaysOnTop(saved.petAlwaysOnTop, saved.petAlwaysOnTop ? "screen-saver" : "normal");
+  applyPetWindowLevel(saved);
 });
 
 ipcMain.on(IPC.SETTINGS_SET_PET_VISIBLE, (_event, value: boolean) => {
@@ -2755,10 +3210,10 @@ ipcMain.handle(IPC.SETTINGS_TEST_CONNECTION, async (_event, cfg: { provider: str
 });
 
 /**
- * 测试视觉模型连通性。
- * 用一张 4x4 纯红 PNG（100 字节 base64）做测试图——纯色位图所有视觉模型都能识别，
+ * 測試視覺模型連通性。
+ * 用一張 4x4 純紅 PNG（100 字節 base64）做測試圖——純色位圖所有視覺模型都能識別，
  * 比 SVG 兼容性好（SVG 是矢量，部分模型不支持）。
- * 验连通性（HTTP 2xx + 有内容返回）而非对答案——模型可能只说"一张红色图片"也算成功。
+ * 驗連通性（HTTP 2xx + 有內容返回）而非對答案——模型可能只說"一張紅色圖片"也算成功。
  */
 const VISION_TEST_IMAGE_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGP4z8DwHxkzkC4AADxAH+HggXe0AAAAAElFTkSuQmCC";
 
@@ -2769,12 +3224,12 @@ ipcMain.handle(IPC.SETTINGS_TEST_VISION, async (_event, cfg: { baseUrl: string; 
     const { captionImage } = await import("./orchestrator/vision-captioner");
     const result = await captionImage(
       { base64: VISION_TEST_IMAGE_BASE64, mime: "image/png" },
-      "这张图是什么颜色？用一个词回答。",
+      "這張圖是什麼顏色？用一個詞回答。",
       { baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, model: cfg.model },
     );
     const latency = Date.now() - start;
-    // 验连通性：返回不含 [错误 即成功（视觉模型返回了内容）
-    if (result.startsWith("[错误")) {
+    // 驗連通性：返回不含 [錯誤 即成功（視覺模型返回了內容）
+    if (result.startsWith("[錯誤")) {
       return { ok: false, latency, error: result };
     }
     return { ok: true, latency, sample: result.slice(0, 80) };
@@ -2865,7 +3320,7 @@ ipcMain.handle(IPC.STICKERS_SET_ENABLED, (_event, payload: unknown) => {
 ipcMain.handle(IPC.STICKERS_PICK_FILE, async () => {
   const result = await dialog.showOpenDialog({
     properties: ["openFile"],
-    filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }],
+    filters: [{ name: "圖片", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }],
   });
   return result.canceled ? null : result.filePaths[0];
 });
@@ -2995,13 +3450,32 @@ ipcMain.handle(IPC.MEMORY_PANEL_SAVE_L1, async (_event, raw: Record<string, unkn
   await memoryStore.updateL1(patch);
   return { ok: true };
 });
+ipcMain.handle(IPC.MEMORY_PANEL_PIN_L2, async (_event, payload: { id: string; pinned: boolean }) => {
+  if (!payload?.id) return { ok: false, error: "缺少記憶 id" };
+  await memoryStore.pinL2(payload.id, Boolean(payload.pinned));
+  return { ok: true };
+});
+ipcMain.handle(IPC.MEMORY_PANEL_DELETE_L2, async (_event, id: string) => {
+  if (!id) return { ok: false, error: "缺少記憶 id" };
+  const memory = (await memoryStore.getAllL2()).find(item => item.id === id);
+  if (memory?.ragId) removeMemory(memory.ragId);
+  await memoryStore.deleteL2(id);
+  return { ok: true };
+});
 ipcMain.handle(IPC.USER_GET_PROFILE, () => loadUserProfile());
-ipcMain.handle(IPC.USER_SAVE_PROFILE, (_event, profile: Partial<UserProfile>) => saveUserProfile(profile));
+ipcMain.handle(IPC.USER_SAVE_PROFILE, (_event, profile: Partial<UserProfile>) => {
+  const saved = saveUserProfile(profile);
+  const settings = loadGeneralSettings();
+  stopOpener();
+  configureOpener(toOpenerRuntimeConfig(settings));
+  if (settings.openerMode !== "off") startOpener(toOpenerRuntimeConfig(settings));
+  return saved;
+});
 ipcMain.handle(IPC.USER_UPLOAD_AVATAR, async () => {
   const { dialog } = await import("electron");
   const result = await dialog.showOpenDialog({
     properties: ["openFile"],
-    filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp", "bmp"] }],
+    filters: [{ name: "圖片", extensions: ["png", "jpg", "jpeg", "webp", "bmp"] }],
   });
   if (result.canceled || result.filePaths.length === 0) return null;
   const srcPath = result.filePaths[0];
@@ -3073,14 +3547,17 @@ ipcMain.handle(IPC.EMBEDDING_DELETE, async (_event, payload: unknown) => {
   }
 });
 
-// 注册 local-sticker:// 协议（用户添加的表情包图片）
-// 必须在 app.ready 之前调用
+// 註冊 local-sticker:// 協議（用戶添加的表情包圖片）
+// 必須在 app.ready 之前調用
 protocol.registerSchemesAsPrivileged([
   { scheme: "local-sticker", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
 ]);
 
 app.whenReady().then(async () => {
-  // 注册 local-sticker:// 协议处理器：将请求映射到 userData/stickers/ 下的文件
+  backupManager = new BackupManager(app.getPath("userData"), app.getVersion());
+  migrateFilesToVault(vaultFiles());
+  try { backupManager.runAutoBackupIfDue(); } catch (error) { console.warn("[Backup] 自動備份失敗:", error); }
+  // 註冊 local-sticker:// 協議處理器：將請求映射到 userData/stickers/ 下的文件
   protocol.handle("local-sticker", (request) => {
     const file = parseLocalStickerFileFromUrl(request.url);
     if (!file) return new Response("Invalid sticker URL", { status: 404 });
@@ -3090,9 +3567,132 @@ app.whenReady().then(async () => {
 
     return net.fetch(pathToFileURL(filePath).toString());
   });
-  // Token 用量查询 IPC
+  // Token 用量查詢 IPC
   ipcMain.handle(IPC.TOKEN_USAGE_GET, (_event, days: number) => {
     return getUsage(Math.max(1, Math.min(90, Number(days) || 7)));
+  });
+  ipcMain.handle(IPC.CALL_USAGE_GET, (_event, days: number) => {
+    return getCallUsage(Math.max(1, Math.min(90, Number(days) || 7)));
+  });
+  ipcMain.handle(IPC.AGENT_ACTIVITY_GET, (_event, days: number) => {
+    const safeDays = Math.max(1, Math.min(90, Number(days) || 7));
+    const memory = process.memoryUsage();
+    return {
+      events: getAgentActivities(200),
+      summary: getAgentActivitySummary(),
+      models: getUsageByModel(safeDays),
+      resources: {
+        rssBytes: memory.rss,
+        heapUsedBytes: memory.heapUsed,
+        heapTotalBytes: memory.heapTotal,
+        queue: getLLMQueueStatus(),
+        activityLimit: 1000,
+        callContextTurnLimit: 24,
+      },
+    };
+  });
+  ipcMain.handle(IPC.AGENT_DIAGNOSTIC_EXPORT, async () => {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const options: Electron.SaveDialogOptions = {
+      title: "匯出昔漣診斷包",
+      defaultPath: path.join(app.getPath("documents"), `昔漣診斷-${stamp}.cydiag`),
+      filters: [{ name: "昔漣診斷包", extensions: ["cydiag"] }],
+    };
+    const picked = settingsWindow ? await dialog.showSaveDialog(settingsWindow, options) : await dialog.showSaveDialog(options);
+    if (picked.canceled || !picked.filePath) return null;
+    const output = picked.filePath.endsWith(".cydiag") ? picked.filePath : `${picked.filePath}.cydiag`;
+    const general = redactSecrets(loadGeneralSettings());
+    const model = redactSecrets(loadModelSettings());
+    const payload = {
+      format: "cyrene-diagnostic",
+      version: 1,
+      createdAt: new Date().toISOString(),
+      appVersion: app.getVersion(),
+      platform: { os: process.platform, arch: process.arch, node: process.versions.node, electron: process.versions.electron },
+      settings: { general, model },
+      activities: getAgentActivities(500),
+      activitySummary: getAgentActivitySummary(),
+      tokenUsage: getUsage(30),
+      tokenUsageByModel: getUsageByModel(30),
+      resources: { memory: process.memoryUsage(), queue: getLLMQueueStatus() },
+    };
+    fs.writeFileSync(output, zlib.gzipSync(Buffer.from(JSON.stringify(payload, null, 2))), { mode: 0o600 });
+    return { filePath: output };
+  });
+  ipcMain.handle(IPC.ASR_TEST_LOCAL, async (_event, payload: { pcmBase64?: string; language?: string }) => {
+    const pcm = Buffer.from(payload?.pcmBase64 ?? "", "base64");
+    if (!pcm.length || pcm.length > 10 * 1024 * 1024) throw new Error("測試音訊為空或超過 10 MB");
+    const startedAt = Date.now();
+    const text = await transcribeOfflineWhisper(pcm, payload?.language === "en" ? "en" : "zh");
+    return { text, latencyMs: Date.now() - startedAt };
+  });
+
+  ipcMain.handle(IPC.CONNECTION_STATUS_GET, () => {
+    type State = "connected" | "pending" | "error";
+    type Item = { id: string; name: string; detail: string; icon: string; state: State; label: string };
+    const items: Item[] = [];
+    const model = loadModelSettings();
+    const general = loadGeneralSettings();
+    const add = (item: Item) => items.push(item);
+
+    add({
+      id: "model",
+      name: "對話模型",
+      detail: model.model || model.provider || "尚未設定",
+      icon: "AI",
+      state: model.apiKey ? "connected" : "error",
+      label: model.apiKey ? "已連接" : "缺少設定",
+    });
+
+    if (general.ttsEngine !== "off") {
+      const configured = general.ttsEngine === "minimax"
+        ? Boolean(general.ttsMinimaxKey && general.ttsMinimaxVoiceId)
+        : general.ttsEngine === "gptsovits"
+          ? Boolean(general.ttsGptsovitsBaseUrl && general.ttsGptsovitsRefAudioPath)
+          : general.ttsEngine === "custom-cloud"
+            ? Boolean(general.ttsCustomCloudEndpointUrl)
+            : Boolean(general.ttsMimoKey && general.ttsMimoVoiceAudioPath);
+      add({ id: "tts", name: "語音合成", detail: general.ttsEngine, icon: "TTS", state: configured ? "connected" : "error", label: configured ? "已設定" : "設定不完整" });
+    }
+
+    if (general.asrEngine !== "off") {
+      const configured = general.asrEngine === "local"
+        || general.asrEngine === "web-speech"
+        || Boolean(general.asrAliyunAppKey && general.asrAliyunAccessKeyId && general.asrAliyunAccessKeySecret);
+      add({ id: "asr", name: "語音辨識", detail: general.asrEngine, icon: "ASR", state: configured ? "connected" : "error", label: configured ? "已設定" : "設定不完整" });
+    }
+
+    if (general.weatherEnabled) {
+      const configured = general.weatherSource === "open-meteo" || Boolean(general.amapKey);
+      add({ id: "weather", name: "天氣服務", detail: general.weatherSource, icon: "天", state: configured ? "connected" : "error", label: configured ? "已啟用" : "缺少金鑰" });
+    }
+
+    if (general.searchEngine !== "off") {
+      const key = general.searchEngine === "bocha" ? general.searchBochaKey : general.searchEngine === "tavily" ? general.searchTavilyKey : general.searchMinimaxKey;
+      add({ id: "search", name: "聯網搜尋", detail: general.searchEngine, icon: "搜", state: key ? "connected" : "error", label: key ? "已啟用" : "缺少金鑰" });
+    }
+
+    if (general.emailEnabled) {
+      const configured = Boolean(general.emailSmtpHost && general.emailSmtpUser && general.emailSmtpPass);
+      add({ id: "email", name: "郵件服務", detail: general.emailSmtpHost || "SMTP", icon: "郵", state: configured ? "connected" : "error", label: configured ? "已設定" : "設定不完整" });
+    }
+
+    if (general.travelEnabled) {
+      add({ id: "travel", name: "出行服務", detail: "高德地圖", icon: "行", state: general.amapKey ? "connected" : "error", label: general.amapKey ? "已啟用" : "缺少金鑰" });
+    }
+
+    const channelNames: Record<string, string> = { wechat: "微信", feishu: "飛書", discord: "Discord" };
+    for (const [id, status] of Object.entries(channelManager.getAllStatus())) {
+      if (!status.enabled) continue;
+      const state: State = status.phase === "running" ? "connected" : status.phase === "starting" ? "pending" : "error";
+      add({ id: `channel-${id}`, name: channelNames[id] || id, detail: status.message || status.phase, icon: id.slice(0, 2).toUpperCase(), state, label: status.phase === "running" ? "已連接" : status.phase === "starting" ? "連接中" : "異常" });
+    }
+
+    for (const server of listMcpServers()) {
+      add({ id: `mcp-${server.id}`, name: server.name, detail: `MCP · ${server.toolCount} 個工具`, icon: "MCP", state: server.connected ? "connected" : "error", label: server.connected ? "已連接" : "未連接" });
+    }
+
+    return items;
   });
 
   ipcMain.on(IPC.LIVE2D_SPEECH_PREPARE, () => {
@@ -3106,90 +3706,105 @@ app.whenReady().then(async () => {
   });
 
   // ── TTS IPC ──
-  // 保存/加载 TTS 配置（复用 general settings 存储）
+  // 保存/加載 TTS 配置（複用 general settings 存儲）
   ipcMain.handle(IPC.TTS_SAVE_SETTINGS, async (_event, tts: Partial<GeneralSettings>) => {
     const before = loadGeneralSettings();
     const saved = saveGeneralSettings({ ...before, ...tts });
 
-    // 搜索 MCP 自动注册/移除：选 MiniMax+有key→注册，否则→移除
+    // 搜索 MCP 自動註冊/移除：選 MiniMax+有key→註冊，否則→移除
     const searchConfigChanged = "searchMinimaxKey" in tts || "searchEngine" in tts;
     if (searchConfigChanged) {
       await syncVolcanoSearchMcp(saved);
     }
 
-    // Playwright MCP：按 settings 字段自动连接/断开
+    // Playwright MCP：按 settings 字段自動連接/斷開
     if ("playwrightMcpEnabled" in tts) {
       await syncPlaywrightMcp(saved);
     }
 
-    // Opener 主动开口：档位变化时重启
-    if ("openerMode" in tts) {
+    // Opener 主動開口：任一策略變化時重啟
+    if (Object.keys(tts).some(key => key.startsWith("opener"))) {
       stopOpener();
-      if (saved.openerMode !== "off") startOpener(saved.openerMode);
+      configureOpener(toOpenerRuntimeConfig(saved));
+      if (saved.openerMode !== "off") startOpener(toOpenerRuntimeConfig(saved));
     }
 
-    // 返回不含密钥明文的副本（前端展示用）
+    if (Object.keys(tts).some(key => key.startsWith("dailyRitual"))) {
+      syncDailyRitualTasks(saved, getSchedulerStore());
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send(IPC.SCHEDULER_CHANGED);
+      }
+    }
+
+    // 返回不含密鑰明文的副本（前端展示用）
     return saved;
   });
   ipcMain.handle(IPC.TTS_LOAD_SETTINGS, () => {
     return loadGeneralSettings();
   });
 
-  // Opener 反馈：点气泡接话
+  // Opener 反饋：點氣泡接話
   ipcMain.on(IPC.OPENER_FEEDBACK, (_event, payload: { type: "clicked"; sceneId: string; itemId: string }) => {
     if (payload?.type === "clicked") {
       handleBubbleClick(payload.sceneId, payload.itemId);
     }
   });
 
-  // Opener 手动测试气泡
-  ipcMain.handle(IPC.OPENER_TEST_FIRE, async () => { await testFire(); });
+  // Opener 手動測試氣泡
+  ipcMain.handle(IPC.OPENER_TEST_FIRE, async (_event, sceneId?: string) => testFire(sceneId));
+  ipcMain.handle(IPC.OPENER_GET_STATUS, () => getOpenerStatus());
+  ipcMain.handle(IPC.OPENER_OPEN_PACK_FOLDER, async () => {
+    const dir = getOpenerStatus().packDir;
+    fs.mkdirSync(dir, { recursive: true });
+    const error = await shell.openPath(dir);
+    return { ok: !error, error: error || undefined };
+  });
 
-  // 上传音频文件 → file_id
+  // 上傳音頻文件 → file_id
   ipcMain.handle(IPC.TTS_UPLOAD, async (_event, payload: { apiKey: string; filePath: string; purpose: "voice_clone" | "prompt_audio" }) => {
     if (!payload?.apiKey || !payload?.filePath) {
-      throw new Error("缺少 API Key 或文件路径");
+      throw new Error("缺少 API Key 或文件路徑");
     }
     return await ttsUploadFile(payload.apiKey, payload.filePath, payload.purpose);
   });
 
-  // 选择音频文件（Electron dialog）
+  // 選擇音頻文件（Electron dialog）
   ipcMain.handle(IPC.TTS_PICK_AUDIO, async () => {
     const result = await dialog.showOpenDialog({
-      title: "选择音频文件",
-      filters: [{ name: "音频文件", extensions: ["mp3", "m4a", "wav"] }],
+      title: "選擇音頻文件",
+      filters: [{ name: "音頻文件", extensions: ["mp3", "m4a", "wav"] }],
       properties: ["openFile"],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
   });
 
-  // 音色快速复刻 → voice_id
+  // 音色快速復刻 → voice_id
   ipcMain.handle(IPC.TTS_CLONE, async (_event, payload: {
     apiKey: string; fileId: string; voiceId: string;
     promptAudioId?: string; promptText?: string;
     text: string; model?: string;
   }) => {
     if (!payload?.apiKey || !payload?.fileId || !payload?.voiceId || !payload?.text) {
-      throw new Error("缺少必要参数（apiKey/fileId/voiceId/text）");
+      throw new Error("缺少必要參數（apiKey/fileId/voiceId/text）");
     }
     return await ttsCloneVoice(payload);
   });
 
-  // 语音合成 → base64 音频（聊天朗读 / 测试发音都用这个）
+  // 語音合成 → base64 音頻（聊天朗讀 / 測試發音都用這個）
   ipcMain.handle(IPC.TTS_SYNTHESIZE, async (_event, payload: {
     apiKey: string; voiceId: string; text: string;
     speed?: number; volume?: number; pitch?: number;
     model?: string; format?: "mp3" | "wav" | "pcm";
   }) => {
     if (!payload?.apiKey || !payload?.voiceId || !payload?.text) {
-      throw new Error("缺少必要参数（apiKey/voiceId/text）");
+      throw new Error("缺少必要參數（apiKey/voiceId/text）");
     }
     const audioBuffer = await ttsSynthesize({
       ...payload,
       debugLog: appendMinimaxTtsLog,
     });
-    // Buffer → base64 传给渲染进程（渲染进程用 atob 解码再播）
+    // Buffer → base64 傳給渲染進程（渲染進程用 atob 解碼再播）
     return audioBuffer.toString("base64");
   });
 
@@ -3201,7 +3816,7 @@ app.whenReady().then(async () => {
   }) => {
     const format = payload.format ?? "mp3";
 
-    // 回听优先：如果 expectedCacheKey 对应的缓存文件存在，直接返回，不需要 apiKey/voiceId。
+    // 回聽優先：如果 expectedCacheKey 對應的緩存文件存在，直接返回，不需要 apiKey/voiceId。
     let expectedPath: string | null = null;
     if (payload.expectedCacheKey) {
       try {
@@ -3225,9 +3840,9 @@ app.whenReady().then(async () => {
       };
     }
 
-    // 缓存未命中 → 需要合成，检查 apiKey/voiceId
+    // 緩存未命中 → 需要合成，檢查 apiKey/voiceId
     if (!payload?.apiKey || !payload?.voiceId || !payload?.text || payload.apiKey === "cache-only") {
-      throw new Error("缓存未命中且缺少必要参数（apiKey/voiceId/text）");
+      throw new Error("緩存未命中且缺少必要參數（apiKey/voiceId/text）");
     }
 
     const cacheKey = buildTtsCacheKey(payload);
@@ -3255,8 +3870,8 @@ app.whenReady().then(async () => {
     };
   });
 
-  // 流式语音合成（minimax WS 边合成边推 chunk 给渲染端播）
-  // 主进程同时攒完整 buffer 落盘缓存，下次同文本走缓存
+  // 流式語音合成（minimax WS 邊合成邊推 chunk 給渲染端播）
+  // 主進程同時攢完整 buffer 落盤緩存，下次同文本走緩存
   ipcMain.handle(IPC.TTS_STREAM_START, async (event, payload: {
     apiKey: string; voiceId: string; text: string;
     speed?: number; volume?: number; pitch?: number;
@@ -3266,7 +3881,7 @@ app.whenReady().then(async () => {
     const format = payload.format ?? "mp3";
     const sender = event.sender;
 
-    // 回听优先：expectedCacheKey 命中缓存直接发完整 base64（走 STREAM_END，不走 chunk）
+    // 回聽優先：expectedCacheKey 命中緩存直接發完整 base64（走 STREAM_END，不走 chunk）
     let expectedPath: string | null = null;
     if (payload.expectedCacheKey) {
       try { expectedPath = getTtsCachePath(payload.expectedCacheKey, format); } catch { /* */ }
@@ -3280,14 +3895,14 @@ app.whenReady().then(async () => {
         cacheKey: payload.expectedCacheKey,
         audioBytes: cachedBuf.length,
       });
-      // 缓存命中：一次性发完整音频（渲染端会按 STREAM_END 处理，直接播完整 buffer）
+      // 緩存命中：一次性發完整音頻（渲染端會按 STREAM_END 處理，直接播完整 buffer）
       sender.send(IPC.TTS_AUDIO_CHUNK, { base64: cachedBuf.toString("base64") });
       sender.send(IPC.TTS_STREAM_END, { cacheKey: payload.expectedCacheKey, cached: true, format });
       return { started: false, cacheKey: payload.expectedCacheKey, cached: true };
     }
 
     if (!payload?.apiKey || !payload?.voiceId || !payload?.text) {
-      throw new Error("流式合成缺少必要参数（apiKey/voiceId/text）");
+      throw new Error("流式合成缺少必要參數（apiKey/voiceId/text）");
     }
 
     const cacheKey = buildTtsCacheKey(payload);
@@ -3295,7 +3910,7 @@ app.whenReady().then(async () => {
     fs.mkdirSync(path.dirname(audioPath), { recursive: true });
     const fullChunks: Buffer[] = [];
 
-    // 异步合成，不 await（handler 立即返回，chunk 通过 send 推送）
+    // 異步合成，不 await（handler 立即返回，chunk 通過 send 推送）
     void (async () => {
       try {
         const audioBuffer = await ttsSynthesize({
@@ -3313,7 +3928,7 @@ app.whenReady().then(async () => {
             if (!sender.isDestroyed()) sender.send(IPC.TTS_AUDIO_CHUNK, { base64: chunkBase64 });
           },
         });
-        // 落盘缓存（用完整 buffer，不用拼接的 fullChunks——synthesize 返回的更可靠）
+        // 落盤緩存（用完整 buffer，不用拼接的 fullChunks——synthesize 返回的更可靠）
         fs.writeFileSync(audioPath, audioBuffer);
         appendMinimaxTtsLog({
           requestId: `tts-stream-${Date.now()}`,
@@ -3333,13 +3948,13 @@ app.whenReady().then(async () => {
     return { started: true, cacheKey, cached: false };
   });
 
-  // GPT-SoVITS 语音合成 → base64 音频（测试发音用，不缓存）
+  // GPT-SoVITS 語音合成 → base64 音頻（測試發音用，不緩存）
   ipcMain.handle(IPC.TTS_SYNTHESIZE_GPTSOVITS, async (_event, payload: {
     baseUrl: string; refAudioPath: string; promptText: string; text: string;
     speed?: number; format?: "wav" | "mp3";
   }) => {
     if (!payload?.baseUrl || !payload?.refAudioPath || !payload?.promptText || !payload?.text) {
-      throw new Error("缺少必要参数（baseUrl/refAudioPath/promptText/text）");
+      throw new Error("缺少必要參數（baseUrl/refAudioPath/promptText/text）");
     }
     const result = await gptsovitsSynthesize({
       ...payload,
@@ -3354,7 +3969,7 @@ app.whenReady().then(async () => {
     };
   });
 
-  // GPT-SoVITS 语音合成 + 本地缓存（聊天朗读用）
+  // GPT-SoVITS 語音合成 + 本地緩存（聊天朗讀用）
   ipcMain.handle(IPC.TTS_SYNTHESIZE_CACHED_GPTSOVITS, async (_event, payload: {
     baseUrl: string; refAudioPath: string; promptText: string; text: string;
     speed?: number; format?: "wav" | "mp3";
@@ -3362,7 +3977,7 @@ app.whenReady().then(async () => {
   }) => {
     const format: "wav" | "mp3" = payload.format ?? "wav";
 
-    // 回听优先：如果 expectedCacheKey 对应的缓存文件存在，直接返回，不需要 baseUrl/refAudioPath。
+    // 回聽優先：如果 expectedCacheKey 對應的緩存文件存在，直接返回，不需要 baseUrl/refAudioPath。
     let expectedPath: string | null = null;
     if (payload.expectedCacheKey) {
       try {
@@ -3387,9 +4002,9 @@ app.whenReady().then(async () => {
       };
     }
 
-    // 缓存未命中 → 需要合成，检查必要参数
+    // 緩存未命中 → 需要合成，檢查必要參數
     if (!payload?.baseUrl || !payload?.refAudioPath || !payload?.promptText || !payload?.text) {
-      throw new Error("缓存未命中且缺少必要参数（baseUrl/refAudioPath/promptText/text）");
+      throw new Error("緩存未命中且缺少必要參數（baseUrl/refAudioPath/promptText/text）");
     }
 
     const cacheKey = buildGptsovitsCacheKey(payload);
@@ -3422,13 +4037,13 @@ app.whenReady().then(async () => {
     };
   });
 
-  // 自定义云端 TTS 合成 → base64 音频（测试发音用，不缓存）
+  // 自定義雲端 TTS 合成 → base64 音頻（測試發音用，不緩存）
   ipcMain.handle(IPC.TTS_SYNTHESIZE_CUSTOM_CLOUD, async (_event, payload: {
     endpointUrl: string; apiKey?: string; voiceId?: string; text: string;
     speed?: number; volume?: number; format?: "wav" | "mp3"; timeoutMs?: number;
   }) => {
     if (!payload?.endpointUrl || !payload?.text) {
-      throw new Error("缺少必要参数（endpointUrl/text）");
+      throw new Error("缺少必要參數（endpointUrl/text）");
     }
     const result = await customCloudSynthesize({
       ...payload,
@@ -3443,7 +4058,7 @@ app.whenReady().then(async () => {
     };
   });
 
-  // 自定义云端 TTS 合成 + 本地缓存（聊天朗读用）
+  // 自定義雲端 TTS 合成 + 本地緩存（聊天朗讀用）
   ipcMain.handle(IPC.TTS_SYNTHESIZE_CACHED_CUSTOM_CLOUD, async (_event, payload: {
     endpointUrl: string; apiKey?: string; voiceId?: string; text: string;
     speed?: number; volume?: number; format?: "wav" | "mp3"; timeoutMs?: number;
@@ -3476,7 +4091,7 @@ app.whenReady().then(async () => {
     }
 
     if (!payload?.endpointUrl || !payload?.text) {
-      throw new Error("缓存未命中且缺少必要参数（endpointUrl/text）");
+      throw new Error("緩存未命中且缺少必要參數（endpointUrl/text）");
     }
 
     const cacheKey = buildCustomCloudCacheKey(payload);
@@ -3511,12 +4126,12 @@ app.whenReady().then(async () => {
     };
   });
 
-  // 小米 MiMo TTS 合成 → base64 音频（测试发音用，不缓存）
+  // 小米 MiMo TTS 合成 → base64 音頻（測試發音用，不緩存）
   ipcMain.handle(IPC.TTS_SYNTHESIZE_MIMO, async (_event, payload: {
     apiKey: string; voiceAudioPath?: string; text: string; stylePrompt?: string;
   }) => {
     if (!payload?.apiKey || !payload?.voiceAudioPath || !payload?.text) {
-      throw new Error("缺少必要参数（apiKey/voiceAudioPath/text）");
+      throw new Error("缺少必要參數（apiKey/voiceAudioPath/text）");
     }
     const result = await mimoSynthesize({
       apiKey: payload.apiKey,
@@ -3534,7 +4149,7 @@ app.whenReady().then(async () => {
     };
   });
 
-  // 小米 MiMo TTS 合成 + 本地缓存（聊天朗读用）
+  // 小米 MiMo TTS 合成 + 本地緩存（聊天朗讀用）
   ipcMain.handle(IPC.TTS_SYNTHESIZE_CACHED_MIMO, async (_event, payload: {
     apiKey: string; voiceAudioPath?: string; text: string; stylePrompt?: string;
     expectedCacheKey?: string;
@@ -3566,7 +4181,7 @@ app.whenReady().then(async () => {
     }
 
     if (!payload?.apiKey || !payload?.voiceAudioPath || !payload?.text || payload.apiKey === "cache-only") {
-      throw new Error("缓存未命中且缺少必要参数（apiKey/voiceAudioPath/text）");
+      throw new Error("緩存未命中且缺少必要參數（apiKey/voiceAudioPath/text）");
     }
 
     const cacheKey = buildMimoCacheKey(payload);
@@ -3597,59 +4212,96 @@ app.whenReady().then(async () => {
     };
   });
 
-  // 聊天会话存储 IPC（chats-store.initialize 会建好 cyrene-chats 目录并加载 index）
+  // 聊天會話存儲 IPC（chats-store.initialize 會建好 cyrene-chats 目錄並加載 index）
   registerChatsIpc();
 
-  // 历史召回工具（recall_history）——让模型能回忆滚出窗口的对话
+  // 歷史召回工具（recall_history）——讓模型能回憶滾出窗口的對話
   registerRecallHistoryTool();
 
-  // 文档生成工具（write_excel/write_word/write_pdf/write_markdown）
+  // 文檔生成工具（write_excel/write_word/write_pdf/write_markdown）
   registerDocumentTools();
 
-  // 生活类工具（记账/汇率/翻译/代码补丁）
-  // 翻译需要主模型，注入 loadModelSettings getter
+  // 生活類工具（記賬/匯率/翻譯/代碼補丁）
+  // 翻譯需要主模型，注入 loadModelSettings getter
   setTranslateConfig(() => {
     const s = loadModelSettings();
     return s.apiKey ? { provider: s.provider, baseUrl: s.baseUrl, model: s.model, apiKey: s.apiKey } : null;
   });
   registerLifeTools();
 
-  // 出行工具（路线规划——驾车/步行/骑行/公交，复用 amapKey）
+  // 出行工具（路線規劃——駕車/步行/騎行/公交，複用 amapKey）
   registerTravelTools();
 
-  // 邮件发送工具（SMTP 直发，需在设置里配置 SMTP 授权码）
+  // 郵件發送工具（SMTP 直髮，需在設置裡配置 SMTP 授權碼）
   registerEmailTools();
   syncBuiltInToolToggles(loadGeneralSettings());
 
-  // 内置 MCP 自动连接：Playwright (默认关闭,选项控制)
+  // 內置 MCP 自動連接：Playwright (默認關閉,選項控制)
   const initialSettings = loadGeneralSettings();
 
-  // 一次性清理已下架的内置 MCP（Firecrawl hosted 等）
+  // 一次性清理已下架的內置 MCP（Firecrawl hosted 等）
   const removed = await pruneMcpServersByIds([...REMOVED_BUILTIN_MCP_IDS]);
   if (removed.length > 0) {
-    console.log("[Cyrene] 已清理遗留的已下架内置 MCP:", removed.join(", "));
+    console.log("[Cyrene] 已清理遺留的已下架內置 MCP:", removed.join(", "));
   }
 
   void syncPlaywrightMcp(initialSettings).catch((e) =>
     console.error("[Cyrene] playwright MCP sync failed:", e)
   );
 
-  // Skill 系统：扫描双源 skills + 注册 meta-tool
+  // Skill 系統：掃描雙源 skills + 註冊 meta-tool
   initSkills();
 
-  // 游戏代肝：IPC + game_bot_start 工具
+  // 遊戲代肝：IPC + game_bot_start 工具
   initGameBot();
 
-  // 多渠道（微信/飞书/...）：先注入 dispatcher 的 buildAndRunAgent + TTS + 镜像广播 + 最近历史读取，
-  // 让 channels 模块拿到真 agent + 出站增强能力 + 对话上下文。
+  // 內建遊戲房：比分持久化 + Live2D 回合反應
+  initGameRoom(sendToLive2DWindow);
+
+  // 多渠道（微信/飛書/...）：先注入 dispatcher 的 buildAndRunAgent + TTS + 鏡像廣播 + 最近歷史讀取，
+  // 讓 channels 模塊拿到真 agent + 出站增強能力 + 對話上下文。
   setDispatcherLoadRecentHistory(async (sessionId, limit) => {
-    // 委托给 history-log：读 userData/channels/history/<sessionId>.jsonl 最新 N 条
+    // 委託給 history-log：讀 userData/channels/history/<sessionId>.jsonl 最新 N 條
     const { loadRecentHistory } = await import("./channels/history-log");
     return loadRecentHistory(sessionId, limit);
   });
 
+  const channelSessionModes = new Map<string, string>();
+
   setDispatcherBuildAndRunAgent(async (msg, sessionId, priorMessages) => {
-    // Phase 3.3：按 toolSandbox 过滤可用工具
+    const textTrimmed = msg.text.trim();
+    if (textTrimmed === "/study") {
+      channelSessionModes.set(sessionId, "study");
+      return "昔漣已為你切換至學習模式（英文教學、無語音）！\nCyrene has switched to Study Mode (English, no TTS) for you! ♪";
+    }
+    if (textTrimmed === "/talk") {
+      channelSessionModes.set(sessionId, "talk");
+      return "昔漣已為你切換至日常聊天模式！♪";
+    }
+    if (textTrimmed === "/collab") {
+      channelSessionModes.set(sessionId, "collab");
+      return "昔漣已為你切換至協作模式！♪";
+    }
+
+    // 根據語意動態切換模式（適用於 DC 等多渠道對話）
+    const isGameQueryDC = ["攻略", "遊戲", "打法", "配隊"].some(k => msg.text.includes(k));
+    if (msg.text.includes("昔漣老師")) {
+      channelSessionModes.set(sessionId, "study");
+    } else if (msg.text.includes("昔漣")) {
+      channelSessionModes.set(sessionId, "collab");
+    } else if (isGameQueryDC) {
+      channelSessionModes.set(sessionId, "game");
+    } else if (isEnglishText(msg.text)) {
+      channelSessionModes.set(sessionId, "study");
+    }
+
+    const currentMode = channelSessionModes.get(sessionId) || "collab";
+    let style = "01_default.md";
+    if (currentMode === "study") style = "study";
+    else if (currentMode === "talk") style = "talk";
+    else if (currentMode === "game") style = "game";
+
+    // Phase 3.3：按 toolSandbox 過濾可用工具
     const sandbox = loadChannelsSettings().toolSandbox;
     const allTools = toolRegistry.getEnabledTools();
     const filteredTools: ToolDefinition[] = sandbox === "safe-only"
@@ -3660,8 +4312,8 @@ app.whenReady().then(async () => {
       `msg.channel=${msg.channel} sandbox=${sandbox} tools=${filteredTools.length}/${allTools.length} priorMsgs=${priorMessages?.length ?? 0}`,
     );
 
-    // Phase A：拼接历史 (同桌面端 buildModelMessages 行为: 上滑窗最近 N 条).
-    // history-log 统一存 role: "user"|"assistant", 直接用即可.
+    // Phase A：拼接歷史 (同桌面端 buildModelMessages 行為: 上滑窗最近 N 條).
+    // history-log 統一存 role: "user"|"assistant", 直接用即可.
     const historyMessages = (priorMessages ?? [])
       .filter((m) => typeof m.content === "string" && m.content.trim().length > 0)
       .map((m) => ({
@@ -3669,14 +4321,14 @@ app.whenReady().then(async () => {
         content: m.content,
       }));
 
-    // 把 IncomingMessage 转成 AguiRunInput，调 CyreneAgent
+    // 把 IncomingMessage 轉成 AguiRunInput，調 CyreneAgent
     const { options } = await buildAgentRunOptions(
       {
         messages: [
           ...historyMessages,
           { role: "user", content: msg.text },
         ],
-        style: "01_default.md",
+        style,
         sessionId,
         attachments: msg.attachments?.map((a) => ({
           name: a.filePath ?? a.url ?? "attachment",
@@ -3686,7 +4338,7 @@ app.whenReady().then(async () => {
       },
       buildOptionsDeps,
     );
-    // 把过滤后的 tools 注入 options（覆盖默认的 getEnabledTools）
+    // 把過濾後的 tools 注入 options（覆蓋默認的 getEnabledTools）
     options.tools = filteredTools;
 
     const threadId = `thread-${sessionId}-${Date.now()}`;
@@ -3700,22 +4352,41 @@ app.whenReady().then(async () => {
       });
     });
     if (agent.lastResult) {
-      await onAgentRunFinished(agent.lastResult, msg.text, onRunFinishedDeps, msg.channel);
+      const stickerId = await onAgentRunFinished(agent.lastResult, msg.text, onRunFinishedDeps, msg.channel);
+      if (msg.channel === "discord") {
+        void recordDiscordToolActionsInNotebook(agent.lastResult.toolResults, {
+          companionName: msg.senderName,
+        });
+      }
+      // Dispatcher 會依渠道能力把這個 part 交給 Discord；其他不支援的渠道會自動略過。
+      const stickerPath = msg.channel === "discord" && stickerId
+        ? resolveStickerImagePath(stickerId)
+        : null;
+      if (stickerId && !stickerPath) {
+        console.warn(`[stickers] 找不到表情包圖片，略過渠道發送: ${stickerId}`);
+      }
+      void indexConversationTurn(sessionId, msg.text, reply);
+      return {
+        text: reply,
+        ...(stickerId && stickerPath
+          ? { sticker: { id: stickerId, imagePath: stickerPath } }
+          : {}),
+      };
     }
-    // 落历史
+    // 落歷史
     void indexConversationTurn(sessionId, msg.text, reply);
     return reply;
   });
 
-  // Phase 3.1：注入 TTS 合成 —— dispatcher 在 reply 后会用这个生成 mp3
-  setDispatcherSynthesizeTts(async (text: string) => {
+  // Phase 3.1：注入 TTS 合成 —— dispatcher 在 reply 後會用這個生成 mp3
+  const synthesizeChannelTts = async (text: string): Promise<{ audio: Buffer; format: "wav" | "mp3" } | null> => {
     const cfg = loadGeneralSettings();
     if (cfg.ttsEngine === "off") return null;
     if (cfg.ttsEngine === "minimax" && (!cfg.ttsMinimaxKey || !cfg.ttsMinimaxVoiceId)) return null;
     if (cfg.ttsEngine === "gptsovits" && (!cfg.ttsGptsovitsBaseUrl || !cfg.ttsGptsovitsRefAudioPath || !cfg.ttsGptsovitsPromptText)) return null;
     if (cfg.ttsEngine === "custom-cloud" && !cfg.ttsCustomCloudEndpointUrl) return null;
     if (cfg.ttsEngine === "mimo" && (!cfg.ttsMimoKey || !cfg.ttsMimoVoiceAudioPath)) return null;
-    // 限制 TTS 文本长度（飞书 audio 100M 限制 + 用户体验，太长应截断）
+    // 限制 TTS 文本長度（飛書 audio 100M 限制 + 用戶體驗，太長應截斷）
     const ttsText = text.length > 1000 ? text.slice(0, 1000) + "…" : text;
     try {
       const result = await synthesizeByEngine(cfg.ttsEngine, {
@@ -3744,16 +4415,25 @@ app.whenReady().then(async () => {
         // mimo
         voiceAudioPath: cfg.ttsMimoVoiceAudioPath,
         stylePrompt: cfg.ttsMimoStylePrompt,
-        format: "mp3",
+        format: cfg.ttsEngine === "gptsovits"
+          ? cfg.ttsGptsovitsFormat
+          : cfg.ttsEngine === "custom-cloud"
+            ? cfg.ttsCustomCloudFormat
+            : "mp3",
       });
-      return result.audio;
+      return result;
     } catch (err) {
-      console.warn("[Channels] TTS 合成失败:", err instanceof Error ? err.message : err);
+      console.warn("[Channels] TTS 合成失敗:", err instanceof Error ? err.message : err);
       return null;
     }
+  };
+  setDispatcherSynthesizeTts(synthesizeChannelTts);
+  setDiscordVoiceServices({
+    transcribe: transcribeCallPcm,
+    synthesize: synthesizeChannelTts,
   });
 
-  // Phase 3.2：注入桌面端镜像广播 —— 把 bot 入站/出站消息推到 chatWindow
+  // Phase 3.2：注入桌面端鏡像廣播 —— 把 bot 入站/出站消息推到 chatWindow
   setDispatcherBroadcastChat((event) => {
     const win = chatWindow;
     if (!win || win.isDestroyed()) return;
@@ -3764,16 +4444,16 @@ app.whenReady().then(async () => {
         value: event,
       });
     } catch (err) {
-      console.warn("[Channels] botMessage 广播失败:", err);
+      console.warn("[Channels] botMessage 廣播失敗:", err);
     }
   });
 
   void initChannels();
 
-  // 任务清单（todo_write 工具的持久化 + 事件广播）：
-  // - loadTodos 从磁盘恢复上次未完成的任务（跨重启延续）
-  // - onTodosChange 订阅变化，把 TodoState 作为 CUSTOM 事件转发给所有聊天窗口
-  //   渲染端收到 cyrene.todos 后渲染左上角进度面板
+  // 任務清單（todo_write 工具的持久化 + 事件廣播）：
+  // - loadTodos 從磁盤恢復上次未完成的任務（跨重啟延續）
+  // - onTodosChange 訂閱變化，把 TodoState 作為 CUSTOM 事件轉發給所有聊天窗口
+  //   渲染端收到 cyrene.todos 後渲染左上角進度面板
   loadTodos();
   onTodosChange((state) => {
     for (const win of BrowserWindow.getAllWindows()) {
@@ -3785,21 +4465,28 @@ app.whenReady().then(async () => {
           value: state,
         });
       } catch (e) {
-        console.warn("[Cyrene] todos 广播失败:", e);
+        console.warn("[Cyrene] todos 廣播失敗:", e);
       }
     }
   });
 
   const schedulerStore = getSchedulerStore();
   schedulerStore.load();
+  syncDailyRitualTasks(loadGeneralSettings(), schedulerStore);
   const schedulerRunner = createSchedulerRunner({
     buildOptions: async (task: ScheduledTask) => {
       const settings = loadModelSettings();
-      if (!settings.apiKey) throw new Error("还没有填写 API Key，请先在设置里保存 API 配置。");
-      const messages = [{ role: "user" as const, content: task.prompt }];
+      if (!settings.apiKey) throw new Error("還沒有填寫 API Key，請先在設置裡保存 API 配置。");
+      const currentTodos = getCurrentTodos().todos
+        .filter(todo => todo.status !== "completed")
+        .slice(0, 8)
+        .map(todo => `- [${todo.status === "in_progress" ? "進行中" : "待辦"}] ${todo.content}`)
+        .join("\n");
+      const prompt = getDailyRitualPrompt(task, currentTodos);
+      const messages = [{ role: "user" as const, content: prompt }];
       let alwaysOnContext = "";
       try {
-        alwaysOnContext = await buildAlwaysOnContext(task.prompt, messages);
+        alwaysOnContext = await buildAlwaysOnContext(prompt, messages);
       } catch (err) {
         console.warn("[Scheduler] always-on context build failed:", err);
       }
@@ -3829,6 +4516,18 @@ app.whenReady().then(async () => {
     recordHistory: (entry) => schedulerStore.recordHistory(entry),
     id: () => `hist-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     now: () => new Date(),
+    onSuccess: async (task, result) => {
+      if (!isDailyRitualTask(task) || !result.reply?.trim()) return;
+      const cfg = loadGeneralSettings();
+      const speech = await synthesizeDailyRitual(result.reply, cfg);
+      showGeneratedBubble(
+        result.reply,
+        speech?.base64 ?? "",
+        speech?.format ?? "mp3",
+        Math.max(2200, Math.min(20000, result.reply.length * 190)),
+        `daily-ritual-${task.ritualId}`,
+      );
+    },
   });
   schedulerEngine = new SchedulerEngine({
     store: schedulerStore,
@@ -3836,10 +4535,10 @@ app.whenReady().then(async () => {
   });
   registerSchedulerIpc(schedulerStore, schedulerEngine, () => toolRegistry.getAllTools());
 
-  // AG-UI 事件流桥：渲染进程 invoke(AGUI_RUN) → CyreneAgent 跑 FC 循环 → 事件透传
-  // buildOptions 复用 requestModelReply 的上下文构建；onRunFinished 复用副作用
-  // Phase 0 重构：抽出到 orchestrator/build-options.ts，三处共用（桌面 / scheduler / bot）
-  // deps 函数签名故意宽 (unknown/ReadonlyArray)；这里做一次包装把强类型函数适配进去
+  // AG-UI 事件流橋：渲染進程 invoke(AGUI_RUN) → CyreneAgent 跑 FC 循環 → 事件透傳
+  // buildOptions 複用 requestModelReply 的上下文構建；onRunFinished 複用副作用
+  // Phase 0 重構：抽出到 orchestrator/build-options.ts，三處共用（桌面 / scheduler / bot）
+  // deps 函數簽名故意寬 (unknown/ReadonlyArray)；這裡做一次包裝把強類型函數適配進去
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const buildOptionsDeps: BuildOptionsDeps = {
     loadModelSettings: () => loadModelSettings(),
@@ -3893,7 +4592,9 @@ app.whenReady().then(async () => {
   };
   registerAgUiIpc(
     async (input: AguiRunInput) => buildAgentRunOptions(input, buildOptionsDeps),
-    async (result, latestUserText) => onAgentRunFinished(result, latestUserText, onRunFinishedDeps),
+    async (result, latestUserText) => {
+      await onAgentRunFinished(result, latestUserText, onRunFinishedDeps);
+    },
     () => chatWindow,
   );
 
@@ -3901,8 +4602,8 @@ app.whenReady().then(async () => {
     createChatWindow(sessionId);
     return true;
   });
-  // 聊天窗口启动/切换会话时上报当前活跃 sessionId；main 广播给所有窗口
-  // 用途：设置面板"删除当前会话"时差异化提示文案
+  // 聊天窗口啟動/切換會話時上報當前活躍 sessionId；main 廣播給所有窗口
+  // 用途：設置面板"刪除當前會話"時差異化提示文案
   ipcMain.handle(IPC.CHATS_SET_ACTIVE_SESSION, (_event, sessionId: string | null) => {
     activeChatSessionId = sessionId ?? null;
     for (const win of BrowserWindow.getAllWindows()) {
@@ -3913,22 +4614,27 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle(IPC.CHATS_GET_ACTIVE_SESSION, () => activeChatSessionId);
 
+  ipcMain.on("sidebar:report-slot-bounds", (event, bounds) => {
+    lastSlotBounds = { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
+    isPetDocked = bounds.isDocked;
+    syncPetChatInputVisibility();
+    updatePetDockPosition();
+  });
+
   const generalSettings = loadGeneralSettings();
   createWindow();
-  createChatWindow();
-  if (generalSettings.sidebarVisible) createSidebarWindow();
-  if (generalSettings.tasksVisible) createTasksWindow();
+  createSidebarWindow();
   createTray();
-  // 权限模块初始化：必须在 createWindow 之后但任意工具调用之前
+  // 權限模塊初始化：必須在 createWindow 之後但任意工具調用之前
   initPermissionFromDisk();
   registerPermissionIpc();
   registerChoiceIpc();
   registerCallIpc();
-  console.log("[Cyrene] 当前 agent 权限档位:", getCurrentLevel());
+  console.log("[Cyrene] 當前 agent 權限檔位:", getCurrentLevel());
   try {
     const modelSettings = loadModelSettings();
     await initRAG("auto", undefined, undefined, modelSettings.embeddingModel);
-      // 初始化 MCP Manager；scheduler 启动前等待一次，避免近即时任务早于 MCP 工具恢复。
+      // 初始化 MCP Manager；scheduler 啟動前等待一次，避免近即時任務早於 MCP 工具恢復。
       await initMcpManager();
       console.log("[Cyrene] RAG initialized OK");
 
@@ -3954,8 +4660,8 @@ app.whenReady().then(async () => {
     console.error("[StickerEmbedding] Init failed:", (err as Error).message);
   }
 
-  // 初始化场景 embedding 索引（语气注入用，替代关键词匹配）
-  // 用 bge-m3（多语言，中文效果好），和文档/记忆的 minilm 独立
+  // 初始化場景 embedding 索引（語氣注入用，替代關鍵詞匹配）
+  // 用 bge-m3（多語言，中文效果好），和文檔/記憶的 minilm 獨立
   try {
     const sceneProvider = getSceneEmbeddingProvider();
     if (sceneProvider) {
@@ -3968,16 +4674,248 @@ app.whenReady().then(async () => {
     console.error("[SceneEmbedding] Init failed:", (err as Error).message);
   }
 
+  // 昔漣的創作工作台（OpenRouter / Gemini 圖片生成）IPC 處理器
+  ipcMain.handle("paint:build-prompt", async (_event, description: string) => {
+    try {
+      const settings = loadModelSettings();
+      if (!settings.apiKey) {
+        throw new Error("還沒有填寫 API Key，請先在設置裡保存 API 配置。");
+      }
+      
+      const promptMessages = [
+        {
+          role: "system" as const,
+          content: "You convert Traditional Chinese image briefs into concise, production-ready English prompts for modern image generation models. Preserve the user's requested subject, clothing, pose, camera, lighting, mood, and style. Use natural descriptive English rather than Danbooru keyword spam. Output only the final prompt with no markdown, commentary, headings, or quotation marks. Do not invent nudity or sexual content."
+        },
+        {
+          role: "user" as const,
+          content: description
+        }
+      ];
+      
+      const result = await callChatCompletions(
+        settings,
+        promptMessages,
+        undefined,
+        15000,
+        "繪圖提示詞生成"
+      );
+      return result || "";
+    } catch (err: any) {
+      console.error("[Paint] build-prompt error:", err?.message || err);
+      return "";
+    }
+  });
+
+  const getPaintCredentials = () => {
+    const settings = loadModelSettings();
+    const openRouterProfile = settings.perProvider?.Custom;
+    const geminiProfile = settings.perProvider?.["Gemini（Google）"];
+    return {
+      openrouter: {
+        apiKey: openRouterProfile?.apiKey || process.env.OPENROUTER_API_KEY || "",
+        baseUrl: (openRouterProfile?.baseUrl || "https://openrouter.ai/api/v1").replace(/\/$/, ""),
+        model: openRouterProfile?.model || "google/gemini-3.1-flash-image",
+      },
+      gemini: {
+        apiKey: geminiProfile?.apiKey || process.env.GEMINI_API_KEY || "",
+        model: geminiProfile?.model || "gemini-3.1-flash-image",
+      },
+    };
+  };
+
+  ipcMain.handle("paint:get-connections", () => {
+    const credentials = getPaintCredentials();
+    return [
+      {
+        provider: "openrouter",
+        label: "OpenRouter Image API",
+        connected: Boolean(credentials.openrouter.apiKey),
+        model: credentials.openrouter.model,
+      },
+      {
+        provider: "gemini",
+        label: "Gemini 原生圖片 API",
+        connected: Boolean(credentials.gemini.apiKey),
+        model: credentials.gemini.model,
+      },
+    ];
+  });
+
+  type PaintImagePayload = {
+    provider: "openrouter" | "gemini";
+    prompt: string;
+    model: string;
+    aspectRatio: string;
+    resolution: "1K" | "2K" | "4K";
+    quality: "auto" | "low" | "medium" | "high";
+    references?: Array<{ dataUrl: string; mimeType: string }>;
+  };
+
+  const parseDataUrl = (dataUrl: string, fallbackMimeType: string) => {
+    const match = /^data:([^;,]+);base64,(.+)$/s.exec(dataUrl);
+    if (!match) throw new Error("參考圖格式無效，請重新選擇 PNG、JPEG 或 WebP 圖片。");
+    return { mimeType: match[1] || fallbackMimeType, data: match[2] };
+  };
+
+  const readErrorResponse = async (response: Response) => {
+    const body = await response.text();
+    try {
+      const parsed = JSON.parse(body) as { error?: { message?: string } | string; message?: string };
+      if (typeof parsed.error === "string") return parsed.error;
+      return parsed.error?.message || parsed.message || body;
+    } catch {
+      return body || `HTTP ${response.status}`;
+    }
+  };
+
+  const savePaintImage = (bytes: Uint8Array, mimeType = "image/png") => {
+    const extension = mimeType.includes("jpeg") ? "jpg" : mimeType.includes("webp") ? "webp" : "png";
+    const outputDir = path.join(app.getPath("pictures"), "Cyrene Studio");
+    fs.mkdirSync(outputDir, { recursive: true });
+    const savedPath = path.join(outputDir, `cyrene-${Date.now()}.${extension}`);
+    fs.writeFileSync(savedPath, bytes);
+    return savedPath;
+  };
+
+  const savePaintBase64 = (data: string, mimeType = "image/png") =>
+    savePaintImage(Buffer.from(data, "base64"), mimeType);
+
+  const savePaintUrl = async (url: string) => {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`下載生成圖片失敗：HTTP ${response.status}`);
+    const mimeType = response.headers.get("content-type") || "image/png";
+    return savePaintImage(new Uint8Array(await response.arrayBuffer()), mimeType);
+  };
+
+  const findGeminiImage = (value: unknown, depth = 0): { data: string; mimeType: string } | null => {
+    if (depth > 7 || value == null) return null;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const found = findGeminiImage(item, depth + 1);
+        if (found) return found;
+      }
+      return null;
+    }
+    if (typeof value !== "object") return null;
+    const record = value as Record<string, unknown>;
+    const data = typeof record.data === "string" ? record.data : undefined;
+    const mimeType = typeof record.mime_type === "string"
+      ? record.mime_type
+      : typeof record.mimeType === "string"
+        ? record.mimeType
+        : undefined;
+    if (data && (!mimeType || mimeType.startsWith("image/"))) {
+      return { data, mimeType: mimeType || "image/png" };
+    }
+    for (const child of Object.values(record)) {
+      const found = findGeminiImage(child, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  ipcMain.handle("paint:generate-image", async (_event, payload: PaintImagePayload) => {
+    try {
+      if (!payload?.prompt?.trim()) throw new Error("繪圖 Prompt 不可為空。");
+      const credentials = getPaintCredentials();
+      const references = (payload.references || []).slice(0, 4);
+
+      if (payload.provider === "openrouter") {
+        const apiKey = credentials.openrouter.apiKey;
+        if (!apiKey) throw new Error("尚未設定 OpenRouter API Key，請到設定頁完成連接。");
+        const inputReferences = references.map((reference) => ({
+          type: "image_url",
+          image_url: { url: reference.dataUrl },
+        }));
+        const response = await fetch(`${credentials.openrouter.baseUrl}/images`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://cyrene.local",
+            "X-Title": "Cyrene Painting Studio",
+          },
+          body: JSON.stringify({
+            model: payload.model || "google/gemini-3.1-flash-image",
+            prompt: payload.prompt,
+            n: 1,
+            aspect_ratio: payload.aspectRatio || "1:1",
+            resolution: payload.resolution || "1K",
+            quality: payload.quality || "auto",
+            output_format: "png",
+            ...(inputReferences.length > 0 ? { input_references: inputReferences } : {}),
+          }),
+        });
+        if (!response.ok) throw new Error(`OpenRouter：${await readErrorResponse(response)}`);
+        const result = await response.json() as { data?: Array<{ b64_json?: string; media_type?: string; url?: string }> };
+        const image = result.data?.[0];
+        if (image?.b64_json) {
+          const mimeType = image.media_type || "image/png";
+          return {
+            dataUrl: `data:${mimeType};base64,${image.b64_json}`,
+            savedPath: savePaintBase64(image.b64_json, mimeType),
+          };
+        }
+        if (image?.url) return { dataUrl: image.url, savedPath: await savePaintUrl(image.url) };
+        throw new Error("OpenRouter 回應中沒有圖片資料。");
+      }
+
+      const apiKey = credentials.gemini.apiKey;
+      if (!apiKey) throw new Error("尚未設定 Gemini API Key，請到設定頁完成連接。");
+      const model = payload.model || "gemini-3.1-flash-image";
+      const imageSize = model.includes("flash-lite-image") ? "1K" : payload.resolution || "1K";
+      const input: Array<Record<string, string>> = [{ type: "text", text: payload.prompt }];
+      for (const reference of references) {
+        const parsed = parseDataUrl(reference.dataUrl, reference.mimeType);
+        input.push({ type: "image", mime_type: parsed.mimeType, data: parsed.data });
+      }
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+        method: "POST",
+        headers: {
+          "x-goog-api-key": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          input,
+          response_format: {
+            type: "image",
+            mime_type: "image/jpeg",
+            aspect_ratio: payload.aspectRatio || "1:1",
+            image_size: imageSize,
+          },
+        }),
+      });
+      if (!response.ok) throw new Error(`Gemini：${await readErrorResponse(response)}`);
+      const result = await response.json() as unknown;
+      const image = findGeminiImage(result);
+      if (!image) throw new Error("Gemini 回應中沒有圖片資料。");
+      return {
+        dataUrl: `data:${image.mimeType};base64,${image.data}`,
+        savedPath: savePaintBase64(image.data, image.mimeType),
+      };
+    } catch (err: any) {
+      console.error("[Paint] generate-image error:", err?.message || err);
+      throw err;
+    }
+  });
+
   schedulerEngine.start();
 });
 
-app.on("window-all-closed", () => {});
+// 雲端 Discord Bot 會持續在線；桌面視窗全關閉時也應真正結束本機程序，
+// 避免隱藏在背景的 Discord client 與雲端同時搶同一個 interaction。
+app.on("window-all-closed", () => {
+  app.quit();
+});
 
-// 应用退出前把 token 用量缓存落盘（防抖未触发的最后一次写）
+// 應用退出前把 token 用量緩存落盤（防抖未觸發的最後一次寫）
 app.on("before-quit", () => {
   schedulerEngine?.stop();
   stopOpener();
   flushTokenUsage();
+  flushCallUsage();
   void shutdownChannels();
 });
 
@@ -3986,10 +4924,3 @@ app.on("activate", () => {
     createWindow();
   }
 });
-
-
-
-
-
-
-

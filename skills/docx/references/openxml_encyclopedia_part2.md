@@ -1247,11 +1247,11 @@ body.AppendChild(styledTable);
 body.AppendChild(new Paragraph());  // Empty paragraph after table
 ```
 
-### 2.15 Three-Line Table (学术三线表)
+### 2.15 Three-Line Table (學術三線表)
 
 ```csharp
 // =============================================================================
-// THREE-LINE TABLE (学术三线表)
+// THREE-LINE TABLE (學術三線表)
 // =============================================================================
 // Academic/scientific table style common in Chinese academic publishing:
 //   - Top border: THICK (1.5pt)
@@ -1801,14 +1801,14 @@ tblHeaderPart.Header = new Header(headerTable, new Paragraph());
 tblHeaderPart.Header.Save();
 ```
 
-### 3.9 Chinese Government Document Page Numbers (公文页码)
+### 3.9 Chinese Government Document Page Numbers (公文頁碼)
 
 ```csharp
 // =============================================================================
-// CHINESE GOVERNMENT DOCUMENT PAGE NUMBERS (公文页码)
+// CHINESE GOVERNMENT DOCUMENT PAGE NUMBERS (公文頁碼)
 // =============================================================================
 // Standard: bottom center, format "-X-" (em-dash surrounding page number)
-// Font: 宋体 (SimSun) 四号 (14pt = "28" half-points)
+// Font: 宋體 (SimSun) 四號 (14pt = "28" half-points)
 // Per GB/T 9704-2012
 
 var govFooterPart = mainPart.AddNewPart<FooterPart>();
@@ -1819,7 +1819,7 @@ var govFooterPara = new Paragraph(
         new Justification { Val = JustificationValues.Center })
 );
 
-// Run properties for 宋体四号
+// Run properties for 宋體四號
 RunProperties GovPageRunProps() => new RunProperties(
     new RunFonts
     {
@@ -1827,7 +1827,7 @@ RunProperties GovPageRunProps() => new RunProperties(
         HighAnsi = "SimSun",
         EastAsia = "SimSun"
     },
-    new FontSize { Val = "28" },           // 14pt = 四号
+    new FontSize { Val = "28" },           // 14pt = 四號
     new FontSizeComplexScript { Val = "28" }
 );
 

@@ -2,7 +2,7 @@ import * as fs from "fs"
 import * as path from "path"
 import { app } from "electron"
 
-export type RelationshipChannel = "desktop" | "wechat" | "feishu"
+export type RelationshipChannel = "desktop" | "wechat" | "feishu" | "discord"
 
 export interface RelationshipTurnInput {
   userText: string
@@ -59,11 +59,11 @@ function compact(text: string, max = 120): string {
 }
 
 function detectUserMood(text: string): string {
-  if (/累|疲惫|困|没精神|撑不住|倦/.test(text)) return "疲惫"
-  if (/不要|别|不想|不喜欢|太影响|影响观感|先不|别.*问|不要.*确认/.test(text)) return "明确边界"
-  if (/焦虑|压力|烦|崩|紧张|担心|慌/.test(text)) return "焦虑"
-  if (/难过|伤心|委屈|失落|想哭/.test(text)) return "低落"
-  if (/开心|高兴|舒服|喜欢|好耶|太好了/.test(text)) return "开心"
+  if (/累|疲憊|困|沒精神|撐不住|倦/.test(text)) return "疲憊"
+  if (/不要|別|不想|不喜歡|太影響|影響觀感|先不|別.*問|不要.*確認/.test(text)) return "明確邊界"
+  if (/焦慮|壓力|煩|崩|緊張|擔心|慌/.test(text)) return "焦慮"
+  if (/難過|傷心|委屈|失落|想哭/.test(text)) return "低落"
+  if (/開心|高興|舒服|喜歡|好耶|太好了/.test(text)) return "開心"
   return "未知"
 }
 
@@ -72,45 +72,45 @@ function deriveSignal(userText: string, userMood: string): {
   importantMoment?: string
   nextCareCue: string
 } {
-  if (userMood === "明确边界") {
+  if (userMood === "明確邊界") {
     return {
-      relationshipSignal: "用户表达了低打扰偏好或体验边界，需要优先尊重，不要把关心做成打断。",
-      importantMoment: "用户明确表示不喜欢影响观感的确认卡片或过度询问。",
-      nextCareCue: "不要弹确认或反复追问；先按用户偏好安静执行，必要时用一句话确认。",
+      relationshipSignal: "用戶表達了低打擾偏好或體驗邊界，需要優先尊重，不要把關心做成打斷。",
+      importantMoment: "用戶明確表示不喜歡影響觀感的確認卡片或過度詢問。",
+      nextCareCue: "不要彈確認或反覆追問；先按用戶偏好安靜執行，必要時用一句話確認。",
     }
   }
 
-  if (userMood === "疲惫") {
+  if (userMood === "疲憊") {
     return {
-      relationshipSignal: "用户显露疲惫状态，更需要低压力陪伴和短回应。",
-      nextCareCue: "下次回应提示：少安排、少追问，语气放慢，先接住状态。",
+      relationshipSignal: "用戶顯露疲憊狀態，更需要低壓力陪伴和短回應。",
+      nextCareCue: "下次回應提示：少安排、少追問，語氣放慢，先接住狀態。",
     }
   }
 
-  if (userMood === "焦虑") {
+  if (userMood === "焦慮") {
     return {
-      relationshipSignal: "用户可能处在压力或焦虑里，需要稳定感和清晰的小步建议。",
-      nextCareCue: "下次回应提示：先安抚，再给一两个可执行小步，不要铺太大。",
+      relationshipSignal: "用戶可能處在壓力或焦慮裡，需要穩定感和清晰的小步建議。",
+      nextCareCue: "下次回應提示：先安撫，再給一兩個可執行小步，不要鋪太大。",
     }
   }
 
   if (userMood === "低落") {
     return {
-      relationshipSignal: "用户情绪偏低，需要被理解和陪着，而不是立刻被纠正。",
-      nextCareCue: "下次回应提示：先承认感受，再轻轻陪伴，不要急着总结道理。",
+      relationshipSignal: "用戶情緒偏低，需要被理解和陪著，而不是立刻被糾正。",
+      nextCareCue: "下次回應提示：先承認感受，再輕輕陪伴，不要急著總結道理。",
     }
   }
 
-  if (userMood === "开心") {
+  if (userMood === "開心") {
     return {
-      relationshipSignal: "用户反馈偏积极，可以保持轻快互动并记住触发愉快的点。",
-      nextCareCue: "下次回应提示：可以更轻松一点，延续用户的好状态。",
+      relationshipSignal: "用戶反饋偏積極，可以保持輕快互動並記住觸發愉快的點。",
+      nextCareCue: "下次回應提示：可以更輕鬆一點，延續用戶的好狀態。",
     }
   }
 
   return {
-    relationshipSignal: "本轮互动没有明显情绪峰值，保持自然陪伴即可。",
-    nextCareCue: `下次回应提示：延续最近话题「${compact(userText, 40)}」，不要过度解读。`,
+    relationshipSignal: "本輪互動沒有明顯情緒峰值，保持自然陪伴即可。",
+    nextCareCue: `下次回應提示：延續最近話題「${compact(userText, 40)}」，不要過度解讀。`,
   }
 }
 
@@ -134,12 +134,12 @@ function writeData(filePath: string, data: RelationshipLogData): void {
 
 function summarizeDate(date: string, entries: RelationshipLogEntry[]): RelationshipDailySummary {
   const moods = entries.map((e) => e.userMood).filter((m) => m !== "未知")
-  const dominantMood = moods.at(-1) ?? "平稳"
+  const dominantMood = moods.at(-1) ?? "平穩"
   const important = [...entries].reverse().find((e) => e.importantMoment)?.importantMoment
   const cue = entries.at(-1)?.nextCareCue ?? "保持自然陪伴。"
-  const signal = entries.at(-1)?.relationshipSignal ?? "今天互动平稳。"
+  const signal = entries.at(-1)?.relationshipSignal ?? "今天互動平穩。"
   const parts = [
-    `${date}：用户最近状态偏「${dominantMood}」。`,
+    `${date}：用戶最近狀態偏「${dominantMood}」。`,
     important ? `重要偏好：${important}` : signal,
     cue,
   ]
@@ -195,18 +195,18 @@ export class RelationshipLogStore {
     const recent = data.entries.slice(-8)
     if (recent.length === 0) return ""
 
-    const lastMood = [...recent].reverse().find((e) => e.userMood !== "未知")?.userMood ?? "平稳"
+    const lastMood = [...recent].reverse().find((e) => e.userMood !== "未知")?.userMood ?? "平穩"
     const latestSummary = data.dailySummaries.at(-1)?.summary
     const preference = [...recent].reverse().find((e) => e.importantMoment)?.importantMoment
     const cues = [...new Set(recent.map((e) => e.nextCareCue).filter(Boolean))].slice(-3)
 
     const lines = [
-      "【近期关系线索】",
-      `- 用户最近状态：${lastMood}`,
+      "【近期關係線索】",
+      `- 用戶最近狀態：${lastMood}`,
     ]
-    if (latestSummary) lines.push(`- 最近日记摘要：${latestSummary}`)
-    if (preference) lines.push(`- 重要互动偏好：${preference}`)
-    if (cues.length > 0) lines.push(`- 下次回应提示：${cues.join("；")}`)
+    if (latestSummary) lines.push(`- 最近日記摘要：${latestSummary}`)
+    if (preference) lines.push(`- 重要互動偏好：${preference}`)
+    if (cues.length > 0) lines.push(`- 下次回應提示：${cues.join("；")}`)
     return lines.join("\n")
   }
 }

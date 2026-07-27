@@ -1,0 +1,576 @@
+/* ── 崩壞：星穹鐵道「如我所書」主題視覺設計系統 ── */
+
+body {
+  background: radial-gradient(circle at center, #180d32 0%, #06020f 100%);
+  color: #e2e8f0;
+  font-family: 'Noto Serif TC', 'Cinzel', serif;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 宇宙星空背景層 */
+.starfield {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: 
+    radial-gradient(rgba(255, 255, 255, 0.25) 1.5px, transparent 1.5px),
+    radial-gradient(rgba(255, 255, 255, 0.15) 1px, transparent 1px);
+  background-size: 320px 320px, 200px 200px;
+  background-position: 0 0, 40px 60px;
+  opacity: 0.25;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.notebook-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 16px 24px;
+  box-sizing: border-box;
+}
+
+.notebook-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+  padding-bottom: 10px;
+}
+
+.notebook-header__title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.notebook-logo {
+  font-size: 20px;
+  filter: drop-shadow(0 0 8px rgba(212, 175, 55, 0.5));
+}
+
+.hsr-title {
+  font-family: 'Cinzel', serif;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #d4af37;
+  text-shadow: 0 0 10px rgba(212, 175, 55, 0.35);
+}
+
+.notebook-header__btn {
+  background: rgba(22, 12, 38, 0.6);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  border-radius: 8px;
+  color: #d4af37;
+  padding: 5px 12px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notebook-header__btn:hover {
+  border-color: #d4af37;
+  background: rgba(212, 175, 55, 0.08);
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.2);
+}
+
+/* ── 本體左右側配置佈局 ── */
+.notebook-body-layout {
+  flex: 1;
+  display: flex;
+  gap: 20px;
+  overflow: hidden;
+  height: calc(100vh - 75px);
+}
+
+/* 左側：章節邊欄 */
+.chapters-sidebar {
+  width: 220px;
+  background: rgba(14, 8, 25, 0.7);
+  border: 1px solid rgba(212, 175, 55, 0.15);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.sidebar-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #d4af37;
+  text-align: center;
+  margin-bottom: 16px;
+  letter-spacing: 2px;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+  padding-bottom: 8px;
+}
+
+.chapters-list {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.chapters-list::-webkit-scrollbar {
+  width: 3px;
+}
+.chapters-list::-webkit-scrollbar-thumb {
+  background: rgba(212, 175, 55, 0.2);
+  border-radius: 1.5px;
+}
+
+/* 章節按鈕節點 */
+.chapter-item {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(212, 175, 55, 0.1);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 11.5px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.chapter-item:hover {
+  background: rgba(212, 175, 55, 0.06);
+  border-color: rgba(212, 175, 55, 0.4);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.15);
+}
+
+.chapter-item.active {
+  background: rgba(212, 175, 55, 0.15);
+  border-color: #d4af37;
+  color: #d4af37;
+  font-weight: 700;
+  box-shadow: 0 0 15px rgba(212, 175, 55, 0.25);
+  transform: translateX(4px);
+}
+
+.chapter-item::before {
+  content: '✦';
+  font-size: 8px;
+  opacity: 0.4;
+  color: #d4af37;
+}
+
+.chapter-item.active::before {
+  opacity: 1;
+  filter: drop-shadow(0 0 4px #d4af37);
+}
+
+/* 右側：日誌與控制總區 */
+.book-workspace {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.notebook-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1200px;
+  overflow: hidden;
+}
+
+/* ── 活頁本主體（如我所書古典金黃框） ── */
+.book {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background: rgba(14, 8, 25, 0.95);
+  border: 1.5px solid rgba(212, 175, 55, 0.35); /* 黃金刻線框 */
+  border-radius: 16px;
+  box-shadow: 
+    0 20px 50px rgba(0, 0, 0, 0.6), 
+    inset 0 0 24px rgba(212, 175, 55, 0.08),
+    0 0 20px rgba(168, 85, 247, 0.1);
+  overflow: hidden;
+}
+
+/* 擬真中脊活頁鐵圈線（暗金色） */
+.book-spine {
+  position: absolute;
+  left: 50%;
+  top: 15px;
+  bottom: 15px;
+  width: 8px;
+  background: linear-gradient(to right, rgba(0,0,0,0.5), rgba(212, 175, 55, 0.25) 50%, rgba(0,0,0,0.5));
+  transform: translateX(-50%);
+  z-index: 10;
+  border-radius: 4px;
+}
+
+.book-spine::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 50%;
+  width: 16px;
+  transform: translateX(-50%);
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0px, transparent 10px,
+    #d4af37 10px, #b45309 12px, #d4af37 14px,
+    transparent 14px, transparent 34px
+  );
+  background-size: 16px 34px;
+  opacity: 0.85;
+}
+
+/* 頁面通用樣式（古典紙面紙漿顆粒感色調） */
+.book-page {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 32px 36px 44px 36px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: transform 0.45s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease;
+  background: linear-gradient(135deg, rgba(20, 14, 34, 0.2) 0%, rgba(12, 8, 20, 0.5) 100%);
+}
+
+.left-page {
+  border-right: 1px solid rgba(212, 175, 55, 0.1);
+}
+
+.right-page {
+  border-left: 1px solid rgba(0, 0, 0, 0.35);
+}
+
+/* 翻頁動畫狀態 */
+.book.flipping-next .right-page {
+  transform: rotateY(-12deg) scale(0.98);
+  opacity: 0.4;
+}
+
+.book.flipping-prev .left-page {
+  transform: rotateY(12deg) scale(0.98);
+  opacity: 0.4;
+}
+
+/* 頁面內容滾動區 */
+.page-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 8px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 13.5px;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+
+.page-content::-webkit-scrollbar {
+  width: 4px;
+}
+.page-content::-webkit-scrollbar-thumb {
+  background: rgba(212, 175, 55, 0.25);
+  border-radius: 2px;
+}
+
+/* 頁尾頁碼 */
+.page-footer {
+  position: absolute;
+  bottom: 12px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.page-number {
+  font-size: 11px;
+  color: rgba(212, 175, 55, 0.4);
+  font-family: 'Cinzel', monospace;
+  letter-spacing: 1px;
+}
+
+/* ── 筆記本文字內容排版樣式 ── */
+.page-content h1 {
+  font-family: 'Noto Serif TC', serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #d4af37;
+  margin-top: 0;
+  margin-bottom: 16px;
+  text-shadow: 0 0 8px rgba(212, 175, 55, 0.25);
+}
+
+.page-content h2 {
+  font-family: 'Noto Serif TC', serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  margin-top: 20px;
+  margin-bottom: 10px;
+  border-bottom: 1px dashed rgba(212, 175, 55, 0.3);
+  padding-bottom: 6px;
+}
+
+.page-content h3 {
+  font-family: 'Noto Serif TC', serif;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #d4af37;
+  margin-top: 16px;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+}
+
+/* 黃金星芒分頁線 */
+.page-content hr {
+  border: 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(212, 175, 55, 0.5) 50%, transparent);
+  margin: 18px 0;
+  position: relative;
+}
+
+.page-content hr::after {
+  content: '✦';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: #d4af37;
+  font-size: 10px;
+  background: #0e0819;
+  padding: 0 8px;
+}
+
+.page-content blockquote {
+  border-left: 2px solid #d4af37;
+  background: rgba(212, 175, 55, 0.05);
+  padding: 10px 14px;
+  margin: 14px 0;
+  border-radius: 0 8px 8px 0;
+  color: rgba(255, 255, 255, 0.95);
+  font-style: italic;
+  box-shadow: inset 2px 0 8px rgba(0, 0, 0, 0.3);
+}
+
+.page-content ul {
+  margin: 8px 0;
+  padding-left: 18px;
+}
+
+.page-content li {
+  margin-bottom: 6px;
+}
+
+.page-content strong {
+  color: #d4af37;
+  font-weight: 600;
+}
+
+.page-content a {
+  color: #f2ca67;
+  text-decoration-color: rgba(242, 202, 103, 0.42);
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+.page-content a:hover,
+.page-content a:focus-visible {
+  color: #fff2bd;
+  text-decoration-color: currentColor;
+}
+
+.empty-page-tip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: rgba(212, 175, 55, 0.3);
+  font-style: italic;
+  font-size: 12px;
+  text-align: center;
+  gap: 8px;
+  font-family: 'Cinzel', serif;
+}
+
+.empty-page-tip span:first-child {
+  font-size: 20px;
+  filter: drop-shadow(0 0 6px rgba(212, 175, 55, 0.4));
+}
+
+/* ── 控制列樣式（星芒圓環按鈕） ── */
+.notebook-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+}
+
+.control-btn {
+  background: rgba(212, 175, 55, 0.08); /* 亮金色光澤背景 */
+  border: 1.5px solid rgba(212, 175, 55, 0.5); /* 黃金刻度線 */
+  border-radius: 50%;
+  color: #d4af37; /* 黃金指標 */
+  width: 42px;
+  height: 42px;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.2);
+}
+
+.control-btn:hover:not(:disabled) {
+  background: rgba(212, 175, 55, 0.2);
+  border-color: #f59e0b;
+  color: #fff;
+  box-shadow: 0 0 16px rgba(212, 175, 55, 0.65);
+  transform: scale(1.12);
+}
+
+.control-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.control-btn:disabled {
+  opacity: 0.15;
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.15);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.controls-hint {
+  font-size: 11px;
+  color: rgba(212, 175, 55, 0.4);
+  letter-spacing: 2px;
+  font-family: 'Cinzel', serif;
+}
+
+/* 工作台內容區較窄時改成真正的單頁閱讀，不讓書脊與第二頁擠進正文。 */
+@media (max-width: 760px) {
+  .notebook-container {
+    padding: 10px 12px;
+  }
+
+  .notebook-header {
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+  }
+
+  .notebook-logo {
+    display: none;
+  }
+
+  .hsr-title {
+    max-width: 280px;
+    overflow: hidden;
+    font-size: 12px;
+    letter-spacing: 1.2px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .notebook-header__btn {
+    flex: 0 0 auto;
+    padding: 5px 9px;
+  }
+
+  .notebook-body-layout {
+    height: calc(100vh - 61px);
+  }
+
+  .chapters-sidebar,
+  .book-spine,
+  .right-page {
+    display: none;
+  }
+
+  .book {
+    border-radius: 14px;
+  }
+
+  .book-page {
+    flex: 1 1 100%;
+    width: 100%;
+    padding: 22px 22px 38px;
+  }
+
+  .left-page {
+    border-right: 0;
+  }
+
+  .page-content {
+    padding-right: 10px;
+    font-size: 13px;
+    line-height: 1.72;
+  }
+
+  .page-content h3 {
+    margin-top: 4px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .page-content ul {
+    margin: 8px 0;
+    padding-left: 20px;
+  }
+
+  .page-content li {
+    margin-bottom: 8px;
+  }
+
+  .book.flipping-next .left-page {
+    transform: translateX(-10px);
+    opacity: 0.4;
+  }
+
+  .book.flipping-prev .left-page {
+    transform: translateX(10px);
+    opacity: 0.4;
+  }
+
+  .notebook-controls {
+    padding: 7px 4px 0;
+  }
+
+  .control-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .controls-hint {
+    max-width: calc(100% - 96px);
+    overflow: hidden;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

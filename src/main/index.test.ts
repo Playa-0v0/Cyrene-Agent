@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// mock electron — sync 函数 import 时不依赖它,但防万一
+// mock electron — sync 函數 import 時不依賴它,但防萬一
 vi.mock("electron", () => ({
   app: { getPath: vi.fn() },
   ipcMain: { handle: vi.fn() },
 }));
 
-// vi.mock 工厂会被 hoist 到文件顶部,不能直接引用顶层 const;
-// 用 vi.hoisted 把 mock 函数提到 mock 工厂之前。
+// vi.mock 工廠會被 hoist 到文件頂部,不能直接引用頂層 const;
+// 用 vi.hoisted 把 mock 函數提到 mock 工廠之前。
 const { mockAdd, mockRemove, mockList } = vi.hoisted(() => ({
   mockAdd: vi.fn().mockResolvedValue({ ok: true, toolIds: [] }),
   mockRemove: vi.fn().mockResolvedValue({ ok: true }),

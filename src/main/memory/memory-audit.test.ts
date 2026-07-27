@@ -39,8 +39,8 @@ describe("memory audit", () => {
     const store = baseStore({
       l2: [{
         id: "l2_dirty",
-        content: "用户喜欢跑步",
-        triggerText: "我喜欢跑步",
+        content: "用戶喜歡跑步",
+        triggerText: "我喜歡跑步",
         sourceConversationId: "conv",
         createdAt: 1,
         lastAccessedAt: 1,
@@ -68,8 +68,8 @@ describe("memory audit", () => {
     const store = baseStore({
       l2: [{
         id: "l2_overclaim",
-        content: "用户以后都只吃香菇和平菇",
-        triggerText: "我这次想吃香菇和平菇",
+        content: "用戶以後都只吃香菇和平菇",
+        triggerText: "我這次想吃香菇和平菇",
         sourceConversationId: "conv",
         createdAt: 1,
         lastAccessedAt: 1,
@@ -82,7 +82,7 @@ describe("memory audit", () => {
       evidence: [{
         id: "ev_1",
         memoryId: "l2_overclaim",
-        quoteSnippet: "我这次想吃香菇和平菇",
+        quoteSnippet: "我這次想吃香菇和平菇",
         createdAt: 1,
         sourceStatus: "active",
       }],
@@ -103,8 +103,8 @@ describe("memory audit", () => {
     const store = baseStore({
       l2: [{
         id: "l2_conflicted",
-        content: "用户喜欢咖啡",
-        triggerText: "我喜欢咖啡",
+        content: "用戶喜歡咖啡",
+        triggerText: "我喜歡咖啡",
         sourceConversationId: "conv",
         createdAt: 1,
         lastAccessedAt: 1,
@@ -133,8 +133,8 @@ describe("memory audit", () => {
     fs.writeFileSync(filePath, JSON.stringify(baseStore({
       l2: [{
         id: "l2_dirty",
-        content: "用户喜欢跑步",
-        triggerText: "我喜欢跑步",
+        content: "用戶喜歡跑步",
+        triggerText: "我喜歡跑步",
         sourceConversationId: "conv",
         createdAt: 1,
         lastAccessedAt: 1,

@@ -6,10 +6,17 @@ import * as path from "path";
 // process.env / require("path") instead of importing "os" or "path".
 const { ISOLATED_ROOT, ISOLATED_HOME } = vi.hoisted(() => {
   const pathMod = require("path") as typeof import("path");
-  const root = pathMod.join(
+  const fsMod = require("fs") as typeof import("fs");
+  let root = pathMod.join(
     process.env.TEMP || process.env.TMP || "/tmp",
     `cyrene-model-status-test-${process.pid}`,
   );
+  try {
+    const parent = pathMod.dirname(root);
+    if (fsMod.existsSync(parent)) {
+      root = pathMod.join(fsMod.realpathSync(parent), pathMod.basename(root));
+    }
+  } catch (e) {}
   return { ISOLATED_ROOT: root, ISOLATED_HOME: pathMod.join(root, "home") };
 });
 

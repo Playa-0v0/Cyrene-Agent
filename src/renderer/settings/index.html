@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>昔涟 · 设置</title>
+  <title>昔漣 · 設置</title>
+  <script>
+    // Mark embedded pages before stylesheets load so the inner titlebar never paints.
+    if (window.self !== window.top) document.documentElement.classList.add("is-embedded");
+  </script>
   <link rel="stylesheet" href="../ui/tokens.css" />
   <link rel="stylesheet" href="../ui/fonts.css" />
   <link rel="stylesheet" href="../ui/base.css" />
@@ -11,47 +15,48 @@
 </head>
 <body>
   <div class="settings-shell">
-    <aside class="settings-nav" aria-label="设置导航">
+    <aside class="settings-nav" aria-label="設置導航">
       <header class="settings-nav__header">
-        <div class="settings-nav__brand">昔涟</div>
-        <div class="settings-nav__sub">设置中心</div>
+        <div class="settings-nav__brand">昔漣</div>
+        <div class="settings-nav__sub">設置中心</div>
       </header>
 
       <nav class="settings-nav__list">
-        <button type="button" class="nav-item" data-section="memory"><span>🧠</span>记忆</button>
+        <button type="button" class="nav-item" data-section="memory"><span>🧠</span>記憶</button>
         <button type="button" class="nav-item" data-section="chat"><span>💬</span>聊天</button>
-        <button type="button" class="nav-item" data-section="user"><span>👤</span>用户信息</button>
+        <button type="button" class="nav-item" data-section="user"><span>👤</span>用戶信息</button>
         <hr class="nav-divider" />
-        <button type="button" class="nav-item" data-section="tasks"><span>⏰</span>定时任务</button>
-        <button type="button" class="nav-item" data-section="identity"><span>💼</span>职位</button>
+        <button type="button" class="nav-item" data-section="tasks"><span>⏰</span>定時任務</button>
+        <button type="button" class="nav-item" data-section="identity"><span>💼</span>職位</button>
         <button type="button" class="nav-item" data-section="skills"><span>✨</span>技能 Skill</button>
         <button type="button" class="nav-item" data-section="plugins"><span>🔌</span>插件</button>
         <hr class="nav-divider" />
-        <button type="button" class="nav-item is-active" data-section="general"><span>⚙️</span>设置</button>
-        <button type="button" class="nav-item" data-section="api"><span>🔑</span>API 设置</button>
-        <button type="button" class="nav-item" data-section="cyrene"><span>🌸</span>昔涟设置</button>
-        <button type="button" class="nav-item" data-section="channels"><span>📱</span>连接手机</button>
-        <button type="button" class="nav-item" data-section="tts"><span>🎙️</span>TTS 设置</button>
-        <button type="button" class="nav-item" data-section="asr"><span>🎧</span>ASR 设置</button>
+        <button type="button" class="nav-item is-active" data-section="general"><span>⚙️</span>設置</button>
+        <button type="button" class="nav-item" data-section="api"><span>🔑</span>API 設置</button>
+        <button type="button" class="nav-item" data-section="cyrene"><span>🌸</span>昔漣設置</button>
+        <button type="button" class="nav-item" data-section="channels"><span>📱</span>連接手機</button>
+        <button type="button" class="nav-item" data-section="tts"><span>🎙️</span>TTS 設置</button>
+        <button type="button" class="nav-item" data-section="asr"><span>🎧</span>ASR 設置</button>
         <button type="button" class="nav-item" data-section="tokens"><span>📊</span>Token 用量</button>
+        <button type="button" class="nav-item" data-section="security"><span>🛡️</span>資料安全</button>
         <hr class="nav-divider" />
-        <button type="button" class="nav-item" data-section="disclaimer"><span>📜</span>免责声明</button>
+        <button type="button" class="nav-item" data-section="disclaimer"><span>📜</span>免責聲明</button>
       </nav>
 
-      <footer class="settings-nav__footer">昔涟 v0.1.1</footer>
+      <footer class="settings-nav__footer">昔漣 v0.1.1</footer>
     </aside>
 
     <main class="settings-main">
       <header class="settings-titlebar">
         <div>
-          <div class="settings-titlebar__title" id="section-title">API 设置</div>
-          <div class="settings-titlebar__hint" id="section-hint">填写模型服务配置，保存在本地。</div>
+          <div class="settings-titlebar__title" id="section-title">API 設置</div>
+          <div class="settings-titlebar__hint" id="section-hint">填寫模型服務配置，保存在本地。</div>
         </div>
         <div class="settings-titlebar__actions">
           <button type="button" class="win-btn" id="min-btn" aria-label="最小化" title="最小化">
             <svg width="10" height="2" viewBox="0 0 10 2" aria-hidden="true"><rect width="10" height="2" rx="1" fill="currentColor"/></svg>
           </button>
-          <button type="button" class="win-btn win-btn--close" id="close-btn" aria-label="关闭" title="关闭">
+          <button type="button" class="win-btn win-btn--close" id="close-btn" aria-label="關閉" title="關閉">
             <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
               <line x1="2" y1="2" x2="8" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
               <line x1="8" y1="2" x2="2" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
@@ -65,25 +70,67 @@
           <div class="panel-heading">
             <div class="panel-heading__icon">🔑</div>
             <div>
-              <h1>API 设置</h1>
-              <p>先配置一个模型服务，后面昔涟会用它进行聊天和状态判断。</p>
+              <h1>API 設置</h1>
+              <p>先配置一個模型服務，後面昔漣會用它進行聊天和狀態判斷。</p>
             </div>
           </div>
 
+          <section class="api-source-switcher" aria-labelledby="api-source-title">
+            <div class="api-source-switcher__heading">
+              <div>
+                <span class="api-source-switcher__eyebrow">QUICK SWITCH</span>
+                <h2 id="api-source-title">選擇昔漣的思考來源</h2>
+              </div>
+              <span class="api-source-switcher__hint">點一下立即切換並保存</span>
+            </div>
+            <div class="api-source-grid" role="group" aria-label="快速切換聊天 API">
+              <button type="button" class="api-source-card" data-api-source="Custom" aria-pressed="false">
+                <span class="api-source-card__signal api-source-card__signal--cloud" aria-hidden="true">
+                  <span></span><span></span><span></span>
+                </span>
+                <span class="api-source-card__copy">
+                  <strong>OpenRouter Free</strong>
+                  <small>雲端免費路由 · 使用現有 API Key</small>
+                </span>
+                <span class="api-source-card__state">選擇</span>
+              </button>
+              <button type="button" class="api-source-card" data-api-source="Gemini（Google）" aria-pressed="false">
+                <span class="api-source-card__signal api-source-card__signal--gemini" aria-hidden="true">
+                  <span></span><span></span><span></span>
+                </span>
+                <span class="api-source-card__copy">
+                  <strong>Gemini 3.5 Flash</strong>
+                  <small>Google 雲端 · 使用已保存 API Key</small>
+                </span>
+                <span class="api-source-card__state">選擇</span>
+              </button>
+              <button type="button" class="api-source-card" data-api-source="Ollama（本機）" aria-pressed="false">
+                <span class="api-source-card__signal api-source-card__signal--local" aria-hidden="true">
+                  <span></span><span></span><span></span>
+                </span>
+                <span class="api-source-card__copy">
+                  <strong>Llama 3.1 · 8B</strong>
+                  <small>本機離線推理 · 不使用雲端額度</small>
+                </span>
+                <span class="api-source-card__state">選擇</span>
+              </button>
+            </div>
+          </section>
+
           <div class="preset-row">
             <label class="field field--full">
-              <span>模型预设</span>
+              <span>模型預設</span>
               <div class="preset-select-row">
                 <select id="preset-select"></select>
-                <a id="preset-website-link" class="preset-website-link" href="#" target="_blank" rel="noopener noreferrer" title="前往厂商官网">↗</a>
+                <a id="preset-website-link" class="preset-website-link" href="#" target="_blank" rel="noopener noreferrer" title="前往廠商官網">↗</a>
               </div>
             </label>
           </div>
 
           <div class="form-grid">
             <label class="field">
-              <span>昵称</span>
-              <input id="display-name" type="text" placeholder="给模型起个名字，留空用厂商名" autocomplete="off" />
+              <span>暱稱</span>
+              <input id="display-name" type="text" placeholder="給模型起個名字，留空用廠商名" autocomplete="off" />
             </label>
 
             <label class="field">
@@ -95,49 +142,49 @@
               <span>Base URL</span>
               <div class="base-url-row">
                 <input id="base-url" type="url" placeholder="https://api.deepseek.com" autocomplete="off" />
-                <button type="button" class="base-url-reset" id="base-url-reset-btn" title="重置为厂商默认 URL">↻</button>
+                <button type="button" class="base-url-reset" id="base-url-reset-btn" title="重置為廠商默認 URL">↻</button>
               </div>
             </label>
 
             <label class="field field--full">
-              <span>API 协议</span>
+              <span>API 協議</span>
               <select id="transport-select">
-                <option value="auto">自动（按 Base URL 推断）</option>
+                <option value="auto">自動（按 Base URL 推斷）</option>
                 <option value="openai">OpenAI 兼容</option>
                 <option value="anthropic">Anthropic 兼容</option>
               </select>
-              <span class="form-hint">默认按 Base URL 推断；如有歧义可手动指定</span>
+              <span class="form-hint">默認按 Base URL 推斷；如有歧義可手動指定</span>
             </label>
 
             <label class="field field--full">
               <span>模型名</span>
-              <input id="model-input" type="text" placeholder="选厂商后自动填入，可手填覆盖" autocomplete="off" list="model-input-suggestions" />
+              <input id="model-input" type="text" placeholder="選廠商後自動填入，可手填覆蓋" autocomplete="off" list="model-input-suggestions" />
               <datalist id="model-input-suggestions"></datalist>
             </label>
           </div>
 
           <div class="api-note">
             <span>🔒</span>
-            <p>选择模型预设后会自动填入 Provider、Base URL 和模型名；你只需要填写对应平台的 API Key。配置只保存在本机 Electron 用户数据目录。</p>
+            <p>選擇模型預設後會自動填入 Provider、Base URL 和模型名；你只需要填寫對應平臺的 API Key。配置只保存在本機 Electron 用戶數據目錄。</p>
           </div>
 
           <hr class="api-section-divider" />
 
-          <!-- 视觉模型配置区（可选） -->
+          <!-- 視覺模型配置區（可選） -->
           <div class="vision-config-section">
             <div class="vision-config-heading">
               <span class="vision-config-icon">🖼️</span>
               <div>
-                <h2>视觉模型（可选）</h2>
-                <p>配置后昔涟能看懂图片。留空则遇到图片会诚实告知看不了。</p>
+                <h2>視覺模型（可選）</h2>
+                <p>配置後昔漣能看懂圖片。留空則遇到圖片會誠實告知看不了。</p>
               </div>
             </div>
 
             <div class="vision-sync-row">
               <span class="field-label">配置方式</span>
-              <div class="option-blocks option-blocks--wide" id="vision-sync-blocks" role="radiogroup" aria-label="视觉模型配置方式">
-                <button type="button" class="option-block is-active" data-vision-sync="main" aria-pressed="true">与主聊天模型相同</button>
-                <button type="button" class="option-block" data-vision-sync="independent" aria-pressed="false">独立配置</button>
+              <div class="option-blocks option-blocks--wide" id="vision-sync-blocks" role="radiogroup" aria-label="視覺模型配置方式">
+                <button type="button" class="option-block is-active" data-vision-sync="main" aria-pressed="true">與主聊天模型相同</button>
+                <button type="button" class="option-block" data-vision-sync="independent" aria-pressed="false">獨立配置</button>
               </div>
             </div>
 
@@ -151,24 +198,24 @@
                 <input id="vision-api-key" type="password" placeholder="sk-..." autocomplete="off" />
               </label>
               <label class="field">
-                <span>视觉型号</span>
+                <span>視覺型號</span>
                 <input id="vision-model" type="text" placeholder="gpt-4o / glm-5v-turbo / qwen-vl-max" autocomplete="off" />
               </label>
             </div>
-            <p class="vision-hint">ⓘ 该模型需支持 OpenAI 兼容的 /chat/completions 接口及 image_url 多模态能力</p>
+            <p class="vision-hint">ⓘ 該模型需支持 OpenAI 兼容的 /chat/completions 接口及 image_url 多模態能力</p>
 
-            <button type="button" class="save-btn save-btn--ghost" id="test-vision-btn">测试视觉模型</button>
+            <button type="button" class="save-btn save-btn--ghost" id="test-vision-btn">測試視覺模型</button>
             <div class="save-status" id="vision-test-status"></div>
           </div>
 
           <div class="form-actions">
             <div class="save-status" id="save-status">等待保存</div>
             <!--
-              测试连接按钮：当前为 UI 占位，点击后只弹一行临时提示。
-              等到 vendor adapter 接好后再接真实测试逻辑（替换 onclick 即可）。
+              測試連接按鈕：當前為 UI 佔位，點擊後只彈一行臨時提示。
+              等到 vendor adapter 接好後再接真實測試邏輯（替換 onclick 即可）。
             -->
-            <button type="button" class="save-btn save-btn--ghost" id="test-connection-btn">测试连接</button>
-            <button type="submit" class="save-btn">保存 API 设置</button>
+            <button type="button" class="save-btn save-btn--ghost" id="test-connection-btn">測試連接</button>
+            <button type="submit" class="save-btn">保存 API 設置</button>
           </div>
         </form>
 
@@ -177,32 +224,32 @@
           <div class="panel-heading">
             <div class="panel-heading__icon">⚙️</div>
             <div>
-              <h1>设置</h1>
-              <p>控制桌宠窗口、状态栏、日程栏和基础音频偏好。</p>
+              <h1>設置</h1>
+              <p>控制桌寵窗口、狀態欄、日程欄和基礎音頻偏好。</p>
             </div>
           </div>
 
           <div class="settings-list">
             <div class="setting-row">
               <div>
-                <strong>状态栏窗口</strong>
-                <span>不小心关闭后可以从这里重新打开。</span>
+                <strong>狀態欄窗口</strong>
+                <span>不小心關閉後可以從這裡重新打開。</span>
               </div>
               <span class="switch"><input id="sidebar-visible" type="checkbox" checked /><span class="switch__track"><span class="switch__thumb"></span></span></span>
             </div>
 
             <div class="setting-row">
               <div>
-                <strong>日程栏窗口</strong>
-                <span>控制右侧日程/任务展示窗口。</span>
+                <strong>日程欄窗口</strong>
+                <span>控制右側日程/任務展示窗口。</span>
               </div>
               <span class="switch"><input id="tasks-visible" type="checkbox" checked /><span class="switch__track"><span class="switch__thumb"></span></span></span>
             </div>
 
             <label class="setting-row">
               <div>
-                <strong>音乐</strong>
-                <span>预留背景音乐开关和音量。</span>
+                <strong>音樂</strong>
+                <span>預留背景音樂開關和音量。</span>
               </div>
               <div class="inline-control">
                 <span class="switch"><input id="music-enabled" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
@@ -213,7 +260,7 @@
             <label class="setting-row">
               <div>
                 <strong>音效</strong>
-                <span>预留点击、提示和交互音效。</span>
+                <span>預留點擊、提示和交互音效。</span>
               </div>
               <div class="inline-control">
                 <span class="switch"><input id="sound-enabled" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
@@ -223,24 +270,32 @@
 
             <label class="setting-row">
               <div>
-                <strong>桌宠置顶</strong>
-                <span>只让桌宠保持最上层，聊天和侧边窗口不置顶。</span>
+                <strong>桌寵置頂</strong>
+                <span>只讓桌寵保持最上層，聊天和側邊窗口不置頂。</span>
               </div>
               <span class="switch"><input id="pet-always-on-top" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
             </label>
 
             <label class="setting-row">
               <div>
-                <strong>桌宠显示</strong>
-                <span>隐藏或显示 Live2D 桌宠本体。</span>
+                <strong>桌寵顯示</strong>
+                <span>隱藏或顯示 Live2D 桌寵本體。</span>
               </div>
               <span class="switch"><input id="pet-visible" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
             </label>
 
             <label class="setting-row">
               <div>
-                <strong>桌宠缩放</strong>
-                <span>调整 Live2D 模型大小（0.5× ~ 2.0×），窗口与模型同步缩放。</span>
+                <strong>桌寵快捷輸入</strong>
+                <span>桌寵拖出工作台後，在下方顯示文字輸入列。</span>
+              </div>
+              <span class="switch"><input id="pet-chat-input-enabled" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
+            </label>
+
+            <label class="setting-row">
+              <div>
+                <strong>桌寵縮放</strong>
+                <span>調整 Live2D 模型大小（0.5× ~ 2.0×），窗口與模型同步縮放。</span>
               </div>
               <div class="range-row">
                 <input id="pet-zoom" type="range" min="0.5" max="2" step="0.1" />
@@ -250,13 +305,13 @@
 
             <div class="setting-row">
               <div>
-                <strong>界面主题</strong>
-                <span>默认保持当前外观；暗系更清透；白调是柔和珍珠白。</span>
+                <strong>界面主題</strong>
+                <span>默認保持當前外觀；暗系更清透；白調是柔和珍珠白。</span>
               </div>
-              <div class="option-blocks theme-options" id="ui-theme-select" role="radiogroup" aria-label="界面主题">
+              <div class="option-blocks theme-options" id="ui-theme-select" role="radiogroup" aria-label="界面主題">
                 <button type="button" class="option-block is-active" data-theme="classic" aria-pressed="true">
                   <span class="theme-swatch theme-swatch--classic" aria-hidden="true"></span>
-                  <span>默认</span>
+                  <span>默認</span>
                 </button>
                 <button type="button" class="option-block" data-theme="polished-pink" aria-pressed="false">
                   <span class="theme-swatch theme-swatch--pink" aria-hidden="true"></span>
@@ -264,52 +319,52 @@
                 </button>
                 <button type="button" class="option-block" data-theme="pearl-white" aria-pressed="false">
                   <span class="theme-swatch theme-swatch--white" aria-hidden="true"></span>
-                  <span>白调</span>
+                  <span>白調</span>
                 </button>
               </div>
             </div>
 
             <label class="setting-row">
               <div>
-                <strong>开机自启</strong>
-                <span>系统启动时自动打开昔涟。</span>
+                <strong>開機自啟</strong>
+                <span>系統啟動時自動打開昔漣。</span>
               </div>
               <span class="switch"><input id="launch-at-login" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
             </label>
             <div class="setting-row">
               <div>
-                <strong>聊天记录管理</strong>
-                <span>清空全部本地聊天会话（迁移到「💬 聊天」面板可逐条管理）。</span>
+                <strong>聊天記錄管理</strong>
+                <span>清空全部本地聊天會話（遷移到「💬 聊天」面板可逐條管理）。</span>
               </div>
-              <button type="button" class="ghost-btn" id="clear-chat-history-btn">清空记录</button>
+              <button type="button" class="ghost-btn" id="clear-chat-history-btn">清空記錄</button>
             </div>
 
 
             <label class="setting-row">
               <div>
-                <strong>语言</strong>
-                <span>当前仅支持中文，其他语言待开发。</span>
+                <strong>語言</strong>
+                <span>當前僅支持中文，其他語言待開發。</span>
               </div>
-              <div class="language-options" id="language-select" role="radiogroup" aria-label="语言">
+              <div class="language-options" id="language-select" role="radiogroup" aria-label="語言">
                 <button type="button" class="language-option is-active" data-lang="zh-CN" aria-pressed="true">中文</button>
                 <button type="button" class="language-option" data-lang="en" disabled aria-pressed="false">EN</button>
                 <button type="button" class="language-option" data-lang="ja" disabled aria-pressed="false">日文</button>
-                <button type="button" class="language-option" data-lang="ko" disabled aria-pressed="false">韩语</button>
+                <button type="button" class="language-option" data-lang="ko" disabled aria-pressed="false">韓語</button>
               </div>
             </label>
 
 
             <div class="setting-row setting-row--about">
               <div>
-                <strong>关于</strong>
-                <span>昔涟 v0.1.1 · 轻量情感陪伴桌面 Agent</span>
+                <strong>關於</strong>
+                <span>昔漣 v0.1.1 · 輕量情感陪伴桌面 Agent</span>
               </div>
             </div>
           </div>
 
           <div class="form-actions">
             <div class="save-status" id="general-save-status">等待保存</div>
-            <button type="submit" class="save-btn">保存设置</button>
+            <button type="submit" class="save-btn">保存設置</button>
           </div>
         </form>
 
@@ -318,8 +373,8 @@
           <div class="panel-heading">
             <div class="panel-heading__icon">🌸</div>
             <div>
-              <h1>昔涟设置</h1>
-              <p>这里集中管理昔涟的 Agent 行为、状态更新、表情包、记忆和本地检索能力。</p>
+              <h1>昔漣設置</h1>
+              <p>這裡集中管理昔漣的 Agent 行為、狀態更新、表情包、記憶和本地檢索能力。</p>
             </div>
           </div>
 
@@ -328,47 +383,47 @@
               <div class="agent-setting-card__head">
                 <span>💗</span>
                 <div>
-                  <h2>状态栏实时更新</h2>
-                  <p>控制状态与心情如何同步到状态栏。</p>
+                  <h2>狀態欄實時更新</h2>
+                  <p>控制狀態與心情如何同步到狀態欄。</p>
                 </div>
               </div>
-              <div class="option-blocks option-blocks--wide" id="runtime-sync" role="radiogroup" aria-label="状态栏实时更新方式">
-                <button type="button" class="option-block is-active" data-value="off" aria-pressed="true">关闭</button>
-                <button type="button" class="option-block" data-value="local" aria-pressed="false">本地关键词</button>
+              <div class="option-blocks option-blocks--wide" id="runtime-sync" role="radiogroup" aria-label="狀態欄實時更新方式">
+                <button type="button" class="option-block is-active" data-value="off" aria-pressed="true">關閉</button>
+                <button type="button" class="option-block" data-value="local" aria-pressed="false">本地關鍵詞</button>
                 <button type="button" class="option-block" data-value="llm" aria-pressed="false">LLM 分析</button>
               </div>
-              <em class="field-note is-hidden" id="runtime-sync-note">LLM 模式每轮会额外调用一次模型，产生额外 Token 用量。</em>
+              <em class="field-note is-hidden" id="runtime-sync-note">LLM 模式每輪會額外調用一次模型，產生額外 Token 用量。</em>
             </article>
 
             <article class="agent-setting-card agent-setting-card--full">
               <div class="agent-setting-card__head">
                 <span>🎭</span>
                 <div>
-                  <h2>表情包发送</h2>
-                  <p>控制昔涟是否在聊天框里发送表情包，以及表情包显示大小。</p>
+                  <h2>表情包發送</h2>
+                  <p>控制昔漣是否在聊天框裡發送表情包，以及表情包顯示大小。</p>
                 </div>
               </div>
               <label class="agent-status-row agent-status-row--switch">
                 <div>
-                  <strong>发送状态：允许发送表情包</strong>
+                  <strong>發送狀態：允許發送表情包</strong>
                 </div>
                 <span class="switch"><input id="sticker-enabled" type="checkbox" checked /><span class="switch__track"><span class="switch__thumb"></span></span></span>
               </label>
               <div class="agent-setting-subgroup">
-                <strong>表情包显示大小</strong>
-                <div class="option-blocks option-blocks--wide" id="sticker-size" role="radiogroup" aria-label="表情包显示大小">
-                  <button type="button" class="option-block" data-value="small" aria-pressed="false">小图</button>
-                  <button type="button" class="option-block is-active" data-value="standard" aria-pressed="true">标准</button>
-                  <button type="button" class="option-block" data-value="large" aria-pressed="false">大图</button>
+                <strong>表情包顯示大小</strong>
+                <div class="option-blocks option-blocks--wide" id="sticker-size" role="radiogroup" aria-label="表情包顯示大小">
+                  <button type="button" class="option-block" data-value="small" aria-pressed="false">小圖</button>
+                  <button type="button" class="option-block is-active" data-value="standard" aria-pressed="true">標準</button>
+                  <button type="button" class="option-block" data-value="large" aria-pressed="false">大圖</button>
                 </div>
               </div>
               <div class="agent-setting-subgroup">
-                <strong>相似度阈值</strong>
+                <strong>相似度閾值</strong>
                 <div class="range-row">
                   <input type="range" id="sticker-threshold" min="0.3" max="0.9" step="0.05" value="0.55" />
                   <span class="range-val" id="sticker-threshold-val">0.55</span>
                 </div>
-                <em class="field-note">值越低越容易触发表情包，值越高匹配越精准</em>
+                <em class="field-note">值越低越容易觸發表情包，值越高匹配越精準</em>
               </div>
               <div class="agent-actions-row">
                 <button type="button" class="ghost-btn" id="open-sticker-manager-btn">管理表情包</button>
@@ -380,8 +435,8 @@
               <div class="agent-setting-card__head">
                 <span>📚</span>
                 <div>
-                  <h2>RAG / 文档导入</h2>
-                  <p>选择本地检索模型，后续用于文件导入、世界书与长期记忆召回。</p>
+                  <h2>RAG / 文檔導入</h2>
+                  <p>選擇本地檢索模型，後續用於文件導入、世界書與長期記憶召回。</p>
                 </div>
               </div>
 
@@ -389,14 +444,14 @@
                 <strong>Embedding 模型</strong>
                 <div class="rag-model-options">
                   <button type="button" class="rag-model-card is-active" data-value="bgem3">
-                    <span class="rag-model-card__title">专业 BGE-M3</span>
-                    <span class="rag-model-card__desc">中文效果优秀，支持贴纸语义匹配和场景语气注入。</span>
-                    <em id="embedding-bgem3-status">检测中...</em>
+                    <span class="rag-model-card__title">專業 BGE-M3</span>
+                    <span class="rag-model-card__desc">中文效果優秀，支持貼紙語義匹配和場景語氣注入。</span>
+                    <em id="embedding-bgem3-status">檢測中...</em>
                   </button>
                   <button type="button" class="rag-model-card" data-value="minilm">
-                    <span class="rag-model-card__title">轻量 MiniLM</span>
-                    <span class="rag-model-card__desc">兼容项，中文效果一般。</span>
-                    <em id="embedding-minilm-status">检测中...</em>
+                    <span class="rag-model-card__title">輕量 MiniLM</span>
+                    <span class="rag-model-card__desc">兼容項，中文效果一般。</span>
+                    <em id="embedding-minilm-status">檢測中...</em>
                   </button>
                 </div>
               </div>
@@ -405,49 +460,49 @@
                 <strong>Rerank 重排序</strong>
                 <div class="rag-model-options">
                   <button type="button" class="rag-model-card is-active" data-value="light" data-reranker="1">
-                    <span class="rag-model-card__title">轻量 ms-marco-MiniLM</span>
-                    <span class="rag-model-card__desc">快速重排，适合日常闲聊，约 50ms/对。</span>
-                    <em id="reranker-light-status">检测中...</em>
+                    <span class="rag-model-card__title">輕量 ms-marco-MiniLM</span>
+                    <span class="rag-model-card__desc">快速重排，適合日常閒聊，約 50ms/對。</span>
+                    <em id="reranker-light-status">檢測中...</em>
                   </button>
                   <button type="button" class="rag-model-card" data-value="standard" data-reranker="1">
-                    <span class="rag-model-card__title">标准 bge-reranker-base</span>
-                    <span class="rag-model-card__desc">精准重排，适合长文档和专业检索，约 200ms/对。</span>
-                    <em id="reranker-standard-status">检测中...</em>
+                    <span class="rag-model-card__title">標準 bge-reranker-base</span>
+                    <span class="rag-model-card__desc">精準重排，適合長文檔和專業檢索，約 200ms/對。</span>
+                    <em id="reranker-standard-status">檢測中...</em>
                   </button>
                   <button type="button" class="rag-model-card" data-value="none" data-reranker="1">
-                    <span class="rag-model-card__title">关闭</span>
-                    <span class="rag-model-card__desc">不进行重排序，检索后直接使用。</span>
-                    <em>无需模型</em>
+                    <span class="rag-model-card__title">關閉</span>
+                    <span class="rag-model-card__desc">不進行重排序，檢索後直接使用。</span>
+                    <em>無需模型</em>
                   </button>
                 </div>
               </div>
 
               <div class="agent-status-row rag-status-row">
-                <strong>当前模式</strong>
-                <em>自动（优先使用已安装模型）</em>
+                <strong>當前模式</strong>
+                <em>自動（優先使用已安裝模型）</em>
               </div>
 
               <div class="agent-actions-row rag-actions-row">
-                <button type="button" class="ghost-btn" id="embedding-download-btn">📖 模型安装说明</button>
-                <button type="button" class="ghost-btn" id="embedding-delete-btn">删除缓存</button>
-                <button type="button" class="ghost-btn" id="embedding-update-btn">检查更新</button>
+                <button type="button" class="ghost-btn" id="embedding-download-btn">📖 模型安裝說明</button>
+                <button type="button" class="ghost-btn" id="embedding-delete-btn">刪除緩存</button>
+                <button type="button" class="ghost-btn" id="embedding-update-btn">檢查更新</button>
               </div>
 
               <div class="agent-setting-subgroup" style="margin-top:12px">
-                <strong>下载镜像源</strong>
-                <div class="option-blocks option-blocks--wide" id="embedding-mirror" role="radiogroup" aria-label="镜像源">
+                <strong>下載鏡像源</strong>
+                <div class="option-blocks option-blocks--wide" id="embedding-mirror" role="radiogroup" aria-label="鏡像源">
                   <button type="button" class="option-block is-active" data-value="official" aria-pressed="true">官方源</button>
                   <button type="button" class="option-block" data-value="hf-mirror" aria-pressed="false">hf-mirror</button>
                 </div>
               </div>
 
-              <p class="agent-setting-card__note">按钮暂为界面预留；后续会接入安装包可选模型、模型状态检测和文档导入检索。</p>
+              <p class="agent-setting-card__note">按鈕暫為界面預留；後續會接入安裝包可選模型、模型狀態檢測和文檔導入檢索。</p>
             </article>
           </div>
 
           <div class="form-actions agent-form-actions">
             <div class="save-status" id="cyrene-save-status">等待保存</div>
-            <button type="submit" class="save-btn">保存昔涟设置</button>
+            <button type="submit" class="save-btn">保存昔漣設置</button>
           </div>
         </form>
 
@@ -456,8 +511,8 @@
           <div class="panel-heading">
             <div class="panel-heading__icon">🧠</div>
             <div>
-              <h1>昔涟记忆</h1>
-              <p>昔涟对你的认知和记忆，你可以查看、编辑和管理。</p>
+              <h1>昔漣記憶</h1>
+              <p>昔漣對你的認知和記憶，你可以查看、編輯和管理。</p>
             </div>
           </div>
           <div class="panel-body">
@@ -466,71 +521,109 @@
               <div class="memory-card__head">
                 <span>📌</span>
                 <div>
-                  <h2>长期画像</h2>
-                  <p>昔涟一直记得、基本不会变化的信息</p><p class="memory-card__hint">手动修改的内容优先级高于自动推断</p>
+                  <h2>長期畫像</h2>
+                  <p>昔漣一直記得、基本不會變化的信息</p><p class="memory-card__hint">手動修改的內容優先級高於自動推斷</p>
                 </div>
                 <span class="memory-card__badge">L0</span>
               </div>
               <div class="memory-fields">
-                <div class="memory-field"><label>称呼</label><input id="memory-l0-name" type="text" placeholder="未设置" disabled /></div>
-                <div class="memory-field"><label>职业 / 身份</label><input id="memory-l0-occupation" type="text" placeholder="未设置" disabled /></div>
-                <div class="memory-field"><label>长期兴趣</label><input id="memory-l0-interests" type="text" placeholder="未设置" disabled /></div>
-                <div class="memory-field"><label>常用语言</label><input id="memory-l0-language" type="text" placeholder="未设置" disabled /></div>
-                <div class="memory-field memory-field--full"><label>永久备注</label><textarea id="memory-l0-note" placeholder="未设置" rows="2" disabled></textarea></div>
+                <div class="memory-field"><label>稱呼</label><input id="memory-l0-name" type="text" placeholder="未設置" disabled /></div>
+                <div class="memory-field"><label>職業 / 身份</label><input id="memory-l0-occupation" type="text" placeholder="未設置" disabled /></div>
+                <div class="memory-field"><label>長期興趣</label><input id="memory-l0-interests" type="text" placeholder="未設置" disabled /></div>
+                <div class="memory-field"><label>常用語言</label><input id="memory-l0-language" type="text" placeholder="未設置" disabled /></div>
+                <div class="memory-field memory-field--full"><label>永久備註</label><textarea id="memory-l0-note" placeholder="未設置" rows="2" disabled></textarea></div>
               </div>
-              <button type="button" class="ghost-btn" id="memory-l0-edit-btn" disabled>✏️ 编辑</button> <button type="button" class="ghost-btn is-hidden" id="memory-l0-cancel-btn">取消</button>
+              <button type="button" class="ghost-btn" id="memory-l0-edit-btn" disabled>✏️ 編輯</button> <button type="button" class="ghost-btn is-hidden" id="memory-l0-cancel-btn">取消</button>
             </div>
             <!-- L1 -->
             <div class="memory-card">
               <div class="memory-card__head">
                 <span>🌱</span>
                 <div>
-                  <h2>当前阶段</h2>
-                  <p>最近的目标、偏好和状态，会随时间变化</p><p class="memory-card__hint">手动修改的内容优先级高于自动推断</p>
+                  <h2>當前階段</h2>
+                  <p>最近的目標、偏好和狀態，會隨時間變化</p><p class="memory-card__hint">手動修改的內容優先級高於自動推斷</p>
                 </div>
                 <span class="memory-card__badge">L1</span>
               </div>
               <div class="memory-fields">
-                <div class="memory-field memory-field--full"><label>最近目标</label><textarea id="memory-l1-goals" placeholder="未设置" rows="2" disabled></textarea></div>
-                <div class="memory-field memory-field--full"><label>近期偏好</label><textarea id="memory-l1-preferences" placeholder="未设置" rows="2" disabled></textarea></div>
-                <div class="memory-field memory-field--full"><label>当前项目</label><textarea id="memory-l1-project" placeholder="未设置" rows="2" disabled></textarea></div>
+                <div class="memory-field memory-field--full"><label>最近目標</label><textarea id="memory-l1-goals" placeholder="未設置" rows="2" disabled></textarea></div>
+                <div class="memory-field memory-field--full"><label>近期偏好</label><textarea id="memory-l1-preferences" placeholder="未設置" rows="2" disabled></textarea></div>
+                <div class="memory-field memory-field--full"><label>當前項目</label><textarea id="memory-l1-project" placeholder="未設置" rows="2" disabled></textarea></div>
               </div>
-              <button type="button" class="ghost-btn" id="memory-l1-edit-btn" disabled>✏️ 编辑</button> <button type="button" class="ghost-btn is-hidden" id="memory-l1-cancel-btn">取消</button>
+              <button type="button" class="ghost-btn" id="memory-l1-edit-btn" disabled>✏️ 編輯</button> <button type="button" class="ghost-btn is-hidden" id="memory-l1-cancel-btn">取消</button>
             </div>
-            <!-- L2 -->
-            <div class="memory-card">
-              <div class="memory-card__head">
-                <span>📝</span>
+            <!-- L2 時間軸與關係圖 -->
+            <div class="memory-card memory-explorer">
+              <div class="memory-card__head memory-explorer__head">
+                <span>✦</span>
                 <div>
-                  <h2>事件记忆</h2>
-                  <p>从聊天中提炼的重要事件，可搜索和管理</p>
+                  <h2>記憶軌跡</h2>
+                  <p>沿著時間回看重要片段，或看看人、地點與偏好如何彼此相連</p>
                 </div>
                 <span class="memory-card__badge">L2</span>
               </div>
-              <div class="memory-search"><input id="memory-l2-search" type="text" placeholder="搜索记忆..." /></div>
-              <div class="memory-list" id="memory-l2-list"><div class="memory-list__empty"><span>📭</span><p>暂无事件记忆</p><p class="memory-list__hint">聊天后昔涟会自动提炼重要信息</p></div></div>
+
+              <div class="memory-view-tabs" role="tablist" aria-label="記憶視圖">
+                <button type="button" class="memory-view-tab is-active" data-memory-view="timeline" role="tab" aria-selected="true">時間軸</button>
+                <button type="button" class="memory-view-tab" data-memory-view="graph" role="tab" aria-selected="false">關係圖</button>
+                <span class="memory-view-tabs__count" id="memory-view-count">0 段記憶</span>
+              </div>
+
+              <div class="memory-explorer__toolbar" id="memory-timeline-toolbar">
+                <div class="memory-search"><input id="memory-l2-search" type="search" placeholder="搜尋內容、證據或來源…" /></div>
+                <select id="memory-l2-status-filter" aria-label="依狀態篩選">
+                  <option value="all">全部狀態</option>
+                  <option value="active">活躍</option>
+                  <option value="aging">淡化中</option>
+                  <option value="archived">已封存</option>
+                  <option value="pinned">已固定</option>
+                  <option value="conflict">有衝突</option>
+                </select>
+              </div>
+
+              <section class="memory-view-panel" id="memory-timeline-view" role="tabpanel">
+                <div class="memory-timeline" id="memory-l2-list"><div class="memory-list__empty"><span>📭</span><p>暫無事件記憶</p><p class="memory-list__hint">聊天後昔漣會自動提煉重要資訊</p></div></div>
+              </section>
+
+              <section class="memory-view-panel is-hidden" id="memory-graph-view" role="tabpanel">
+                <div class="memory-graph-layout">
+                  <div class="memory-graph-stage" id="memory-graph-stage">
+                    <svg class="memory-graph-lines" id="memory-graph-lines" aria-hidden="true"></svg>
+                    <div class="memory-graph-nodes" id="memory-graph-nodes"></div>
+                    <div class="memory-graph-empty is-hidden" id="memory-graph-empty">聊天裡出現人物、地點或偏好後，關係會在這裡長出來。</div>
+                  </div>
+                  <aside class="memory-graph-detail" id="memory-graph-detail">
+                    <span class="memory-graph-detail__eyebrow">關係圖</span>
+                    <h3>點選一個節點</h3>
+                    <p>查看提及次數、最近出現時間與相連的關係。</p>
+                    <div class="memory-graph-legend">
+                      <span data-type="person">人物</span><span data-type="place">地點</span><span data-type="preference">偏好</span><span data-type="organization">組織</span><span data-type="concept">概念</span>
+                    </div>
+                  </aside>
+                </div>
+              </section>
             </div>
             <!-- import -->
             <div class="memory-card">
               <div class="memory-card__head">
                 <span>📚</span>
                 <div>
-                  <h2>导入知识</h2>
-                  <p>用户上传的文档和知识库</p>
+                  <h2>導入知識</h2>
+                  <p>用戶上傳的文檔和知識庫</p>
                 </div>
               </div>
-              <div class="memory-list" id="memory-imported-list"><div class="memory-list__empty"><span>📭</span><p>暂无导入文档</p><p class="memory-list__hint">在聊天窗口上传文件后会自动索引</p></div></div>
+              <div class="memory-list" id="memory-imported-list"><div class="memory-list__empty"><span>📭</span><p>暫無導入文檔</p><p class="memory-list__hint">在聊天窗口上傳文件後會自動索引</p></div></div>
             </div>
             <!-- reflection -->
             <div class="memory-card">
               <div class="memory-card__head">
                 <span>📖</span>
                 <div>
-                  <h2>阶段总结</h2>
-                  <p>AI 自动生成的阶段性回顾</p>
+                  <h2>階段總結</h2>
+                  <p>AI 自動生成的階段性回顧</p>
                 </div>
               </div>
-              <div class="memory-list" id="memory-reflection-list"><div class="memory-list__empty"><span>📭</span><p>暂无阶段总结</p><p class="memory-list__hint">持续聊天后会自动生成</p></div></div>
+              <div class="memory-list" id="memory-reflection-list"><div class="memory-list__empty"><span>📭</span><p>暫無階段總結</p><p class="memory-list__hint">持續聊天后會自動生成</p></div></div>
             </div>
           </div>
         </section>
@@ -540,7 +633,7 @@
             <div class="panel-heading__icon">👤</div>
             <div>
               <h1>我的信息</h1>
-              <p>你的个人标识与云端账号（即将支持）</p>
+              <p>你的個人標識與雲端賬號（即將支持）</p>
             </div>
           </div>
           <div class="panel-body">
@@ -550,28 +643,28 @@
                   <span>👤</span>
                 </div>
                 <div class="user-avatar-actions">
-                  <button type="button" class="ghost-btn" id="upload-avatar-btn">📷 上传头像</button>
-                  <p class="user-avatar-hint">支持 JPG、PNG，建议 1:1 比例</p>
+                  <button type="button" class="ghost-btn" id="upload-avatar-btn">📷 上傳頭像</button>
+                  <p class="user-avatar-hint">支持 JPG、PNG，建議 1:1 比例</p>
                 </div>
               </div>
               <div class="user-profile-fields">
                 <div class="tts-field">
-                  <label for="user-nickname">昵称</label>
-                  <input type="text" id="user-nickname" placeholder="你想让昔涟怎么称呼你" />
+                  <label for="user-nickname">暱稱</label>
+                  <input type="text" id="user-nickname" placeholder="你想讓昔漣怎麼稱呼你" />
                 </div>
                 <div class="tts-field">
-                  <label for="user-call-pref">称呼偏好</label>
-                  <input type="text" id="user-call-pref" placeholder="例如：P宝、主人、哥哥（留空用昵称）" />
+                  <label for="user-call-pref">稱呼偏好</label>
+                  <input type="text" id="user-call-pref" placeholder="例如：P寶、主人、哥哥（留空用暱稱）" />
                 </div>
                 <div class="tts-field">
                   <label for="user-birthday">生日</label>
                   <input type="date" id="user-birthday" />
                 </div>
                 <div class="tts-field">
-                  <label for="user-default-city">默认城市</label>
-                  <input type="text" id="user-default-city" placeholder="例如：上海、北京、广州（用于天气等）" />
+                  <label for="user-default-city">默認城市</label>
+                  <input type="text" id="user-default-city" placeholder="例如：上海、北京、廣州（用於天氣等）" />
                 </div>
-                <p class="user-field-hint">这些信息会告诉昔涟，让她知道怎么称呼你、你在哪。默认城市用于天气等需要定位的工具。</p>
+                <p class="user-field-hint">這些信息會告訴昔漣，讓她知道怎麼稱呼你、你在哪。默認城市用於天氣等需要定位的工具。</p>
               </div>
             </div>
           </div>
@@ -582,24 +675,24 @@
             <div class="panel-heading__icon">💬</div>
             <div>
               <h1>聊天</h1>
-              <p>管理聊天窗口与会话历史</p>
+              <p>管理聊天窗口與會話歷史</p>
             </div>
           </div>
           <div class="panel-body">
             <div class="chat-sessions">
               <button type="button" class="chat-sessions__new" id="chat-new-btn">
                 <span class="chat-sessions__new-icon" aria-hidden="true">＋</span>
-                <span>新对话</span>
+                <span>新對話</span>
               </button>
               <ul class="chat-sessions__list" id="chat-sessions-list" role="list"></ul>
               <div class="chat-sessions__empty is-hidden" id="chat-sessions-empty">
                 <span class="chat-sessions__empty-icon" aria-hidden="true">📭</span>
-                <p>还没有对话，点上面的「＋ 新对话」开始吧</p>
+                <p>還沒有對話，點上面的「＋ 新對話」開始吧</p>
               </div>
             </div>
             <div class="chat-sessions__footer">
-              <button type="button" class="ghost-btn" id="chat-open-folder-btn">📂 打开存储位置</button>
-              <span class="chat-sessions__footer-hint">所有会话保存在 userData/cyrene-chats/ 下，可整体迁移</span>
+              <button type="button" class="ghost-btn" id="chat-open-folder-btn">📂 打開存儲位置</button>
+              <span class="chat-sessions__footer-hint">所有會話保存在 userData/cyrene-chats/ 下，可整體遷移</span>
             </div>
           </div>
         </section>
@@ -608,21 +701,64 @@
           <div class="panel-heading">
             <div class="panel-heading__icon">⏰</div>
             <div>
-              <h1>定时任务</h1>
-              <p>管理自动触发的 agent 任务。到点后会根据提示词调用当前允许的工具。</p>
+              <h1>定時任務</h1>
+              <p>管理自動觸發的 agent 任務。到點後會根據提示詞調用當前允許的工具。</p>
             </div>
           </div>
+
+          <section class="ritual-card" aria-labelledby="daily-ritual-title">
+            <div class="ritual-card__header">
+              <div>
+                <span class="ritual-card__eyebrow">一天，三次溫柔的相遇</span>
+                <h2 id="daily-ritual-title">每日陪伴儀式</h2>
+                <p>昔漣會參考記憶、待辦與可用的天氣資料，主動來陪你一下。</p>
+              </div>
+              <label class="ritual-master" title="啟用每日陪伴儀式">
+                <span>啟用</span>
+                <input id="daily-ritual-enabled" type="checkbox" class="switch-input" />
+              </label>
+            </div>
+
+            <div class="ritual-timeline" id="daily-ritual-timeline">
+              <div class="ritual-stop" data-ritual="morning">
+                <span class="ritual-stop__orb">☀</span>
+                <div class="ritual-stop__copy"><strong>早安</strong><span>天氣、今日重點與一句打氣</span></div>
+                <input class="ritual-stop__time" id="daily-ritual-morning-time" type="time" value="08:00" aria-label="早安儀式時間" />
+                <input id="daily-ritual-morning-enabled" type="checkbox" class="switch-input" checked aria-label="啟用早安儀式" />
+                <button class="ritual-stop__play" type="button" data-ritual-test="morning">試播</button>
+              </div>
+              <div class="ritual-stop" data-ritual="afternoon">
+                <span class="ritual-stop__orb">☕</span>
+                <div class="ritual-stop__copy"><strong>午後</strong><span>休息提醒與目前最重要的一件事</span></div>
+                <input class="ritual-stop__time" id="daily-ritual-afternoon-time" type="time" value="15:00" aria-label="午後儀式時間" />
+                <input id="daily-ritual-afternoon-enabled" type="checkbox" class="switch-input" checked aria-label="啟用午後儀式" />
+                <button class="ritual-stop__play" type="button" data-ritual-test="afternoon">試播</button>
+              </div>
+              <div class="ritual-stop" data-ritual="evening">
+                <span class="ritual-stop__orb">☾</span>
+                <div class="ritual-stop__copy"><strong>晚安</strong><span>一天的收尾與輕輕的回顧</span></div>
+                <input class="ritual-stop__time" id="daily-ritual-evening-time" type="time" value="22:30" aria-label="晚安儀式時間" />
+                <input id="daily-ritual-evening-enabled" type="checkbox" class="switch-input" checked aria-label="啟用晚安儀式" />
+                <button class="ritual-stop__play" type="button" data-ritual-test="evening">試播</button>
+              </div>
+            </div>
+
+            <div class="ritual-card__footer">
+              <label><input id="daily-ritual-voice" type="checkbox" checked /> 使用目前的 TTS 聲音朗讀；未設定 TTS 時仍會顯示氣泡</label>
+              <span id="daily-ritual-status" role="status">設定會立即保存</span>
+            </div>
+          </section>
 
           <div class="scheduler-toolbar">
             <div class="scheduler-toolbar__copy">
-              <strong>任务列表</strong>
-              <span>任务修改会立即保存，不需要点击全局保存按钮。</span>
+              <strong>任務列表</strong>
+              <span>任務修改會立即保存，不需要點擊全局保存按鈕。</span>
             </div>
-            <button type="button" class="save-btn" id="scheduler-new-btn">+ 新建任务</button>
+            <button type="button" class="save-btn" id="scheduler-new-btn">+ 新建任務</button>
           </div>
 
           <div class="scheduler-empty" id="scheduler-empty">
-            还没有定时任务。新建一个任务，让昔涟按时间自动执行提示词。
+            還沒有定時任務。新建一個任務，讓昔漣按時間自動執行提示詞。
           </div>
 
           <div class="scheduler-list" id="scheduler-list"></div>
@@ -630,86 +766,86 @@
           <div class="scheduler-editor is-hidden" id="scheduler-editor">
             <div class="scheduler-editor__card">
               <div class="scheduler-editor__header">
-                <h2 id="scheduler-editor-title">新建定时任务</h2>
-                <button type="button" class="ghost-btn" id="scheduler-editor-close">关闭</button>
+                <h2 id="scheduler-editor-title">新建定時任務</h2>
+                <button type="button" class="ghost-btn" id="scheduler-editor-close">關閉</button>
               </div>
 
               <label class="field">
-                <span>标题</span>
+                <span>標題</span>
                 <input id="scheduler-title" type="text" placeholder="例如：早安信息整理" />
               </label>
 
               <label class="field">
-                <span>提示词</span>
-                <textarea id="scheduler-prompt" rows="5" placeholder="到点后发给 LLM 的提示词"></textarea>
+                <span>提示詞</span>
+                <textarea id="scheduler-prompt" rows="5" placeholder="到點後發給 LLM 的提示詞"></textarea>
               </label>
 
               <label class="setting-row">
                 <div>
-                  <strong>启用</strong>
-                  <span>关闭后不会自动触发，但仍可手动立即运行。</span>
+                  <strong>啟用</strong>
+                  <span>關閉後不會自動觸發，但仍可手動立即運行。</span>
                 </div>
                 <input id="scheduler-enabled" type="checkbox" class="switch-input" checked />
               </label>
 
               <div class="form-grid scheduler-form-grid">
                 <label class="field">
-                  <span>频率</span>
+                  <span>頻率</span>
                   <select id="scheduler-kind">
-                    <option value="once">仅一次</option>
+                    <option value="once">僅一次</option>
                     <option value="daily">每天</option>
-                    <option value="weekly">每周</option>
-                    <option value="interval">每隔一段时间</option>
+                    <option value="weekly">每週</option>
+                    <option value="interval">每隔一段時間</option>
                   </select>
                 </label>
                 <label class="field scheduler-once-field">
-                  <span>运行时间</span>
+                  <span>運行時間</span>
                   <input id="scheduler-once-run-at" type="datetime-local" />
                 </label>
                 <label class="field scheduler-time-field">
-                  <span>时间</span>
+                  <span>時間</span>
                   <input id="scheduler-time-of-day" type="time" value="08:00" />
                 </label>
                 <label class="field scheduler-weekly-field">
                   <span>星期</span>
                   <select id="scheduler-day-of-week">
-                    <option value="1">周一</option>
-                    <option value="2">周二</option>
-                    <option value="3">周三</option>
-                    <option value="4">周四</option>
-                    <option value="5">周五</option>
-                    <option value="6">周六</option>
-                    <option value="0">周日</option>
+                    <option value="1">週一</option>
+                    <option value="2">週二</option>
+                    <option value="3">週三</option>
+                    <option value="4">週四</option>
+                    <option value="5">週五</option>
+                    <option value="6">週六</option>
+                    <option value="0">週日</option>
                   </select>
                 </label>
                 <label class="field scheduler-interval-field">
-                  <span>间隔数值</span>
+                  <span>間隔數值</span>
                   <input id="scheduler-interval-every" type="number" min="1" value="1" />
                 </label>
                 <label class="field scheduler-interval-field">
-                  <span>间隔单位</span>
+                  <span>間隔單位</span>
                   <select id="scheduler-interval-unit">
-                    <option value="minutes">分钟</option>
-                    <option value="hours">小时</option>
+                    <option value="minutes">分鐘</option>
+                    <option value="hours">小時</option>
                   </select>
                 </label>
               </div>
 
               <label class="setting-row">
                 <div>
-                  <strong>高级工具限制</strong>
-                  <span>开启后，只允许调用下方选择的工具；仍不会绕过插件全局开关。</span>
+                  <strong>高級工具限制</strong>
+                  <span>開啟後，只允許調用下方選擇的工具；仍不會繞過插件全局開關。</span>
                 </div>
                 <input id="scheduler-tool-limit" type="checkbox" class="switch-input" />
               </label>
 
               <div class="scheduler-tool-picker is-hidden" id="scheduler-tool-picker"></div>
-              <div class="scheduler-tool-hint is-hidden" id="scheduler-tool-empty-hint">未选择工具时，任务只能使用模型自身能力，不会调用任何工具。</div>
+              <div class="scheduler-tool-hint is-hidden" id="scheduler-tool-empty-hint">未選擇工具時，任務只能使用模型自身能力，不會調用任何工具。</div>
 
               <div class="form-actions">
                 <div class="save-status" id="scheduler-save-status">等待操作</div>
                 <button type="button" class="ghost-btn" id="scheduler-cancel-btn">取消</button>
-                <button type="button" class="save-btn" id="scheduler-save-btn">保存任务</button>
+                <button type="button" class="save-btn" id="scheduler-save-btn">保存任務</button>
               </div>
             </div>
           </div>
@@ -719,39 +855,39 @@
           <div class="panel-heading">
             <div class="panel-heading__icon">💼</div>
             <div>
-              <h1>职位</h1>
-              <p>自定义昔涟的身份定位与工作职责</p>
+              <h1>職位</h1>
+              <p>自定義昔漣的身份定位與工作職責</p>
             </div>
           </div>
           <div class="panel-body">
             <div class="placeholder-card">
               <span class="placeholder-icon">🚧</span>
-              <p class="placeholder-text">敬请期待</p>
-              <p class="placeholder-hint">此功能将在后续版本更新加入多 agent 协作后开启</p>
+              <p class="placeholder-text">敬請期待</p>
+              <p class="placeholder-hint">此功能將在後續版本更新加入多 agent 協作後開啟</p>
             </div>
           </div>
         </section>
 
         <section class="settings-panel is-hidden" id="skills-panel" data-panel="skills">
           <h1>Skill 管理</h1>
-          <p class="panel-hint">Skill 约束 agent 如何使用工具。把含 SKILL.md 的目录放到用户数据目录的 skills/ 下即可扩展。</p>
+          <p class="panel-hint">Skill 約束 agent 如何使用工具。把含 SKILL.md 的目錄放到用戶數據目錄的 skills/ 下即可擴展。</p>
           <div id="skills-list"></div>
-          <p id="skills-empty" class="empty-hint is-hidden">还没有可用的 skill。</p>
+          <p id="skills-empty" class="empty-hint is-hidden">還沒有可用的 skill。</p>
         </section>
 
         <section class="settings-panel is-hidden" id="channels-panel" data-panel="channels">
           <details class="channels-log" id="channels-log-details">
-            <summary>💬 消息日志（最近 100 条）</summary>
+            <summary>💬 消息日誌（最近 100 條）</summary>
             <div class="channels-log__actions">
               <button type="button" class="btn-secondary" id="channels-log-refresh">刷新</button>
               <button type="button" class="btn-secondary" id="channels-log-clear">清空</button>
             </div>
             <div class="channels-log__list" id="channels-log-list">
-              <p class="empty-hint">暂无消息。</p>
+              <p class="empty-hint">暫無消息。</p>
             </div>
           </details>
-          <h1>连接手机</h1>
-          <p class="panel-hint">把 Cyrene 接到微信、飞书等聊天平台。在外部渠道里的每个用户会拥有独立的对话上下文与记忆。</p>
+          <h1>連接手機</h1>
+          <p class="panel-hint">把 Cyrene 接到微信、飛書等聊天平臺。在外部渠道里的每個用戶會擁有獨立的對話上下文與記憶。</p>
 
           <div class="channels-card">
             <div class="channels-card__header">
@@ -761,23 +897,23 @@
             <div class="channels-card__body">
               <div class="channels-status" id="channels-wechat-status">
                 <span class="channels-status__dot channels-status__dot--offline"></span>
-                <span class="channels-status__text">未启用</span>
+                <span class="channels-status__text">未啟用</span>
               </div>
               <p class="channels-card__hint">
-                通过腾讯 <strong>iLink Bot API</strong>（个人微信官方接入通道）直连微信，无须外部网关。
-                点击"扫码登录"在 Cyrene 内弹出二维码窗口，扫描后自动连接。
+                通過騰訊 <strong>iLink Bot API</strong>（個人微信官方接入通道）直連微信，無須外部網關。
+                點擊"掃碼登錄"在 Cyrene 內彈出二維碼窗口，掃描後自動連接。
               </p>
               <div class="channels-card__actions">
-                <button type="button" class="btn-secondary" id="channels-wechat-login">扫码登录</button>
-                <button type="button" class="btn-secondary" id="channels-wechat-restart">重启连接</button>
+                <button type="button" class="btn-secondary" id="channels-wechat-login">掃碼登錄</button>
+                <button type="button" class="btn-secondary" id="channels-wechat-restart">重啟連接</button>
               </div>
               <div class="channels-qr-modal" id="channels-wechat-qr" hidden>
                 <div class="channels-qr-modal__backdrop" id="channels-wechat-qr-backdrop"></div>
                 <div class="channels-qr-modal__card">
-                  <h3 class="channels-qr-modal__title">扫码登录微信</h3>
-                  <img class="channels-qr-modal__img" id="channels-wechat-qr-img" alt="微信登录二维码" />
-                  <p class="channels-qr-modal__tip">请用微信扫描二维码完成登录</p>
-                  <button type="button" class="btn-secondary channels-qr-modal__close" id="channels-wechat-qr-close">关闭</button>
+                  <h3 class="channels-qr-modal__title">掃碼登錄微信</h3>
+                  <img class="channels-qr-modal__img" id="channels-wechat-qr-img" alt="微信登錄二維碼" />
+                  <p class="channels-qr-modal__tip">請用微信掃描二維碼完成登錄</p>
+                  <button type="button" class="btn-secondary channels-qr-modal__close" id="channels-wechat-qr-close">關閉</button>
                 </div>
               </div>
               <div class="channels-feedback" id="channels-wechat-feedback"></div>
@@ -786,19 +922,19 @@
 
           <div class="channels-card">
             <div class="channels-card__header">
-              <h2>飞书</h2>
+              <h2>飛書</h2>
               <span class="switch"><input id="channels-feishu-enabled" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
             </div>
             <div class="channels-card__body">
               <div class="channels-status" id="channels-feishu-status">
                 <span class="channels-status__dot channels-status__dot--offline"></span>
-                <span class="channels-status__text">未启用</span>
+                <span class="channels-status__text">未啟用</span>
               </div>
               <p class="channels-card__hint">
-                通过飞书官方 SDK 的<strong>长连接 WebSocket</strong>接收消息（无需公网/内网穿透）。
+                通過飛書官方 SDK 的<strong>長連接 WebSocket</strong>接收消息（無需公網/內網穿透）。
                 在
-                <a href="https://open.feishu.cn/app" target="_blank" rel="noopener">飞书开放平台</a>
-                创建自建应用 → 开启"机器人"能力 → 填入下方 App ID/Secret → 启用即可。
+                <a href="https://open.feishu.cn/app" target="_blank" rel="noopener">飛書開放平臺</a>
+                創建自建應用 → 開啟"機器人"能力 → 填入下方 App ID/Secret → 啟用即可。
               </p>
 
               <div class="form-row">
@@ -808,15 +944,271 @@
               <div class="form-row">
                 <label class="form-label">App Secret</label>
                 <div class="form-input-with-action">
-                  <input type="password" id="channels-feishu-app-secret" class="form-input form-input--wide" placeholder="点击保存配置时自动加密保存" autocomplete="off" />
-                  <button type="button" class="btn-reveal" id="channels-feishu-app-secret-reveal" title="显示/隐藏">👁</button>
+                  <input type="password" id="channels-feishu-app-secret" class="form-input form-input--wide" placeholder="點擊保存配置時自動加密保存" autocomplete="off" />
+                  <button type="button" class="btn-reveal" id="channels-feishu-app-secret-reveal" title="顯示/隱藏">👁</button>
                 </div>
               </div>
 
               <div class="channels-card__actions">
-                <button type="button" class="btn-secondary" id="channels-feishu-save">保存并连接</button>
+                <button type="button" class="btn-secondary" id="channels-feishu-save">保存並連接</button>
               </div>
               <div class="channels-feedback" id="channels-feishu-feedback"></div>
+            </div>
+          </div>
+
+          <div class="channels-card channels-card--spotify" id="channels-spotify-card" tabindex="-1">
+            <div class="channels-card__header spotify-card__header">
+              <div class="spotify-card__brand"><span class="spotify-card__logo">●</span><div><h2>Spotify Premium</h2><small>CONNECT PLAYER</small></div></div>
+              <span class="spotify-card__badge" id="channels-spotify-plan">尚未連線</span>
+            </div>
+            <div class="channels-card__body">
+              <div class="spotify-player" id="channels-spotify-player">
+                <div class="spotify-player__cover"><img id="channels-spotify-cover" alt="Spotify 專輯封面" hidden /><span>♫</span></div>
+                <div class="spotify-player__meta">
+                  <span id="channels-spotify-device">等待 Spotify 裝置</span>
+                  <strong id="channels-spotify-title">連線後即可控制手機或電腦上的 Spotify</strong>
+                  <small id="channels-spotify-artist">Premium 播放控制</small>
+                  <div class="spotify-player__progress"><i id="channels-spotify-progress"></i></div>
+                </div>
+              </div>
+              <div class="spotify-player__request">
+                <input type="text" id="channels-spotify-query" class="form-input" placeholder="歌曲名稱或 Spotify 歌曲／專輯／歌單連結" autocomplete="off" disabled />
+                <button type="button" id="channels-spotify-play-query" class="btn-secondary btn-spotify" disabled>播放</button>
+              </div>
+              <div class="spotify-player__controls" aria-label="Spotify 播放控制">
+                <button type="button" id="channels-spotify-previous" title="上一首" disabled>│◀</button>
+                <button type="button" id="channels-spotify-toggle" class="spotify-player__primary" title="播放或暫停" disabled>▶</button>
+                <button type="button" id="channels-spotify-next" title="下一首" disabled>▶│</button>
+                <select id="channels-spotify-device-select" class="form-input" aria-label="Spotify 播放裝置" disabled><option value="">沒有可用裝置</option></select>
+              </div>
+              <label class="spotify-player__volume" for="channels-spotify-volume"><span>音量</span><input type="range" id="channels-spotify-volume" min="0" max="100" value="50" disabled /><output id="channels-spotify-volume-value">50%</output></label>
+
+              <div class="spotify-connection-divider"><span>開發者連線</span></div>
+              <p class="channels-card__hint">使用 Spotify 官方 OAuth，只要求讀取歌單與控制播放。Client Secret 與授權 Token 會透過 macOS 鑰匙串加密保存。</p>
+              <div class="spotify-credentials">
+                <div class="form-row"><label class="form-label" for="channels-spotify-client-id">Client ID</label><input type="text" id="channels-spotify-client-id" class="form-input form-input--wide" autocomplete="off" /></div>
+                <div class="form-row"><label class="form-label" for="channels-spotify-client-secret">Client Secret</label><div class="form-input-with-action"><input type="password" id="channels-spotify-client-secret" class="form-input form-input--wide" autocomplete="off" /><button type="button" class="btn-reveal" id="channels-spotify-secret-reveal" title="顯示或隱藏">👁</button></div></div>
+              </div>
+              <p class="form-hint">Redirect URI：<code>http://127.0.0.1:53854/spotify/callback</code></p>
+              <div class="channels-card__actions">
+                <button type="button" class="btn-secondary btn-spotify" id="channels-spotify-connect">連接 Spotify</button>
+                <button type="button" class="btn-secondary" id="channels-spotify-disconnect" disabled>解除連線</button>
+                <a class="btn-secondary spotify-portal-link" href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">開啟 Developer Dashboard ↗</a>
+              </div>
+              <div class="channels-feedback" id="channels-spotify-feedback" aria-live="polite"></div>
+            </div>
+          </div>
+
+          <div class="channels-card channels-card--bilibili" id="channels-bilibili-card" tabindex="-1">
+            <div class="channels-card__header bilibili-card__header">
+              <div class="bilibili-card__brand">
+                <span class="bilibili-card__logo" aria-hidden="true">B</span>
+                <div><h2>Bilibili</h2><small>OPERA GX SESSION</small></div>
+              </div>
+              <span class="bilibili-card__badge" id="channels-bilibili-status">尚未連接</span>
+            </div>
+            <div class="channels-card__body">
+              <div class="bilibili-session" aria-label="Bilibili 瀏覽器連接狀態">
+                <div class="bilibili-session__rail" aria-hidden="true">
+                  <span class="bilibili-session__node bilibili-session__node--gx">GX</span>
+                  <span class="bilibili-session__line"><i></i></span>
+                  <span class="bilibili-session__node bilibili-session__node--bili">B</span>
+                </div>
+                <div class="bilibili-session__copy">
+                  <strong id="channels-bilibili-session-title">連接你的 Opera GX 登入狀態</strong>
+                  <span id="channels-bilibili-session-detail">連接後，Discord 播放 Bilibili 連結時會自動讀取你的本機登入狀態。</span>
+                </div>
+              </div>
+              <p class="channels-card__hint">Cyrene 不會保存你的 Bilibili 帳號、密碼或 Cookie；播放時只會讓 yt-dlp 從本機 Opera GX 讀取，而且只套用於 <strong>bilibili.com</strong> 與 <strong>b23.tv</strong> 連結。</p>
+              <div class="bilibili-privacy"><span aria-hidden="true">⌁</span><div><strong>只在這台 Mac 生效</strong><small>Opera GX 必須保持 Bilibili 已登入；登出後可在這裡重新連接。</small></div></div>
+              <div class="channels-card__actions">
+                <button type="button" class="btn-secondary btn-bilibili" id="channels-bilibili-connect">連接 Bilibili</button>
+                <button type="button" class="btn-secondary" id="channels-bilibili-disconnect" disabled>解除連接</button>
+                <a class="btn-secondary bilibili-portal-link" href="https://www.bilibili.com/" target="_blank" rel="noopener">開啟 Bilibili ↗</a>
+              </div>
+              <div class="channels-feedback" id="channels-bilibili-feedback" aria-live="polite"></div>
+            </div>
+          </div>
+
+          <div class="channels-card channels-card--discord" id="channels-discord-card" tabindex="-1">
+            <div class="channels-card__header">
+              <h2>Discord</h2>
+              <span class="switch"><input id="channels-discord-enabled" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
+            </div>
+            <div class="channels-card__body">
+              <div class="channels-status" id="channels-discord-status">
+                <span class="channels-status__dot channels-status__dot--offline"></span>
+                <span class="channels-status__text">未啟用</span>
+              </div>
+              <section class="discord-identity" aria-labelledby="discord-identity-title">
+                <div class="discord-identity__profile">
+                  <div class="discord-avatar" id="channels-discord-avatar-wrap">
+                    <img id="channels-discord-avatar" alt="Discord Bot 頭像" hidden />
+                    <span id="channels-discord-avatar-fallback">DI</span>
+                    <i id="channels-discord-avatar-presence" aria-hidden="true"></i>
+                  </div>
+                  <div class="discord-identity__nameblock">
+                    <span class="discord-identity__eyebrow" id="discord-identity-title">BOT 身分</span>
+                    <strong id="channels-discord-display-name">尚未連接</strong>
+                    <span id="channels-discord-tag">連接 Gateway 後顯示即時資訊</span>
+                  </div>
+                  <div class="discord-media-change">
+                    <button type="button" class="btn-secondary discord-avatar-button" id="channels-discord-avatar-pick" aria-expanded="false" disabled>更換</button>
+                    <div class="discord-media-menu" id="channels-discord-media-menu" hidden>
+                      <button type="button" id="channels-discord-avatar-option"><span>◉</span><span><strong>更換頭像</strong><small>建議使用正方形圖片</small></span></button>
+                      <button type="button" id="channels-discord-banner-option"><span>▰</span><span><strong>更換 Banner</strong><small>建議使用橫向圖片</small></span></button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="discord-identity__stats">
+                  <div><span>應用程式 ID</span><strong id="channels-discord-application-id">—</strong></div>
+                  <div><span>所在伺服器</span><strong id="channels-discord-guild-count">0</strong></div>
+                  <div><span>語音狀態</span><strong id="channels-discord-voice-status">未通話</strong></div>
+                </div>
+                <div class="discord-guilds" id="channels-discord-guilds" aria-label="Bot 所在伺服器">
+                  <span>尚未取得伺服器資訊</span>
+                </div>
+
+                <div class="discord-identity__editor">
+                  <div class="form-row">
+                    <label class="form-label" for="channels-discord-username">Bot 顯示名稱</label>
+                    <div class="discord-emoji-input">
+                      <input type="text" id="channels-discord-username" class="form-input form-input--wide" minlength="2" maxlength="32" placeholder="2–32 個字元" />
+                      <button type="button" class="discord-emoji-button" data-emoji-target="channels-discord-username" aria-label="替 Bot 顯示名稱選擇 emoji" title="選擇 emoji">☺</button>
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <label class="form-label" for="channels-discord-activity">活動文字</label>
+                    <div class="discord-emoji-input">
+                      <input type="text" id="channels-discord-activity" class="form-input form-input--wide" maxlength="128" placeholder="例如：陪你聊天（顯示為「正在玩」）" />
+                      <button type="button" class="discord-emoji-button" data-emoji-target="channels-discord-activity" aria-label="替活動文字選擇 emoji" title="選擇 emoji">☺</button>
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <label class="form-label" for="channels-discord-presence">上線狀態</label>
+                    <select id="channels-discord-presence" class="form-input">
+                      <option value="online">上線</option>
+                      <option value="idle">閒置</option>
+                      <option value="dnd">請勿打擾</option>
+                      <option value="invisible">隱形</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="discord-emoji-picker" id="channels-discord-emoji-picker" hidden aria-label="Emoji 選擇器"></div>
+                <div class="channels-card__actions discord-identity__actions">
+                  <button type="button" class="btn-secondary btn-discord" id="channels-discord-profile-save" disabled>更新 Discord 身分</button>
+                  <a class="btn-secondary discord-portal-link" href="https://discord.com/developers/applications" target="_blank" rel="noopener">開啟 Developer Portal ↗</a>
+                </div>
+                <p class="channels-feedback" id="channels-discord-profile-feedback"></p>
+
+                <section class="discord-player" id="channels-discord-player" aria-labelledby="discord-player-title">
+                  <div class="discord-player__heading">
+                    <div>
+                      <span class="discord-identity__eyebrow">VOICE MUSIC</span>
+                      <h3 id="discord-player-title">Discord 播放器</h3>
+                    </div>
+                    <span class="discord-player__live" id="channels-discord-music-status">尚未播放</span>
+                  </div>
+
+                  <div class="discord-player__now">
+                    <div class="discord-player__record" id="channels-discord-music-record" aria-hidden="true">
+                      <img id="channels-discord-music-cover" alt="" hidden />
+                      <span>♪</span>
+                    </div>
+                    <div class="discord-player__track">
+                      <span>目前播放</span>
+                      <strong id="channels-discord-music-title">等待你在 Discord 使用 /play</strong>
+                      <div class="discord-player__progress" aria-hidden="true"><i id="channels-discord-music-progress"></i></div>
+                      <div class="discord-player__time"><span id="channels-discord-music-elapsed">0:00</span><span id="channels-discord-music-duration">—</span></div>
+                    </div>
+                  </div>
+
+                  <div class="discord-player__controls" aria-label="Discord 音樂控制">
+                    <button type="button" id="channels-discord-music-shuffle" title="切換隨機播放" aria-pressed="false">⇄</button>
+                    <button type="button" id="channels-discord-music-previous" title="上一首">│◀</button>
+                    <button type="button" id="channels-discord-music-toggle" class="discord-player__primary" title="暫停或繼續">Ⅱ</button>
+                    <button type="button" id="channels-discord-music-next" title="下一首">▶│</button>
+                    <button type="button" id="channels-discord-music-repeat" title="切換循環模式" aria-pressed="false">↻</button>
+                    <button type="button" id="channels-discord-music-autoplay" title="自動推薦相近歌曲" aria-pressed="false">♾</button>
+                    <button type="button" id="channels-discord-music-stop" title="停止並離開語音">■</button>
+                  </div>
+
+                  <label class="discord-player__volume" for="channels-discord-music-volume">
+                    <span>音量</span>
+                    <input type="range" id="channels-discord-music-volume" min="0" max="150" step="1" value="100" />
+                    <output id="channels-discord-music-volume-value">100%</output>
+                  </label>
+
+                  <div class="discord-player__library">
+                    <div class="discord-player__list-head">
+                      <div><span class="discord-identity__eyebrow" id="channels-discord-music-library-kind">PLAYLIST</span><h4 id="channels-discord-music-playlist-title">播放清單</h4></div>
+                      <div class="discord-player__list-actions">
+                        <div class="discord-player__tabs" role="tablist" aria-label="音樂資料庫">
+                          <button type="button" id="channels-discord-music-queue-toggle" role="tab" aria-selected="true">待播</button>
+                          <button type="button" id="channels-discord-music-favorites-toggle" role="tab" aria-selected="false">♡ 收藏</button>
+                          <button type="button" id="channels-discord-music-history-toggle" role="tab" aria-selected="false">歷史</button>
+                        </div>
+                        <button type="button" id="channels-discord-music-clear">清空待播</button>
+                      </div>
+                    </div>
+                    <ol id="channels-discord-music-queue" class="discord-player__queue">
+                      <li class="is-empty">播放清單會和 Discord 即時同步</li>
+                    </ol>
+                    <ol id="channels-discord-music-favorites" class="discord-player__queue discord-player__favorites" hidden></ol>
+                    <ol id="channels-discord-music-history" class="discord-player__queue" hidden></ol>
+                  </div>
+                  <p class="channels-feedback" id="channels-discord-music-feedback" aria-live="polite"></p>
+                </section>
+              </section>
+
+              <div class="discord-connection-divider"><span>連線與回覆規則</span></div>
+              <p class="channels-card__hint">
+                使用 Discord Gateway 長連接，桌面程式開啟時 Bot 才會在線。請先到
+                <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Discord Developer Portal</a>
+                建立 Bot，開啟 <strong>Message Content Intent</strong>，再貼入 Token。
+                私訊會直接回覆；伺服器頻道預設需要 @Bot。
+              </p>
+              <div class="form-row">
+                <label class="form-label">Bot Token</label>
+                <div class="form-input-with-action">
+                  <input type="password" id="channels-discord-token" class="form-input form-input--wide" placeholder="保存時會加密" autocomplete="off" />
+                  <button type="button" class="btn-reveal" id="channels-discord-token-reveal" title="顯示/隱藏">👁</button>
+                </div>
+              </div>
+              <div class="form-row">
+                <label class="form-label">允許的 Server IDs</label>
+                <input type="text" id="channels-discord-guild-ids" class="form-input form-input--wide" placeholder="留空不限制；多個用逗號分隔" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">允許的 Channel IDs</label>
+                <input type="text" id="channels-discord-channel-ids" class="form-input form-input--wide" placeholder="留空不限制；多個用逗號分隔" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">允許的 User IDs</label>
+                <input type="text" id="channels-discord-user-ids" class="form-input form-input--wide" placeholder="留空不限制；多個用逗號分隔" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">Codex 繪圖擁有者 ID</label>
+                <input type="text" id="channels-discord-codex-owner-id" class="form-input form-input--wide" inputmode="numeric" placeholder="只有這個 Discord User ID 能使用 /draw" />
+                <span class="form-help">獨立於一般聊天白名單；繪圖結果只會私訊給此帳號。</span>
+              </div>
+              <div class="form-row form-row--inline">
+                <span class="switch"><input id="channels-discord-require-mention" type="checkbox" checked /><span class="switch__track"><span class="switch__thumb"></span></span></span>
+                <span class="form-row__label">伺服器頻道必須 @Bot 或以 / 開頭才回覆</span>
+              </div>
+              <div class="form-row form-row--inline">
+                <span class="switch"><input id="channels-discord-voice-enabled" type="checkbox" checked /><span class="switch__track"><span class="switch__thumb"></span></span></span>
+                <span class="form-row__label">允許 Bot 加入語音頻道通話（只辨識白名單使用者）</span>
+              </div>
+              <p class="channels-card__hint">
+                先加入語音頻道，再輸入 <strong>@Bot 加入通話</strong>；結束時輸入 <strong>@Bot 離開通話</strong>。
+                需同時設定 ASR 與 TTS，並給 Bot「連接」及「說話」權限。
+              </p>
+              <div class="channels-card__actions">
+                <button type="button" class="btn-secondary" id="channels-discord-save">保存並連接</button>
+              </div>
+              <div class="channels-feedback" id="channels-discord-feedback"></div>
             </div>
           </div>
 
@@ -826,28 +1218,28 @@
             </div>
             <div class="channels-card__body">
               <div class="form-row">
-                <label class="form-label">限速 (每用户 / 分钟)</label>
+                <label class="form-label">限速 (每用戶 / 分鐘)</label>
                 <input type="number" min="1" max="1000" id="channels-rate-user" class="form-input" />
               </div>
               <div class="form-row">
-                <label class="form-label">限速 (单渠道 / 分钟)</label>
+                <label class="form-label">限速 (單渠道 / 分鐘)</label>
                 <input type="number" min="1" max="10000" id="channels-rate-channel" class="form-input" />
               </div>
               <div class="form-row form-row--inline">
                 <span class="switch"><input id="channels-tts-enabled" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
-                <span class="form-row__label">发送 TTS 音频消息</span>
+                <span class="form-row__label">發送 TTS 音頻消息</span>
               </div>
               <div class="form-row form-row--inline">
                 <span class="switch"><input id="channels-sticker-enabled" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
-                <span class="form-row__label">发送表情包</span>
+                <span class="form-row__label">發送表情包</span>
               </div>
               <div class="form-row form-row--inline">
                 <span class="switch"><input id="channels-mirror-desktop" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
-                <span class="form-row__label">桌面端镜像显示</span>
+                <span class="form-row__label">桌面端鏡像顯示</span>
               </div>
               <div class="form-row form-row--inline">
                 <span class="switch"><input id="channels-tool-sandbox" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
-                <span class="form-row__label">工具沙箱: 仅 safe 类 (禁用文件/shell 工具)</span>
+                <span class="form-row__label">工具沙箱: 僅 safe 類 (禁用文件/shell 工具)</span>
               </div>
             </div>
           </div>
@@ -857,7 +1249,7 @@
           <div class="plugin-panel-heading">
             <div>
               <h1>插件</h1>
-              <p>管理昔涟可调用的工具能力；关闭后调度层不会使用对应工具。</p>
+              <p>管理昔漣可調用的工具能力；關閉後調度層不會使用對應工具。</p>
             </div>
             <button type="button" class="plugin-add-btn" aria-label="添加插件">＋</button>
           </div>
@@ -866,63 +1258,63 @@
             <article class="plugin-card">
               <div class="plugin-card__icon">📚</div>
               <div class="plugin-card__body">
-                <h2>文档检索</h2>
-                <p>检索用户导入的小说、资料和知识库片段。</p>
+                <h2>文檔檢索</h2>
+                <p>檢索用戶導入的小說、資料和知識庫片段。</p>
               </div>
-              <span class="plugin-always-on" title="常驻">●</span>
+              <span class="plugin-always-on" title="常駐">●</span>
             </article>
 
             <article class="plugin-card">
               <div class="plugin-card__icon">🧠</div>
               <div class="plugin-card__body">
-                <h2>用户记忆</h2>
-                <p>用户画像、阶段记忆，以及历史对话的语义召回。</p>
+                <h2>用戶記憶</h2>
+                <p>用戶畫像、階段記憶，以及歷史對話的語義召回。</p>
               </div>
-              <span class="plugin-always-on" title="常驻">●</span>
+              <span class="plugin-always-on" title="常駐">●</span>
             </article>
 
             <article class="plugin-card">
               <div class="plugin-card__icon">📖</div>
               <div class="plugin-card__body">
-                <h2>世界书</h2>
-                <p>按需召回昔涟的背景设定、经历和关键词内容。</p>
+                <h2>世界書</h2>
+                <p>按需召回昔漣的背景設定、經歷和關鍵詞內容。</p>
               </div>
-              <span class="plugin-always-on" title="常驻">●</span>
+              <span class="plugin-always-on" title="常駐">●</span>
             </article>
 
             <article class="plugin-card">
               <div class="plugin-card__icon">🌐</div>
               <div class="plugin-card__body">
-                <h2>联网搜索</h2>
-                <p>联网检索实时资料和网页内容（在下方配置搜索源）。</p>
+                <h2>聯網搜索</h2>
+                <p>聯網檢索實時資料和網頁內容（在下方配置搜索源）。</p>
               </div>
-              <span class="plugin-always-on" title="常驻">●</span>
+              <span class="plugin-always-on" title="常駐">●</span>
             </article>
 
             <article class="plugin-card" id="plugin-weather-card">
               <div class="plugin-card__icon">🌤️</div>
               <div class="plugin-card__body">
-                <h2>天气查询</h2>
-                <p>查指定城市的实时天气与预报。Open-Meteo 免配置，或用高德（<a href="https://lbs.amap.com" target="_blank" rel="noopener">注册 Key</a>）。</p>
+                <h2>天氣查詢</h2>
+                <p>查指定城市的實時天氣與預報。Open-Meteo 免配置，或用高德（<a href="https://lbs.amap.com" target="_blank" rel="noopener">註冊 Key</a>）。</p>
                 <div class="plugin-config" id="plugin-weather-config">
                   <div class="tts-field">
-                    <label for="weather-source">天气源</label>
+                    <label for="weather-source">天氣源</label>
                     <select id="weather-source">
-                      <option value="open-meteo">Open-Meteo（免配置，推荐）</option>
-                      <option value="amap">高德天气（需 Key，国内准）</option>
+                      <option value="open-meteo">Open-Meteo（免配置，推薦）</option>
+                      <option value="amap">高德天氣（需 Key，國內準）</option>
                     </select>
                   </div>
                   <div id="amap-fields" style="display:none">
                     <div class="tts-field">
                       <label for="amap-key">高德 Key</label>
-                      <input type="password" id="amap-key" placeholder="lbs.amap.com 注册 Web服务 Key" autocomplete="off" />
+                      <input type="password" id="amap-key" placeholder="lbs.amap.com 註冊 Web服務 Key" autocomplete="off" />
                     </div>
-                    <p class="user-field-hint">高德开放平台 → 控制台 → 应用管理 → 创建「Web服务」类型 Key。</p>
+                    <p class="user-field-hint">高德開放平臺 → 控制台 → 應用管理 → 創建「Web服務」類型 Key。</p>
                   </div>
-                  <p class="user-field-hint">Open-Meteo 免配置直接用。默认城市在「我的信息」面板填。</p>
+                  <p class="user-field-hint">Open-Meteo 免配置直接用。默認城市在「我的信息」面板填。</p>
                 </div>
               </div>
-              <label class="plugin-switch" aria-label="启用天气查询">
+              <label class="plugin-switch" aria-label="啟用天氣查詢">
                 <input type="checkbox" id="plugin-weather-enabled" />
                 <span></span>
               </label>
@@ -933,19 +1325,19 @@
               <div class="plugin-card__icon">🚗</div>
               <div class="plugin-card__body">
                 <h2>🚗出行工具</h2>
-                <p>查驾车/步行/骑行/公交的路线规划和预计时间。需要高德 Key（
-                  <a href="https://lbs.amap.com" target="_blank" rel="noopener">注册 Key</a>，
-                  与天气查询共用）。
+                <p>查駕車/步行/騎行/公交的路線規劃和預計時間。需要高德 Key（
+                  <a href="https://lbs.amap.com" target="_blank" rel="noopener">註冊 Key</a>，
+                  與天氣查詢共用）。
                 </p>
                 <div class="plugin-config" id="plugin-travel-config">
                   <div class="tts-field">
                     <label for="travel-amap-key">高德 Key</label>
-                    <input type="password" id="travel-amap-key" placeholder="lbs.amap.com 注册 Web服务 Key" autocomplete="off" />
+                    <input type="password" id="travel-amap-key" placeholder="lbs.amap.com 註冊 Web服務 Key" autocomplete="off" />
                   </div>
-                  <p class="user-field-hint">高德开放平台 → 控制台 → 应用管理 → 创建「Web服务」类型 Key。与天气查询共用同一个 Key。</p>
+                  <p class="user-field-hint">高德開放平臺 → 控制台 → 應用管理 → 創建「Web服務」類型 Key。與天氣查詢共用同一個 Key。</p>
                 </div>
               </div>
-              <label class="plugin-switch" aria-label="启用出行工具">
+              <label class="plugin-switch" aria-label="啟用出行工具">
                 <input type="checkbox" id="plugin-travel-enabled" />
                 <span></span>
               </label>
@@ -954,34 +1346,34 @@
             <article class="plugin-card" id="plugin-search-card">
               <div class="plugin-card__icon">🔍</div>
               <div class="plugin-card__body">
-                <h2>联网搜索</h2>
-                <p>让昔涟能搜索互联网获取实时信息。选择一个搜索源并填入对应 Key。</p>
+                <h2>聯網搜索</h2>
+                <p>讓昔漣能搜索互聯網獲取實時信息。選擇一個搜索源並填入對應 Key。</p>
                 <div class="plugin-config" id="plugin-search-config">
                   <div class="tts-field">
                     <label for="search-engine">搜索源</label>
                     <select id="search-engine">
-                      <option value="off">关闭</option>
-                      <option value="bocha">博查 Bocha（国内，AI 友好）</option>
+                      <option value="off">關閉</option>
+                      <option value="bocha">博查 Bocha（國內，AI 友好）</option>
                       <option value="tavily">Tavily（海外，AI 友好）</option>
                       <option value="minimax">MiniMax（需 uvx）</option>
                     </select>
                   </div>
                   <div class="tts-field" id="search-bocha-row" style="display:none">
                     <label for="search-bocha-key">博查 Key</label>
-                    <input type="password" id="search-bocha-key" placeholder="open.bochaai.com 注册获取" autocomplete="off" />
+                    <input type="password" id="search-bocha-key" placeholder="open.bochaai.com 註冊獲取" autocomplete="off" />
                   </div>
                   <div class="tts-field" id="search-tavily-row" style="display:none">
                     <label for="search-tavily-key">Tavily Key</label>
-                    <input type="password" id="search-tavily-key" placeholder="tavily.com 注册获取" autocomplete="off" />
+                    <input type="password" id="search-tavily-key" placeholder="tavily.com 註冊獲取" autocomplete="off" />
                   </div>
                   <div class="tts-field" id="search-minimax-row" style="display:none">
                     <label for="search-minimax-key">MiniMax Key</label>
-                    <input type="password" id="search-minimax-key" placeholder="MiniMax 平台 API Key" autocomplete="off" />
+                    <input type="password" id="search-minimax-key" placeholder="MiniMax 平臺 API Key" autocomplete="off" />
                   </div>
-                  <p class="user-field-hint" id="search-engine-hint">选择搜索源后填入对应 Key。MiniMax 需先安装 uvx（Python）。</p>
+                  <p class="user-field-hint" id="search-engine-hint">選擇搜索源後填入對應 Key。MiniMax 需先安裝 uvx（Python）。</p>
                 </div>
               </div>
-              <label class="plugin-switch" aria-label="启用联网搜索">
+              <label class="plugin-switch" aria-label="啟用聯網搜索">
                 <input type="checkbox" id="plugin-search-enabled" />
                 <span></span>
               </label>
@@ -990,11 +1382,11 @@
             <article class="plugin-card" id="plugin-email-card">
               <div class="plugin-card__icon">✉️</div>
               <div class="plugin-card__body">
-                <h2>邮件发送</h2>
-                <p>通过 SMTP 发送邮件，可带附件。需填写邮箱 SMTP 授权码（非登录密码）。</p>
+                <h2>郵件發送</h2>
+                <p>通過 SMTP 發送郵件，可帶附件。需填寫郵箱 SMTP 授權碼（非登錄密碼）。</p>
                 <div class="plugin-config" id="plugin-email-config">
                   <div class="tts-field">
-                    <label for="email-smtp-host">SMTP 主机</label>
+                    <label for="email-smtp-host">SMTP 主機</label>
                     <input type="text" id="email-smtp-host" placeholder="如 smtp.qq.com" autocomplete="off" />
                   </div>
                   <div class="tts-field">
@@ -1004,24 +1396,24 @@
                   <div class="tts-field">
                     <label for="email-smtp-secure">使用 SSL/TLS</label>
                     <input type="checkbox" id="email-smtp-secure" />
-                    <span class="user-field-hint">465 端口通常勾选，587 通常不勾</span>
+                    <span class="user-field-hint">465 端口通常勾選，587 通常不勾</span>
                   </div>
                   <div class="tts-field">
-                    <label for="email-smtp-user">发件邮箱</label>
+                    <label for="email-smtp-user">發件郵箱</label>
                     <input type="text" id="email-smtp-user" placeholder="your@qq.com" autocomplete="off" />
                   </div>
                   <div class="tts-field">
-                    <label for="email-smtp-pass">SMTP 授权码</label>
-                    <input type="password" id="email-smtp-pass" placeholder="非邮箱登录密码" autocomplete="off" />
+                    <label for="email-smtp-pass">SMTP 授權碼</label>
+                    <input type="password" id="email-smtp-pass" placeholder="非郵箱登錄密碼" autocomplete="off" />
                   </div>
                   <div class="tts-field">
-                    <label for="email-from-name">发件人名称（可选）</label>
-                    <input type="text" id="email-from-name" placeholder="如 昔涟" autocomplete="off" />
+                    <label for="email-from-name">發件人名稱（可選）</label>
+                    <input type="text" id="email-from-name" placeholder="如 昔漣" autocomplete="off" />
                   </div>
-                  <p class="user-field-hint">QQ邮箱 → 设置 → 账户 → 开启 SMTP → 获取授权码；163/Gmail 同理。</p>
+                  <p class="user-field-hint">QQ郵箱 → 設置 → 賬戶 → 開啟 SMTP → 獲取授權碼；163/Gmail 同理。</p>
                 </div>
               </div>
-              <label class="plugin-switch" aria-label="启用邮件发送">
+              <label class="plugin-switch" aria-label="啟用郵件發送">
                 <input type="checkbox" id="plugin-email-enabled" />
                 <span></span>
               </label>
@@ -1031,60 +1423,61 @@
               <div class="plugin-card__icon">📁</div>
               <div class="plugin-card__body">
                 <h2>本地文件</h2>
-                <p id="plugin-file-note">只读：昔涟不会修改本地任何文件。</p>
+                <p id="plugin-file-note">只讀：昔漣不會修改本地任何文件。</p>
               </div>
-              <div class="plugin-perm-capsule" id="plugin-file-permission" role="group" aria-label="本地文件权限">
-                <button type="button" class="perm-seg is-active" data-level="read-only" title="只读">只读</button>
-                <button type="button" class="perm-seg" data-level="per-action" title="每次审批">审批</button>
-                <button type="button" class="perm-seg" data-level="full" title="完全访问">完全</button>
+              <div class="plugin-perm-capsule" id="plugin-file-permission" role="group" aria-label="本地文件權限">
+                <button type="button" class="perm-seg is-active" data-level="read-only" title="只讀">只讀</button>
+                <button type="button" class="perm-seg" data-level="per-action" title="每次審批">審批</button>
+                <button type="button" class="perm-seg" data-level="full" title="完全訪問">完全</button>
               </div>
             </article>
 
             <article class="plugin-card">
               <div class="plugin-card__icon">📑</div>
               <div class="plugin-card__body">
-                <h2>多档编写</h2>
-                <p>把数据整理成 Excel / Word / PDF / Markdown，保存到桌面。</p>
+                <h2>多檔編寫</h2>
+                <p>把數據整理成 Excel / Word / PDF / Markdown，保存到桌面。</p>
               </div>
-              <span class="plugin-always-on" title="常驻">●</span>
+              <span class="plugin-always-on" title="常駐">●</span>
             </article>
 
             <article class="plugin-card">
               <div class="plugin-card__icon">🕷️</div>
               <div class="plugin-card__body">
-                <h2>网页抓取</h2>
-                <p>下载指定网址并转成结构化 Markdown 喂给昔涟。</p>
+                <h2>網頁抓取</h2>
+                <p>下載指定網址並轉成結構化 Markdown 餵給昔漣。</p>
               </div>
-              <span class="plugin-always-on" title="常驻">●</span>
+              <span class="plugin-always-on" title="常駐">●</span>
             </article>
 
             <article class="plugin-card">
               <div class="plugin-card__icon">💰</div>
               <div class="plugin-card__body">
-                <h2>收支记账</h2>
-                <p>记支出、查账汇总、汇率换算（frankfurter 免配置）。</p>
+                <h2>收支記賬</h2>
+                <p>記支出、查賬彙總、匯率換算（frankfurter 免配置）。</p>
               </div>
-              <span class="plugin-always-on" title="常驻">●</span>
+              <span class="plugin-always-on" title="常駐">●</span>
             </article>
 
             <article class="plugin-card">
               <div class="plugin-card__icon">🔌</div>
               <div class="plugin-card__body">
                 <h2>MCP 工具</h2>
-                <p>已注册的 MCP Server 工具，按需自动调用。</p>
+                <p>已註冊的 MCP Server 工具，按需自動調用。</p>
               </div>
-              <span class="plugin-always-on" title="常驻">●</span>
+              <span class="plugin-always-on" title="常駐">●</span>
             </article>
 
             <article class="plugin-card" id="plugin-gamebot-card">
               <div class="plugin-card__icon">🎮</div>
               <div class="plugin-card__body">
-                <h2>游戏代肝</h2>
-                <p>按预设脚本自动跑每日任务，视觉定位自适应分辨率。参考图由后端存储，把小图按命名放进下方目录即可。</p>
+                <h2>遊戲代肝</h2>
+                <p>按預設腳本自動跑每日任務，視覺定位自適應分辨率。參考圖由後端存儲，把小圖按命名放進下方目錄即可。</p>
                 <div class="plugin-config" id="plugin-gamebot-config">
                   <div class="tts-field">
-                    <label for="gamebot-exe">游戏 exe 路径</label>
-                    <input id="gamebot-exe" type="text" placeholder="C:/Games/StarRail/StarRail.exe" autocomplete="off" />
+                    <label for="gamebot-exe">遊戲／YAAGL 路徑</label>
+                    <input id="gamebot-exe" type="text" placeholder="macOS: /Applications/Honkai Star Rail.app；Windows: C:/Games/StarRail/StarRail.exe" autocomplete="off" />
+                    <p class="user-field-hint">macOS YAAGL 預設為 <code>/Applications/Honkai Star Rail.app</code>。首次執行需在系統設定授權「輔助使用」與「螢幕與系統錄音」。</p>
                   </div>
                   <div class="tts-field">
                     <label for="gamebot-vlm-url">VLM Base URL（OpenAI 兼容）</label>
@@ -1098,20 +1491,21 @@
                     <label for="gamebot-vlm-model">VLM 模型名</label>
                     <input id="gamebot-vlm-model" type="text" placeholder="Qwen/Qwen3-VL-8B-Instruct" autocomplete="off" />
                   </div>
+                  <p class="user-field-hint">三個 VLM 欄位全部留空時，會自動沿用昔漣 API 設定中的視覺模型／目前主模型。</p>
                   <div class="tts-field">
-                    <label for="gamebot-recipe">代肝脚本</label>
+                    <label for="gamebot-recipe">代肝腳本</label>
                     <select id="gamebot-recipe"></select>
                   </div>
-                  <p class="user-field-hint">参考图存放目录（自行把裁好的小图放进去）：<br /><code id="gamebot-refs-dir">未加载</code></p>
+                  <p class="user-field-hint">參考圖存放目錄（自行把裁好的小圖放進去）：<br /><code id="gamebot-refs-dir">未加載</code></p>
                   <p class="user-field-hint" id="gamebot-refs-list" style="font-size:12px;"></p>
                   <div class="tts-field">
-                    <button type="button" id="gamebot-start-btn">▶ 开始代肝</button>
+                    <button type="button" id="gamebot-start-btn">▶ 開始代肝</button>
                     <button type="button" id="gamebot-stop-btn">⏹ 停止</button>
                   </div>
                   <pre id="gamebot-log" style="background:#1a1a1a;color:#0f0;padding:8px;max-height:180px;overflow:auto;font-size:12px;white-space:pre-wrap;"></pre>
                 </div>
               </div>
-              <label class="plugin-switch" aria-label="启用游戏代肝">
+              <label class="plugin-switch" aria-label="啟用遊戲代肝">
                 <input type="checkbox" id="plugin-gamebot-enabled" />
                 <span></span>
               </label>
@@ -1120,10 +1514,10 @@
             <article class="plugin-card" id="plugin-playwright-mcp-card">
               <div class="plugin-card__icon">🖥️</div>
               <div class="plugin-card__body">
-                <h2>浏览器自动化（Playwright）</h2>
-                <p>让她能点网页、填表单、截图、跑 UI 流程。首次启用会下载 Chromium，约 150MB。<strong>默认关闭。</strong></p>
+                <h2>瀏覽器自動化（Playwright）</h2>
+                <p>讓她能點網頁、填表單、截圖、跑 UI 流程。首次啟用會下載 Chromium，約 150MB。<strong>默認關閉。</strong></p>
               </div>
-              <label class="plugin-switch" aria-label="启用浏览器自动化（Playwright）">
+              <label class="plugin-switch" aria-label="啟用瀏覽器自動化（Playwright）">
                 <input type="checkbox" id="plugin-playwright-mcp-enabled" />
                 <span></span>
               </label>
@@ -1134,27 +1528,95 @@
                 <div class="plugin-card__icon">🏘️</div>
                 <div class="plugin-card__body">
                   <h2>生活工具</h2>
-                  <p>日常小工具集合，点击展开。</p>
+                  <p>日常小工具集合，點擊展開。</p>
                 </div>
-                <button type="button" class="accordion-toggle" id="plugin-life-toggle" aria-label="展开生活工具" aria-expanded="false">▾</button>
+                <button type="button" class="accordion-toggle" id="plugin-life-toggle" aria-label="展開生活工具" aria-expanded="false">▾</button>
               </div>
               <div class="plugin-accordion-body is-collapsed" id="plugin-life-body">
                 <article class="plugin-card plugin-card--sub">
                   <div class="plugin-card__icon">📋</div>
                   <div class="plugin-card__body">
-                    <h2>任务拆解</h2>
-                    <p>把复杂任务拆成步骤，左上角面板显示进度。</p>
+                    <h2>任務拆解</h2>
+                    <p>把複雜任務拆成步驟，左上角面板顯示進度。</p>
                   </div>
-                  <span class="plugin-always-on" title="常驻">●</span>
+                  <span class="plugin-always-on" title="常駐">●</span>
                 </article>
                 <article class="plugin-card plugin-card--sub">
                   <div class="plugin-card__icon">🔤</div>
                   <div class="plugin-card__body">
-                    <h2>翻译</h2>
-                    <p>把文本翻译成指定语言，走主模型保证质量。</p>
+                    <h2>翻譯</h2>
+                    <p>把文本翻譯成指定語言，走主模型保證質量。</p>
                   </div>
-                  <span class="plugin-always-on" title="常驻">●</span>
+                  <span class="plugin-always-on" title="常駐">●</span>
                 </article>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="settings-panel security-panel is-hidden" id="security-panel" data-panel="security">
+          <div class="panel-heading">
+            <div class="panel-heading__icon">🛡️</div>
+            <div>
+              <h1>資料安全</h1>
+              <p>把重要回憶收進時間膠囊，密鑰則留在這台 Mac 的系統保管庫。</p>
+            </div>
+          </div>
+
+          <div class="security-hero">
+            <div class="security-orbit" aria-hidden="true"><span>✦</span></div>
+            <div class="security-hero__copy">
+              <span class="security-kicker">SYSTEM VAULT</span>
+              <h2 id="vault-title">正在檢查保管庫…</h2>
+              <p id="vault-detail">API Key、Token 與郵件密碼不會出現在備份檔中。</p>
+            </div>
+            <button type="button" class="save-btn save-btn--ghost" id="vault-protect-btn">立即保護</button>
+          </div>
+
+          <div class="security-grid">
+            <article class="security-card security-card--capsule">
+              <div class="security-card__heading">
+                <div><span class="security-kicker">TIME CAPSULE</span><h2>建立備份</h2></div>
+                <span class="security-card__mark">03</span>
+              </div>
+              <p class="security-card__intro">選擇要保存的內容，輸出可攜式 <code>.cybackup</code>。設定內的密鑰會自動清空。</p>
+              <div class="backup-category-grid" id="backup-create-categories">
+                <label><input type="checkbox" value="conversations" checked />聊天紀錄</label>
+                <label><input type="checkbox" value="memories" checked />記憶與關係</label>
+                <label><input type="checkbox" value="planning" checked />任務與生活</label>
+                <label><input type="checkbox" value="personalization" checked />個人化內容</label>
+                <label><input type="checkbox" value="knowledge" />知識庫</label>
+                <label><input type="checkbox" value="settings" checked />一般設定</label>
+              </div>
+              <div class="security-actions">
+                <button type="button" class="save-btn" id="backup-create-btn">封存此刻</button>
+                <span class="security-status" id="backup-create-status" aria-live="polite">尚未建立手動備份</span>
+              </div>
+              <div class="auto-backup-row">
+                <label><input type="checkbox" id="backup-auto-enabled" /> 每日自動備份</label>
+                <label>保留 <select id="backup-retention"><option value="7">7 天</option><option value="30">30 天</option></select></label>
+                <span id="backup-last-auto">尚未執行</span>
+              </div>
+            </article>
+
+            <article class="security-card security-card--restore">
+              <div class="security-card__heading">
+                <div><span class="security-kicker">RESTORE POINT</span><h2>預覽與還原</h2></div>
+                <span class="security-card__mark">04</span>
+              </div>
+              <p class="security-card__intro">先讀取備份內容，再選擇要回到哪一部分。開始前會自動建立「還原前」快照。</p>
+              <button type="button" class="save-btn save-btn--ghost security-pick-btn" id="backup-pick-btn">選擇時間膠囊</button>
+              <div class="backup-preview is-hidden" id="backup-preview">
+                <div class="backup-preview__meta"><strong id="backup-preview-date"></strong><span id="backup-preview-summary"></span></div>
+                <div class="backup-category-grid" id="backup-restore-categories"></div>
+                <div class="security-actions">
+                  <button type="button" class="save-btn" id="backup-restore-btn">開始還原</button>
+                  <span class="security-status" id="backup-restore-status" aria-live="polite"></span>
+                </div>
+              </div>
+              <div class="restart-callout is-hidden" id="backup-restart-callout">
+                <span>還原完成，重新啟動後套用全部資料。</span>
+                <button type="button" class="save-btn" id="security-restart-btn">重新啟動</button>
               </div>
             </article>
           </div>
@@ -1164,64 +1626,64 @@
           <div class="panel-heading">
             <div class="panel-heading__icon">📜</div>
             <div>
-              <h1>免责声明与使用条款</h1>
-              <p>使用本软件前，请阅读并理解以下条款。</p>
+              <h1>免責聲明與使用條款</h1>
+              <p>使用本軟件前，請閱讀並理解以下條款。</p>
             </div>
           </div>
 
           <div class="disclaimer-content">
             <article class="disclaimer-section">
-              <h2>1. 项目性质与版权声明</h2>
-              <p>本 AI 陪伴程序为个人粉丝非商用同人项目，“昔涟”角色人设取材于米哈游（miHoYo）旗下游戏《崩坏：星穹铁道》。角色名称、世界观、原画、官方文案等全部知识产权及著作权均归属米哈游。</p>
-              <p>本项目无官方授权，不属于官方软件，双方不存在任何合作关系。</p>
+              <h2>1. 項目性質與版權聲明</h2>
+              <p>本 AI 陪伴程序為個人粉絲非商用同人項目，“昔漣”角色人設取材於米哈遊（miHoYo）旗下游戲《崩壞：星穹鐵道》。角色名稱、世界觀、原畫、官方文案等全部知識產權及著作權均歸屬米哈遊。</p>
+              <p>本項目無官方授權，不屬於官方軟件，雙方不存在任何合作關係。</p>
             </article>
 
             <article class="disclaimer-section">
-              <h2>2. 使用范围与禁止行为</h2>
-              <p>项目仅限个人本地私人使用，严禁任何商用行为，包括但不限于售卖程序、直播盈利、付费社群运营、商业推广变现，以及对外谎称本程序为官方产品。</p>
-              <p>程序内表情包为个人收集素材，仅限个人本地使用，禁止批量向外分发传播。</p>
+              <h2>2. 使用範圍與禁止行為</h2>
+              <p>項目僅限個人本地私人使用，嚴禁任何商用行為，包括但不限於售賣程序、直播盈利、付費社群運營、商業推廣變現，以及對外謊稱本程序為官方產品。</p>
+              <p>程序內表情包為個人收集素材，僅限個人本地使用，禁止批量向外分發傳播。</p>
             </article>
 
             <article class="disclaimer-section">
-              <h2>3. 用户责任</h2>
-              <p>用户与 AI 产生的对话内容，责任由使用者自行承担。</p>
-              <p>不得使用本软件发布违法、低俗、造谣、恶意抹黑原作 IP、违背公序良俗的内容；违规后果由用户自行承担，开发者不承担任何连带责任。</p>
+              <h2>3. 用戶責任</h2>
+              <p>用戶與 AI 產生的對話內容，責任由使用者自行承擔。</p>
+              <p>不得使用本軟件發佈違法、低俗、造謠、惡意抹黑原作 IP、違背公序良俗的內容；違規後果由用戶自行承擔，開發者不承擔任何連帶責任。</p>
             </article>
 
             <article class="disclaimer-section">
-              <h2>4. 项目无担保声明</h2>
-              <p>本项目为实验性开源项目，不保障程序稳定性。因程序漏洞、硬件故障、本地聊天数据丢失等产生的任何损失，开发者不予赔付。</p>
-              <p>本软件按“原样”提供，不附带任何明示或默示的担保。</p>
+              <h2>4. 項目無擔保聲明</h2>
+              <p>本項目為實驗性開源項目，不保障程序穩定性。因程序漏洞、硬件故障、本地聊天數據丟失等產生的任何損失，開發者不予賠付。</p>
+              <p>本軟件按“原樣”提供，不附帶任何明示或默示的擔保。</p>
             </article>
 
             <article class="disclaimer-section">
-              <h2>5. 版权方联络通道</h2>
-              <p>若米哈游 / HoYoverse 权利方认为本软件存在侵犯权益的情形，请通过以下方式联系，作者承诺在收到通知后 7 个工作日内积极配合处理或下架。</p>
+              <h2>5. 版權方聯絡通道</h2>
+              <p>若米哈遊 / HoYoverse 權利方認為本軟件存在侵犯權益的情形，請通過以下方式聯繫，作者承諾在收到通知後 7 個工作日內積極配合處理或下架。</p>
               <ul>
-                <li>📧 电子邮箱：1357502569@qq.com（邮件标题请注明【版权事宜】）</li>
-                <li>🎵 <a href="https://space.bilibili.com/260670644" target="_blank" rel="noopener noreferrer">B站：Playa0 作者空间</a>（私信请注明【版权联络】）</li>
+                <li>📧 電子郵箱：1357502569@qq.com（郵件標題請註明【版權事宜】）</li>
+                <li>🎵 <a href="https://space.bilibili.com/260670644" target="_blank" rel="noopener noreferrer">B站：Playa0 作者空間</a>（私信請註明【版權聯絡】）</li>
                 <li>🧩 GitHub：<a href="https://github.com/Playa-0v0/Cyrene-Agent" target="_blank" rel="noopener noreferrer">Playa-0v0/Cyrene-Agent</a></li>
               </ul>
             </article>
 
             <article class="disclaimer-section">
-              <h2>6. 用户反馈与 Bug 提交</h2>
-              <p>如您遇到问题、Bug 或有功能建议，欢迎通过以下渠道提交。</p>
+              <h2>6. 用戶反饋與 Bug 提交</h2>
+              <p>如您遇到問題、Bug 或有功能建議，歡迎通過以下渠道提交。</p>
               <ul>
-                <li>发送邮件至 1357502569@qq.com（标题建议带【反馈】或【Bug】）</li>
-                <li><a href="https://space.bilibili.com/260670644" target="_blank" rel="noopener noreferrer">B站私信 Playa0</a>（开头注明【反馈/Bug】）</li>
+                <li>發送郵件至 1357502569@qq.com（標題建議帶【反饋】或【Bug】）</li>
+                <li><a href="https://space.bilibili.com/260670644" target="_blank" rel="noopener noreferrer">B站私信 Playa0</a>（開頭註明【反饋/Bug】）</li>
               </ul>
-              <p>普通用户反馈我会尽力查看，但不保证及时回复；版权事宜享有最高响应优先级。</p>
+              <p>普通用戶反饋我會盡力查看，但不保證及時回覆；版權事宜享有最高響應優先級。</p>
             </article>
 
             <article class="disclaimer-section">
-              <h2>8. 特别鸣谢</h2>
-              <p>特别鸣谢 B站 UP 主 <a href="https://space.bilibili.com/457683484" target="_blank" rel="noopener noreferrer">是依七哒</a> 制作并分享的 Live2D 模型相关资源，为本项目的桌宠展示提供了重要参考与支持。本项目仍为个人非商用同人项目，相关素材版权归属原权利方；如有侵权或使用不当，将积极配合处理。</p>
+              <h2>8. 特別鳴謝</h2>
+              <p>特別鳴謝 B站 UP 主 <a href="https://space.bilibili.com/457683484" target="_blank" rel="noopener noreferrer">是依七噠</a> 製作並分享的 Live2D 模型相關資源，為本項目的桌寵展示提供了重要參考與支持。本項目仍為個人非商用同人項目，相關素材版權歸屬原權利方；如有侵權或使用不當，將積極配合處理。</p>
             </article>
 
             <article class="disclaimer-section">
-              <h2>9. 协议效力</h2>
-              <p>安装或使用本软件即视为您已阅读、理解并同意本免责声明的全部条款。</p>
+              <h2>9. 協議效力</h2>
+              <p>安裝或使用本軟件即視為您已閱讀、理解並同意本免責聲明的全部條款。</p>
             </article>
           </div>
         </section>
@@ -1231,37 +1693,37 @@
             <div class="panel-heading__icon">📊</div>
             <div>
               <h1>Token 用量</h1>
-              <p>查看 API 调用统计与消耗</p>
+              <p>查看 API 調用統計與消耗</p>
             </div>
           </div>
           <div class="panel-body">
-            <!-- 时间范围切换 -->
-            <div class="token-range" role="tablist" aria-label="时间范围">
+            <!-- 時間範圍切換 -->
+            <div class="token-range" role="tablist" aria-label="時間範圍">
               <button type="button" class="token-range__btn is-active" data-range="7" role="tab" aria-selected="true">7d</button>
               <button type="button" class="token-range__btn" data-range="14" role="tab" aria-selected="false">14d</button>
               <button type="button" class="token-range__btn" data-range="30" role="tab" aria-selected="false">30d</button>
             </div>
 
-            <!-- Hero 指标区：总消耗(大字)+请求数(右上小字)，下面三小框 -->
+            <!-- Hero 指標區：總消耗(大字)+請求數(右上小字)，下面三小框 -->
             <div class="token-hero">
               <div class="token-hero__main">
-                <span class="token-hero__label">📊 真实消耗</span>
+                <span class="token-hero__label">📊 真實消耗</span>
                 <span class="token-hero__value" id="token-total">12,470</span>
               </div>
               <div class="token-hero__req">
-                <span class="token-hero__req-label">🔢 请求数</span>
+                <span class="token-hero__req-label">🔢 請求數</span>
                 <span class="token-hero__req-value" id="token-requests">42</span>
               </div>
             </div>
             <div class="token-stats">
               <div class="token-stat">
                 <span class="token-stat__icon">📥</span>
-                <span class="token-stat__label">输入</span>
+                <span class="token-stat__label">輸入</span>
                 <span class="token-stat__value" id="token-input">8,200</span>
               </div>
               <div class="token-stat">
                 <span class="token-stat__icon">📤</span>
-                <span class="token-stat__label">输出</span>
+                <span class="token-stat__label">輸出</span>
                 <span class="token-stat__value" id="token-output">4,270</span>
               </div>
               <div class="token-stat">
@@ -1271,33 +1733,63 @@
               </div>
             </div>
 
-            <!-- 空态：无用量数据时显示 -->
+            <!-- 空態：無用量數據時顯示 -->
             <div class="token-empty is-hidden" id="token-empty">
               <span class="token-empty__icon" aria-hidden="true">📭</span>
-              <p class="token-empty__text">暂无用量数据</p>
-              <p class="token-empty__hint">和昔涟聊天后这里会显示真实的 Token 消耗统计</p>
+              <p class="token-empty__text">暫無用量數據</p>
+              <p class="token-empty__hint">和昔漣聊天后這裡會顯示真實的 Token 消耗統計</p>
             </div>
 
-            <!-- 图表区（有数据时显示） -->
+            <!-- 圖表區（有數據時顯示） -->
             <div id="token-charts">
-              <!-- 柱状图（保留 CSS 版，按时间范围动态生成天数） -->
-              <div class="token-section-title">📈 每日消耗柱状图</div>
+              <!-- 柱狀圖（保留 CSS 版，按時間範圍動態生成天數） -->
+              <div class="token-section-title">📈 每日消耗柱狀圖</div>
               <div class="mini-chart" aria-hidden="true">
                 <div class="mini-chart__avg"><span id="token-avg-label">日均 0</span></div>
                 <div class="mini-chart__bars" id="token-bar-chart"></div>
               </div>
 
-              <!-- 波浪面积图（Chart.js，输入蓝/输出粉双曲线） -->
-              <div class="token-section-title">🌊 使用趋势</div>
+              <!-- 波浪面積圖（Chart.js，輸入藍/輸出粉雙曲線） -->
+              <div class="token-section-title">🌊 使用趨勢</div>
               <div class="token-trend-wrap">
                 <canvas id="token-trend-chart"></canvas>
               </div>
             </div>
 
-            <!-- hover tooltip 浮层（柱状图和波浪图共用） -->
+            <!-- hover tooltip 浮層（柱狀圖和波浪圖共用） -->
             <div class="token-tooltip" id="token-tooltip" hidden></div>
 
-            <p class="token-panel__hint">💡 命中/未命中为缓存统计占位，接入缓存功能后显示真实值。</p>
+            <p class="token-panel__hint">💡 命中/未命中為緩存統計佔位，接入緩存功能後顯示真實值。</p>
+
+            <section class="activity-center">
+              <div class="activity-center__head">
+                <div><span class="activity-eyebrow">AGENT FLIGHT RECORDER</span><h2>Agent 活動中心</h2><p>工具、權限與資源狀態只保存精簡摘要，最多保留 1,000 筆。</p></div>
+                <button type="button" class="save-btn save-btn--ghost" id="diagnostic-export-btn">匯出診斷包</button>
+              </div>
+              <div class="activity-summary">
+                <div><span>工具呼叫</span><strong id="activity-total">0</strong></div>
+                <div><span>成功率</span><strong id="activity-success-rate">—</strong></div>
+                <div><span>平均耗時</span><strong id="activity-avg">—</strong></div>
+                <div><span>拒絕／失敗</span><strong id="activity-problems">0</strong></div>
+              </div>
+              <div class="activity-layout">
+                <div class="activity-flight-log">
+                  <div class="activity-subhead"><span>最近活動</span><small id="activity-export-status" aria-live="polite"></small></div>
+                  <div id="activity-events" class="activity-events"><p class="activity-empty">尚未有工具活動</p></div>
+                </div>
+                <aside class="activity-side">
+                  <div class="activity-subhead"><span>模型用量</span><small>目前範圍</small></div>
+                  <div id="activity-models" class="activity-models"><p class="activity-empty">尚無模型資料</p></div>
+                  <div class="activity-subhead activity-subhead--resource"><span>資源護欄</span><small>即時</small></div>
+                  <dl class="activity-resources">
+                    <div><dt>主程序記憶體</dt><dd id="activity-rss">—</dd></div>
+                    <div><dt>Heap 使用</dt><dd id="activity-heap">—</dd></div>
+                    <div><dt>背景佇列</dt><dd id="activity-queue">—</dd></div>
+                    <div><dt>通話上下文</dt><dd id="activity-context">24 輪</dd></div>
+                  </dl>
+                </aside>
+              </div>
+            </section>
           </div>
         </section>
 
@@ -1305,8 +1797,8 @@
           <div class="panel-heading">
             <div class="panel-heading__icon">🎙️</div>
             <div>
-              <h1>TTS 设置</h1>
-              <p>语音合成与朗读偏好</p>
+              <h1>TTS 設置</h1>
+              <p>語音合成與朗讀偏好</p>
             </div>
           </div>
           <div class="panel-body">
@@ -1315,15 +1807,15 @@
               <h2 class="tts-section__title">播放交互</h2>
               <label class="setting-row">
                 <div>
-                  <strong>自动朗读回复</strong>
-                  <span>昔涟每次回复后自动语音朗读</span>
+                  <strong>自動朗讀回覆</strong>
+                  <span>昔漣每次回覆後自動語音朗讀</span>
                 </div>
                 <span class="switch"><input type="checkbox" id="tts-auto-read" checked /><span class="switch__track"><span class="switch__thumb"></span></span></span>
               </label>
               <div class="setting-row">
                 <div>
-                  <strong>语速</strong>
-                  <span>控制语音朗读速度</span>
+                  <strong>語速</strong>
+                  <span>控制語音朗讀速度</span>
                 </div>
                 <input type="range" id="tts-speed" min="0.5" max="2" step="0.1" value="1" />
                 <span class="range-val" id="tts-speed-val">1.0x</span>
@@ -1331,25 +1823,25 @@
               <div class="setting-row">
                 <div>
                   <strong>音量</strong>
-                  <span>控制语音朗读音量</span>
+                  <span>控制語音朗讀音量</span>
                 </div>
                 <input type="range" id="tts-volume" min="0" max="1" step="0.1" value="1" />
                 <span class="range-val" id="tts-volume-val">100%</span>
               </div>
             </div>
 
-            <!-- 引擎选择 -->
+            <!-- 引擎選擇 -->
             <div class="tts-section">
-              <h2 class="tts-section__title">引擎选择</h2>
+              <h2 class="tts-section__title">引擎選擇</h2>
               <div class="tts-engines" role="radiogroup" aria-label="TTS引擎">
                 <button type="button" class="tts-engine is-active" data-engine="off" role="radio" aria-checked="true">
                   <span class="tts-engine__icon">🔇</span>
-                  <span class="tts-engine__name">关闭</span>
+                  <span class="tts-engine__name">關閉</span>
                 </button>
                 <button type="button" class="tts-engine" data-engine="minimax" role="radio" aria-checked="false">
                   <span class="tts-engine__icon">✨</span>
                   <span class="tts-engine__name">MiniMax</span>
-                  <span class="tts-engine__tag">云端</span>
+                  <span class="tts-engine__tag">雲端</span>
                 </button>
                 <button type="button" class="tts-engine" data-engine="gptsovits" role="radio" aria-checked="false">
                   <span class="tts-engine__icon">🗣️</span>
@@ -1358,65 +1850,65 @@
                 </button>
                 <button type="button" class="tts-engine" data-engine="custom-cloud" role="radio" aria-checked="false">
                   <span class="tts-engine__icon">☁️</span>
-                  <span class="tts-engine__name">自定义云端</span>
+                  <span class="tts-engine__name">自定義雲端</span>
                   <span class="tts-engine__tag">接口</span>
                 </button>
                 <button type="button" class="tts-engine" data-engine="mimo" role="radio" aria-checked="false">
                   <span class="tts-engine__icon">🎧</span>
                   <span class="tts-engine__name">小米 MiMo</span>
-                  <span class="tts-engine__tag">云端</span>
+                  <span class="tts-engine__tag">雲端</span>
                 </button>
               </div>
             </div>
 
-            <!-- 引擎配置表单（选中哪个显示哪个） -->
+            <!-- 引擎配置表單（選中哪個顯示哪個） -->
             <div class="tts-config" id="tts-config-minimax" hidden>
               <h2 class="tts-section__title">✨ MiniMax 配置</h2>
               <div class="tts-field"><label>API Key</label><input type="password" id="tts-minimax-key" placeholder="MiniMax API Key" /></div>
-              <div class="tts-field"><label>音色 ID</label><input type="text" id="tts-minimax-voice" placeholder="训练好的音色 ID（或下方复刻后自动填入）" /></div>
+              <div class="tts-field"><label>音色 ID</label><input type="text" id="tts-minimax-voice" placeholder="訓練好的音色 ID（或下方復刻後自動填入）" /></div>
               <div class="tts-field">
                 <label>合成模型</label>
                 <select id="tts-minimax-model">
-                  <option value="speech-2.8-turbo">speech-2.8-turbo（极速 ¥2.0/万字符）</option>
-                  <option value="speech-2.8-hd">speech-2.8-hd（高保真 ¥3.5/万字符）</option>
+                  <option value="speech-2.8-turbo">speech-2.8-turbo（極速 ¥2.0/萬字符）</option>
+                  <option value="speech-2.8-hd">speech-2.8-hd（高保真 ¥3.5/萬字符）</option>
                 </select>
               </div>
               <label class="setting-row" style="margin-top: 8px;">
                 <div>
                   <strong>流式播放</strong>
-                  <span>边合成边播，首字延迟低（默认开）。关掉=收完再播。</span>
+                  <span>邊合成邊播，首字延遲低（默認開）。關掉=收完再播。</span>
                 </div>
                 <span class="switch"><input type="checkbox" id="tts-streaming" checked /><span class="switch__track"><span class="switch__thumb"></span></span></span>
               </label>
-              <button type="button" class="ghost-btn" id="tts-minimax-test">🔊 测试发音</button>
+              <button type="button" class="ghost-btn" id="tts-minimax-test">🔊 測試發音</button>
 
-              <!-- 音色快速复刻 -->
+              <!-- 音色快速復刻 -->
               <div class="tts-clone-section">
-                <h3 class="tts-clone-title">🎙️ 音色快速复刻</h3>
-                <p class="tts-clone-hint">上传昔涟配音（mp3/m4a/wav，10秒~5分钟，≤20MB），训练专属音色</p>
+                <h3 class="tts-clone-title">🎙️ 音色快速復刻</h3>
+                <p class="tts-clone-hint">上傳昔漣配音（mp3/m4a/wav，10秒~5分鐘，≤20MB），訓練專屬音色</p>
                 <div class="tts-field">
                   <label>配音文件</label>
-                  <input type="text" id="tts-clone-file" placeholder="点击右侧选择音频文件" readonly />
-                  <button type="button" class="ghost-btn tts-pick-btn" id="tts-clone-pick">选择</button>
+                  <input type="text" id="tts-clone-file" placeholder="點擊右側選擇音頻文件" readonly />
+                  <button type="button" class="ghost-btn tts-pick-btn" id="tts-clone-pick">選擇</button>
                 </div>
                 <div class="tts-field">
-                  <label>示例音频</label>
-                  <input type="text" id="tts-clone-prompt-file" placeholder="可选，增强克隆效果（≤8秒）" readonly />
-                  <button type="button" class="ghost-btn tts-pick-btn" id="tts-clone-prompt-pick">选择</button>
+                  <label>示例音頻</label>
+                  <input type="text" id="tts-clone-prompt-file" placeholder="可選，增強克隆效果（≤8秒）" readonly />
+                  <button type="button" class="ghost-btn tts-pick-btn" id="tts-clone-prompt-pick">選擇</button>
                 </div>
                 <div class="tts-field">
                   <label>示例文本</label>
-                  <input type="text" id="tts-clone-prompt-text" placeholder="示例音频对应的文字（可选）" />
+                  <input type="text" id="tts-clone-prompt-text" placeholder="示例音頻對應的文字（可選）" />
                 </div>
                 <div class="tts-field">
-                  <label>复刻文本</label>
-                  <input type="text" id="tts-clone-text" placeholder="训练时合成这句做对比" value="你好，我是昔涟，很高兴见到你。" />
+                  <label>復刻文本</label>
+                  <input type="text" id="tts-clone-text" placeholder="訓練時合成這句做對比" value="你好，我是昔漣，很高興見到你。" />
                 </div>
                 <div class="tts-field">
                   <label>音色命名</label>
-                  <input type="text" id="tts-clone-voice-id" placeholder="自定义音色ID（如 cyrene-voice）" />
+                  <input type="text" id="tts-clone-voice-id" placeholder="自定義音色ID（如 cyrene-voice）" />
                 </div>
-                <button type="button" class="ghost-btn" id="tts-clone-start">🚀 开始复刻</button>
+                <button type="button" class="ghost-btn" id="tts-clone-start">🚀 開始復刻</button>
                 <div class="tts-clone-status" id="tts-clone-status"></div>
               </div>
             </div>
@@ -1428,51 +1920,51 @@
                 <input type="text" id="tts-gptsovits-url" placeholder="http://localhost:9880" value="http://localhost:9880" />
               </div>
               <div class="tts-field">
-                <label>参考音频路径</label>
-                <input type="text" id="tts-gptsovits-ref-audio" placeholder="点击右侧选择音频文件" readonly />
-                <button type="button" class="ghost-btn tts-pick-btn" id="tts-gptsovits-ref-pick">选择</button>
+                <label>參考音頻路徑</label>
+                <input type="text" id="tts-gptsovits-ref-audio" placeholder="點擊右側選擇音頻文件" readonly />
+                <button type="button" class="ghost-btn tts-pick-btn" id="tts-gptsovits-ref-pick">選擇</button>
               </div>
               <div class="tts-field">
-                <label>参考音频对应的文本</label>
-                <input type="text" id="tts-gptsovits-prompt-text" placeholder="例：你好，我是昔涟" />
+                <label>參考音頻對應的文本</label>
+                <input type="text" id="tts-gptsovits-prompt-text" placeholder="例：你好，我是昔漣" />
               </div>
               <div class="tts-field">
-                <label>输出格式</label>
+                <label>輸出格式</label>
                 <select id="tts-gptsovits-format">
-                  <option value="wav">wav（推荐，gptsovits 默认）</option>
-                  <option value="mp3">mp3（需服务端支持）</option>
+                  <option value="wav">wav（推薦，gptsovits 默認）</option>
+                  <option value="mp3">mp3（需服務端支持）</option>
                 </select>
               </div>
-              <button type="button" class="ghost-btn" id="tts-gptsovits-test">🔊 测试发音</button>
+              <button type="button" class="ghost-btn" id="tts-gptsovits-test">🔊 測試發音</button>
               <div class="tts-clone-status" id="tts-gptsovits-test-status"></div>
             </div>
 
             <div class="tts-config" id="tts-config-custom-cloud" hidden>
-              <h2 class="tts-section__title">☁️ 自定义云端配置</h2>
+              <h2 class="tts-section__title">☁️ 自定義雲端配置</h2>
               <div class="tts-field">
                 <label>Endpoint URL</label>
                 <input type="text" id="tts-custom-cloud-url" placeholder="https://example.com/tts" />
               </div>
               <div class="tts-field">
                 <label>API Key</label>
-                <input type="password" id="tts-custom-cloud-key" placeholder="可选；为空则不发送 Authorization" />
+                <input type="password" id="tts-custom-cloud-key" placeholder="可選；為空則不發送 Authorization" />
               </div>
               <div class="tts-field">
                 <label>音色 ID</label>
-                <input type="text" id="tts-custom-cloud-voice" placeholder="传给你的云端网关，如 cyrene-voice" />
+                <input type="text" id="tts-custom-cloud-voice" placeholder="傳給你的雲端網關，如 cyrene-voice" />
               </div>
               <div class="tts-field">
-                <label>输出格式</label>
+                <label>輸出格式</label>
                 <select id="tts-custom-cloud-format">
                   <option value="mp3">mp3</option>
                   <option value="wav">wav</option>
                 </select>
               </div>
               <div class="tts-field">
-                <label>超时（毫秒）</label>
+                <label>超時（毫秒）</label>
                 <input type="number" id="tts-custom-cloud-timeout" min="1000" max="120000" step="1000" value="30000" />
               </div>
-              <button type="button" class="ghost-btn" id="tts-custom-cloud-test">🔊 测试发音</button>
+              <button type="button" class="ghost-btn" id="tts-custom-cloud-test">🔊 測試發音</button>
               <div class="tts-clone-status" id="tts-custom-cloud-test-status"></div>
             </div>
 
@@ -1483,44 +1975,87 @@
                 <input type="password" id="tts-mimo-key" placeholder="小米 MiMo API Key" />
               </div>
               <div class="tts-field">
-                <label>昔涟克隆音频</label>
-                <input type="text" id="tts-mimo-voice-audio" placeholder="选择昔涟参考音频（mp3/wav/m4a）" readonly />
-                <button type="button" class="ghost-btn tts-pick-btn" id="tts-mimo-voice-pick">选择</button>
+                <label>昔漣克隆音頻</label>
+                <input type="text" id="tts-mimo-voice-audio" placeholder="選擇昔漣參考音頻（mp3/wav/m4a）" readonly />
+                <button type="button" class="ghost-btn tts-pick-btn" id="tts-mimo-voice-pick">選擇</button>
               </div>
               <div class="tts-field">
-                <label>风格提示</label>
-                <input type="text" id="tts-mimo-style" placeholder="例：温柔、自然、略带亲近感" />
+                <label>風格提示</label>
+                <input type="text" id="tts-mimo-style" placeholder="例：溫柔、自然、略帶親近感" />
               </div>
-              <button type="button" class="ghost-btn" id="tts-mimo-test">🔊 测试发音</button>
+              <button type="button" class="ghost-btn" id="tts-mimo-test">🔊 測試發音</button>
               <div class="tts-clone-status" id="tts-mimo-test-status"></div>
             </div>
 
-            <p class="tts-hint">💡 MiniMax 需在控制台训练音色并填写音色 ID。GPT-SoVITS 需自行启动本地服务并提供参考音频。自定义云端会 POST 固定 JSON 到你的 Endpoint。小米 MiMo 当前使用昔涟参考音频走 voiceclone 非流式 wav 合成。</p>
+            <p class="tts-hint">💡 MiniMax 需在控制台訓練音色並填寫音色 ID。GPT-SoVITS 需自行啟動本地服務並提供參考音頻。自定義雲端會 POST 固定 JSON 到你的 Endpoint。小米 MiMo 當前使用昔漣參考音頻走 voiceclone 非流式 wav 合成。</p>
 
             <hr class="api-section-divider" />
-            <div class="tts-section">
-              <h2 class="tts-section__title">主动开口</h2>
-              <p class="tts-hint">昔涟会在你没主动聊天时，偶尔自己冒一句话关心你（基于时间/空闲/天气）。走预合成音频，0 token。</p>
-              <div class="tts-engines" role="radiogroup" aria-label="主动开口档位">
-                <button type="button" class="opener-mode tts-engine is-active" data-mode="off" role="radio" aria-checked="true">
-                  <span class="tts-engine__icon">🔇</span>
-                  <span class="tts-engine__name">关闭</span>
+            <section class="opener-console" aria-labelledby="opener-title">
+              <div class="opener-console__header">
+                <div>
+                  <span class="opener-console__eyebrow">PROACTIVE COMPANION</span>
+                  <h2 id="opener-title">主動開口</h2>
+                  <p>昔漣會讀取時間、空閒狀態與天氣，在適合的時刻主動關心你。全程 0 token。</p>
+                </div>
+                <div class="opener-health" id="opener-health">
+                  <span class="opener-health__pulse"></span>
+                  <div><strong id="opener-health-title">正在讀取狀態</strong><span id="opener-health-detail">請稍候</span></div>
+                </div>
+              </div>
+
+              <div class="opener-mode-grid" role="radiogroup" aria-label="主動開口頻率">
+                <button type="button" class="opener-mode is-active" data-mode="off" role="radio" aria-checked="true">
+                  <span class="opener-mode__icon">◌</span><strong>關閉</strong><small>保持安靜</small>
                 </button>
-                <button type="button" class="opener-mode tts-engine" data-mode="quiet" role="radio" aria-checked="false">
-                  <span class="tts-engine__icon">🌙</span>
-                  <span class="tts-engine__name">安静</span>
+                <button type="button" class="opener-mode" data-mode="quiet" role="radio" aria-checked="false">
+                  <span class="opener-mode__icon">☾</span><strong>安靜</strong><small>低頻陪伴</small>
                 </button>
-                <button type="button" class="opener-mode tts-engine" data-mode="normal" role="radio" aria-checked="false">
-                  <span class="tts-engine__icon">🌸</span>
-                  <span class="tts-engine__name">普通</span>
+                <button type="button" class="opener-mode" data-mode="normal" role="radio" aria-checked="false">
+                  <span class="opener-mode__icon">✿</span><strong>普通</strong><small>自然出現</small>
                 </button>
-                <button type="button" class="opener-mode tts-engine" data-mode="lively" role="radio" aria-checked="false">
-                  <span class="tts-engine__icon">✨</span>
-                  <span class="tts-engine__name">活泼</span>
+                <button type="button" class="opener-mode" data-mode="lively" role="radio" aria-checked="false">
+                  <span class="opener-mode__icon">✦</span><strong>活潑</strong><small>更常來找你</small>
                 </button>
               </div>
-              <button type="button" class="ghost-btn" id="opener-test-fire" style="margin-top: 10px;">🔊 测试气泡</button>
-            </div>
+
+              <div class="opener-policy" id="opener-policy">
+                <div class="opener-policy__item">
+                  <label>安靜時段</label>
+                  <div class="opener-time-range">
+                    <input id="opener-quiet-start" type="time" value="23:00" aria-label="安靜時段開始" />
+                    <span>至</span>
+                    <input id="opener-quiet-end" type="time" value="07:00" aria-label="安靜時段結束" />
+                  </div>
+                </div>
+                <div class="opener-policy__item">
+                  <label for="opener-daily-limit">每日最多</label>
+                  <div class="opener-limit-control"><input id="opener-daily-limit" type="range" min="1" max="12" value="4" /><strong id="opener-daily-limit-value">4 次</strong></div>
+                </div>
+              </div>
+
+              <div class="opener-scenes" aria-label="主動開口場景">
+                <label class="opener-scene"><span class="opener-scene__icon">🌤</span><span><strong>日常問候</strong><small>早安與深夜關心</small></span><input id="opener-routine-enabled" type="checkbox" class="switch-input" checked /></label>
+                <label class="opener-scene"><span class="opener-scene__icon">🫧</span><span><strong>工作與回來</strong><small>久坐、放空、離開後返回</small></span><input id="opener-breaks-enabled" type="checkbox" class="switch-input" checked /></label>
+                <label class="opener-scene"><span class="opener-scene__icon">☔</span><span><strong>天氣關心</strong><small>下雨、降溫與舒適晴天</small></span><input id="opener-weather-enabled" type="checkbox" class="switch-input" checked /></label>
+              </div>
+
+              <div class="opener-console__footer">
+                <div class="opener-test-controls">
+                  <select id="opener-test-scene" aria-label="測試場景">
+                    <option value="morning">早安問候</option>
+                    <option value="work_break">工作休息</option>
+                    <option value="back_from_away">歡迎回來</option>
+                    <option value="rainy_day">下雨關心</option>
+                    <option value="late_night">深夜關心</option>
+                  </select>
+                  <button type="button" class="ghost-btn" id="opener-test-fire">試播氣泡</button>
+                </div>
+                <div class="opener-pack-actions">
+                  <span id="opener-test-status" role="status"></span>
+                  <button type="button" class="opener-folder-btn" id="opener-open-pack-folder">語音包資料夾</button>
+                </div>
+              </div>
+            </section>
           </div>
         </section>
 
@@ -1529,62 +2064,82 @@
           <div class="panel-heading">
             <div class="panel-heading__icon">🎧</div>
             <div>
-              <h1>ASR 设置</h1>
-              <p>语音识别与通话配置</p>
+              <h1>ASR 設置</h1>
+              <p>語音識別與通話配置</p>
             </div>
           </div>
           <div class="panel-body">
             <div class="tts-section">
-              <h2 class="tts-section__title">语音识别引擎</h2>
+              <h2 class="tts-section__title">語音識別引擎</h2>
               <div class="tts-field">
-                <label for="asr-engine">ASR 服务商</label>
+                <label for="asr-engine">ASR 服務商</label>
                 <select id="asr-engine">
-                  <option value="off">关闭</option>
-                  <option value="aliyun">阿里云（实时语音识别）</option>
-                  <option value="local">本地（占位，敬请期待）</option>
+                  <option value="off">關閉</option>
+                  <option value="aliyun">阿里雲（實時語音識別）</option>
+                  <option value="local">Groq Whisper（免費，需配置 Key）</option>
+                  <option value="web-speech">本機離線 Whisper（免費、免金鑰，首次下載模型）</option>
                 </select>
               </div>
-              <p class="tts-hint">选择「阿里云」后填入下方配置。</p>
+              <p class="tts-hint">選擇「阿里雲」後填入下方配置。</p>
             </div>
 
             <div class="tts-section" id="asr-aliyun-config">
-              <h2 class="tts-section__title">☁️ 阿里云配置</h2>
+              <h2 class="tts-section__title">☁️ 阿里雲配置</h2>
               <div class="tts-field">
                 <label for="asr-aliyun-app-key">App Key</label>
-                <input type="text" id="asr-aliyun-app-key" placeholder="智能语音交互控制台 → 项目设置 → AppKey" autocomplete="off" />
+                <input type="text" id="asr-aliyun-app-key" placeholder="智能語音交互控制台 → 項目設置 → AppKey" autocomplete="off" />
               </div>
               <div class="tts-field">
                 <label for="asr-aliyun-access-key-id">AccessKey ID</label>
-                <input type="text" id="asr-aliyun-access-key-id" placeholder="RAM 访问控制 → AccessKey 管理" autocomplete="off" />
+                <input type="text" id="asr-aliyun-access-key-id" placeholder="RAM 訪問控制 → AccessKey 管理" autocomplete="off" />
               </div>
               <div class="tts-field">
                 <label for="asr-aliyun-access-key-secret">AccessKey Secret</label>
-                <input type="password" id="asr-aliyun-access-key-secret" placeholder="创建 AccessKey 时显示的 Secret" autocomplete="off" />
+                <input type="password" id="asr-aliyun-access-key-secret" placeholder="創建 AccessKey 時顯示的 Secret" autocomplete="off" />
               </div>
               <div class="tts-field">
-                <label for="asr-language">识别语言</label>
+                <label for="asr-language">識別語言</label>
                 <select id="asr-language">
                   <option value="zh">中文</option>
                   <option value="en">英文</option>
                 </select>
               </div>
-              <p class="tts-hint">阿里云 → 智能语音交互控制台 → 创建项目获取 AppKey。AccessKey 在 RAM 访问控制台获取（ram.console.aliyun.com/manage/ak）。Token 会自动获取，无需手动填写。</p>
+              <p class="tts-hint">阿里雲 → 智能語音交互控制台 → 創建項目獲取 AppKey。AccessKey 在 RAM 訪問控制台獲取（ram.console.aliyun.com/manage/ak）。Token 會自動獲取，無需手動填寫。</p>
             </div>
 
             <div class="tts-section">
-              <h2 class="tts-section__title">通话设置</h2>
+              <h2 class="tts-section__title">通話設置</h2>
               <div class="tts-field">
-                <label for="asr-vad-silence">VAD 静默阈值（毫秒）</label>
+                <label for="asr-vad-silence">VAD 靜默閾值（毫秒）</label>
                 <input type="number" id="asr-vad-silence" placeholder="1000" min="300" max="10000" step="100" value="1000" />
               </div>
-              <p class="tts-hint">用户说话后停顿多久判定为说完。有人想词慢就填大一点（如 3000），反应快就填小一点（如 800）。默认 1000ms。</p>
+              <p class="tts-hint">用戶說話後停頓多久判定為說完。有人想詞慢就填大一點（如 3000），反應快就填小一點（如 800）。默認 1000ms。</p>
+              <label class="setting-row">
+                <div><strong>雲端失敗時切換本機</strong><p class="tts-hint">阿里雲或 Groq 無法使用時，改由本機 Whisper 完成這一輪。</p></div>
+                <input type="checkbox" id="asr-fallback-local" checked />
+              </label>
+              <label class="setting-row">
+                <div><strong>按住說話</strong><p class="tts-hint">通話中按住按鈕或空白鍵收音，放開後送出；適合吵雜環境。</p></div>
+                <input type="checkbox" id="asr-push-to-talk" />
+              </label>
               <label class="setting-row">
                 <div>
-                  <strong>通话中显示文字转写</strong>
-                  <p class="tts-hint">开启后通话窗口显示实时识别文字和昔涟回复文字</p>
+                  <strong>通話中顯示文字轉寫</strong>
+                  <p class="tts-hint">開啟後通話窗口顯示實時識別文字和昔漣回覆文字</p>
                 </div>
                 <input type="checkbox" id="asr-show-transcript" />
               </label>
+            </div>
+
+            <div class="tts-section asr-test-bench">
+              <div class="asr-test-bench__head"><div><span>LOCAL CHECK</span><h2 class="tts-section__title">麥克風與本機延遲測試</h2></div><strong id="asr-test-meter">— dB</strong></div>
+              <p class="tts-hint">按下後錄製 3 秒並交給本機 Whisper。首次使用會下載模型，因此第一次較久。</p>
+              <div class="asr-meter"><i id="asr-meter-fill"></i></div>
+              <div class="security-actions">
+                <button type="button" class="save-btn" id="asr-test-btn">錄音 3 秒</button>
+                <span class="security-status" id="asr-test-status" aria-live="polite">尚未測試</span>
+              </div>
+              <blockquote id="asr-test-transcript" class="asr-test-transcript is-hidden"></blockquote>
             </div>
           </div>
         </section>
@@ -1593,43 +2148,43 @@
         <section class="settings-panel is-hidden" id="placeholder-panel">
           <div class="placeholder-card">
             <div class="placeholder-card__icon" id="placeholder-icon">✨</div>
-            <h1 id="placeholder-title">待开发</h1>
-            <p id="placeholder-copy">这个模块先占位，等核心聊天与 API 接通后再继续扩展。</p>
+            <h1 id="placeholder-title">待開發</h1>
+            <p id="placeholder-copy">這個模塊先佔位，等核心聊天與 API 接通後再繼續擴展。</p>
           </div>
         </section>
       </section>
     </main>
   </div>
 
-  <!-- 添加表情包弹窗 -->
+  <!-- 添加表情包彈窗 -->
   <div class="sticker-add-overlay is-hidden" id="sticker-add-overlay">
     <div class="sticker-add-modal">
       <div class="sticker-add-modal__title">＋ 添加表情包</div>
       <div class="sticker-add-modal__body">
         <div class="sticker-field">
-          <label>图片</label>
+          <label>圖片</label>
           <div class="sticker-file-row">
-            <button type="button" class="sticker-file-btn" id="sticker-add-pick-btn">选择文件</button>
-            <span class="sticker-file-name" id="sticker-add-file-name">未选择</span>
+            <button type="button" class="sticker-file-btn" id="sticker-add-pick-btn">選擇文件</button>
+            <span class="sticker-file-name" id="sticker-add-file-name">未選擇</span>
           </div>
         </div>
         <div class="sticker-field">
-          <label>英文名称</label>
+          <label>英文名稱</label>
           <input type="text" id="sticker-add-id" placeholder="mycat" autocomplete="off" />
         </div>
         <div class="sticker-field">
-          <label>图片描述</label>
-          <input type="text" id="sticker-add-desc" placeholder="可爱的小猫表情" autocomplete="off" />
+          <label>圖片描述</label>
+          <input type="text" id="sticker-add-desc" placeholder="可愛的小貓表情" autocomplete="off" />
         </div>
         <div class="sticker-field">
-          <label>相近语义（一行一个）</label>
-          <textarea id="sticker-add-phrases" rows="4" placeholder="可爱的小猫&#10;想rua一下&#10;猫咪好乖"></textarea>
+          <label>相近語義（一行一個）</label>
+          <textarea id="sticker-add-phrases" rows="4" placeholder="可愛的小貓&#10;想rua一下&#10;貓咪好乖"></textarea>
         </div>
         <div class="sticker-add-modal__error is-hidden" id="sticker-add-error"></div>
       </div>
       <div class="sticker-add-modal__actions">
         <button type="button" class="ghost-btn" id="sticker-add-cancel">取消</button>
-        <button type="button" class="btn-primary" id="sticker-add-confirm">确认添加</button>
+        <button type="button" class="btn-primary" id="sticker-add-confirm">確認添加</button>
       </div>
     </div>
   </div>
@@ -1637,5 +2192,3 @@
   <script type="module" src="./settings.ts"></script>
 </body>
 </html>
-
-

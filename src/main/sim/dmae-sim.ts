@@ -1,6 +1,6 @@
 // ── DMAE Simulator 入口 ──
-// 直接 import 真 worldbook.ts，不 mock，不重写算法。
-// 改一个参数 → 重跑 → 看曲线/统计 → 改回/保留
+// 直接 import 真 worldbook.ts，不 mock，不重寫算法。
+// 改一個參數 → 重跑 → 看曲線/統計 → 改回/保留
 import * as path from "path";
 import {
   WorldbookManager,
@@ -38,7 +38,7 @@ function parseArgs(argv: string[]): CliArgs {
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    // 兼容 --key=value 和 --key value 两种形态
+    // 兼容 --key=value 和 --key value 兩種形態
     const eq = a.includes("=");
     const key = eq ? a.split("=")[0] : a;
     const valFromEq = eq ? a.split("=").slice(1).join("=") : null;
@@ -79,7 +79,7 @@ function runScenario(
   params: DmaeParams,
   debug: boolean = false
 ): SimResult {
-  // 直接用真 WorldbookManager：通过公开的 loadFromEntries 注入 entries（不反射、不破坏封装）
+  // 直接用真 WorldbookManager：通過公開的 loadFromEntries 注入 entries（不反射、不破壞封裝）
   const mgr = new WorldbookManager("", { params, debug: false });
   mgr.loadFromEntries(scenario.buildEntries());
 
@@ -88,7 +88,7 @@ function runScenario(
   const snapshots: EntrySnapshot[][] = [];
 
   for (const round of rounds) {
-    // 跑一整轮：manager.updateActivation(userText, modelText)
+    // 跑一整輪：manager.updateActivation(userText, modelText)
     mgr.updateActivation(round.userText, round.modelText);
     // 拍快照
     const snap: EntrySnapshot[] = entries.map((e) => {
@@ -125,7 +125,7 @@ function runScenario(
 
 function runSweep(scenario: Scenario, baseParams: DmaeParams, values: number[]): void {
   console.log(`\n=== Parameter Sweep: userRewardBase = [${values.join(", ")}] on ${scenario.name} ===\n`);
-  console.log("Bu       |  I=90 占用%  |  I=70 占用%  |  I=45 占用%  |  I=15 占用%  |  avgLife(I=45)");
+  console.log("Bu       |  I=90 佔用%  |  I=70 佔用%  |  I=45 佔用%  |  I=15 佔用%  |  avgLife(I=45)");
   console.log("---------|---------------|---------------|---------------|---------------|---------------");
   for (const v of values) {
     const params: DmaeParams = { ...baseParams, userRewardBase: v };
@@ -159,20 +159,20 @@ function main(): void {
   }
 
   const params: DmaeParams = { ...DEFAULT_DMAE_PARAMS, ...cli.paramOverrides };
-  console.log(`参数: ${JSON.stringify(params, null, 2)}`);
+  console.log(`參數: ${JSON.stringify(params, null, 2)}`);
 
   const result = runScenario(scenario, params, true);
 
   // CSV
   const csvFile = exportCsv(result, cli.outputDir);
-  console.log(`\nCSV 写入: ${csvFile}`);
+  console.log(`\nCSV 寫入: ${csvFile}`);
 
-  // 统计
+  // 統計
   printStats(result);
 
-  // 折线图
+  // 折線圖
   if (cli.showCharts) renderLineCharts(result);
-  // 条形图
+  // 條形圖
   if (cli.showBars) renderBars(result);
 }
 

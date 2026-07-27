@@ -1,5 +1,5 @@
-// Sim 自带的 fixture 解析（极简版，专注行为测试，不复用 worldbook.ts 的 parser）
-// 解析：## title / - 触发词: k1, k2 / - 常驻: 是 / - 优先级: N / - 内在价值: N
+// Sim 自帶的 fixture 解析（極簡版，專注行為測試，不復用 worldbook.ts 的 parser）
+// 解析：## title / - 觸發詞: k1, k2 / - 常駐: 是 / - 優先級: N / - 內在價值: N
 import type { WorldbookEntry } from "../../rag/worldbook";
 
 export function parseFixtureMarkdown(content: string, fileName: string): WorldbookEntry[] {
@@ -36,13 +36,13 @@ export function parseFixtureMarkdown(content: string, fileName: string): Worldbo
     }
 
     if (!title || contentLines.join("").trim() === "") continue;
-    const keywords = (meta["触发词"] ?? "")
+    const keywords = (meta["觸發詞"] ?? "")
       .split(/[,，、]/)
       .map((k) => k.trim())
       .filter(Boolean);
-    const intrinsicValue = parseFloat(meta["内在价值"] ?? meta["初始分"] ?? meta["initial_score"] ?? meta["intrinsic_value"] ?? "60") || 60;
-    const priority = parseInt(meta["优先级"] ?? "5") || 5;
-    const permanent = ["是", "yes", "true"].includes(meta["常驻"] ?? "");
+    const intrinsicValue = parseFloat(meta["內在價值"] ?? meta["初始分"] ?? meta["initial_score"] ?? meta["intrinsic_value"] ?? "60") || 60;
+    const priority = parseInt(meta["優先級"] ?? "5") || 5;
+    const permanent = ["是", "yes", "true"].includes(meta["常駐"] ?? "");
 
     entries.push({
       id: `wb_${fileName}_${title.replace(/\s+/g, "_")}`,

@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>昔涟 · 聊天</title>
+  <title>昔漣 · 聊天</title>
+  <script>
+    // Mark embedded pages before stylesheets load so the inner titlebar never paints.
+    if (window.self !== window.top) document.documentElement.classList.add("is-embedded");
+  </script>
   <link rel="stylesheet" href="../ui/tokens.css" />
   <link rel="stylesheet" href="../ui/fonts.css" />
   <link rel="stylesheet" href="../ui/base.css" />
@@ -16,18 +20,18 @@
       <aside class="chat__rail" id="chat-rail" hidden>
         <button type="button" class="chat__rail-new" id="chat-rail-new">
           <span class="chat__rail-new-icon" aria-hidden="true">＋</span>
-          <span>新对话</span>
+          <span>新對話</span>
         </button>
         <ul class="chat__rail-list" id="chat-rail-list" role="list"></ul>
         <div class="chat__rail-empty is-hidden" id="chat-rail-empty">
           <span aria-hidden="true">📭</span>
-          <p>还没有对话</p>
+          <p>還沒有對話</p>
         </div>
       </aside>
       <div class="chat__main">
         <header class="chat__titlebar">
           <div class="chat__titlebar-drag">
-            <button type="button" class="chat__status-btn" id="chat-status-btn" aria-label="会话列表" title="会话列表">
+            <button type="button" class="chat__status-btn" id="chat-status-btn" aria-label="會話列表" title="會話列表">
               <div class="loader">
                 <svg width="100" height="100" viewBox="0 0 100 100">
                   <defs>
@@ -46,35 +50,35 @@
               </div>
             </button>
             <span class="chat__title-meta">
-              <span class="chat__name">昔涟</span>
+              <span class="chat__name">昔漣</span>
               <span class="chat__name-sep" aria-hidden="true">·</span>
-              <span class="chat__hint" id="chat-hint">模型未连接</span>
+              <span class="chat__hint" id="chat-hint">模型未連接</span>
             </span>
           </div>
           <div class="chat__titlebar-actions">
             <div class="dropdown-trigger" data-dropdown="mode-dropdown">
               <span class="dt-label">模式</span>
-              <span class="dt-value" id="mode-val">协作</span>
+              <span class="dt-value" id="mode-val">協作</span>
               <span class="dt-arrow"></span>
             </div>
             <div class="dropdown-trigger" data-dropdown="style-dropdown">
-              <span class="dt-label">风格</span>
-              <span class="dt-value" id="style-val">温柔 · 和善</span>
+              <span class="dt-label">風格</span>
+              <span class="dt-value" id="style-val">溫柔 · 和善</span>
               <span class="dt-arrow"></span>
             </div>
             <div class="dropdown-trigger" data-dropdown="reasoning-dropdown">
               <span class="dt-label">推理</span>
-              <span class="dt-value" id="reasoning-val">Auto · 自动</span>
+              <span class="dt-value" id="reasoning-val">Auto · 自動</span>
               <span class="dt-arrow"></span>
             </div>
-            <button type="button" class="chat__icon-btn" id="clear" aria-label="清空对话" title="清空对话">⌫</button>
+            <button type="button" class="chat__icon-btn" id="clear" aria-label="清空對話" title="清空對話">⌫</button>
             <button type="button" class="chat__winbtn" id="min-btn" aria-label="最小化" title="最小化">
               <svg width="10" height="2" viewBox="0 0 10 2" aria-hidden="true"><rect width="10" height="2" rx="1" fill="currentColor"/></svg>
             </button>
             <button type="button" class="chat__winbtn" id="max-btn" aria-label="最大化" title="最大化">
               <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.75" y="0.75" width="8.5" height="8.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
             </button>
-            <button type="button" class="chat__winbtn chat__winbtn--close" id="close-btn" aria-label="关闭" title="关闭">
+            <button type="button" class="chat__winbtn chat__winbtn--close" id="close-btn" aria-label="關閉" title="關閉">
               <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
                 <line x1="2" y1="2" x2="8" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
                 <line x1="8" y1="2" x2="2" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
@@ -85,24 +89,31 @@
         <main class="chat__messages" id="messages" aria-live="polite"></main>
         <div class="chat__empty-state" id="chat-empty" hidden>
           <div class="chat__empty-icon">💬</div>
-          <p class="chat__empty-text">昔涟期待与你聊天哦 ✨</p>
+          <p class="chat__empty-text">昔漣期待與你聊天哦 ✨</p>
           <div class="chat__quick-presets" id="quick-presets"></div>
         </div>
       </div>
     </div>
-    <div class="chat__file-tags" id="file-tags"></div>
+    <div class="chat__stop-speaking" id="stop-speaking-btn" style="display: none;">
+      <button type="button" class="stop-speaking-btn-inner" id="stop-speaking-btn-inner">
+        <svg class="stop-speaking-icon" viewBox="0 0 24 24" width="16" height="16">
+          <rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"/>
+        </svg>
+        <span>停止播放 (Esc)</span>
+      </button>
+    </div>
     <form class="chat__input" id="composer">
       <input type="file" id="file-input" accept=".txt,.md,.json,.csv,.log" multiple style="display:none" />
-      <button type="button" class="chat__attach" id="attach-btn" aria-label="上传文件" title="上传文件">📎</button>
+      <button type="button" class="chat__attach" id="attach-btn" aria-label="上傳文件" title="上傳文件">📎</button>
       <button type="button" class="chat__sticker-btn" id="sticker-picker-btn" aria-label="表情包" title="表情包">😀</button>
       <textarea
         id="input"
         rows="1"
-        placeholder="说点什么…  Enter 发送 / Shift+Enter 换行"
+        placeholder="說點什麼…  Enter 發送 / Shift+Enter 換行"
         autocomplete="off"
         spellcheck="false"
       ></textarea>
-      <button type="submit" class="chat__send" id="send" aria-label="发送">↵</button>
+      <button type="submit" class="chat__send" id="send" aria-label="發送">↵</button>
     </form>
     <div class="sticker-picker" id="sticker-picker" hidden>
       <div class="sticker-picker__grid" id="sticker-picker-grid"></div>
@@ -110,21 +121,23 @@
   </div>
   <script type="module" src="./main.ts"></script>
   <div class="dropdown-menu" id="mode-dropdown">
-    <div class="dm-opt is-active" data-value="collab">🛠️ 协作</div>
+    <div class="dm-opt is-active" data-value="collab">🛠️ 協作</div>
     <div class="dm-opt" data-value="talk">💬 日常聊天</div>
+    <div class="dm-opt" data-value="study">📖 學習模式</div>
+    <div class="dm-opt" data-value="game">🎮 遊戲模式</div>
   </div>
   <div class="dropdown-menu" id="style-dropdown">
-    <div class="dm-title">聊天风格</div>
-    <div class="dm-opt is-active" data-value="01_default.md">🌸 温柔 · 和善</div>
-    <div class="dm-opt" data-value="02_lively.md">✨ 元气 · 活泼</div>
-    <div class="dm-opt" data-value="03_healing.md">🌿 治愈 · 安心</div>
-    <div class="dm-opt" data-value="04_focused.md">📖 知性 · 认真</div>
-    <div class="dm-opt" data-value="05_sweet.md">💕 撒娇 · 黏人</div>
+    <div class="dm-title">聊天風格</div>
+    <div class="dm-opt is-active" data-value="01_default.md">🌸 溫柔 · 和善</div>
+    <div class="dm-opt" data-value="02_lively.md">✨ 元氣 · 活潑</div>
+    <div class="dm-opt" data-value="03_healing.md">🌿 治癒 · 安心</div>
+    <div class="dm-opt" data-value="04_focused.md">📖 知性 · 認真</div>
+    <div class="dm-opt" data-value="05_sweet.md">💕 撒嬌 · 黏人</div>
   </div>
   <div class="dropdown-menu" id="reasoning-dropdown">
-    <div class="dm-title">推理强度</div>
-    <div class="dm-opt" data-value="Custom · 自定义">Custom · 自定义</div>
-    <div class="dm-opt is-active" data-value="Auto · 自动">Auto · 自动</div>
+    <div class="dm-title">推理強度</div>
+    <div class="dm-opt" data-value="Custom · 自定義">Custom · 自定義</div>
+    <div class="dm-opt is-active" data-value="Auto · 自動">Auto · 自動</div>
     <div class="dm-opt" data-value="Low · 低">Low · 低</div>
     <div class="dm-opt" data-value="Medium · 中">Medium · 中</div>
     <div class="dm-opt" data-value="High · 高">High · 高</div>

@@ -1,4 +1,4 @@
-// MCP Adapter — 将 MCP server 的工具发现和调用适配到 ToolRegistry
+// MCP Adapter — 將 MCP server 的工具發現和調用適配到 ToolRegistry
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
@@ -8,11 +8,11 @@ import { ToolDefinition, toolRegistry } from "./tool-registry";
 const LOG_PREFIX = "[MCP Adapter]";
 
 export interface McpServerConfig {
-  id: string;              // 唯一标识
+  id: string;              // 唯一標識
   name: string;            // 展示名
   transport: "stdio" | "sse";
   command?: string;         // stdio 必填,sse 不用
-  args?: string[];         // 命令行参数
+  args?: string[];         // 命令行參數
   env?: Record<string, string>;
   cwd?: string;
   url?: string;            // sse 必填,stdio 不用
@@ -23,15 +23,15 @@ interface McpServerState {
   client: Client;
   transport: Transport;
   connected: boolean;
-  toolIds: string[];       // 已注册到 ToolRegistry 的工具 ID 列表
+  toolIds: string[];       // 已註冊到 ToolRegistry 的工具 ID 列表
 }
 
 /**
- * 连接一个 MCP server，发现其工具并注册到 ToolRegistry。
- * 返回注册的工具 ID 列表。
+ * 連接一個 MCP server，發現其工具並註冊到 ToolRegistry。
+ * 返回註冊的工具 ID 列表。
  */
 export async function connectMcpServer(config: McpServerConfig): Promise<string[]> {
-  console.log(LOG_PREFIX, "连接 MCP server:", config.name, "(" + config.id + ")");
+  console.log(LOG_PREFIX, "連接 MCP server:", config.name, "(" + config.id + ")");
 
   let transport: Transport;
   if (config.transport === "sse") {
@@ -51,9 +51,9 @@ export async function connectMcpServer(config: McpServerConfig): Promise<string[
     });
   }
 
-  // 监听 transport 错误
+  // 監聽 transport 錯誤
   transport.onerror = (err: Error) => {
-    console.error(LOG_PREFIX, "transport 错误 [" + config.name + "]:", err.message);
+    console.error(LOG_PREFIX, "transport 錯誤 [" + config.name + "]:", err.message);
   };
 
   const client = new Client(
@@ -63,16 +63,16 @@ export async function connectMcpServer(config: McpServerConfig): Promise<string[
 
   try {
     await client.connect(transport);
-    console.log(LOG_PREFIX, "已连接到", config.name);
+    console.log(LOG_PREFIX, "已連接到", config.name);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(LOG_PREFIX, "连接失败 [" + config.name + "]:", msg);
-    // 连接失败时清理 transport
+    console.error(LOG_PREFIX, "連接失敗 [" + config.name + "]:", msg);
+    // 連接失敗時清理 transport
     try { await transport.close(); } catch (_) { /* ignore */ }
     throw err;
   }
 
-  // 发现工具
+  // 發現工具
   let mcpTools: Array<{
     name: string;
     description?: string;
@@ -94,24 +94,24 @@ export async function connectMcpServer(config: McpServerConfig): Promise<string[
         required?: string[];
       };
     }>;
-    console.log(LOG_PREFIX, "发现 " + mcpTools.length + " 个工具:", mcpTools.map(t => t.name).join(", "));
+    console.log(LOG_PREFIX, "發現 " + mcpTools.length + " 個工具:", mcpTools.map(t => t.name).join(", "));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(LOG_PREFIX, "listTools 失败 [" + config.name + "]:", msg);
+    console.error(LOG_PREFIX, "listTools 失敗 [" + config.name + "]:", msg);
     await client.close();
     throw err;
   }
 
-  // 注册到 ToolRegistry
+  // 註冊到 ToolRegistry
   const registeredIds: string[] = [];
   for (const mt of mcpTools) {
-    // 用短横线拼接，不用冒号——Kimi 等厂商 function.name 正则不允许冒号
-    // （Kimi: ^[a-zA-Z_][a-zA-Z0-9-_]$）。短横线所有厂商都接受。
+    // 用短橫線拼接，不用冒號——Kimi 等廠商 function.name 正則不允許冒號
+    // （Kimi: ^[a-zA-Z_][a-zA-Z0-9-_]$）。短橫線所有廠商都接受。
     const toolId = config.id + "-" + mt.name;
 
-    // 如果已存在同名工具，跳过
+    // 如果已存在同名工具，跳過
     if (toolRegistry.getById(toolId)) {
-      console.warn(LOG_PREFIX, "工具已存在，跳过:", toolId);
+      console.warn(LOG_PREFIX, "工具已存在，跳過:", toolId);
       continue;
     }
 
@@ -125,16 +125,16 @@ export async function connectMcpServer(config: McpServerConfig): Promise<string[
         properties: mt.inputSchema?.properties as Record<string, { type: string; description: string }> || {},
         required: mt.inputSchema?.required,
       },
-      // TODO: 未来若 MCP 工具需要 ToolContext，在此将 ctx 映射为 MCP 协议 arguments 的隐藏字段。
-      // 当前 MCP 工具 execute 签名不带 ctx，按需接入时改签名为 (args, ctx?) 并在这里处理。
+      // TODO: 未來若 MCP 工具需要 ToolContext，在此將 ctx 映射為 MCP 協議 arguments 的隱藏字段。
+      // 當前 MCP 工具 execute 簽名不帶 ctx，按需接入時改簽名為 (args, ctx?) 並在這裡處理。
       execute: async (args: Record<string, unknown>) => {
-        console.log(LOG_PREFIX, "调用工具:", toolId, JSON.stringify(args));
+        console.log(LOG_PREFIX, "調用工具:", toolId, JSON.stringify(args));
         try {
           const result = await client.callTool({
             name: mt.name,
             arguments: args,
           });
-          // 提取文本内容
+          // 提取文本內容
           const texts: string[] = [];
           if (result.content && Array.isArray(result.content)) {
             for (const block of result.content) {
@@ -148,18 +148,18 @@ export async function connectMcpServer(config: McpServerConfig): Promise<string[
           return output;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          console.error(LOG_PREFIX, "工具调用失败 [" + toolId + "]:", msg);
-          return "[MCP 工具调用失败] " + msg;
+          console.error(LOG_PREFIX, "工具調用失敗 [" + toolId + "]:", msg);
+          return "[MCP 工具調用失敗] " + msg;
         }
       },
     };
 
     toolRegistry.register(toolDef);
     registeredIds.push(toolId);
-    console.log(LOG_PREFIX, "已注册工具:", toolId);
+    console.log(LOG_PREFIX, "已註冊工具:", toolId);
   }
 
-  // 保存状态
+  // 保存狀態
   const state: McpServerState = {
     config,
     client,
@@ -169,22 +169,22 @@ export async function connectMcpServer(config: McpServerConfig): Promise<string[
   };
   mcpServerStates.set(config.id, state);
 
-  console.log(LOG_PREFIX, "MCP server 就绪:", config.name, "(" + registeredIds.length + " 个工具)");
+  console.log(LOG_PREFIX, "MCP server 就緒:", config.name, "(" + registeredIds.length + " 個工具)");
   return registeredIds;
 }
 
 /**
- * 断开并清理一个 MCP server 及其注册的工具。
+ * 斷開並清理一個 MCP server 及其註冊的工具。
  */
 export async function disconnectMcpServer(serverId: string): Promise<boolean> {
-  console.log(LOG_PREFIX, "断开 MCP server:", serverId);
+  console.log(LOG_PREFIX, "斷開 MCP server:", serverId);
   const state = mcpServerStates.get(serverId);
   if (!state) {
     console.warn(LOG_PREFIX, "未找到 MCP server:", serverId);
     return false;
   }
 
-  // 从 ToolRegistry 移除工具
+  // 從 ToolRegistry 移除工具
   for (const toolId of state.toolIds) {
     toolRegistry.unregister(toolId);
     console.log(LOG_PREFIX, "已移除工具:", toolId);
@@ -192,11 +192,11 @@ export async function disconnectMcpServer(serverId: string): Promise<boolean> {
 
   try {
     await state.client.close();
-    console.log(LOG_PREFIX, "已断开:", serverId);
+    console.log(LOG_PREFIX, "已斷開:", serverId);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(LOG_PREFIX, "client.close 失败 [" + serverId + "]:", msg);
-    // 即使 client.close 失败，也尝试关闭 transport
+    console.error(LOG_PREFIX, "client.close 失敗 [" + serverId + "]:", msg);
+    // 即使 client.close 失敗，也嘗試關閉 transport
     try { await state.transport.close(); } catch (_) { /* ignore */ }
   }
 
@@ -206,7 +206,7 @@ export async function disconnectMcpServer(serverId: string): Promise<boolean> {
 }
 
 /**
- * 获取所有已连接的 MCP server 状态。
+ * 獲取所有已連接的 MCP server 狀態。
  */
 export function getMcpServerStates(): Array<{
   id: string;
@@ -224,7 +224,7 @@ export function getMcpServerStates(): Array<{
   }));
 }
 
-// 内部状态存储
+// 內部狀態存儲
 const mcpServerStates = new Map<string, McpServerState>();
 
 

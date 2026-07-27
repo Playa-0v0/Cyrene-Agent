@@ -1,12 +1,12 @@
 /* ============================================================
-   共享柱状图/用量进度条组件
+   共享柱狀圖/用量進度條組件
    tasks 窗口（今日日程）和 settings 窗口（Token 用量面板）共用。
-   抽出来避免两处重复——改一处两处都生效。
-   依赖：tokens.css 里的 --rb-text-micro / --rb-radius-full / --rb-text-on-pink
+   抽出來避免兩處重複——改一處兩處都生效。
+   依賴：tokens.css 裡的 --rb-text-micro / --rb-radius-full / --rb-text-on-pink
    ============================================================ */
 
-/* 用量进度条容器（标签 + 数字 + 总量 + 进度条）。
-   外层 .schedule-usage 的布局由各窗口自己定义（tasks/settings 间距不同）。 */
+/* 用量進度條容器（標籤 + 數字 + 總量 + 進度條）。
+   外層 .schedule-usage 的佈局由各窗口自己定義（tasks/settings 間距不同）。 */
 
 .usage-info {
   display: flex;
@@ -29,7 +29,7 @@
   font-weight: 800;
   letter-spacing: -0.2px;
   color: var(--rb-text-strong);
-  /* pink 光晕收紧，避免 20px 字符叠 32px 大光晕糊成白光 */
+  /* pink 光暈收緊，避免 20px 字符疊 32px 大光暈糊成白光 */
   text-shadow: 0 0 6px rgba(236, 72, 153, 0.4);
 }
 
@@ -54,7 +54,7 @@
   box-shadow: 0 0 10px rgba(236, 72, 153, 0.35);
 }
 
-/* 7 天柱状图 */
+/* 7 天柱狀圖 */
 .mini-chart {
   position: relative;
   height: 112px;
@@ -121,8 +121,8 @@
   box-shadow: 0 0 10px rgba(236, 72, 153, 0.22);
 }
 
-/* Token 面板动态柱子用的真实 fill div（高度由 JS 设像素值）。
-   tasks 窗口用上面的 ::before 伪元素（固定高度），两套互不干扰。 */
+/* Token 面板動態柱子用的真實 fill div（高度由 JS 設像素值）。
+   tasks 窗口用上面的 ::before 偽元素（固定高度），兩套互不干擾。 */
 .chart-bar__fill {
   width: 100%;
   max-width: 24px;

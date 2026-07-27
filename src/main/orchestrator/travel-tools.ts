@@ -1,10 +1,10 @@
-// 🚗 出行工具 —— 路线规划（驾车/步行/骑行/公交）。
+// 🚗 出行工具 —— 路線規劃（駕車/步行/騎行/公交）。
 //
-// 设计原则：
-// - 复用 GeneralSettings 中已有的 amapKey（高德 Web 服务 API Key）
-// - 用高德地理编码将地名转坐标，再调用路径规划 API
-// - 返回易读的中文路线描述
-// - 不引入新依赖，复用全局 fetch
+// 設計原則：
+// - 複用 GeneralSettings 中已有的 amapKey（高德 Web 服務 API Key）
+// - 用高德地理編碼將地名轉座標，再調用路徑規劃 API
+// - 返回易讀的中文路線描述
+// - 不引入新依賴，複用全局 fetch
 
 import { toolRegistry } from "./tool-registry";
 
@@ -18,14 +18,14 @@ const TRAVEL_TIMEOUT_MS = 15000;
 let amapKeyGetter: (() => string) | null = null;
 let travelEnabledGetter: (() => boolean) | null = null;
 
-/** index.ts 启动时注入 amapKey 获取器。 */
+/** index.ts 啟動時注入 amapKey 獲取器。 */
 export function setTravelConfig(amapKeyFn: () => string, enabledFn?: () => boolean): void {
   amapKeyGetter = amapKeyFn;
   travelEnabledGetter = enabledFn ?? null;
 }
 
 // ══════════════════════════════════════════════════════════
-// 高德地理编码：地名 → "经度,纬度"
+// 高德地理編碼：地名 → "經度,緯度"
 // ══════════════════════════════════════════════════════════
 
 async function geocode(address: string, key: string): Promise<string | null> {
@@ -46,99 +46,99 @@ async function geocode(address: string, key: string): Promise<string | null> {
 }
 
 // ══════════════════════════════════════════════════════════
-// 各出行方式 API 封装
+// 各出行方式 API 封裝
 // ══════════════════════════════════════════════════════════
 
-/** 驾车路径规划。 */
+/** 駕車路徑規劃。 */
 async function planDriving(origin: string, destination: string, key: string): Promise<string> {
   const url = `https://restapi.amap.com/v3/direction/driving?origin=${origin}&destination=${destination}&extensions=base&strategy=0&key=${key}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TRAVEL_TIMEOUT_MS);
   try {
     const resp = await fetch(url, { signal: ctrl.signal });
-    if (!resp.ok) return `[错误] 驾车路线查询失败：HTTP ${resp.status}`;
+    if (!resp.ok) return `[錯誤] 駕車路線查詢失敗：HTTP ${resp.status}`;
     const data = await resp.json() as {
       route?: { paths?: Array<{ distance: string; duration: string; tolls: string; toll_distance: string; traffic_lights: string }> };
     };
-    if (!data.route?.paths?.length) return "[错误] 未找到驾车路线";
+    if (!data.route?.paths?.length) return "[錯誤] 未找到駕車路線";
     const path = data.route.paths[0];
     const distKm = (Number(path.distance) / 1000).toFixed(1);
     const durMin = Math.round(Number(path.duration) / 60);
     const toll = Number(path.tolls);
     const lines = [
-      `🚗 驾车路线`,
-      `距离：${distKm} 公里`,
-      `预计用时：${durMin} 分钟`,
-      toll > 0 ? `路费：${toll.toFixed(0)} 元` : `路费：免费`,
-      `红绿灯：${path.traffic_lights || 0} 个`,
+      `🚗 駕車路線`,
+      `距離：${distKm} 公里`,
+      `預計用時：${durMin} 分鐘`,
+      toll > 0 ? `路費：${toll.toFixed(0)} 元` : `路費：免費`,
+      `紅綠燈：${path.traffic_lights || 0} 個`,
     ];
     return lines.join("\n");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return "[错误] 驾车路线查询失败：" + msg;
+    return "[錯誤] 駕車路線查詢失敗：" + msg;
   } finally {
     clearTimeout(timer);
   }
 }
 
-/** 步行路径规划（最长 100km）。 */
+/** 步行路徑規劃（最長 100km）。 */
 async function planWalking(origin: string, destination: string, key: string): Promise<string> {
   const url = `https://restapi.amap.com/v3/direction/walking?origin=${origin}&destination=${destination}&key=${key}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TRAVEL_TIMEOUT_MS);
   try {
     const resp = await fetch(url, { signal: ctrl.signal });
-    if (!resp.ok) return `[错误] 步行路线查询失败：HTTP ${resp.status}`;
+    if (!resp.ok) return `[錯誤] 步行路線查詢失敗：HTTP ${resp.status}`;
     const data = await resp.json() as {
       route?: { paths?: Array<{ distance: string; duration: string }> };
     };
-    if (!data.route?.paths?.length) return "[错误] 未找到步行路线";
+    if (!data.route?.paths?.length) return "[錯誤] 未找到步行路線";
     const path = data.route.paths[0];
     const distM = Number(path.distance);
     const durMin = Math.round(Number(path.duration) / 60);
     const distStr = distM >= 1000 ? `${(distM / 1000).toFixed(1)} 公里` : `${distM.toFixed(0)} 米`;
     return [
-      `🚶 步行路线`,
-      `距离：${distStr}`,
-      `预计用时：${durMin} 分钟`,
+      `🚶 步行路線`,
+      `距離：${distStr}`,
+      `預計用時：${durMin} 分鐘`,
     ].join("\n");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return "[错误] 步行路线查询失败：" + msg;
+    return "[錯誤] 步行路線查詢失敗：" + msg;
   } finally {
     clearTimeout(timer);
   }
 }
 
-/** 骑行路径规划（最长 500km）。 */
+/** 騎行路徑規劃（最長 500km）。 */
 async function planCycling(origin: string, destination: string, key: string): Promise<string> {
   const url = `https://restapi.amap.com/v4/direction/bicycling?origin=${origin}&destination=${destination}&key=${key}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TRAVEL_TIMEOUT_MS);
   try {
     const resp = await fetch(url, { signal: ctrl.signal });
-    if (!resp.ok) return `[错误] 骑行路线查询失败：HTTP ${resp.status}`;
+    if (!resp.ok) return `[錯誤] 騎行路線查詢失敗：HTTP ${resp.status}`;
     const data = await resp.json() as {
       data?: { paths?: Array<{ distance: string; duration: string }> };
     };
-    if (!data.data?.paths?.length) return "[错误] 未找到骑行路线";
+    if (!data.data?.paths?.length) return "[錯誤] 未找到騎行路線";
     const path = data.data.paths[0];
     const distKm = (Number(path.distance) / 1000).toFixed(1);
     const durMin = Math.round(Number(path.duration) / 60);
     return [
-      `🚲 骑行路线`,
-      `距离：${distKm} 公里`,
-      `预计用时：${durMin} 分钟`,
+      `🚲 騎行路線`,
+      `距離：${distKm} 公里`,
+      `預計用時：${durMin} 分鐘`,
     ].join("\n");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return "[错误] 骑行路线查询失败：" + msg;
+    return "[錯誤] 騎行路線查詢失敗：" + msg;
   } finally {
     clearTimeout(timer);
   }
 }
 
-/** 公交路径规划（支持公交/地铁/火车综合换乘）。 */
+/** 公交路徑規劃（支持公交/地鐵/火車綜合換乘）。 */
 async function planTransit(
   origin: string,
   destination: string,
@@ -150,7 +150,7 @@ async function planTransit(
   const timer = setTimeout(() => ctrl.abort(), TRAVEL_TIMEOUT_MS);
   try {
     const resp = await fetch(url, { signal: ctrl.signal });
-    if (!resp.ok) return `[错误] 公交路线查询失败：HTTP ${resp.status}`;
+    if (!resp.ok) return `[錯誤] 公交路線查詢失敗：HTTP ${resp.status}`;
     const data = await resp.json() as {
       route?: { transits?: Array<{
         cost: string; duration: string; walking_distance: string;
@@ -160,14 +160,14 @@ async function planTransit(
         }>;
       }>; taxi_cost?: string };
     };
-    if (!data.route?.transits?.length) return "[错误] 未找到公交路线";
+    if (!data.route?.transits?.length) return "[錯誤] 未找到公交路線";
     const transit = data.route.transits[0];
     const durMin = Math.round(Number(transit.duration) / 60);
     const price = Number(transit.cost).toFixed(0);
     const walkDist = Number(transit.walking_distance);
     const walkStr = walkDist > 0 ? `（步行 ${walkDist.toFixed(0)} 米）` : "";
 
-    // 提取换乘方案简述
+    // 提取換乘方案簡述
     const steps = transit.segments?.map((seg, i) => {
       if (seg.bus?.buslines?.length) {
         const bus = seg.bus.buslines[0];
@@ -180,17 +180,17 @@ async function planTransit(
     }).filter(Boolean) || [];
 
     const lines = [
-      `🚌 公交路线`,
-      `预计用时：${durMin} 分钟`,
-      `票价：${price} 元${walkStr}`,
-      data.route.taxi_cost ? `打车参考价：${data.route.taxi_cost} 元` : "",
-      ...(steps.length ? [`换乘方案：`, ...steps] : []),
+      `🚌 公交路線`,
+      `預計用時：${durMin} 分鐘`,
+      `票價：${price} 元${walkStr}`,
+      data.route.taxi_cost ? `打車參考價：${data.route.taxi_cost} 元` : "",
+      ...(steps.length ? [`換乘方案：`, ...steps] : []),
     ].filter(Boolean);
 
     return lines.join("\n");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return "[错误] 公交路线查询失败：" + msg;
+    return "[錯誤] 公交路線查詢失敗：" + msg;
   } finally {
     clearTimeout(timer);
   }
@@ -202,92 +202,92 @@ async function planTransit(
 
 async function executePlanTrip(args: Record<string, unknown>): Promise<string> {
   if (travelEnabledGetter && !travelEnabledGetter()) {
-    return "[错误] 出行工具未启用，请在设置里开启";
+    return "[錯誤] 出行工具未啟用，請在設置裡開啟";
   }
 
   const amapKey = amapKeyGetter?.() ?? "";
   if (!amapKey) {
-    return "[提示] 高德 API Key 未配置。可在 设置→插件 中找到 🚗出行工具，填入高德 Web 服务 API Key（注册地址：https://lbs.amap.com）。";
+    return "[提示] 高德 API Key 未配置。可在 設置→插件 中找到 🚗出行工具，填入高德 Web 服務 API Key（註冊地址：https://lbs.amap.com）。";
   }
 
   const origin = String(args.origin ?? "").trim();
   const destination = String(args.destination ?? "").trim();
   if (!origin || !destination) {
-    return "[错误] 请提供起点和终点";
+    return "[錯誤] 請提供起點和終點";
   }
 
-  const mode = String(args.mode ?? "驾车").trim();
+  const mode = String(args.mode ?? "駕車").trim();
 
-  // 地理编码：地名 → 坐标
+  // 地理編碼：地名 → 座標
   const [origLoc, destLoc] = await Promise.all([
     geocode(origin, amapKey),
     geocode(destination, amapKey),
   ]);
-  if (!origLoc) return `[错误] 无法解析起点「${origin}」的位置，请尝试更具体的名称`;
-  if (!destLoc) return `[错误] 无法解析终点「${destination}」的位置，请尝试更具体的名称`;
+  if (!origLoc) return `[錯誤] 無法解析起點「${origin}」的位置，請嘗試更具體的名稱`;
+  if (!destLoc) return `[錯誤] 無法解析終點「${destination}」的位置，請嘗試更具體的名稱`;
 
-  console.log(LOG_PREFIX, `规划路线：「${origin}」→「${destination}」, 方式=${mode}`);
+  console.log(LOG_PREFIX, `規劃路線：「${origin}」→「${destination}」, 方式=${mode}`);
 
   switch (mode) {
-    case "驾车":
-    case "开车":
+    case "駕車":
+    case "開車":
       return planDriving(origLoc, destLoc, amapKey);
 
     case "步行":
     case "走路":
       return planWalking(origLoc, destLoc, amapKey);
 
-    case "骑行":
-    case "骑车":
-    case "自行车":
+    case "騎行":
+    case "騎車":
+    case "自行車":
       return planCycling(origLoc, destLoc, amapKey);
 
     case "公交":
     case "公共交通":
-    case "地铁":
-    case "公交地铁": {
+    case "地鐵":
+    case "公交地鐵": {
       const city = String(args.city ?? "").trim();
-      if (!city) return "[错误] 公交路线必须提供城市（参数 city），例如 city='北京'";
+      if (!city) return "[錯誤] 公交路線必須提供城市（參數 city），例如 city='北京'";
       return planTransit(origLoc, destLoc, city, amapKey);
     }
 
     default:
-      return `[错误] 不支持的出行方式「${mode}」。支持：驾车、步行、骑行、公交`;
+      return `[錯誤] 不支持的出行方式「${mode}」。支持：駕車、步行、騎行、公交`;
   }
 }
 
 // ══════════════════════════════════════════════════════════
-// 注册
+// 註冊
 // ══════════════════════════════════════════════════════════
 
-/** 注册出行工具。index.ts startup 调一次。 */
+/** 註冊出行工具。index.ts startup 調一次。 */
 export function registerTravelTools(): void {
   toolRegistry.register({
     id: "plan_trip",
     name: "🚗出行工具",
     description:
-      "路线规划，查驾车/步行/骑行/公交的路线、距离和预计时间。\n\n" +
-      "何时用：\n" +
-      "- 用户问「从 A 到 B 怎么走」「去 X 怎么坐车」「到 Y 多远」\n" +
-      "- 用户想知道驾车/公交/骑行/步行的路线和耗时\n" +
-      "- 用户问「打车要多少钱」「骑自行车去 X 多久」\n\n" +
-      "不要用于：\n" +
-      "- 查天气（用 weather 工具）\n" +
-      "- 查具体公交线路信息或时刻表（不支持）\n" +
-      "- 查路况（不支持）\n\n" +
-      "参数：\n" +
-      "- origin（必填）：起点，如「故宫」「北京市天安门」\n" +
-      "- destination（必填）：终点\n" +
-      "- mode（可选，默认驾车）：出行方式——驾车/开车、步行/走路、骑行/骑车/自行车、公交/公共交通/地铁\n" +
-      "- city（公交必填）：城市名，如「北京」「上海」。仅公交模式需要",
+      "路線規劃，查駕車/步行/騎行/公交的路線、距離和預計時間。\n\n" +
+      "何時用：\n" +
+      "- 用戶問「從 A 到 B 怎麼走」「去 X 怎麼坐車」「到 Y 多遠」\n" +
+      "- 用戶想知道駕車/公交/騎行/步行的路線和耗時\n" +
+      "- 用戶問「打車要多少錢」「騎自行車去 X 多久」\n\n" +
+      "不要用於：\n" +
+      "- 查天氣（用 weather 工具）\n" +
+      "- 查具體公交線路信息或時刻表（不支持）\n" +
+      "- 查路況（不支持）\n\n" +
+      "參數：\n" +
+      "- origin（必填）：起點，如「故宮」「北京市天安門」\n" +
+      "- destination（必填）：終點\n" +
+      "- mode（可選，默認駕車）：出行方式——駕車/開車、步行/走路、騎行/騎車/自行車、公交/公共交通/地鐵\n" +
+      "- city（公交必填）：城市名，如「北京」「上海」。僅公交模式需要",
     enabled: true,
     risk: "network",
     inputSchema: {
       type: "object",
       properties: {
-        origin:       { type: "string", description: "起点，如「故宫」「北京市天安门」" },
-        destination:  { type: "string", description: "终点" },
-        mode:         { type: "string", description: "出行方式：驾车/开车、步行/走路、骑行/骑车/自行车、公交/公共交通/地铁（默认驾车）" },
+        origin:       { type: "string", description: "起點，如「故宮」「北京市天安門」" },
+        destination:  { type: "string", description: "終點" },
+        mode:         { type: "string", description: "出行方式：駕車/開車、步行/走路、騎行/騎車/自行車、公交/公共交通/地鐵（默認駕車）" },
         city:         { type: "string", description: "城市名，如「北京」「上海」，公交模式必填" },
       },
       required: ["origin", "destination"],
@@ -295,5 +295,5 @@ export function registerTravelTools(): void {
     execute: executePlanTrip,
   });
 
-  console.log(LOG_PREFIX, "已注册：plan_trip（🚗出行工具）");
+  console.log(LOG_PREFIX, "已註冊：plan_trip（🚗出行工具）");
 }

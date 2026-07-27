@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 
-// 纯函数直接从源码文本提取（避免 electron module mock）
-// clampWindowToWorkArea 和 computePanelLayout 是纯函数，不依赖 electron。
+// 純函數直接從源碼文本提取（避免 electron module mock）
+// clampWindowToWorkArea 和 computePanelLayout 是純函數，不依賴 electron。
 function clampWindowToWorkArea(
   pos: { x: number; y: number },
   size: { width: number; height: number },
@@ -48,7 +48,7 @@ function computePanelLayout(
     return positions;
   }
 
-  // 阶梯排列
+  // 階梯排列
   const chatPos = clampWindowToWorkArea(
     { x: workArea.x + Math.floor((workArea.width - panels[0].width) / 2), y: baseY },
     panels[0],
@@ -114,7 +114,7 @@ describe("computePanelLayout", () => {
     }
   });
 
-  it("1366x768: 阶梯布局，三窗口至少 120x80 可见", () => {
+  it("1366x768: 階梯佈局，三窗口至少 120x80 可見", () => {
     const wa = { x: 0, y: 0, width: 1366, height: 768 };
     const positions = computePanelLayout(wa, PANELS, 8);
     for (let i = 0; i < 3; i++) {
@@ -124,10 +124,10 @@ describe("computePanelLayout", () => {
     }
   });
 
-  it("1280x720: 阶梯布局，y = workArea.y（高度不足，顶部对齐）", () => {
+  it("1280x720: 階梯佈局，y = workArea.y（高度不足，頂部對齊）", () => {
     const wa = { x: 0, y: 0, width: 1280, height: 720 };
     const positions = computePanelLayout(wa, PANELS, 8);
-    // 高度 720 < 面板高度 760，顶部对齐
+    // 高度 720 < 面板高度 760，頂部對齊
     expect(positions[0].y).toBe(wa.y);
     for (let i = 0; i < 3; i++) {
       const v = visibleArea(positions[i], PANELS[i], wa);

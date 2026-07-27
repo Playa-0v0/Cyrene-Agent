@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>昔漣的遊戲房</title>
+  <link rel="stylesheet" href="../ui/tokens.css" />
+  <link rel="stylesheet" href="../ui/fonts.css" />
+  <link rel="stylesheet" href="../ui/base.css" />
+  <link rel="stylesheet" href="./game-room.css" />
+</head>
+<body>
+  <main class="game-room">
+    <section class="hero" aria-labelledby="room-title">
+      <div class="hero__copy">
+        <span class="eyebrow">今晚的共同星圖</span>
+        <h1 id="room-title">昔漣的遊戲房</h1>
+        <p>選一顆星開始吧。輸贏會留下，但我更想記住我們剛才笑了幾次。</p>
+      </div>
+      <div class="orbit" aria-hidden="true">
+        <div class="orbit__ring"></div>
+        <span class="orbit__star orbit__star--one">✦</span>
+        <span class="orbit__star orbit__star--two">✧</span>
+        <img src="/avatars/cyrene-avatar.png" alt="" />
+      </div>
+      <div class="stats" aria-label="共同遊戲紀錄">
+        <div><strong id="stat-rounds">0</strong><span>一起玩過</span></div>
+        <div><strong id="stat-resonance">—</strong><span>最佳默契</span></div>
+        <div><strong id="stat-wins">0</strong><span>你的勝場</span></div>
+      </div>
+    </section>
+
+    <section class="lobby" id="lobby" aria-labelledby="lobby-title">
+      <div class="section-heading">
+        <div><span class="eyebrow">選擇今晚的玩法</span><h2 id="lobby-title">兩個人，才會亮起來</h2></div>
+        <button class="text-button" id="reset-stats" type="button">清除紀錄</button>
+      </div>
+      <div class="game-grid">
+        <button class="game-card game-card--featured game-card--resonance" type="button" data-game="resonance">
+          <span class="game-card__glyph">♡</span>
+          <span class="game-card__meta">五道選擇題 · 約兩分鐘</span>
+          <strong>心有靈犀</strong>
+          <span class="game-card__desc">我們各自選一個答案，看看今晚的頻率靠得多近。</span>
+          <span class="game-card__cta">開始配對 <b>→</b></span>
+        </button>
+        <button class="game-card game-card--featured game-card--tic" type="button" data-game="tic-tac-toe">
+          <span class="game-card__glyph">╳○</span>
+          <span class="game-card__meta">輪流落子 · 三子連線</span>
+          <strong>星軌井字棋</strong>
+          <span class="game-card__desc">你執花瓣，我執星光。別小看我，我可是會偷偷學習的。</span>
+          <span class="game-card__cta">擺好棋盤 <b>→</b></span>
+        </button>
+        <button class="game-card game-card--compact game-card--rose" type="button" data-game="rock-paper-scissors">
+          <span class="game-card__glyph">✊</span>
+          <span class="game-card__meta">三戰兩勝 · 快速對決</span>
+          <strong>猜拳對決</strong>
+          <span class="game-card__desc">石頭、布、剪刀，看看誰先讀懂對方。</span>
+          <span class="game-card__cta">伸出手 <b>→</b></span>
+        </button>
+        <button class="game-card game-card--compact game-card--mint" type="button" data-game="memory-match">
+          <span class="game-card__glyph">❖</span>
+          <span class="game-card__meta">輪流翻牌 · 記憶競賽</span>
+          <strong>星花翻牌</strong>
+          <span class="game-card__desc">記住每一顆星的位置，和昔漣搶先配成對。</span>
+          <span class="game-card__cta">翻開牌背 <b>→</b></span>
+        </button>
+        <button class="game-card game-card--compact game-card--blue" type="button" data-game="connect-four">
+          <span class="game-card__glyph">●</span>
+          <span class="game-card__meta">七列棋盤 · 四子連線</span>
+          <strong>星河四子棋</strong>
+          <span class="game-card__desc">從星河上方落子，先連成四顆就獲勝。</span>
+          <span class="game-card__cta">落下花瓣 <b>→</b></span>
+        </button>
+        <button class="game-card game-card--compact game-card--gold" type="button" data-game="twenty-questions">
+          <span class="game-card__glyph">?</span>
+          <span class="game-card__meta">最多二十問 · 線索推理</span>
+          <strong>昔漣心裡想</strong>
+          <span class="game-card__desc">她藏起一樣東西，只能用是或不是回答你。</span>
+          <span class="game-card__cta">開始提問 <b>→</b></span>
+        </button>
+        <button class="game-card game-card--compact game-card--violet" type="button" data-game="truth-cards">
+          <span class="game-card__glyph">♢</span>
+          <span class="game-card__meta">五張小卡 · 交換答案</span>
+          <strong>真心話小卡</strong>
+          <span class="game-card__desc">你寫下一句真心話，昔漣也會交出她的答案。</span>
+          <span class="game-card__cta">抽一張卡 <b>→</b></span>
+        </button>
+        <button class="game-card game-card--compact game-card--story" type="button" data-game="story">
+          <span class="game-card__glyph">⌁</span>
+          <span class="game-card__meta">分支冒險 · 共同結局</span>
+          <strong>雙星物語</strong>
+          <span class="game-card__desc">輪流選擇前路，一起走到只屬於我們的結局。</span>
+          <span class="game-card__cta">翻開序章 <b>→</b></span>
+        </button>
+        <button class="game-card game-card--wide game-card--quiz" type="button" data-game="cyrene-quiz">
+          <span class="game-card__glyph">∞</span>
+          <span class="game-card__meta">角色知識挑戰 · 初見篇／回憶篇</span>
+          <strong>看看我有多了解昔漣</strong>
+          <span class="game-card__desc">從名字、命途到藏在回憶深處的細節，看看你能點亮多少朵記憶之花。</span>
+          <span class="game-card__cta">接受昔漣的提問 <b>→</b></span>
+        </button>
+        <button class="game-card game-card--wide game-card--ropebound" type="button" data-game="ropebound">
+          <span class="game-card__glyph">⌁</span>
+          <span class="game-card__meta">雙人協作平台冒險 · 單人陪伴／本地雙人</span>
+          <strong>繩結同行</strong>
+          <span class="game-card__desc">保留原版關卡、繩索物理與所有操作；昔漣取代第三名角色，使用憶光閃步。</span>
+          <span class="game-card__cta">開始同行 <b>→</b></span>
+        </button>
+      </div>
+    </section>
+
+    <section class="play-stage" id="play-stage" hidden aria-live="polite">
+      <header class="play-stage__header">
+        <button class="back-button" id="back-button" type="button" aria-label="回到遊戲選擇">←</button>
+        <div><span class="eyebrow" id="game-kicker">共同遊戲</span><h2 id="game-title">遊戲</h2></div>
+        <span class="round-pill" id="round-pill"></span>
+      </header>
+      <div class="cyrene-line">
+        <img src="/avatars/cyrene-avatar.png" alt="昔漣" />
+        <p id="cyrene-line">準備好了嗎？</p>
+      </div>
+
+      <div class="resonance-game" id="resonance-game" hidden>
+        <div class="resonance-track" id="resonance-track" aria-label="默契進度"></div>
+        <h3 id="question-text"></h3>
+        <div class="answer-grid" id="answer-grid"></div>
+        <div class="reveal" id="reveal" hidden></div>
+      </div>
+
+      <div class="tic-game" id="tic-game" hidden>
+        <div class="turn-indicator" id="turn-indicator">輪到你放下花瓣</div>
+        <div class="board" id="board" role="grid" aria-label="井字棋盤"></div>
+        <button class="primary-button" id="restart-tic" type="button" hidden>再玩一局</button>
+      </div>
+
+      <div class="rps-game extra-game" id="rps-game" hidden>
+        <div class="duel-score"><span>你 <b id="rps-user-score">0</b></span><i>三戰兩勝</i><span><b id="rps-cyrene-score">0</b> 昔漣</span></div>
+        <div class="rps-reveal" id="rps-reveal">請選擇要出的手勢</div>
+        <div class="choice-row" id="rps-choices"></div>
+        <button class="primary-button" id="restart-rps" type="button" hidden>再比一次</button>
+      </div>
+
+      <div class="memory-game extra-game" id="memory-game" hidden>
+        <div class="duel-score"><span>你 <b id="memory-user-score">0</b></span><i id="memory-turn">輪到你</i><span><b id="memory-cyrene-score">0</b> 昔漣</span></div>
+        <div class="memory-board" id="memory-board" aria-label="翻牌棋盤"></div>
+        <button class="primary-button" id="restart-memory" type="button" hidden>重新洗牌</button>
+      </div>
+
+      <div class="connect-game extra-game" id="connect-game" hidden>
+        <div class="turn-indicator" id="connect-turn">輪到你落下花瓣</div>
+        <div class="connect-board" id="connect-board" aria-label="四子棋盤"></div>
+        <button class="primary-button" id="restart-connect" type="button" hidden>再下一局</button>
+      </div>
+
+      <div class="twenty-game extra-game" id="twenty-game" hidden>
+        <div class="mystery-object" id="mystery-object">？</div>
+        <div class="question-answer" id="question-answer">從下面挑一個問題，慢慢靠近答案。</div>
+        <div class="question-bank" id="question-bank"></div>
+        <div class="guess-bank" id="guess-bank"></div>
+        <button class="primary-button" id="restart-twenty" type="button" hidden>換一個謎底</button>
+      </div>
+
+      <div class="truth-game extra-game" id="truth-game" hidden>
+        <div class="truth-progress" id="truth-progress"></div>
+        <h3 class="card-prompt" id="truth-prompt"></h3>
+        <textarea class="truth-input" id="truth-input" rows="3" maxlength="120" placeholder="把你的答案留在這裡…"></textarea>
+        <button class="primary-button" id="truth-submit" type="button">交換答案</button>
+        <div class="truth-reveal" id="truth-reveal" hidden></div>
+      </div>
+
+      <div class="story-game extra-game" id="story-game" hidden>
+        <div class="story-trail" id="story-trail"></div>
+        <article class="story-page">
+          <span class="eyebrow" id="story-chapter"></span>
+          <h3 id="story-title"></h3>
+          <p id="story-text"></p>
+        </article>
+        <div class="story-choices" id="story-choices"></div>
+      </div>
+
+      <div class="quiz-game extra-game" id="quiz-game" hidden>
+        <div class="quiz-mode" id="quiz-mode">
+          <div class="quiz-emblem">∞</div>
+          <h3>要從哪一頁開始認識我？</h3>
+          <p>初見篇沒有主線劇透；回憶篇包含角色經歷與存在形式。</p>
+          <div class="quiz-mode__choices">
+            <button type="button" class="quiz-mode-button" data-quiz-mode="basic"><b>初見篇</b><span>十題基本資料</span></button>
+            <button type="button" class="quiz-mode-button quiz-mode-button--spoiler" data-quiz-mode="deep"><b>回憶篇</b><span>包含明確劇透</span></button>
+          </div>
+        </div>
+        <div class="quiz-round" id="quiz-round" hidden>
+          <div class="quiz-petals" id="quiz-petals"></div>
+          <span class="quiz-category" id="quiz-category"></span>
+          <h3 id="quiz-question"></h3>
+          <div class="quiz-options" id="quiz-options"></div>
+          <div class="quiz-feedback" id="quiz-feedback" hidden></div>
+          <button class="primary-button" id="quiz-next" type="button" hidden>下一題</button>
+        </div>
+        <div class="quiz-result" id="quiz-result" hidden>
+          <div class="quiz-result__score"><strong id="quiz-score">0</strong><span>/ 10</span></div>
+          <span class="eyebrow">昔漣授予你的稱號</span>
+          <h3 id="quiz-title"></h3>
+          <p id="quiz-result-copy"></p>
+          <div class="quiz-result__actions">
+            <button class="primary-button" id="restart-quiz" type="button">再答一次</button>
+            <button class="text-button" id="quiz-source" type="button">查看題目資料來源 ↗</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="ropebound-game extra-game" id="ropebound-game" hidden>
+        <iframe
+          class="ropebound-frame"
+          id="ropebound-frame"
+          src="../ropebound-original/index.html"
+          title="繩結同行遊戲"
+          allow="autoplay"
+        ></iframe>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

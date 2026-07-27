@@ -40,7 +40,7 @@ export class SpeakingMotionController {
   }
 
   private triggerSwing(): void {
-    const expression = this.nextSide === "left" ? "拽秋千1" : "拽秋千2";
+    const expression = this.nextSide === "left" ? "拽鞦韆1" : "拽鞦韆2";
     this.nextSide = this.nextSide === "left" ? "right" : "left";
     void this.applyExpression(expression);
     if (this.resetId !== null) window.clearTimeout(this.resetId);
@@ -51,7 +51,7 @@ export class SpeakingMotionController {
   }
 
   private async resetSwing(): Promise<void> {
-    await this.applyExpression("拽秋千回正");
+    await this.applyExpression("拽鞦韆回正");
   }
 
   private async applyExpression(name: string): Promise<void> {

@@ -1,13 +1,13 @@
-// 厂商能力表 —— vendor adapter 的唯一事实来源。
-// 每条字段以 docs/vendors/tool-calling-matrix.md 为准；matrix 没核实的留保守默认值。
-// displayName 必须与 renderer settings.ts 的 MODEL_PRESETS.providerName 完全一致。
+// 廠商能力表 —— vendor adapter 的唯一事實來源。
+// 每條字段以 docs/vendors/tool-calling-matrix.md 為準；matrix 沒核實的留保守默認值。
+// displayName 必須與 renderer settings.ts 的 MODEL_PRESETS.providerName 完全一致。
 import { ProviderCapability } from "./types";
 
 export const PROVIDER_CAPABILITIES: ProviderCapability[] = [
   {
     id: "minimax",
     displayName: "MiniMax（稀宇科技）",
-    // 主推 Anthropic 兼容入口；多轮 tool_calls 必须完整回传 thinking/reasoning_details
+    // 主推 Anthropic 兼容入口；多輪 tool_calls 必須完整回傳 thinking/reasoning_details
     transport: "anthropic",
     baseUrl: "https://api.minimaxi.com/anthropic",
     authStyle: "x-api-key",
@@ -17,10 +17,10 @@ export const PROVIDER_CAPABILITIES: ProviderCapability[] = [
     thinkingField: "thinking",
     cacheStrategy: "cache_control",
     testStrategy: "text",
-    // M3 原生多模态（image_url / video_url）
+    // M3 原生多模態（image_url / video_url）
     supportsVision: true,
-    // 主配走 /anthropic（Anthropic 入口），但视觉要走 OpenAI 入口 /v1。
-    // 同步主模型时用这个 baseUrl，避免用户手动改。
+    // 主配走 /anthropic（Anthropic 入口），但視覺要走 OpenAI 入口 /v1。
+    // 同步主模型時用這個 baseUrl，避免用戶手動改。
     visionBaseUrl: "https://api.minimaxi.com/v1",
   },
   {
@@ -35,13 +35,13 @@ export const PROVIDER_CAPABILITIES: ProviderCapability[] = [
     thinkingField: "reasoning_content",
     cacheStrategy: "auto",
     testStrategy: "text",
-    // 文档未明示视觉版，默认模型不支持
+    // 文檔未明示視覺版，默認模型不支持
     supportsVision: false,
   },
   {
     id: "volcengine",
     displayName: "火山 AgentPlan（火山引擎）",
-    // OpenAI 兼容 + 专属 baseUrl + 可选 reasoning_content；不为它单独写 transport
+    // OpenAI 兼容 + 專屬 baseUrl + 可選 reasoning_content；不為它單獨寫 transport
     transport: "openai",
     baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3",
     authStyle: "bearer",
@@ -51,12 +51,12 @@ export const PROVIDER_CAPABILITIES: ProviderCapability[] = [
     thinkingField: "reasoning_content",
     cacheStrategy: "none",
     testStrategy: "text",
-    // 火山方舟是聚合平台，可路由到 doubao-seed 等多模态子模型；支持视觉
+    // 火山方舟是聚合平臺，可路由到 doubao-seed 等多模態子模型；支持視覺
     supportsVision: true,
   },
   {
     id: "glm",
-    displayName: "GLM（智谱）",
+    displayName: "GLM（智譜）",
     transport: "openai",
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
     authStyle: "bearer",
@@ -66,13 +66,13 @@ export const PROVIDER_CAPABILITIES: ProviderCapability[] = [
     thinkingField: "reasoning_content",
     cacheStrategy: "auto",
     testStrategy: "text",
-    // 视觉版是 glm-5v-turbo，默认 glm-5.2 不支持
+    // 視覺版是 glm-5v-turbo，默認 glm-5.2 不支持
     supportsVision: false,
   },
   {
     id: "kimi",
     displayName: "Kimi（月之暗面）",
-    // OpenAI 兼容 + prompt_cache_key + function.name 正则限制；baseUrl 必须是 .cn
+    // OpenAI 兼容 + prompt_cache_key + function.name 正則限制；baseUrl 必須是 .cn
     transport: "openai",
     baseUrl: "https://api.moonshot.cn/v1",
     authStyle: "bearer",
@@ -87,7 +87,7 @@ export const PROVIDER_CAPABILITIES: ProviderCapability[] = [
   },
   {
     id: "qwen",
-    displayName: "Qwen（通义千问）",
+    displayName: "Qwen（通義千問）",
     transport: "openai",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     authStyle: "bearer",
@@ -97,7 +97,7 @@ export const PROVIDER_CAPABILITIES: ProviderCapability[] = [
     thinkingField: "reasoning_content",
     cacheStrategy: "auto",
     testStrategy: "text",
-    // 视觉版是 qwen-vl 系列，默认 qwen-max 不支持
+    // 視覺版是 qwen-vl 系列，默認 qwen-max 不支持
     supportsVision: false,
   },
   {
@@ -112,8 +112,8 @@ export const PROVIDER_CAPABILITIES: ProviderCapability[] = [
     thinkingField: "reasoning_content",
     cacheStrategy: "auto",
     testStrategy: "text",
-    // model 由用户填，保守 false；门控会按 supportsVision 拦截
-    supportsVision: false,
+    // model 由用戶填，支持自定義多模態模型（如 gpt-4o / gemini）
+    supportsVision: true,
   },
   {
     id: "claude",
@@ -127,7 +127,7 @@ export const PROVIDER_CAPABILITIES: ProviderCapability[] = [
     thinkingField: "thinking",
     cacheStrategy: "cache_control",
     testStrategy: "text",
-    // Claude 支持多模态 image content block，但 adapter 当前 disabled
+    // Claude 支持多模態 image content block，但 adapter 當前 disabled
     supportsVision: true,
     disabled: true,
   },
@@ -139,7 +139,7 @@ export function getCapability(provider: string): ProviderCapability | undefined 
   return byDisplayName.get(provider);
 }
 
-/** 兜底：未知厂商按 OpenAI 兼容处理（保守可用），避免直接崩。 */
+/** 兜底：未知廠商按 OpenAI 兼容處理（保守可用），避免直接崩。 */
 export function getCapabilityOrOpenAI(provider: string): ProviderCapability {
   return byDisplayName.get(provider) ?? {
     id: "unknown",

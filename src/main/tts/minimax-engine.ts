@@ -1,21 +1,21 @@
 // MiniMax TTS 引擎
 //
 // 三大功能：
-// 1. uploadFile — 上传音频文件(配音/示例)，拿 file_id
-// 2. cloneVoice — 音色快速复刻，上传 file_id + voice_id 训练
-// 3. synthesize — WebSocket 流式语音合成，返回完整音频 buffer
+// 1. uploadFile — 上傳音頻文件(配音/示例)，拿 file_id
+// 2. cloneVoice — 音色快速復刻，上傳 file_id + voice_id 訓練
+// 3. synthesize — WebSocket 流式語音合成，返回完整音頻 buffer
 //
-// API 参考：https://platform.minimaxi.com/document
-// 鉴权：Authorization: Bearer {API_KEY}
+// API 參考：https://platform.minimaxi.com/document
+// 鑑權：Authorization: Bearer {API_KEY}
 
 import * as fs from "fs";
 import * as path from "path";
 import { WebSocket } from "ws";
 
-const BASE_URL = "https://api.minimaxi.com";
-const WS_URL = "wss://api.minimaxi.com/ws/v1/t2a_v2";
+const BASE_URL = "https://api.minimax.io";
+const WS_URL = "wss://api.minimax.io/ws/v1/t2a_v2";
 
-// ── 上传音频文件 ──────────────────────────────────────────────
+// ── 上傳音頻文件 ──────────────────────────────────────────────
 
 export interface UploadedFile {
   file_id: string;
@@ -25,9 +25,9 @@ export interface UploadedFile {
 }
 
 /**
- * 上传音频文件（配音 or 示例音频），返回 file_id。
- * - purpose="voice_clone"：上传配音（10秒~5分钟，≤20MB）
- * - purpose="prompt_audio"：上传示例（≤8秒，≤20MB）
+ * 上傳音頻文件（配音 or 示例音頻），返回 file_id。
+ * - purpose="voice_clone"：上傳配音（10秒~5分鐘，≤20MB）
+ * - purpose="prompt_audio"：上傳示例（≤8秒，≤20MB）
  */
 export async function uploadFile(
   apiKey: string,
@@ -37,7 +37,7 @@ export async function uploadFile(
   const fileName = path.basename(filePath);
   const fileBuffer = fs.readFileSync(filePath);
 
-  // 构造 multipart/form-data
+  // 構造 multipart/form-data
   const boundary = "----CyreneTTS" + Math.random().toString(36).slice(2);
   const parts: Buffer[] = [];
 
@@ -74,7 +74,7 @@ export async function uploadFile(
   };
 
   if (data.base_resp?.status_code !== 0 || !data.file) {
-    throw new Error(`上传失败: ${data.base_resp?.status_msg ?? "未知错误"} (code: ${data.base_resp?.status_code})`);
+    throw new Error(`上傳失敗: ${data.base_resp?.status_msg ?? "未知錯誤"} (code: ${data.base_resp?.status_code})`);
   }
 
   return {
@@ -85,27 +85,27 @@ export async function uploadFile(
   };
 }
 
-// ── 音色快速复刻 ──────────────────────────────────────────────
+// ── 音色快速復刻 ──────────────────────────────────────────────
 
 export interface CloneVoiceOptions {
   apiKey: string;
   fileId: string;              // 配音文件的 file_id
-  voiceId: string;             // 自定义音色 ID（用户命名）
-  promptAudioId?: string;      // 示例音频 file_id（可选）
-  promptText?: string;         // 示例音频对应的文本（可选）
-  text: string;                // 复刻用文本（训练时会合成这句做对比）
-  model?: string;              // 默认 speech-2.8-hd
+  voiceId: string;             // 自定義音色 ID（用戶命名）
+  promptAudioId?: string;      // 示例音頻 file_id（可選）
+  promptText?: string;         // 示例音頻對應的文本（可選）
+  text: string;                // 復刻用文本（訓練時會合成這句做對比）
+  model?: string;              // 默認 speech-2.8-hd
 }
 
 export interface CloneVoiceResult {
   voiceId: string;
-  audioDemo?: string;          // 试听音频的下载 URL（如果有）
+  audioDemo?: string;          // 試聽音頻的下載 URL（如果有）
   raw: unknown;
 }
 
 /**
- * 音色快速复刻。上传 file_id + voice_id 后，MiniMax 训练音色。
- * 成功后 voice_id 可用于后续 synthesize 调用。
+ * 音色快速復刻。上傳 file_id + voice_id 後，MiniMax 訓練音色。
+ * 成功後 voice_id 可用於後續 synthesize 調用。
  */
 export async function cloneVoice(opts: CloneVoiceOptions): Promise<CloneVoiceResult> {
   const payload: Record<string, unknown> = {
@@ -137,7 +137,7 @@ export async function cloneVoice(opts: CloneVoiceOptions): Promise<CloneVoiceRes
   };
 
   if (data.base_resp?.status_code !== 0) {
-    throw new Error(`复刻失败: ${data.base_resp?.status_msg ?? "未知错误"} (code: ${data.base_resp?.status_code})`);
+    throw new Error(`復刻失敗: ${data.base_resp?.status_msg ?? "未知錯誤"} (code: ${data.base_resp?.status_code})`);
   }
 
   return {
@@ -147,27 +147,27 @@ export async function cloneVoice(opts: CloneVoiceOptions): Promise<CloneVoiceRes
   };
 }
 
-// ── WebSocket 流式语音合成 ────────────────────────────────────
+// ── WebSocket 流式語音合成 ────────────────────────────────────
 
 export interface SynthesizeOptions {
   apiKey: string;
   voiceId: string;
   text: string;
-  speed?: number;        // 语速 0.5~2，默认 1
-  volume?: number;       // 音量 0~2，默认 1
-  pitch?: number;        // 音调 -12~12，默认 0
-  model?: string;        // 默认 speech-2.8-hd
-  format?: "mp3" | "wav" | "pcm";  // 默认 mp3
-  sampleRate?: number;   // 默认 32000
-  debugLog?: (entry: Record<string, unknown>) => void; // 本地诊断日志（不上传）
-  /** 流式回调：每收到一段 audio chunk 就调一次（传 base64）。不传 = 完整合成模式。 */
+  speed?: number;        // 語速 0.5~2，默認 1
+  volume?: number;       // 音量 0~2，默認 1
+  pitch?: number;        // 音調 -12~12，默認 0
+  model?: string;        // 默認 speech-2.8-hd
+  format?: "mp3" | "wav" | "pcm";  // 默認 mp3
+  sampleRate?: number;   // 默認 32000
+  debugLog?: (entry: Record<string, unknown>) => void; // 本地診斷日誌（不上傳）
+  /** 流式回調：每收到一段 audio chunk 就調一次（傳 base64）。不傳 = 完整合成模式。 */
   onChunk?: (chunkBase64: string) => void;
 }
 
 /**
- * WebSocket 流式语音合成。
- * 建立 WS 连接 → task_start → task_continue(发文本) → 收 hex 音频块 → 拼接 → 返回完整 buffer。
- * 超时 30 秒。
+ * WebSocket 流式語音合成。
+ * 建立 WS 連接 → task_start → task_continue(發文本) → 收 hex 音頻塊 → 拼接 → 返回完整 buffer。
+ * 超時 30 秒。
  */
 export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -216,8 +216,8 @@ export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
       if (!resolved) {
         resolved = true;
         try { ws.close(); } catch { /* ignore */ }
-        log({ phase: "error", error: "语音合成超时（30秒）", durationMs: Date.now() - startedAt });
-        reject(new Error("语音合成超时（30秒）"));
+        log({ phase: "error", error: "語音合成超時（30秒）", durationMs: Date.now() - startedAt });
+        reject(new Error("語音合成超時（30秒）"));
       }
     }, 30000);
 
@@ -227,7 +227,7 @@ export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
 
     ws.on("open", () => {
       log({ phase: "ws.open" });
-      // 连接建立后等 MiniMax 回 connected_success
+      // 連接建立後等 MiniMax 回 connected_success
     });
 
     ws.on("message", (raw: Buffer) => {
@@ -239,7 +239,7 @@ export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
           base_resp?: { status_code: number; status_msg: string };
         };
 
-        // 连接成功 → 发 task_start
+        // 連接成功 → 發 task_start
         if (msg.event === "connected_success") {
           log({ phase: "response.event", event: msg.event, base_resp: msg.base_resp ?? null });
           const startMsg = {
@@ -264,7 +264,7 @@ export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
           return;
         }
 
-        // task 启动成功 → 发 task_continue(发文本)
+        // task 啟動成功 → 發 task_continue(發文本)
         if (msg.event === "task_started") {
           log({ phase: "response.event", event: msg.event, base_resp: msg.base_resp ?? null });
           ws.send(JSON.stringify({ event: "task_continue", text: opts.text }));
@@ -272,13 +272,13 @@ export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
           return;
         }
 
-        // 收到音频块 → hex 解码拼接。音频内容很大，只记长度，不把 hex 全量写日志。
+        // 收到音頻塊 → hex 解碼拼接。音頻內容很大，只記長度，不把 hex 全量寫日誌。
         if (msg.data?.audio) {
           const chunkBuf = Buffer.from(msg.data.audio, "hex");
           audioChunks.push(chunkBuf);
           audioChunkCount += 1;
           audioHexChars += msg.data.audio.length;
-          // 流式模式：每收到一块就回调（base64）
+          // 流式模式：每收到一塊就回調（base64）
           if (opts.onChunk) {
             try { opts.onChunk(chunkBuf.toString("base64")); } catch { /* ignore */ }
           }
@@ -306,18 +306,18 @@ export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
           return;
         }
 
-        // 错误
+        // 錯誤
         if (msg.base_resp?.status_code && msg.base_resp.status_code !== 0) {
           if (!resolved) {
             resolved = true;
             clearTimeout(timeout);
             ws.close();
             log({ phase: "error", base_resp: msg.base_resp, durationMs: Date.now() - startedAt });
-            reject(new Error(`合成失败: ${msg.base_resp.status_msg} (code: ${msg.base_resp.status_code})`));
+            reject(new Error(`合成失敗: ${msg.base_resp.status_msg} (code: ${msg.base_resp.status_code})`));
           }
         }
       } catch (err) {
-        // 单条消息解析失败不影响整体流程
+        // 單條消息解析失敗不影響整體流程
         log({ phase: "response.parse_error", error: err instanceof Error ? err.message : String(err), rawPreview: raw.toString().slice(0, 500) });
       }
     });
@@ -326,8 +326,8 @@ export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
       if (!resolved) {
         resolved = true;
         clearTimeout(timeout);
-        log({ phase: "error", error: `WebSocket 连接失败: ${err.message}`, durationMs: Date.now() - startedAt });
-        reject(new Error(`WebSocket 连接失败: ${err.message}`));
+        log({ phase: "error", error: `WebSocket 連接失敗: ${err.message}`, durationMs: Date.now() - startedAt });
+        reject(new Error(`WebSocket 連接失敗: ${err.message}`));
       }
     });
 
@@ -336,14 +336,14 @@ export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
       if (!resolved) {
         resolved = true;
         clearTimeout(timeout);
-        // 连接关闭时如果已有音频块，返回；否则报错
+        // 連接關閉時如果已有音頻塊，返回；否則報錯
         if (audioChunks.length > 0) {
           const audioBuffer = Buffer.concat(audioChunks);
           log({ phase: "response.close_with_audio", audioChunkCount, audioHexChars, audioBytes: audioBuffer.length });
           resolve(audioBuffer);
         } else {
-          log({ phase: "error", error: "连接已关闭，未收到音频数据", durationMs: Date.now() - startedAt });
-          reject(new Error("连接已关闭，未收到音频数据"));
+          log({ phase: "error", error: "連接已關閉，未收到音頻數據", durationMs: Date.now() - startedAt });
+          reject(new Error("連接已關閉，未收到音頻數據"));
         }
       }
     });

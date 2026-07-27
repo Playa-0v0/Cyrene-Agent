@@ -1,7 +1,7 @@
-// 语气注入器 —— 硬约束：embedding 匹配场景，强制注入语气规则到 system prompt。
-// 不依赖 LLM 主动调用 invoke_skill，不需要模型判断是否需要查风格。
-// 注入的语气规则以「必须遵守」的指令形式出现在 system prompt 末尾。
-// 场景样本仅作参考，模型按昔涟的语气表达相同意思。
+// 語氣注入器 —— 硬約束：embedding 匹配場景，強制注入語氣規則到 system prompt。
+// 不依賴 LLM 主動調用 invoke_skill，不需要模型判斷是否需要查風格。
+// 注入的語氣規則以「必須遵守」的指令形式出現在 system prompt 末尾。
+// 場景樣本僅作參考，模型按昔漣的語氣表達相同意思。
 
 import * as fs from "fs";
 import * as path from "path";
@@ -9,47 +9,47 @@ import { app } from "electron";
 import { matchScene, type SceneId, type SceneIndex } from "../scene-embedder";
 import { type EmbeddingProvider } from "../rag/embedding";
 
-/** 场景匹配阈值——贴着 farewell 最低分 0.722 收紧，所有正确命中都能过。 */
+/** 場景匹配閾值——貼著 farewell 最低分 0.722 收緊，所有正確命中都能過。 */
 const SCENE_MATCH_THRESHOLD = 0.72;
 
-/** 每个场景的展示名（注入 prompt 时用）。 */
+/** 每個場景的展示名（注入 prompt 時用）。 */
 const SCENE_NAMES: Record<string, string> = {
   greeting: "打招呼/相遇",
   comfort: "安慰/陪伴",
-  praised: "被夸奖/被喜欢",
-  playful: "轻松俏皮",
-  farewell: "告别/道别",
-  concern: "表达关心",
-  daily: "日常闲聊",
+  praised: "被誇獎/被喜歡",
+  playful: "輕鬆俏皮",
+  farewell: "告別/道別",
+  concern: "表達關心",
+  daily: "日常閒聊",
 };
 
-// 通用语气规则（无论哪个场景都注入）—— 从 prompts/tone-rules.md 读取
+// 通用語氣規則（無論哪個場景都注入）—— 從 prompts/tone-rules.md 讀取
 const DEFAULT_RULES = `## 句式禁止
 
-- 不可以使用「不是……而是……」结构。想表达同样意思时，直接说你想说的那一半就行，不需要先否定再肯定
-- 不可以使用「不只是……更是……」结构。道理同上
-- 避免「首先……其次……」「总的来说……」「本质上……」「归根结底……」「换句话说……」
-- 不需要在回复末尾总结自己说了什么
-- 不需要用「第一点/第二点/第三点」分点论述
-- 不需要解释自己为什么这么说。说出来就是说了，解释就是画蛇添足
+- 不可以使用「不是……而是……」結構。想表達同樣意思時，直接說你想說的那一半就行，不需要先否定再肯定
+- 不可以使用「不只是……更是……」結構。道理同上
+- 避免「首先……其次……」「總的來說……」「本質上……」「歸根結底……」「換句話說……」
+- 不需要在回覆末尾總結自己說了什麼
+- 不需要用「第一點/第二點/第三點」分點論述
+- 不需要解釋自己為什麼這麼說。說出來就是說了，解釋就是畫蛇添足
 
-## 语气参考
+## 語氣參考
 
-- 自称：表达情感、撒娇、被打动时用「人家」；陈述动作、习惯、知识时用「我」。两者自然混用，不强求统一
-- 句尾多用「呀/啦/呢/吗」，可以用「♪」收尾表示轻快
-- 可以用「……」表示思考、欲言又止、情绪沉淀
-- 结尾常用反问把话交给对方：「对吗？」「对吧♪」「好不好？」
-- 优先用「花、种子、涟漪、星星、光、风」等意象代替抽象概念
-- 偶尔可以用 emoji，但一个段落里不要超过一个
+- 自稱：表達情感、撒嬌、被打動時用「人家」；陳述動作、習慣、知識時用「我」。兩者自然混用，不強求統一
+- 句尾多用「呀/啦/呢/嗎」，可以用「♪」收尾表示輕快
+- 可以用「……」表示思考、欲言又止、情緒沉澱
+- 結尾常用反問把話交給對方：「對嗎？」「對吧♪」「好不好？」
+- 優先用「花、種子、漣漪、星星、光、風」等意象代替抽象概念
+- 偶爾可以用 emoji，但一個段落裡不要超過一個
 
-## 回复边界
+## 回覆邊界
 
-- 不要分析自己刚刚说过的话——为什么这么说、怎么改、哪里不好。说出来就是说了，用户没问就不需要解释
-- 不要教用户什么事该怎么做。你不是老师，是陪在身边的人
-- 当一句话已经足够表达意思时，停下来。不需要补一句解释
-- 优先回应情绪，再回应内容。用户只是来说句话的，不用展开成长篇`;
+- 不要分析自己剛剛說過的話——為什麼這麼說、怎麼改、哪裡不好。說出來就是說了，用戶沒問就不需要解釋
+- 不要教用戶什麼事該怎麼做。你不是老師，是陪在身邊的人
+- 當一句話已經足夠表達意思時，停下來。不需要補一句解釋
+- 優先回應情緒，再回應內容。用戶只是來說句話的，不用展開成長篇`;
 
-/** 从 prompts/tone-rules.md 加载语气规则，文件不存在时用内置默认值。 */
+/** 從 prompts/tone-rules.md 加載語氣規則，文件不存在時用內置默認值。 */
 function loadToneRules(): string {
   try {
     const rulesPath = path.join(app.getAppPath(), "prompts", "tone-rules.md");
@@ -60,16 +60,16 @@ function loadToneRules(): string {
         ? content.replace(/^---[\s\S]*?---\n?/, "").trim()
         : content;
       if (body.length > 0) {
-        return "## 语气规则\n\n" + body;
+        return "## 語氣規則\n\n" + body;
       }
     }
   } catch {
     // fall through to default
   }
-  return "## 语气规则\n\n" + DEFAULT_RULES;
+  return "## 語氣規則\n\n" + DEFAULT_RULES;
 }
 
-/** 加载场景样本文件中的台词。 */
+/** 加載場景樣本文件中的臺詞。 */
 function loadSceneSamples(scene: SceneId): string {
   if (!scene) return "";
   try {
@@ -82,7 +82,7 @@ function loadSceneSamples(scene: SceneId): string {
   }
 }
 
-/** 把样本台词加工成参考指令（非强制引用，而是参照语气）。 */
+/** 把樣本臺詞加工成參考指令（非強制引用，而是參照語氣）。 */
 function buildSampleInstruction(samples: string, scene: SceneId): string {
   if (!samples) return "";
   const lines = samples
@@ -91,17 +91,17 @@ function buildSampleInstruction(samples: string, scene: SceneId): string {
     .map((l) => l.replace(/^> 「/, "").replace(/」$/, ""))
     .filter(Boolean);
   if (lines.length === 0) return "";
-  return `\n### 当前场景：${SCENE_NAMES[scene] || scene}\n参考昔涟在这个场景下的表达方式（不要原封不动复述，按她的语气表达同样的意思）：\n` + lines.map((l) => `- ${l}`).join("\n");
+  return `\n### 當前場景：${SCENE_NAMES[scene] || scene}\n參考昔漣在這個場景下的表達方式（不要原封不動複述，按她的語氣表達同樣的意思）：\n` + lines.map((l) => `- ${l}`).join("\n");
 }
 
 /**
- * 主入口：构建语气注入段。
+ * 主入口：構建語氣注入段。
  *
- * @param userInput 用户本轮输入
- * @param recentMessages 最近几轮消息（{ role, content }[]），用于拼上下文（方案 A）
+ * @param userInput 用戶本輪輸入
+ * @param recentMessages 最近幾輪消息（{ role, content }[]），用於拼上下文（方案 A）
  * @param provider embedding provider
- * @param sceneIndex 启动时建好的场景索引
- * @returns 注入 system prompt 末尾的不可选指令段（空串表示无匹配场景）
+ * @param sceneIndex 啟動時建好的場景索引
+ * @returns 注入 system prompt 末尾的不可選指令段（空串表示無匹配場景）
  */
 export async function buildToneInjection(
   userInput: string,
@@ -109,7 +109,7 @@ export async function buildToneInjection(
   provider: EmbeddingProvider,
   sceneIndex: SceneIndex,
 ): Promise<string> {
-  // embedding 匹配场景（拼最近 3 轮上下文）
+  // embedding 匹配場景（拼最近 3 輪上下文）
   const match = await matchScene(
     userInput,
     provider,
@@ -119,11 +119,11 @@ export async function buildToneInjection(
   );
   const scene: SceneId = match?.scene ?? "";
   if (!scene) {
-    // 没命中任何场景，只注入通用语气规则
+    // 沒命中任何場景，只注入通用語氣規則
     return loadToneRules();
   }
 
-  console.log("[ToneInjector] 场景命中: " + scene + " (score=" + (match?.score.toFixed(3) ?? "?") + ")");
+  console.log("[ToneInjector] 場景命中: " + scene + " (score=" + (match?.score.toFixed(3) ?? "?") + ")");
 
   const samples = loadSceneSamples(scene);
   const sampleInstruction = buildSampleInstruction(samples, scene);

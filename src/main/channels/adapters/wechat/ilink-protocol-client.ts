@@ -1,13 +1,13 @@
-// iLink Protocol Client —— 直接打微信 iLink Bot API 的 HTTP 协议客户端。
-// 零依赖（只用 Node 22 内置 fetch + crypto.randomUUID），不走任何 ESM SDK。
+// iLink Protocol Client —— 直接打微信 iLink Bot API 的 HTTP 協議客戶端。
+// 零依賴（只用 Node 22 內置 fetch + crypto.randomUUID），不走任何 ESM SDK。
 //
-// 参考实现：
+// 參考實現：
 //   - weclaw (Go): github.com/fastclaw-ai/weclaw
-//   - 协议文档:    https://www.wechatbot.dev/zh/protocol
+//   - 協議文檔:    https://www.wechatbot.dev/zh/protocol
 //
 // Base URL: https://ilinkai.weixin.qq.com + /ilink/bot/...
 // weclaw (Go): github.com/fastclaw-ai/weclaw
-// 协议文档:    https://www.wechatbot.dev/zh/protocol
+// 協議文檔:    https://www.wechatbot.dev/zh/protocol
 import { randomUUID } from "node:crypto";
 
 const BASE_URL = "https://ilinkai.weixin.qq.com";
@@ -18,30 +18,30 @@ const LONG_POLL_TIMEOUT_MS = 35_000;
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type ItemType = 1 | 2 | 3 | 4 | 5;  // text|image|voice|file|video
-export type MessageType = 1;               // 摘要只描述了 user→bot 类型
+export type MessageType = 1;               // 摘要只描述了 user→bot 類型
 
 export interface Credentials {
   botToken: string;
   ilinkBotId: string;
   baseUrl: string;            // 一般就是 BASE_URL
   ilinkUserId: string;
-  /** 显示用的账号 id（用 ilinkBotId @ 之前的一段，或完整） */
+  /** 顯示用的賬號 id（用 ilinkBotId @ 之前的一段，或完整） */
   accountId?: string;
 }
 
-/** 入站消息（已展开成单一形状） */
+/** 入站消息（已展開成單一形狀） */
 export interface WeixinMessage {
   msgId: string;
   fromUserId: string;
   toUserId: string;
   msgType: number;            // 1=user, 2=bot echo
-  content: string;            // 从 item_list[].text_item.text 提取
-  contextToken: string;       // ⚠️ 回复时原样带回
+  content: string;            // 從 item_list[].text_item.text 提取
+  contextToken: string;       // ⚠️ 回覆時原樣帶回
   createTimeMs?: number;
   raw: unknown;
 }
 
-/** iLink item 形状（与 SDK WireMessageItem 一致） */
+/** iLink item 形狀（與 SDK WireMessageItem 一致） */
 export interface WeixinItem {
   type: ItemType;             // 1=text 2=image 3=voice 4=file 5=video
   text_item?: { text: string };
@@ -51,7 +51,7 @@ export interface WeixinItem {
   video_item?: any;
 }
 
-/** iLink 原始 WireMessage 形状（snake_case） */
+/** iLink 原始 WireMessage 形狀（snake_case） */
 export interface WireMessage {
   message_id?: number;
   from_user_id: string;
@@ -64,12 +64,12 @@ export interface WireMessage {
   [k: string]: unknown;
 }
 
-/** getupdates 响应（iLink 真实字段名：snake_case + msgs） */
+/** getupdates 響應（iLink 真實字段名：snake_case + msgs） */
 interface GetUpdatesResponse {
   ret: number;
   errcode?: number;
   errmsg?: string;
-  msgs?: WireMessage[];                // ← 真实字段是 msgs，不是 messages
+  msgs?: WireMessage[];                // ← 真實字段是 msgs，不是 messages
   get_updates_buf?: string;
   longpolling_timeout_ms?: number;
 }
@@ -88,7 +88,7 @@ interface SendMessageItem {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ILinkClientOptions {
-  /** 注入的随机 wechat-uin 生成器（测试时可固定） */
+  /** 注入的隨機 wechat-uin 生成器（測試時可固定） */
   wechatUin?: string;
 }
 
@@ -113,8 +113,8 @@ export class ILinkClient {
 
   /**
    * Long-poll for new messages.
-   * 后端最长挂 35 秒；如果返回就立刻拿新 get_updates_buf 再次请求。
-   * 收到会话过期（ret=-14）抛 SessionExpired。
+   * 後端最長掛 35 秒；如果返回就立刻拿新 get_updates_buf 再次請求。
+   * 收到會話過期（ret=-14）拋 SessionExpired。
    */
   async getUpdates(buf = ""): Promise<{ messages: WeixinMessage[]; buf: string }> {
     const ctrl = new AbortController();
@@ -130,13 +130,13 @@ export class ILinkClient {
       if (data.ret === -14) {
         throw new SessionExpiredError("iLink session expired (ret=-14)");
       }
-      // 注意：成功响应里通常没有 ret 字段（只有 msgs/sync_buf/get_updates_buf），
-      // 所以 "ret !== 0" 会因为 undefined !== 0 误判为错误。这里只对显式非 0 才报错。
+      // 注意：成功響應裡通常沒有 ret 字段（只有 msgs/sync_buf/get_updates_buf），
+      // 所以 "ret !== 0" 會因為 undefined !== 0 誤判為錯誤。這裡只對顯式非 0 才報錯。
       if (data.ret !== undefined && data.ret !== 0) {
         throw new Error(`iLink getupdates failed: ret=${data.ret} ${data.errmsg ?? ""}`);
       }
 
-      // 跳过 bot 自己发出去的消息（message_type=2）
+      // 跳過 bot 自己發出去的消息（message_type=2）
       const wires = (data.msgs ?? []).filter((m) => m.message_type === 1);
       return {
         messages: wires.map((m) => this.#wireToMessage(m)),
@@ -147,9 +147,9 @@ export class ILinkClient {
     }
   }
 
-  /** 把 iLink WireMessage（snake_case + item_list）转成我们用的 WeixinMessage */
+  /** 把 iLink WireMessage（snake_case + item_list）轉成我們用的 WeixinMessage */
   #wireToMessage(w: WireMessage): WeixinMessage {
-    // 提取文本：遍历 item_list 找 text_item.text
+    // 提取文本：遍歷 item_list 找 text_item.text
     const text = (w.item_list ?? [])
       .filter((it) => it.type === 1 && it.text_item?.text)
       .map((it) => it.text_item!.text)
@@ -168,16 +168,16 @@ export class ILinkClient {
 
   // ── Send ────────────────────────────────────────────────────────────────
 
-  /** 发文本消息（最常用） */
+  /** 發文本消息（最常用） */
   async sendText(toUserId: string, text: string, contextToken: string): Promise<{ ok: boolean; error?: string }> {
     return this.sendMessage(toUserId, [{ type: 1, text_item: { text } }], contextToken);
   }
 
   /**
    * 通用 sendmessage。
-   * @param toUserId 收信人 user id（从入站消息的 from_user_id 拿）
-   * @param itemList 包含 1 个或多个 item（text/image/voice/file/video）
-   * @param contextToken 从入站消息原样带回
+   * @param toUserId 收信人 user id（從入站消息的 from_user_id 拿）
+   * @param itemList 包含 1 個或多個 item（text/image/voice/file/video）
+   * @param contextToken 從入站消息原樣帶回
    */
   async sendMessage(
     toUserId: string,
@@ -185,10 +185,10 @@ export class ILinkClient {
     contextToken: string,
   ): Promise<{ ok: boolean; error?: string }> {
     try {
-      // iLink 真实协议（与 corespeed-io/wechatbot SDK 完全一致）：
-      //   - from_user_id: "" 空字符串（出站消息不携带 from，服务端用 token 鉴权）
-      //   - client_id: 随机 UUID（消息唯一 ID，服务端用来去重/排序）
-      //   - to_user_id: 真实接收者
+      // iLink 真實協議（與 corespeed-io/wechatbot SDK 完全一致）：
+      //   - from_user_id: "" 空字符串（出站消息不攜帶 from，服務端用 token 鑑權）
+      //   - client_id: 隨機 UUID（消息唯一 ID，服務端用來去重/排序）
+      //   - to_user_id: 真實接收者
       //   - message_type: 2=bot
       //   - message_state: 2=finish
       //   - item_list: [{ type: 1, text_item: { text } }]
@@ -235,7 +235,7 @@ export class ILinkClient {
     }
   }
 
-  /** 发送"正在输入" */
+  /** 發送"正在輸入" */
   async sendTyping(userId: string, typingTicket: string, status: 1 | 2 = 1): Promise<void> {
       await this.doJson<unknown>("POST", "/ilink/bot/sendtyping", {
       ilink_user_id: userId,
@@ -291,7 +291,7 @@ export interface QrStatusResp {
   ilink_user_id?: string;
 }
 
-/** 拿登录二维码 */
+/** 拿登錄二維碼 */
 export async function fetchQrCode(): Promise<QrCodeResp> {
   const uin = randomWechatUin();
   const url = `${BASE_URL}/ilink/bot/get_bot_qrcode?bot_type=3`;
@@ -301,7 +301,7 @@ export async function fetchQrCode(): Promise<QrCodeResp> {
   return JSON.parse(text) as QrCodeResp;
 }
 
-/** 轮询扫码状态（long-poll 40s） */
+/** 輪詢掃碼狀態（long-poll 40s） */
 export async function pollQrStatus(qrcode: string, signal?: AbortSignal): Promise<QrStatusResp> {
   const uin = randomWechatUin();
   const url = `${BASE_URL}/ilink/bot/get_qrcode_status?qrcode=${encodeURIComponent(qrcode)}`;
@@ -326,7 +326,7 @@ export class SessionExpiredError extends Error {
 }
 
 function randomWechatUin(): string {
-  // weclaw 实现：随 uint32 → 字符串 → base64
+  // weclaw 實現：隨 uint32 → 字符串 → base64
   const n = (Math.random() * 0xffffffff) >>> 0;
   const s = String(n);
   return Buffer.from(s, "utf8").toString("base64");

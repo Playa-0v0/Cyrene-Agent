@@ -1,4 +1,4 @@
-// CSV 导出：每轮每条目一行
+// CSV 導出：每輪每條目一行
 // 列：round, entryId, intrinsicValue, priority, activation, userSilence, modelSilence, state, userHit, modelHit
 import * as fs from "fs";
 import * as path from "path";

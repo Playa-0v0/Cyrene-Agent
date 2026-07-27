@@ -64,18 +64,18 @@ describe("MemoryScheduler", () => {
   it("runs MemoryJudge on the sixth round with turns 1 through 6", async () => {
     const candidate: MemoryCandidate = {
       layer: "L2",
-      summary: "用户喜欢香菇",
-      content: "用户喜欢香菇",
+      summary: "用戶喜歡香菇",
+      content: "用戶喜歡香菇",
       confidence: 0.9,
-      triggerText: "我喜欢香菇",
+      triggerText: "我喜歡香菇",
       importance: "medium",
       stability: "situational",
       certainty: "explicit",
       attribution: "user_explicit",
-      evidenceQuotes: ["我喜欢香菇"],
-      contextSummary: "用户表达食物偏好",
+      evidenceQuotes: ["我喜歡香菇"],
+      contextSummary: "用戶表達食物偏好",
       shouldWrite: true,
-      reason: "用户明确表达",
+      reason: "用戶明確表達",
       forbiddenOverclaims: [],
     }
     const { scheduler, deps } = createScheduler({

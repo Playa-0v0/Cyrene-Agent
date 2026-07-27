@@ -30,7 +30,7 @@ export async function initRAG(
   const dataDir = getDataDir();
   provider = getEmbeddingProvider(ragMode, cloudBaseUrl, cloudApiKey, embeddingModel);
   store = new JsonVectorStore(dataDir);
-  // 只有 provider 存在时才创建 retriever（向量检索依赖 embedding）
+  // 只有 provider 存在時才創建 retriever（向量檢索依賴 embedding）
   if (provider) {
     retriever = new HybridRetriever(store, provider);
   }
@@ -40,8 +40,8 @@ export async function initRAG(
   );
   await worldbook.loadFromDirectory();
 
-  // 把实体图谱中的已有实体名灌入 jieba 自定义词典
-  // 防止 "昔涟"、"小鹿" 等 AI 伴侣核心名词被错误切分
+  // 把實體圖譜中的已有實體名灌入 jieba 自定義詞典
+  // 防止 "昔漣"、"小鹿" 等 AI 伴侶核心名詞被錯誤切分
   await feedEntityNamesToJieba();
 
   console.log(
@@ -60,7 +60,7 @@ export async function switchEmbeddingModel(modelKey: string): Promise<{ ok: bool
     switchModel(modelKey);
     const newProvider = getEmbeddingProvider("auto", undefined, undefined, modelKey);
 
-    // 模型不存在时无法切换 — 输出详细诊断帮助排查"放到 models/ 却检测不到"
+    // 模型不存在時無法切換 — 輸出詳細診斷幫助排查"放到 models/ 卻檢測不到"
     if (!newProvider) {
       try {
         // require to avoid circular import at module load
@@ -140,6 +140,10 @@ export async function addMemory(
   return entry.id;
 }
 
+export function removeMemory(id: string): boolean {
+  return store?.removeById(id) ?? false;
+}
+
 // ── Memory search ──
 export async function searchMemory(
   query: string,
@@ -188,8 +192,8 @@ async function recordUserMemoryRecalls(results: Array<{ entry: MemoryEntry }>): 
 }
 
 // ── History search with metadata（供 recall_history 工具用）──
-// 跟 searchMemory 的区别：返回完整 entry（含 createdAt / metadata），
-// 让召回工具能按时间排序、展示时间戳。
+// 跟 searchMemory 的區別：返回完整 entry（含 createdAt / metadata），
+// 讓召回工具能按時間排序、展示時間戳。
 export async function searchHistoryEntries(
   query: string,
   topK = 5
@@ -204,20 +208,20 @@ export async function searchHistoryEntries(
   }));
 }
 
-// ── Worldbook DMAE：每轮打分（本轮用户输入 + 上轮模型回复）──
+// ── Worldbook DMAE：每輪打分（本輪用戶輸入 + 上輪模型回覆）──
 export function updateWorldbookActivation(userText: string, modelText: string): void {
   if (!worldbook) return;
   worldbook.updateActivation(userText, modelText);
 }
 
-// ── Worldbook DMAE：取 Active 条目内容（阈值门控 + 注入）──
+// ── Worldbook DMAE：取 Active 條目內容（閾值門控 + 注入）──
 export function getActiveWorldbookEntries(): string[] {
   if (!worldbook) return [];
   return worldbook.getActiveEntries();
 }
 
-// ── Worldbook One-Shot：取本轮 cascade 触发的条目（不入 DMAE 状态表）──
-// 返回带条目标题的完整内容（与 getActiveWorldbookEntries 一致格式，便于合并注入）
+// ── Worldbook One-Shot：取本輪 cascade 觸發的條目（不入 DMAE 狀態表）──
+// 返回帶條目標題的完整內容（與 getActiveWorldbookEntries 一致格式，便於合併注入）
 export function getCascadeWorldbookEntries(): string[] {
   if (!worldbook) return [];
   return worldbook.getCascadeEntries().map(e => {
@@ -250,8 +254,8 @@ export async function importDocument(
 }
 
 // ── Build memory context (legacy, kept for compatibility) ──
-// 注意：单参签名无 modelText，故 model 奖励不触发（降级行为）。
-// 主流程已改用 orchestrator 的 buildAlwaysOnContext（会传上轮模型回复）。
+// 注意：單參簽名無 modelText，故 model 獎勵不觸發（降級行為）。
+// 主流程已改用 orchestrator 的 buildAlwaysOnContext（會傳上輪模型回覆）。
 export async function buildMemoryContext(userInput: string): Promise<string> {
   const parts: string[] = [];
 
@@ -291,8 +295,8 @@ export function getRAGStats() {
 }
 
 /**
- * 获取指定 source 的所有向量条目（含 embedding），用于记忆压缩 / 聚类。
- * 返回浅拷贝，调用方不应修改返回的 embedding。
+ * 獲取指定 source 的所有向量條目（含 embedding），用於記憶壓縮 / 聚類。
+ * 返回淺拷貝，調用方不應修改返回的 embedding。
  */
 export function getEntriesBySource(source: string): Array<{ id: string; text: string; embedding: number[]; createdAt: number; weight: number }> {
   if (!store) return [];

@@ -1,0 +1,69 @@
+name: 星穹鐵道每日（macOS · YAAGL）
+exe: "${exe_path}"
+model: "${vlm_config}"
+
+# macOS / YAAGL 版採純視覺語義定位，不依賴 Windows 視窗句柄或固定分辨率。
+# 建議：遊戲放在主螢幕、使用 16:9 視窗或無邊框模式，開始後不要操作鍵鼠。
+steps:
+  - launch: "${exe}"
+  - wait: 8s
+  # 讀取 YAAGL 真實視窗邊界再點主按鈕，可處理 Retina、視窗縮放與不同 Space。
+  - yaagl_start: true
+  - wait: 90s
+
+  # 登入／月卡畫面在不同帳號狀態可能不存在，因此先用語義判斷。
+  - vlm_check:
+      id: is_login_screen
+      ask: "目前是否為崩壞：星穹鐵道的登入開始畫面，中央可點擊進入遊戲，而不是已進入可控制角色的主世界？"
+  - branch:
+      if: "${is_login_screen}"
+      then:
+        - click: center
+        - wait: 35s
+  - click: center
+  - wait: 8s
+
+  # 打開星際和平指南，進入生存索引並選擇一個可消耗開拓力的材料關卡。
+  - key: F3
+  - wait: 6s
+  - vlm_select: "星際和平指南中的生存索引分頁"
+  - wait: 4s
+  - vlm_select: "生存索引中任一個有『傳送』按鈕、可消耗開拓力取得角色或光錐養成材料的關卡；優先選目前畫面第一個可用項目"
+  - wait: 8s
+  - vlm_select: "關卡畫面中的挑戰、進入或開始挑戰按鈕"
+  - wait: 5s
+
+  # 支援角色為可選步驟；若畫面上沒有支援按鈕，直接開始挑戰。
+  - vlm_check:
+      id: has_support
+      ask: "目前隊伍編成畫面是否有可點擊的『支援』按鈕？"
+  - branch:
+      if: "${has_support}"
+      then:
+        - vlm_select: "隊伍編成畫面的支援按鈕"
+        - wait: 3s
+        - vlm_select: "支援角色列表中的第一個可選角色"
+        - wait: 2s
+        - vlm_select: "確認加入支援角色的按鈕"
+        - wait: 2s
+  - vlm_select: "隊伍編成畫面右下角的開始挑戰按鈕"
+  - wait: 15s
+
+  - vlm_check:
+      id: auto_battle_on
+      ask: "戰鬥畫面右上角的自動戰鬥圖示目前是否已開啟？"
+  - branch:
+      if: "${auto_battle_on}"
+      then: []
+      else:
+        - key: V
+  - wait: 300s
+
+  # 戰鬥完成後結束流程；不自動關閉 YAAGL，避免 Option+F4 在 macOS 的差異。
+  - vlm_check:
+      id: battle_finished
+      ask: "畫面是否已顯示戰鬥勝利、挑戰完成、再來一次或退出關卡等戰後選項？"
+  - branch:
+      if: "${battle_finished}"
+      then:
+        - vlm_select: "戰鬥完成畫面中的退出關卡按鈕"

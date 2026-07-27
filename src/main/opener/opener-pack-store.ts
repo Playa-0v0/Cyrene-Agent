@@ -1,8 +1,9 @@
-// 扫描 manifest.json + 选文案 + 查 wav 存在性 + 读 wav 头算 durationMs
+// 掃描 manifest.json + 選文案 + 查 wav 存在性 + 讀 wav 頭算 durationMs
 import * as fs from "fs";
 import * as path from "path";
 import { app } from "electron";
 import type { Manifest, ManifestItem } from "./opener-types";
+import { BUILT_IN_TEXT_MANIFEST } from "./default-pack";
 
 export function getOpenerPackDir(): string {
   return path.join(app.getPath("userData"), "cyrene-opener-pack");
@@ -25,43 +26,56 @@ export function parseManifest(raw: string): Manifest | null {
   }
 }
 
-/** 加载 manifest。文件不存在或格式错返回 null（runner 据此决定是否启动）。 */
+/** 加載 manifest。文件不存在或格式錯返回 null（runner 據此決定是否啟動）。 */
 export function loadManifest(): Manifest | null {
   const p = getManifestPath();
-  if (!fs.existsSync(p)) return null;
-  return parseManifest(fs.readFileSync(p, "utf8"));
+  if (!fs.existsSync(p)) return BUILT_IN_TEXT_MANIFEST;
+  return parseManifest(fs.readFileSync(p, "utf8")) ?? BUILT_IN_TEXT_MANIFEST;
+}
+
+export function hasExternalVoicePack(): boolean {
+  const manifest = getManifestPath();
+  if (!fs.existsSync(manifest)) return false;
+  const parsed = parseManifest(fs.readFileSync(manifest, "utf8"));
+  if (!parsed) return false;
+  return Object.values(parsed.packs).some(pack => pack.items.some(item => Boolean(item.audio && resolveAudioPath(item.audio))));
 }
 
 /**
- * 从场景 items 里选一条文案。
- * - 先过滤 condition 不满足的（hourGte 等）
- * - 再排除 recent 列表里的
- * - 剩下的随机抽一条
- * 返回 null = 无可用 item。
+ * 從場景 items 裡選一條文案。
+ * - 先過濾 condition 不滿足的（hourGte 等）
+ * - 再排除 recent 列表裡的
+ * - 剩下的隨機抽一條
+ * 返回 null = 無可用 item。
  */
 export function pickItem(
   items: ManifestItem[],
   hour: number,
   recent: string[],
 ): ManifestItem | null {
-  const candidates = items.filter((it) => {
+  const eligible = items.filter((it) => {
     if (it.condition?.hourGte !== undefined && hour < it.condition.hourGte) return false;
-    if (recent.includes(it.id)) return false;
     return true;
   });
+  if (eligible.length === 0) return null;
+
+  // 文案數可能少於 recentAvoidN。全部都進過最近清單時允許重新循環，
+  // 否則 runner 會每分鐘重試同一場景並持續輸出「無可用文案」。
+  const fresh = eligible.filter((it) => !recent.includes(it.id));
+  const candidates = fresh.length > 0 ? fresh : eligible;
   if (candidates.length === 0) return null;
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
-/** 查 wav 文件存在性。返回绝对路径或 null。 */
+/** 查 wav 文件存在性。返回絕對路徑或 null。 */
 export function resolveAudioPath(audioRel: string): string | null {
   const abs = path.join(getOpenerPackDir(), audioRel);
   return fs.existsSync(abs) ? abs : null;
 }
 
 /**
- * 读 wav 文件头算时长（ms）。
- * 失败返回 0。
+ * 讀 wav 文件頭算時長（ms）。
+ * 失敗返回 0。
  */
 export function readWavDurationMs(wavPath: string): number {
   try {
@@ -74,7 +88,7 @@ export function readWavDurationMs(wavPath: string): number {
       const channels = header.readUInt16LE(22);
       const bitsPerSample = header.readUInt16LE(34);
       if (!sampleRate || !channels || !bitsPerSample) return 0;
-      // 找 data chunk（扫前 256 字节）
+      // 找 data chunk（掃前 256 字節）
       const scan = Buffer.alloc(256);
       fs.readSync(fd, scan, 0, 256, 0);
       let dataOffset = -1;
@@ -97,7 +111,7 @@ export function readWavDurationMs(wavPath: string): number {
   }
 }
 
-/** 读 wav 文件 base64（供 IPC 传输）。 */
+/** 讀 wav 文件 base64（供 IPC 傳輸）。 */
 export function readWavBase64(wavPath: string): string {
   return fs.readFileSync(wavPath).toString("base64");
 }

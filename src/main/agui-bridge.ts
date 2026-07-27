@@ -1,15 +1,15 @@
-// AG-UI IPC 桥：把 CyreneAgent 的事件流透传给渲染进程。
+// AG-UI IPC 橋：把 CyreneAgent 的事件流透傳給渲染進程。
 //
-// 架构：
-//   渲染进程  ──invoke(AGUI_RUN, input)──>  本桥  ──>  CyreneAgent.runWithEvents()
-//     ▲                                        │ 订阅 Observable<BaseEvent>
-//     └── send(AGUI_EVENT, baseEvent) ─────────┘ 每个 AG-UI 事件转发给渲染进程
+// 架構：
+//   渲染進程  ──invoke(AGUI_RUN, input)──>  本橋  ──>  CyreneAgent.runWithEvents()
+//     ▲                                        │ 訂閱 Observable<BaseEvent>
+//     └── send(AGUI_EVENT, baseEvent) ─────────┘ 每個 AG-UI 事件轉發給渲染進程
 //
-// Observable 是内存流、跨不过进程边界，所以必须这层桥：
-// 主进程订阅 agent 的 events$，每个 BaseEvent 通过 webContents.send 推给渲染进程。
+// Observable 是內存流、跨不過進程邊界，所以必須這層橋：
+// 主進程訂閱 agent 的 events$，每個 BaseEvent 通過 webContents.send 推給渲染進程。
 //
-// 本桥只管"跑 agent + 转发事件 + 跑完后做副作用"。
-// 上下文构建和副作用由调用方（index.ts）注入回调，保持本模块不依赖 index.ts 内部函数。
+// 本橋只管"跑 agent + 轉發事件 + 跑完後做副作用"。
+// 上下文構建和副作用由調用方（index.ts）注入回調，保持本模塊不依賴 index.ts 內部函數。
 import { ipcMain, IpcMainInvokeEvent, WebContents } from "electron";
 import { IPC } from "../shared/ipc-channels";
 import { Subscription } from "rxjs";
@@ -21,42 +21,42 @@ import {
 import { indexConversationTurn } from "./orchestrator/history-tools";
 import type { RelationshipChannel } from "./relationship/relationship-log";
 
-/** 渲染进程发起 run 时传的输入。 */
+/** 渲染進程發起 run 時傳的輸入。 */
 export interface AguiRunInput {
-  messages: unknown[];   // 原始 {role, content}[]，主进程会 normalize
+  messages: unknown[];   // 原始 {role, content}[]，主進程會 normalize
   style: string;         // 人格 style 文件名
-  sessionId?: string;    // 会话 ID，用于历史召回按会话隔离（可选，默认 "default"）
-  /** 外部渠道入口。桌面聊天不传；微信/飞书用于注入渠道语气规则。 */
+  sessionId?: string;    // 會話 ID，用於歷史召回按會話隔離（可選，默認 "default"）
+  /** 外部渠道入口。桌面聊天不傳；微信/飛書用於注入渠道語氣規則。 */
   channel?: RelationshipChannel;
-  /** 本轮附件（文本内容，临时注入系统上下文，不存历史）。 */
+  /** 本輪附件（文本內容，臨時注入系統上下文，不存歷史）。 */
   attachments?: { name: string; text: string }[];
 }
 
-/** 调用方（index.ts）注入：把输入转成 agent 需要的 options（含 system prompt 拼接）。 */
+/** 調用方（index.ts）注入：把輸入轉成 agent 需要的 options（含 system prompt 拼接）。 */
 export type BuildOptionsFn = (input: AguiRunInput) => Promise<{
   options: CyreneRunOptions;
-  /** 跑完后副作用需要的信息。 */
+  /** 跑完後副作用需要的信息。 */
   latestUserText: string;
 }>;
 
-/** 调用方注入：agent 跑完后的副作用（记忆/sticker/表情/广播）。 */
+/** 調用方注入：agent 跑完後的副作用（記憶/sticker/表情/廣播）。 */
 export type OnRunFinishedFn = (result: CyreneRunResult, latestUserText: string) => Promise<void> | void;
 
-/** 调用方注入：拿聊天窗口（广播副作用用，可空）。 */
+/** 調用方注入：拿聊天窗口（廣播副作用用，可空）。 */
 export type GetChatWindowFn = () => { webContents: WebContents; isDestroyed(): boolean } | null;
 
-/** 单次对话的活跃订阅（用于取消）。键 = runId。 */
+/** 單次對話的活躍訂閱（用於取消）。鍵 = runId。 */
 const activeRuns = new Map<string, Subscription>();
 
 let buildOptionsFn: BuildOptionsFn | null = null;
 let getChatWindowFn: GetChatWindowFn = () => null;
 
 /**
- * 注册 AG-UI IPC。由 index.ts 在 app.whenReady() 调一次。
+ * 註冊 AG-UI IPC。由 index.ts 在 app.whenReady() 調一次。
  *
- * @param buildOptions 把渲染进程输入转成 agent options（含上下文构建）
- * @param onRunFinished agent 跑完的副作用（记忆/sticker 等）
- * @param getChatWindow 聊天窗口（事件要发到这里）
+ * @param buildOptions 把渲染進程輸入轉成 agent options（含上下文構建）
+ * @param onRunFinished agent 跑完的副作用（記憶/sticker 等）
+ * @param getChatWindow 聊天窗口（事件要發到這裡）
  */
 export function registerAgUiIpc(
   buildOptions: BuildOptionsFn,
@@ -69,7 +69,7 @@ export function registerAgUiIpc(
   const onFinished = onRunFinished;
   ipcMain.handle(IPC.AGUI_RUN, async (event: IpcMainInvokeEvent, rawInput: unknown) => {
     if (!buildOptionsFn || !onFinished) {
-      throw new Error("AG-UI 桥未初始化");
+      throw new Error("AG-UI 橋未初始化");
     }
     const input = rawInput as AguiRunInput;
     const { options, latestUserText } = await buildOptionsFn(input);
@@ -78,33 +78,58 @@ export function registerAgUiIpc(
     const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const agent = new CyreneAgent({ threadId, description: "Cyrene 主聊天" });
 
-    // 事件转发目标：优先用 invoke 的 sender（发起 run 的窗口），兜底用聊天窗口
+    // 事件轉發目標：優先用 invoke 的 sender（發起 run 的窗口），兜底用聊天窗口
     const sender = event.sender;
 
     const send = (baseEvent: unknown): void => {
+      // 1. 優先發送給觸發的具體子 frame (例如 iframe)
+      if (event.senderFrame && !event.senderFrame.isDestroyed()) {
+        try {
+          event.senderFrame.send(IPC.AGUI_EVENT, baseEvent);
+        } catch (err) {
+          console.error("[AgUiBridge] send to senderFrame failed:", err);
+        }
+      }
+
+      // 2. 廣播給所有相關窗口及其子 frame
       const targets: WebContents[] = [];
       if (!sender.isDestroyed()) targets.push(sender);
       const chatWin = getChatWindowFn();
       if (chatWin && !chatWin.isDestroyed() && chatWin.webContents !== sender) {
         targets.push(chatWin.webContents);
       }
+
       for (const t of targets) {
         try {
           t.send(IPC.AGUI_EVENT, baseEvent);
+          // 廣播到所有子 frame (以防 iframe 嵌入，且避免與前面的 senderFrame 重複發送)
+          const sendToFrame = (frame: any) => {
+            if (!frame.isDestroyed()) {
+              if (frame !== event.senderFrame) {
+                try { frame.send(IPC.AGUI_EVENT, baseEvent); } catch { /* ignore */ }
+              }
+              for (const sub of frame.frames) {
+                sendToFrame(sub);
+              }
+            }
+          };
+          for (const frame of t.mainFrame.frames) {
+            sendToFrame(frame);
+          }
         } catch (err) {
-          console.error("[AgUiBridge] send 失败:", (err instanceof Error ? err.message : String(err)), "事件类型=", (baseEvent as { type?: string })?.type);
+          console.error("[AgUiBridge] send to webcontents failed:", err);
         }
       }
     };
 
     let pendingRunFinishedEvent: unknown | null = null;
 
-    // 订阅 agent 事件流：每个事件透传渲染端；
-    // complete/error 时做副作用，并补发一个终态事件让渲染端知道这轮结束。
+    // 訂閱 agent 事件流：每個事件透傳渲染端；
+    // complete/error 時做副作用，並補發一個終態事件讓渲染端知道這輪結束。
     const sub = agent.runWithEvents(options).subscribe({
       next: (baseEvent) => {
-        // sticker / memory 等副作用在 complete 回调里执行。前端收到 RUN_FINISHED 后会收尾并取消监听，
-        // 所以必须把 RUN_FINISHED 延后到副作用事件之后发送，否则 cyrene.sticker 会晚到而被丢掉。
+        // sticker / memory 等副作用在 complete 回調裡執行。前端收到 RUN_FINISHED 後會收尾並取消監聽，
+        // 所以必須把 RUN_FINISHED 延後到副作用事件之後發送，否則 cyrene.sticker 會晚到而被丟掉。
         if ((baseEvent as { type?: string })?.type === "RUN_FINISHED") {
           pendingRunFinishedEvent = baseEvent;
           return;
@@ -113,8 +138,8 @@ export function registerAgUiIpc(
       },
       error: (err) => {
         const message = err instanceof Error ? err.message : String(err);
-        console.error("[AgUiBridge] run 失败:", message);
-        // 补发 RUN_ERROR 事件，渲染端据此收尾（invoke 早已 resolve，靠事件驱动）
+        console.error("[AgUiBridge] run 失敗:", message);
+        // 補發 RUN_ERROR 事件，渲染端據此收尾（invoke 早已 resolve，靠事件驅動）
         send({ type: "RUN_ERROR", error: message, threadId, runId });
         activeRuns.delete(runId);
       },
@@ -123,8 +148,8 @@ export function registerAgUiIpc(
         try {
           if (agent.lastResult) {
             await onFinished(agent.lastResult, latestUserText);
-            // 历史召回用：把这轮对话存入向量库（异步，不阻塞，失败不影响主流程）
-            // 放在 onFinished 之后，确保记忆/sticker 等副作用先跑完
+            // 歷史召回用：把這輪對話存入向量庫（異步，不阻塞，失敗不影響主流程）
+            // 放在 onFinished 之後，確保記憶/sticker 等副作用先跑完
             void indexConversationTurn(
               input.sessionId || "default",
               latestUserText,
@@ -132,7 +157,7 @@ export function registerAgUiIpc(
             );
           }
         } catch (err) {
-          console.warn("[AgUiBridge] 副作用失败（不影响结果）:", err);
+          console.warn("[AgUiBridge] 副作用失敗（不影響結果）:", err);
         }
         if (pendingRunFinishedEvent) {
           send(pendingRunFinishedEvent);
@@ -141,9 +166,9 @@ export function registerAgUiIpc(
     });
     activeRuns.set(runId, sub);
 
-    // invoke 立刻返回 ack，不等 Observable 结束。
-    // 终态（RUN_FINISHED/RUN_ERROR）由事件流承载，渲染端据此 offEvent + 收尾。
-    // 这样避免 invoke reply 与 send 事件的投递顺序竞争导致 offEvent 提前取消监听。
+    // invoke 立刻返回 ack，不等 Observable 結束。
+    // 終態（RUN_FINISHED/RUN_ERROR）由事件流承載，渲染端據此 offEvent + 收尾。
+    // 這樣避免 invoke reply 與 send 事件的投遞順序競爭導致 offEvent 提前取消監聽。
     return { success: true, runId };
   });
 

@@ -1,47 +1,47 @@
-// Skill 清单生成 —— 把 enabled skill 拼成注入 system prompt 的清单段。
-// 纯函数，不碰 electron/registry。
+// Skill 清單生成 —— 把 enabled skill 拼成注入 system prompt 的清單段。
+// 純函數，不碰 electron/registry。
 
 import type { SkillEntry } from "./types";
 
 /**
- * 歧义识别策略。
- * 不"制造"歧义，而是"识别"用户需求中天然存在的多解读空间。
- * 用户说了模糊风格词（美观/好看/专业）但没给具体要求 → 弹卡片让用户选。
- * 用户说了"你自己决定" → 不弹，直接用默认样式。
- * 用户给了明确细节 → 不弹，直接做。
+ * 歧義識別策略。
+ * 不"製造"歧義，而是"識別"用戶需求中天然存在的多解讀空間。
+ * 用戶說了模糊風格詞（美觀/好看/專業）但沒給具體要求 → 彈卡片讓用戶選。
+ * 用戶說了"你自己決定" → 不彈，直接用默認樣式。
+ * 用戶給了明確細節 → 不彈，直接做。
  */
 const AMBIGUITY_POLICY = [
   "",
-  "## 歧义识别与处理策略",
+  "## 歧義識別與處理策略",
   "",
-  "### 何时弹卡片（ask_user_choice）",
-  "当用户**主动**提到风格/样式相关词（「美观」「好看」「专业」「漂亮」「彩色」「规整」等）",
-  "且**没有给出具体要求**时，说明需求存在多解读空间。此时应调用 ask_user_choice 让用户选择具体方向，再按选择执行。",
+  "### 何時彈卡片（ask_user_choice）",
+  "當用戶**主動**提到風格/樣式相關詞（「美觀」「好看」「專業」「漂亮」「彩色」「規整」等）",
+  "且**沒有給出具體要求**時，說明需求存在多解讀空間。此時應調用 ask_user_choice 讓用戶選擇具體方向，再按選擇執行。",
   "",
   "示例：",
-  "- 「做个美观的 Excel」→ 弹卡片（美观可以是简洁商务/彩色展示/财务报表等多种解读）",
-  "- 「弄得专业一点」→ 弹卡片（专业可以有多种风格）",
-  "- 「做个漂亮点的报告」→ 弹卡片（漂亮可以有多种解读）",
+  "- 「做個美觀的 Excel」→ 彈卡片（美觀可以是簡潔商務/彩色展示/財務報表等多種解讀）",
+  "- 「弄得專業一點」→ 彈卡片（專業可以有多種風格）",
+  "- 「做個漂亮點的報告」→ 彈卡片（漂亮可以有多種解讀）",
   "",
-  "### 何时不弹卡片",
-  "- 用户说「你自己决定」「看着办」→ 用户已授权，直接用默认样式，不要询问",
-  "- 用户没提任何样式词（「做个表」「导出 Excel」）→ 用默认样式直接做",
-  "- 用户给了明确细节（「深蓝表头白色字」「冻结首行」「加边框」）→ 直接按要求做",
-  "- 用户要求的是功能而非样式（「加公式」「编辑已有文件」）→ 按功能需求执行",
+  "### 何時不彈卡片",
+  "- 用戶說「你自己決定」「看著辦」→ 用戶已授權，直接用默認樣式，不要詢問",
+  "- 用戶沒提任何樣式詞（「做個表」「導出 Excel」）→ 用默認樣式直接做",
+  "- 用戶給了明確細節（「深藍表頭白色字」「凍結首行」「加邊框」）→ 直接按要求做",
+  "- 用戶要求的是功能而非樣式（「加公式」「編輯已有文件」）→ 按功能需求執行",
   "",
-  "### 工具选择",
-  "- 简单表格 / 数据整理 → 直接用 write_excel（已内置美观样式），不要走 invoke_skill(xlsx)",
-  "- 简单文档 / 报告 / 总结 → 直接用 write_word（已内置美观样式），不要走 invoke_skill(docx)",
-  "- 用户通过 ask_user_choice 选择了风格 → 用对应 write_* 工具的 style 参数直接生成，不要走 skill 手写 XML",
-  "- write_excel 支持 5 种主题：default / dark / colorful / simple-business / financial",
-  "- write_word 支持 5 种主题：default / academic / clean / elegant / formal",
-  "- 用户给了自定义颜色要求（如「粉色表头」「深灰背景」）→ 用 write_excel 的 colors 参数传 ARGB hex 值，你负责把颜色名翻译成 hex",
-  "- 只有用户明确要求「公式」「财务格式标准」「条件格式」「编辑已有 xlsx」「页眉页脚/目录/图片」等具体高级需求时，才考虑 invoke_skill",
+  "### 工具選擇",
+  "- 簡單表格 / 數據整理 → 直接用 write_excel（已內置美觀樣式），不要走 invoke_skill(xlsx)",
+  "- 簡單文檔 / 報告 / 總結 → 直接用 write_word（已內置美觀樣式），不要走 invoke_skill(docx)",
+  "- 用戶通過 ask_user_choice 選擇了風格 → 用對應 write_* 工具的 style 參數直接生成，不要走 skill 手寫 XML",
+  "- write_excel 支持 5 種主題：default / dark / colorful / simple-business / financial",
+  "- write_word 支持 5 種主題：default / academic / clean / elegant / formal",
+  "- 用戶給了自定義顏色要求（如「粉色表頭」「深灰背景」）→ 用 write_excel 的 colors 參數傳 ARGB hex 值，你負責把顏色名翻譯成 hex",
+  "- 只有用戶明確要求「公式」「財務格式標準」「條件格式」「編輯已有 xlsx」「頁眉頁腳/目錄/圖片」等具體高級需求時，才考慮 invoke_skill",
 ].join("\n");
 
 /**
- * 生成注入 system prompt 的 skill 清单段（拼在人格层之后）。
- * 只含 enabled skill。返回空串表示无可用 skill（调用方据此跳过拼接）。
+ * 生成注入 system prompt 的 skill 清單段（拼在人格層之後）。
+ * 只含 enabled skill。返回空串表示無可用 skill（調用方據此跳過拼接）。
  */
 export function buildSkillCatalog(skills: SkillEntry[]): string {
   const enabled = skills.filter(s => s.enabled);
@@ -52,7 +52,7 @@ export function buildSkillCatalog(skills: SkillEntry[]): string {
   });
   return [
     "## 可用 Skill",
-    "当某 skill 适用于当前任务时，先调用 invoke_skill(skill_id) 取详细指令，再按指令用工具执行。",
+    "當某 skill 適用於當前任務時，先調用 invoke_skill(skill_id) 取詳細指令，再按指令用工具執行。",
     "",
     ...lines,
   ].join("\n") + AMBIGUITY_POLICY;

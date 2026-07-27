@@ -34,7 +34,7 @@ function guessAudioMime(filePath: string): string {
 function buildVoiceDataUrl(filePath: string): string {
   const audio = fs.readFileSync(filePath);
   if (audio.length === 0) {
-    throw new Error("MiMo 克隆音频为空");
+    throw new Error("MiMo 克隆音頻為空");
   }
   return `data:${guessAudioMime(filePath)};base64,${audio.toString("base64")}`;
 }
@@ -54,7 +54,7 @@ export async function synthesize(opts: MimoSynthesizeOptions): Promise<MimoSynth
 
   if (!apiKey) throw new Error("缺少 MiMo API Key");
   if (!text) throw new Error("缺少合成文本");
-  if (!voiceAudioPath) throw new Error("缺少 MiMo 克隆音频");
+  if (!voiceAudioPath) throw new Error("缺少 MiMo 克隆音頻");
 
   const messages: Array<{ role: "user" | "assistant"; content: string }> = [];
   if (stylePrompt) messages.push({ role: "user", content: stylePrompt });
@@ -89,13 +89,13 @@ export async function synthesize(opts: MimoSynthesizeOptions): Promise<MimoSynth
     });
   } catch (err) {
     log({ phase: "error", error: err instanceof Error ? err.message : String(err), durationMs: Date.now() - startedAt });
-    throw new Error(`MiMo TTS 请求失败: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`MiMo TTS 請求失敗: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   if (!response.ok) {
     const preview = (await response.text().catch(() => "")).slice(0, 200);
     log({ phase: "error", status: response.status, bodyPreview: preview, durationMs: Date.now() - startedAt });
-    throw new Error(`MiMo TTS 合成失败: ${response.status} ${preview}`.trim());
+    throw new Error(`MiMo TTS 合成失敗: ${response.status} ${preview}`.trim());
   }
 
   const data = (await response.json()) as {
@@ -109,12 +109,12 @@ export async function synthesize(opts: MimoSynthesizeOptions): Promise<MimoSynth
   };
   const base64 = data.choices?.[0]?.message?.audio?.data;
   if (typeof base64 !== "string" || !base64.trim()) {
-    throw new Error("MiMo TTS 响应缺少音频数据");
+    throw new Error("MiMo TTS 響應缺少音頻數據");
   }
 
   const audio = Buffer.from(base64, "base64");
   if (audio.length === 0) {
-    throw new Error("MiMo TTS 返回空音频");
+    throw new Error("MiMo TTS 返回空音頻");
   }
 
   log({

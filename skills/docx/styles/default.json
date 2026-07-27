@@ -1,9 +1,9 @@
 {
-  "name": "默认商务",
+  "name": "默認商務",
   "titleColor": "FF1F4E79",
   "titleSize": 28,
-  "titleFont": "微软雅黑",
-  "bodyFont": "微软雅黑",
+  "titleFont": "微軟雅黑",
+  "bodyFont": "微軟雅黑",
   "bodySize": 24,
   "bodyColor": "FF333333",
   "lineSpacing": 360,

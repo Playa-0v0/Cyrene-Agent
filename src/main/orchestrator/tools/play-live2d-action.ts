@@ -64,14 +64,14 @@ export function createPlayLive2DActionHandler(deps: PlayLive2DActionDeps) {
 function buildDescription(): string {
   const lines = LIVE2D_ACTIONS.map((a) => `- ${a.alias}（${a.description}）`).join("\n");
   return [
-    "让 Cyrene 在 Live2D 模型上做一个动作（表情或肢体动作）。",
-    "当用户让她做一个屏幕上可以做的动作时调用此工具。",
+    "讓 Cyrene 在 Live2D 模型上做一個動作（表情或肢體動作）。",
+    "當用戶讓她做一個屏幕上可以做的動作時調用此工具。",
     "",
-    "可选动作列表：",
+    "可選動作列表：",
     lines,
     "",
-    "如果用户要的动作不在这个列表里，不要调用此工具 — 用文字告诉用户你能做什么，并（可选）推荐一个最接近的动作。",
-    "参数：name（必填，从上面的列表中选一个中文别名）。",
+    "如果用戶要的動作不在這個列表裡，不要調用此工具 — 用文字告訴用戶你能做什麼，並（可選）推薦一個最接近的動作。",
+    "參數：name（必填，從上面的列表中選一箇中文別名）。",
   ].join("\n");
 }
 
@@ -79,7 +79,7 @@ function buildDescription(): string {
 export function createPlayLive2DActionTool(deps: PlayLive2DActionDeps): ToolDefinition {
   return {
     id: "play_live2d_action",
-    name: "做动作",
+    name: "做動作",
     description: buildDescription(),
     enabled: true,
     inputSchema: {
@@ -87,7 +87,7 @@ export function createPlayLive2DActionTool(deps: PlayLive2DActionDeps): ToolDefi
       properties: {
         name: {
           type: "string",
-          description: "动作的中文别名，例如「眨眨眼」「戴墨镜」「笑一笑」",
+          description: "動作的中文別名，例如「眨眨眼」「戴墨鏡」「笑一笑」",
         },
       },
       required: ["name"],

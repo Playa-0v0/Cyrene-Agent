@@ -1,10 +1,10 @@
-// Token 用量持久化存储
+// Token 用量持久化存儲
 //
-// 存储位置：<userData>/token-usage.json
-// 数据结构：按天 ISO 日期聚合，方便查询任意时间段。
+// 存儲位置：<userData>/token-usage.json
+// 數據結構：按天 ISO 日期聚合，方便查詢任意時間段。
 //
-// 写入策略：record() 立即更新内存缓存，1 秒防抖落盘（避免高频写）。
-// 读取策略：首次访问时从磁盘加载到内存，后续直接读缓存。
+// 寫入策略：record() 立即更新內存緩存，1 秒防抖落盤（避免高頻寫）。
+// 讀取策略：首次訪問時從磁盤加載到內存，後續直接讀緩存。
 
 import { app } from "electron";
 import * as fs from "fs";
@@ -13,9 +13,10 @@ import * as path from "path";
 export interface TokenUsageDay {
   input: number;
   output: number;
-  hit: number;   // 缓存命中（当前占位 0，接缓存后填）
-  miss: number;  // 缓存未命中（当前占位 0）
+  hit: number;   // 緩存命中（當前佔位 0，接緩存後填）
+  miss: number;  // 緩存未命中（當前佔位 0）
   requests: number;
+  models?: Record<string, { input: number; output: number; requests: number }>;
 }
 
 interface TokenUsageStore {
@@ -50,7 +51,7 @@ function loadFromDisk(): TokenUsageStore {
       };
     }
   } catch (err) {
-    console.warn("[token-usage] 加载失败，重置为空:", err);
+    console.warn("[token-usage] 加載失敗，重置為空:", err);
   }
   return { ...DEFAULT_STORE, days: {} };
 }
@@ -73,35 +74,60 @@ function flushNow(): void {
   const filePath = getFilePath();
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  // 原子写：先写 .tmp 再 rename
+  // 原子寫：先寫 .tmp 再 rename
   const tmpPath = filePath + ".tmp";
   try {
     fs.writeFileSync(tmpPath, JSON.stringify(cache, null, 2), "utf8");
     fs.renameSync(tmpPath, filePath);
   } catch (err) {
-    console.warn("[token-usage] 落盘失败:", err);
+    console.warn("[token-usage] 落盤失敗:", err);
   }
 }
 
 // ── public API ──
 
-/** 记录一次 API 调用的 token 用量（异步累加到当天）。 */
-export function recordUsage(input: number, output: number, requests = 1): void {
+/** 記錄一次 API 調用的 token 用量（異步累加到當天）。 */
+export function recordUsage(input: number, output: number, requests = 1, model = "未標記模型"): void {
   const store = ensureLoaded();
   const key = todayKey();
   const day = store.days[key] ?? { input: 0, output: 0, hit: 0, miss: 0, requests: 0 };
   day.input += Math.max(0, Math.round(input || 0));
   day.output += Math.max(0, Math.round(output || 0));
   day.requests += Math.max(0, requests);
+  day.models ??= {};
+  const modelUsage = day.models[model] ?? { input: 0, output: 0, requests: 0 };
+  modelUsage.input += Math.max(0, Math.round(input || 0));
+  modelUsage.output += Math.max(0, Math.round(output || 0));
+  modelUsage.requests += Math.max(0, requests);
+  day.models[model] = modelUsage;
   store.days[key] = day;
   scheduleFlush();
 }
 
-/** 查询最近 N 天的用量数据，按日期升序返回（无数据的天填 0）。 */
+export function getUsageByModel(days: number): Array<{ model: string; input: number; output: number; requests: number }> {
+  const store = ensureLoaded();
+  const totals = new Map<string, { input: number; output: number; requests: number }>();
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - Math.max(1, days) + 1);
+  for (const [date, day] of Object.entries(store.days)) {
+    if (new Date(`${date}T00:00:00`).getTime() < cutoff.getTime()) continue;
+    for (const [model, usage] of Object.entries(day.models ?? {})) {
+      const total = totals.get(model) ?? { input: 0, output: 0, requests: 0 };
+      total.input += usage.input;
+      total.output += usage.output;
+      total.requests += usage.requests;
+      totals.set(model, total);
+    }
+  }
+  return [...totals.entries()].map(([model, usage]) => ({ model, ...usage })).sort((a, b) => (b.input + b.output) - (a.input + a.output));
+}
+
+/** 查詢最近 N 天的用量數據，按日期升序返回（無數據的天填 0）。 */
 export function getUsage(days: number): Array<{ date: string; weekday: string; input: number; output: number; hit: number; miss: number; requests: number }> {
   const store = ensureLoaded();
   const result: Array<{ date: string; weekday: string; input: number; output: number; hit: number; miss: number; requests: number }> = [];
-  const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+  const weekdays = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
   const now = new Date();
 
   for (let i = days - 1; i >= 0; i--) {
@@ -124,7 +150,7 @@ export function getUsage(days: number): Array<{ date: string; weekday: string; i
   return result;
 }
 
-/** 立即落盘（应用退出时调用）。 */
+/** 立即落盤（應用退出時調用）。 */
 export function flush(): void {
   if (saveTimer) {
     clearTimeout(saveTimer);

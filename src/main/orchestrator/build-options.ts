@@ -1,14 +1,14 @@
-// buildAgentRunOptions —— 把 AG-UI 桥的 buildOptions 闭包抽成纯函数。
+// buildAgentRunOptions —— 把 AG-UI 橋的 buildOptions 閉包抽成純函數。
 //
-// 设计原则：
-//   - 函数无模块级状态；所有 index.ts 模块级符号（runtimeState, stickerEmbeddingIndex 等）
-//     通过 deps 参数注入。
-//   - 函数无副作用（不算 console.warn）；副作用（记忆写入/sticker 广播）由 onRunFinished
-//     单独做，注入到同一个 deps 里。
-//   - index.ts / dispatcher / scheduler 共用同一个 factory。
-//   - 默认 style 写死 '01_default.md'，与原行为一致。
+// 設計原則：
+//   - 函數無模塊級狀態；所有 index.ts 模塊級符號（runtimeState, stickerEmbeddingIndex 等）
+//     通過 deps 參數注入。
+//   - 函數無副作用（不算 console.warn）；副作用（記憶寫入/sticker 廣播）由 onRunFinished
+//     單獨做，注入到同一個 deps 裡。
+//   - index.ts / dispatcher / scheduler 共用同一個 factory。
+//   - 默認 style 寫死 '01_default.md'，與原行為一致。
 //
-// 字段依赖梳理（按 index.ts:3175-3281）：
+// 字段依賴梳理（按 index.ts:3175-3281）：
 //   loadModelSettings / loadUserProfile / buildEnvironmentContext
 //   buildSkillCatalog / skillRegistry / resolveSlashActivation
 //   buildToneInjection / sceneEmbeddingIndex / getSceneEmbeddingProvider
@@ -17,9 +17,9 @@
 //   scheduleMemoryWrite / inferRuntimeState / runtimeState / feelingToExpression
 //   matchSticker / stickerEmbeddingIndex / getEmbeddingProvider / loadStickerSettings
 //   broadcastRuntimeStateChanged / observeRuntimeState
-//   IPC.AGUI_EVENT / chatWindow（用于推 sticker）
+//   IPC.AGUI_EVENT / chatWindow（用於推 sticker）
 //
-// 这些全部塞到 BuildOptionsDeps 里。dispatcher 在 Phase 1 注入同样的 deps 即可。
+// 這些全部塞到 BuildOptionsDeps 裡。dispatcher 在 Phase 1 注入同樣的 deps 即可。
 import type { CyreneRunOptions, CyreneRunResult } from "./cyrene-agent";
 import type { ToolDefinition } from "./tool-registry";
 import type { ChatMessage } from "./vendors/types";
@@ -27,9 +27,9 @@ import type { AguiRunInput } from "../agui-bridge";
 import { IPC } from "../../shared/ipc-channels";
 import type { RelationshipChannel, RelationshipTurnInput } from "../relationship/relationship-log";
 
-/** index.ts 模块级符号的最小可注入子集。
- *  类型故意用宽签名（unknown / 任意 shape）—— 因为 build-options 是纯消费者，
- *  实际调用时由 index.ts 注入真实的强类型函数。这避免循环类型依赖。 */
+/** index.ts 模塊級符號的最小可注入子集。
+ *  類型故意用寬簽名（unknown / 任意 shape）—— 因為 build-options 是純消費者，
+ *  實際調用時由 index.ts 注入真實的強類型函數。這避免循環類型依賴。 */
 export interface BuildOptionsDeps {
   loadModelSettings: () => ModelSettingsLite;
   loadUserProfile: () => UserProfileLite;
@@ -56,7 +56,7 @@ export interface BuildOptionsDeps {
   chatRequestTimeoutMs: number;
 }
 
-/** onRunFinished 副作用所需的 deps（与 BuildOptionsDeps 部分重叠） */
+/** onRunFinished 副作用所需的 deps（與 BuildOptionsDeps 部分重疊） */
 export interface OnRunFinishedDeps {
   loadModelSettings: () => ModelSettingsLite;
   scheduleMemoryWrite: (userText: string, reply: string) => void;
@@ -111,27 +111,35 @@ export interface UserProfileLite {
 export function buildChannelSystem(channel?: RelationshipChannel): string {
   if (channel === "wechat") {
     return [
-      "【渠道回复方式】",
-      "你正在通过微信回复用户。",
-      "回复要像微信聊天消息：短、自然、有来有回。",
-      "不要写长段说明，不要提桌面端、工具调用或系统。",
-      "任务复杂时先简短确认，再安静执行。",
+      "【渠道回覆方式】",
+      "你正在通過微信回覆用戶。",
+      "回覆要像微信聊天消息：短、自然、有來有回。",
+      "不要寫長段說明，不要提桌面端、工具調用或系統。",
+      "任務複雜時先簡短確認，再安靜執行。",
     ].join("\n");
   }
   if (channel === "feishu") {
     return [
-      "【渠道回复方式】",
-      "你正在通过飞书回复用户。",
-      "语气仍是昔涟，但要适合工作上下文：清楚、省时间、结论靠前。",
-      "必要时可以简短列步骤，不要过度撒娇，不要发太长情绪化回复。",
+      "【渠道回覆方式】",
+      "你正在通過飛書回覆用戶。",
+      "語氣仍是昔漣，但要適合工作上下文：清楚、省時間、結論靠前。",
+      "必要時可以簡短列步驟，不要過度撒嬌，不要發太長情緒化回覆。",
+    ].join("\n");
+  }
+  if (channel === "discord") {
+    return [
+      "【渠道回覆方式】",
+      "你正在通過 Discord 回覆用戶。",
+      "回覆要適合即時聊天：自然、精簡，並遵守 Discord 單則消息長度限制。",
+      "不要提桌面端、內部提示、工具調用或系統實作。",
     ].join("\n");
   }
   return "";
 }
 
 /**
- * 构造 CyreneAgent.runWithEvents 所需的 options + 提取 latestUserText。
- * 与 index.ts 原 AG-UI bridge 的 buildOptions 行为完全一致。
+ * 構造 CyreneAgent.runWithEvents 所需的 options + 提取 latestUserText。
+ * 與 index.ts 原 AG-UI bridge 的 buildOptions 行為完全一致。
  */
 export async function buildAgentRunOptions(
   input: AguiRunInput,
@@ -139,11 +147,11 @@ export async function buildAgentRunOptions(
 ): Promise<{ options: CyreneRunOptions; latestUserText: string }> {
   const settings = deps.loadModelSettings();
   if (!settings.apiKey) {
-    throw new Error("还没有填写 API Key，请先在设置里保存 API 配置。");
+    throw new Error("還沒有填寫 API Key，請先在設置裡保存 API 配置。");
   }
   const messages = deps.normalizeChatMessages(input.messages);
   if (messages.length === 0) {
-    throw new Error("没有可发送的聊天内容。");
+    throw new Error("沒有可發送的聊天內容。");
   }
   // slim view for downstream helpers that only need { role, content }
   const slimMessages = messages as unknown as Array<{ role: string; content?: string }>;
@@ -202,7 +210,7 @@ export async function buildAgentRunOptions(
   const atts = input.attachments;
   if (atts && atts.length > 0) {
     const parts = atts.map((a) => `--- ${a.name} ---\n${a.text}`);
-    attachmentContext = `\n\n【本轮附件内容】\n${parts.join("\n\n")}`;
+    attachmentContext = `\n\n【本輪附件內容】\n${parts.join("\n\n")}`;
   }
 
   const isTalkMode = (input.style || "").startsWith("talk");
@@ -241,17 +249,17 @@ export async function buildAgentRunOptions(
 }
 
 /**
- * agent 跑完后的副作用：记忆 + 表情/sticker 推断 + 广播。
- * 与 index.ts 原 AG-UI bridge 的 onRunFinished 行为完全一致。
+ * agent 跑完後的副作用：記憶 + 表情/sticker 推斷 + 廣播。
+ * 與 index.ts 原 AG-UI bridge 的 onRunFinished 行為完全一致。
  *
- * 注意：feeling 字段由 inferRuntimeState 内部副作用更新；本函数只同步 status/expression/updatedAt。
+ * 注意：feeling 字段由 inferRuntimeState 內部副作用更新；本函數只同步 status/expression/updatedAt。
  */
 export async function onAgentRunFinished(
   result: CyreneRunResult,
   latestUserText: string,
   deps: OnRunFinishedDeps,
-  channel?: "wechat" | "feishu",
-): Promise<void> {
+  channel?: "wechat" | "feishu" | "discord",
+): Promise<string | null> {
   const chatContent = result.reply;
   deps.scheduleMemoryWrite(latestUserText, chatContent);
 
@@ -266,17 +274,18 @@ export async function onAgentRunFinished(
   await deps.recordRelationshipTurn({
     userText: latestUserText,
     assistantText: chatContent,
-    cyreneFeeling: deps.runtimeState.feeling ?? "平静",
+    cyreneFeeling: deps.runtimeState.feeling ?? "平靜",
     channel: channel ?? "desktop",
   });
 
   const stickerIndex = deps.getStickerEmbeddingIndex?.() ?? deps.stickerEmbeddingIndex;
+  const stickerProvider = deps.getEmbeddingProvider();
   const stickerCandidate =
-    settings.stickerEnabled && stickerIndex
+    settings.stickerEnabled && stickerIndex && stickerProvider
       ? (
           await deps.matchSticker(
             chatContent + "\n" + latestUserText,
-            deps.getEmbeddingProvider(),
+            stickerProvider,
             stickerIndex,
             settings.stickerSimilarityThreshold ?? 0.55,
           )
@@ -297,10 +306,11 @@ export async function onAgentRunFinished(
     deps.broadcastRuntimeStateChanged();
   } else if (settings.runtimeSync === "llm") {
     deps.broadcastRuntimeStateChanged();
-    // 心情观察器在 channels bot (wechat/feishu) 上跳过：节省一次 LLM 调用、加快首条回复
-    // 桌面聊天（channel === undefined）照常跑，保持 Live2D 表情/心情跟随对话变化
-    if (channel !== "wechat" && channel !== "feishu") {
+    // 心情觀察器在 channels bot (wechat/feishu) 上跳過：節省一次 LLM 調用、加快首條回覆
+    // 桌面聊天（channel === undefined）照常跑，保持 Live2D 表情/心情跟隨對話變化
+    if (channel !== "wechat" && channel !== "feishu" && channel !== "discord") {
       void deps.observeRuntimeState(settings, [], latestUserText, chatContent);
     }
   }
+  return sticker;
 }

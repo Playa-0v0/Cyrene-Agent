@@ -9,12 +9,12 @@ export interface L0Profile {
   updatedAt: number
 }
 export const L0_FIELD_DESCRIPTIONS: Partial<Record<keyof L0Profile, string>> = {
-  preferredName:     '用户希望被如何称呼、叫什么名字、昵称。例如："叫我P宝""我叫Playa""以后喊我宝宝"',
-  occupation:        '用户的职业、身份、工作。例如："我是前端工程师""我在做设计"',
-  longTermInterests: '用户的长期兴趣爱好（稳定的，不是临时的）。例如："我一直喜欢画画""我从小学钢琴"',
-  language:          '用户常用的语言或地区习惯。例如："我习惯说中文""我是广东人"',
-  permanentNote:     '其他不属于以上四类的稳定个人信息。例如："我有一只猫""我住在上海"',
-  // isPinned 和 updatedAt 不在这里，代表不暴露给 AI
+  preferredName:     '用戶希望被如何稱呼、叫什麼名字、暱稱。例如："叫我P寶""我叫Playa""以後喊我寶寶"',
+  occupation:        '用戶的職業、身份、工作。例如："我是前端工程師""我在做設計"',
+  longTermInterests: '用戶的長期興趣愛好（穩定的，不是臨時的）。例如："我一直喜歡畫畫""我從小學鋼琴"',
+  language:          '用戶常用的語言或地區習慣。例如："我習慣說中文""我是廣東人"',
+  permanentNote:     '其他不屬於以上四類的穩定個人信息。例如："我有一隻貓""我住在上海"',
+  // isPinned 和 updatedAt 不在這裡，代表不暴露給 AI
 }
 
 
@@ -42,11 +42,11 @@ export interface L2Memory {
   syncStatus?: L2SyncStatus
   embedding?: number[]
   ragId?: string
-  /** 是否为压缩总结条目（由 Reflection 生成） */
+  /** 是否為壓縮總結條目（由 Reflection 生成） */
   isSummary?: boolean
-  /** 被本条压缩的原始条目 id 列表 */
+  /** 被本條壓縮的原始條目 id 列表 */
   subEntryIds?: string[]
-  /** 冲突标记：与该记忆语义相矛盾的其他条目 ragId 列表 */
+  /** 衝突標記：與該記憶語義相矛盾的其他條目 ragId 列表 */
   conflictWith?: string[]
   evidenceIds?: string[]
   sourceMessageIds?: string[]

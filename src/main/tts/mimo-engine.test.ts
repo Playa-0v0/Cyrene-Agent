@@ -42,7 +42,7 @@ describe("mimo-engine synthesize", () => {
       apiKey: "mimo-key",
       text: "你好呀",
       voiceAudioPath,
-      stylePrompt: "温柔、自然，像近距离聊天。",
+      stylePrompt: "溫柔、自然，像近距離聊天。",
     });
 
     expect(result.audio.equals(audio)).toBe(true);
@@ -59,7 +59,7 @@ describe("mimo-engine synthesize", () => {
     expect(JSON.parse(String(request.body))).toEqual({
       model: "mimo-v2.5-tts-voiceclone",
       messages: [
-        { role: "user", content: "温柔、自然，像近距离聊天。" },
+        { role: "user", content: "溫柔、自然，像近距離聊天。" },
         { role: "assistant", content: "你好呀" },
       ],
       audio: {
@@ -71,7 +71,7 @@ describe("mimo-engine synthesize", () => {
 
   it("rejects missing voice sample path", async () => {
     await expect(synthesize({ apiKey: "k", text: "hello", stylePrompt: "  " }))
-      .rejects.toThrow(/克隆音频/);
+      .rejects.toThrow(/克隆音頻/);
   });
 
   it("omits empty style prompts", async () => {

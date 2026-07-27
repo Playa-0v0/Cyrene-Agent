@@ -1,27 +1,29 @@
-// bot-tools —— 引擎依赖注入的工具集合接口。
-// 引擎不直接 import screenshot/input/vlm/refs，而通过此接口调用，便于单测 mock。
-// 实际实现由 index.ts 组装（screenshot + input + vlm-locator + refs-store）。
+// bot-tools —— 引擎依賴注入的工具集合接口。
+// 引擎不直接 import screenshot/input/vlm/refs，而通過此接口調用，便於單測 mock。
+// 實際實現由 index.ts 組裝（screenshot + input + vlm-locator + refs-store）。
 
 export interface BotTools {
-  /** 启动 exe。 */
+  /** 啟動 exe。 */
   launch(exe: string): Promise<void>;
-  /** 截当前屏幕，返回 base64 + 实际像素尺寸。 */
+  /** 依 YAAGL 視窗邊界點擊其主要「開始遊戲」按鈕。 */
+  yaaglStart(): Promise<void>;
+  /** 截當前屏幕，返回 base64 + 實際像素尺寸。 */
   screenshot(): Promise<{ base64: string; mime: string; width: number; height: number } | null>;
-  /** 点击屏幕坐标。 */
+  /** 點擊屏幕座標。 */
   click(x: number, y: number): Promise<void>;
-  /** 点击屏幕中心。 */
+  /** 點擊屏幕中心。 */
   clickCenter(): Promise<void>;
-  /** 按组合键（如 "F4" / "Alt+F4"）。 */
+  /** 按組合鍵（如 "F4" / "Alt+F4"）。 */
   key(combo: string): Promise<void>;
-  /** 视觉定位：参考图 + 描述 → 目标坐标。未找到返回 null。 */
+  /** 視覺定位：參考圖 + 描述 → 目標座標。未找到返回 null。 */
   locate(refName: string, targetDesc?: string): Promise<{ x: number; y: number } | null>;
-  /** 纯语义定位（无参考图，如"列表第一个"）→ 坐标。未找到返回 null。 */
+  /** 純語義定位（無參考圖，如"列表第一個"）→ 座標。未找到返回 null。 */
   select(desc: string): Promise<{ x: number; y: number } | null>;
-  /** 视觉判断 → 布尔。无法判断返回 null。 */
+  /** 視覺判斷 → 布爾。無法判斷返回 null。 */
   check(ask: string, refName?: string): Promise<boolean | null>;
-  /** 多图比对 → 匹配的参考图序号（0-based）。无法判断返回 null。 */
+  /** 多圖比對 → 匹配的參考圖序號（0-based）。無法判斷返回 null。 */
   compare(refNames: string[], ask: string): Promise<number | null>;
 }
 
-/** 进度回调：每个顶层步骤执行前调用。 */
+/** 進度回調：每個頂層步驟執行前調用。 */
 export type ProgressCb = (info: { index: number; total: number; desc: string }) => void;

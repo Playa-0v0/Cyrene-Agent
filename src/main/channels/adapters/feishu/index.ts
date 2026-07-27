@@ -1,25 +1,25 @@
-// 飞书 FeishuAdapter —— implements ChannelAdapter。
+// 飛書 FeishuAdapter —— implements ChannelAdapter。
 //
-// 接入方式：**长连接 WebSocket**（飞书官方 SDK 内置支持）。
-// 比 HTTP webhook 简单几个数量级：
-//   - 不需要公网 HTTPS URL（飞书 SDK 主动连出）
-//   - 不需要 Verification Token / Encrypt Key（WS 自动鉴权）
-//   - 不需要内网穿透
-//   - 重连 / 心跳 / ack SDK 全自动处理
+// 接入方式：**長連接 WebSocket**（飛書官方 SDK 內置支持）。
+// 比 HTTP webhook 簡單幾個數量級：
+//   - 不需要公網 HTTPS URL（飛書 SDK 主動連出）
+//   - 不需要 Verification Token / Encrypt Key（WS 自動鑑權）
+//   - 不需要內網穿透
+//   - 重連 / 心跳 / ack SDK 全自動處理
 //
-// 数据流：
-//   飞书服务器 ←WSS→ @larksuiteoapi/node-sdk WSClient
+// 數據流：
+//   飛書服務器 ←WSS→ @larksuiteoapi/node-sdk WSClient
 //       ↓ onMessage (normalized LarkChannel event)
 //       ↓ LarkChannel.on('message')
 //   FeishuAdapter.handleLarkMessage → adapter.onMessage (dispatcher)
 //       ↓ CyreneAgent runs
-//   LarkChannel.send(chatId, { text }) → 飞书服务器
+//   LarkChannel.send(chatId, { text }) → 飛書服務器
 //
-// 图片/文件/音频消息：通过 SDK 的 messageResource.get 下载到 userData/channels/cache/
-// 转化为本地 filePath 写入 IncomingMessage.attachments，buildAgentRunOptions 会注入 prompt。
+// 圖片/文件/音頻消息：通過 SDK 的 messageResource.get 下載到 userData/channels/cache/
+// 轉化為本地 filePath 寫入 IncomingMessage.attachments，buildAgentRunOptions 會注入 prompt。
 //
-// 注意：本 adapter 只在用户启用飞书时才创建 LarkChannel 实例。
-// 切换 enabled/config 后调 rebuild() 重启。
+// 注意：本 adapter 只在用戶啟用飛書時才創建 LarkChannel 實例。
+// 切換 enabled/config 後調 rebuild() 重啟。
 import * as fs from "fs";
 import * as path from "path";
 import { app } from "electron";
@@ -46,7 +46,7 @@ import { getAudioDurationMs } from "./audio-duration";
 
 const LOG = "[FeishuAdapter]";
 
-/** 飞书 capability 声明。SDK 已经把消息/图片/音频/视频/卡片/sticker 都内置支持 */
+/** 飛書 capability 聲明。SDK 已經把消息/圖片/音頻/視頻/卡片/sticker 都內置支持 */
 const FEISHU_CAPABILITY: ChannelCapability = {
   text: true,
   image: true,
@@ -59,7 +59,7 @@ const FEISHU_CAPABILITY: ChannelCapability = {
   maxTextLength: 4000,
 };
 
-/** 飞书资源类型 → 我们的附件类型 + 扩展名 */
+/** 飛書資源類型 → 我們的附件類型 + 擴展名 */
 function resourceKindToExt(ktype: string): { ext: string; mime: string } {
   switch (ktype) {
     case "image": return { ext: ".png", mime: "image/png" };
@@ -71,7 +71,7 @@ function resourceKindToExt(ktype: string): { ext: string; mime: string } {
   }
 }
 
-/** 把飞书资源下载到本地缓存目录。返回本地文件路径或 null（失败时）。 */
+/** 把飛書資源下載到本地緩存目錄。返回本地文件路徑或 null（失敗時）。 */
 async function downloadLarkResource(
   channel: LarkChannel,
   messageId: string,
@@ -84,22 +84,22 @@ async function downloadLarkResource(
   const { ext } = resourceKindToExt(kind);
   const shortKey = fileKey.slice(-8);
   const localPath = path.join(cacheDir, `feishu-${messageId}-${shortKey}${ext}`);
-  if (fs.existsSync(localPath)) return localPath; // 已下载过
+  if (fs.existsSync(localPath)) return localPath; // 已下載過
   try {
-    // 绕过 LarkChannel.downloadResource() 这个 wrapper 的 bug —— 它对 image 调的是
-    // /open-apis/im/v1/image/{image_key}（只能下机器人自己上传的图），而我们要的是
-    // /open-apis/im/v1/messages/{message_id}/resources/{file_key}（用户发的图）。
-    // 直接用 channel.rawClient 调正确的 API。
+    // 繞過 LarkChannel.downloadResource() 這個 wrapper 的 bug —— 它對 image 調的是
+    // /open-apis/im/v1/image/{image_key}（只能下機器人自己上傳的圖），而我們要的是
+    // /open-apis/im/v1/messages/{message_id}/resources/{file_key}（用戶發的圖）。
+    // 直接用 channel.rawClient 調正確的 API。
     const typeParam = (kind === "file" || kind === "audio" || kind === "video") ? "file" : "image";
     const res = await channel.rawClient.im.v1.messageResource.get({
       path: { message_id: messageId, file_key: fileKey },
       params: { type: typeParam },
     });
-    // SDK 返回带 writeFile / getReadableStream / headers；用 writeFile 直接落盘
+    // SDK 返回帶 writeFile / getReadableStream / headers；用 writeFile 直接落盤
     if (res && typeof res.writeFile === "function") {
       await res.writeFile(localPath);
     } else {
-      // 兜底：手动从 readable stream 读
+      // 兜底：手動從 readable stream 讀
       const stream = res.getReadableStream();
       const chunks: Buffer[] = [];
       await new Promise<void>((resolve, reject) => {
@@ -110,20 +110,20 @@ async function downloadLarkResource(
       fs.writeFileSync(localPath, Buffer.concat(chunks));
     }
     const stat = fs.statSync(localPath);
-    console.log(LOG, `已下载飞书资源 → ${localPath} (${stat.size} bytes, kind=${kind})`);
+    console.log(LOG, `已下載飛書資源 → ${localPath} (${stat.size} bytes, kind=${kind})`);
     return localPath;
   } catch (err) {
-    console.warn(LOG, `下载飞书资源失败: messageId=${messageId} fileKey=${fileKey} err=`, err instanceof Error ? err.message : err);
+    console.warn(LOG, `下載飛書資源失敗: messageId=${messageId} fileKey=${fileKey} err=`, err instanceof Error ? err.message : err);
     return null;
   }
 }
 
-/** 把飞书 NormalizedMessage → 我们的 IncomingMessage（异步，会下载附件） */
+/** 把飛書 NormalizedMessage → 我們的 IncomingMessage（異步，會下載附件） */
 async function normalizeLarkMessage(
   channel: LarkChannel,
   msg: NormalizedMessage,
 ): Promise<IncomingMessage> {
-  // msg.content 是 JSON 字符串，msg.rawContentType 是消息类型（"text" / "image" / "post" / ...）
+  // msg.content 是 JSON 字符串，msg.rawContentType 是消息類型（"text" / "image" / "post" / ...）
   let text = "";
   const rawType = msg.rawContentType ?? "text";
   const attachments: IncomingMessage["attachments"] = [];
@@ -136,7 +136,7 @@ async function normalizeLarkMessage(
       text = msg.content;
     }
   } else if (rawType === "image" || rawType === "file" || rawType === "audio" || rawType === "video" || rawType === "sticker") {
-    // 下载所有 resources 到本地，给 LLM 一个明确的本地路径
+    // 下載所有 resources 到本地，給 LLM 一個明確的本地路徑
     for (const r of msg.resources ?? []) {
       const localPath = await downloadLarkResource(channel, msg.messageId, r.fileKey, r.type);
       if (localPath) {
@@ -148,13 +148,13 @@ async function normalizeLarkMessage(
           caption: r.fileName,
         });
         if (!text) text = `[${rawType}]`;
-        // 把"附件路径"嵌进 text，让 LLM 一眼看到
+        // 把"附件路徑"嵌進 text，讓 LLM 一眼看到
         text = (text ? text + "\n" : "") + `[附件: ${localPath}]`;
       }
     }
     if (attachments.length === 0) text = `[${rawType}]`;
   } else {
-    // post / interactive / shareChat 等未知类型
+    // post / interactive / shareChat 等未知類型
     text = `[${rawType}]`;
   }
 
@@ -171,8 +171,8 @@ async function normalizeLarkMessage(
   };
 }
 
-/** 把我们 OutgoingMessage.parts 翻译成飞书 SendInput。飞书 send() 一次只发一个 payload，
- *  所以多 parts 时循环调用 send。 */
+/** 把我們 OutgoingMessage.parts 翻譯成飛書 SendInput。飛書 send() 一次只發一個 payload，
+ *  所以多 parts 時循環調用 send。 */
 async function sendLark(channel: LarkChannel, targetId: string, part: OutgoingPart): Promise<{ messageId: string } | null> {
   let result: { messageId: string } | null = null;
   switch (part.kind) {
@@ -182,25 +182,25 @@ async function sendLark(channel: LarkChannel, targetId: string, part: OutgoingPa
     }
     case "image": {
       if (part.filePath) {
-        // 飞书 image: { image: { source: path/Buffer } }
+        // 飛書 image: { image: { source: path/Buffer } }
         result = (await channel.send(targetId, {
           image: { source: part.filePath },
         } as SendInput)) ?? null;
       } else if (part.url) {
-        throw new Error("image URL 需要先下载到本地 filePath");
+        throw new Error("image URL 需要先下載到本地 filePath");
       } else {
         throw new Error("image part needs filePath or url");
       }
       break;
     }
     case "audio": {
-      // 飞书 audio: { audio: { source: path/Buffer, duration } } (duration 是毫秒, 必填)
-      // SDK 内部 MediaUploader.resolveDuration 只对 Opus 自动解析;
-      // 我们 TTS 输出 mp3 → 必须先解析 mp3 时长再传 duration, 否则 SDK 报
+      // 飛書 audio: { audio: { source: path/Buffer, duration } } (duration 是毫秒, 必填)
+      // SDK 內部 MediaUploader.resolveDuration 只對 Opus 自動解析;
+      // 我們 TTS 輸出 mp3 → 必須先解析 mp3 時長再傳 duration, 否則 SDK 報
       // "duration could not be determined for audio; pass it explicitly"
       const duration = await getAudioDurationMs(part.filePath);
       if (!duration) {
-        throw new Error(`无法解析音频时长: ${part.filePath}`);
+        throw new Error(`無法解析音頻時長: ${part.filePath}`);
       }
       result = (await channel.send(targetId, {
         audio: {
@@ -243,7 +243,7 @@ async function sendLark(channel: LarkChannel, targetId: string, part: OutgoingPa
 
 export class FeishuAdapter implements ChannelAdapter {
   readonly id = "feishu" as const;
-  readonly displayName = "飞书";
+  readonly displayName = "飛書";
   readonly capability = FEISHU_CAPABILITY;
   onMessage: MessageHandler | null = null;
 
@@ -251,14 +251,14 @@ export class FeishuAdapter implements ChannelAdapter {
   private status: ChannelStatus = { enabled: false, phase: "config_missing" };
 
   constructor() {
-    // start() 时再初始化
+    // start() 時再初始化
   }
 
-  /** 重建 LarkChannel 实例（用户在 UI 里改了 AppID/Secret 后调） */
+  /** 重建 LarkChannel 實例（用戶在 UI 裡改了 AppID/Secret 後調） */
   private async rebuildChannel(): Promise<LarkChannel | null> {
     const settings = loadChannelsSettings().feishu;
     if (!settings.enabled) {
-      this.status = { enabled: false, phase: "offline", message: "未启用" };
+      this.status = { enabled: false, phase: "offline", message: "未啟用" };
       return null;
     }
     if (!settings.appId || !settings.appSecret) {
@@ -278,11 +278,11 @@ export class FeishuAdapter implements ChannelAdapter {
       transport: "websocket",
     });
 
-    // 绑定入站消息
+    // 綁定入站消息
     ch.on("message" as EventName, async (msg: NormalizedMessage) => {
-      // 私聊 only（方案决策）
+      // 私聊 only（方案決策）
       if (msg.chatType !== "p2p") {
-        console.log(LOG, `忽略 ${msg.chatType} 消息 (私聊优先)`);
+        console.log(LOG, `忽略 ${msg.chatType} 消息 (私聊優先)`);
         return;
       }
       try {
@@ -291,11 +291,11 @@ export class FeishuAdapter implements ChannelAdapter {
           await this.onMessage(inMsg);
         }
       } catch (err) {
-        console.error(LOG, "处理入站消息失败:", err);
+        console.error(LOG, "處理入站消息失敗:", err);
       }
     });
 
-    // 错误/重连事件
+    // 錯誤/重連事件
     ch.on("error" as EventName, (err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(LOG, "channel error:", msg);
@@ -303,11 +303,11 @@ export class FeishuAdapter implements ChannelAdapter {
     });
     ch.on("reconnecting" as EventName, () => {
       console.log(LOG, "reconnecting…");
-      this.status = { enabled: true, phase: "starting", message: "重新连接中" };
+      this.status = { enabled: true, phase: "starting", message: "重新連接中" };
     });
     ch.on("reconnected" as EventName, () => {
       console.log(LOG, "reconnected");
-      this.status = { enabled: true, phase: "running", message: "已连接" };
+      this.status = { enabled: true, phase: "running", message: "已連接" };
     });
 
     this.channel = ch;
@@ -320,8 +320,8 @@ export class FeishuAdapter implements ChannelAdapter {
 
     try {
       await ch.connect();
-      this.status = { enabled: true, phase: "running", message: "长连接已建立" };
-      console.log(LOG, "WS 长连接就绪");
+      this.status = { enabled: true, phase: "running", message: "長連接已建立" };
+      console.log(LOG, "WS 長連接就緒");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(LOG, "connect() failed:", msg);
@@ -334,7 +334,7 @@ export class FeishuAdapter implements ChannelAdapter {
       try {
         await this.channel.disconnect();
       } catch (err) {
-        console.warn(LOG, "disconnect 失败:", err);
+        console.warn(LOG, "disconnect 失敗:", err);
       }
       this.channel = null;
     }
@@ -344,7 +344,7 @@ export class FeishuAdapter implements ChannelAdapter {
   getStatus(): ChannelStatus {
     const settings = loadChannelsSettings().feishu;
     if (!settings.enabled) {
-      return { enabled: false, phase: "offline", message: "未启用" };
+      return { enabled: false, phase: "offline", message: "未啟用" };
     }
     if (!settings.appId || !settings.appSecret) {
       return { enabled: true, phase: "config_missing", message: "App ID/Secret 缺失" };
@@ -354,11 +354,11 @@ export class FeishuAdapter implements ChannelAdapter {
 
   async send(msg: OutgoingMessage): Promise<{ ok: boolean; error?: string }> {
     if (!this.channel) {
-      console.warn(LOG, "send 失败: 长连接未建立");
-      return { ok: false, error: "飞书长连接未建立" };
+      console.warn(LOG, "send 失敗: 長連接未建立");
+      return { ok: false, error: "飛書長連接未建立" };
     }
     if (!msg.parts || msg.parts.length === 0) {
-      return { ok: false, error: "没有可发送的内容" };
+      return { ok: false, error: "沒有可發送的內容" };
     }
     console.log(LOG, `send: targetId=${msg.targetId} parts=${msg.parts.length}`);
     let lastErr: string | undefined;
@@ -377,7 +377,7 @@ export class FeishuAdapter implements ChannelAdapter {
     return { ok: true };
   }
 
-  /** 给外部：触发重建（用户改 AppID/Secret 后调用） */
+  /** 給外部：觸發重建（用戶改 AppID/Secret 後調用） */
   public async rebuild(): Promise<void> {
     if (this.channel) {
       try {

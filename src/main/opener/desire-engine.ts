@@ -1,4 +1,4 @@
-// Desire 累积 + 概率门 + affinity 反馈 + 持久化
+// Desire 累積 + 概率門 + affinity 反饋 + 持久化
 import * as fs from "fs";
 import * as path from "path";
 import { app } from "electron";
@@ -25,6 +25,7 @@ export function defaultState(): OpenerState {
     lastTriggeredAt: null,
     desireRateMultiplier: 1.0,
     lastDateStr: dateStr,
+    dailyFireCount: 0,
   };
 }
 
@@ -37,6 +38,7 @@ function rolloverIfNewDay(state: OpenerState): OpenerState {
   const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   if (state.lastDateStr !== dateStr) {
     state.todayFired = {};
+    state.dailyFireCount = 0;
     state.lastDateStr = dateStr;
   }
   return state;

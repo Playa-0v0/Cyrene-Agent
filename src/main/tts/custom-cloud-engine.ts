@@ -1,5 +1,5 @@
-// 自定义云端 TTS 引擎
-// 固定 HTTP 合约：POST endpointUrl，返回音频二进制或 JSON base64。
+// 自定義雲端 TTS 引擎
+// 固定 HTTP 合約：POST endpointUrl，返回音頻二進制或 JSON base64。
 
 export interface CustomCloudSynthesizeOptions {
   endpointUrl: string;
@@ -47,7 +47,7 @@ export async function synthesize(opts: CustomCloudSynthesizeOptions): Promise<Cu
     try { opts.debugLog?.({ requestId, ts: new Date().toISOString(), ...entry }); } catch { /* ignore */ }
   };
 
-  if (!endpointUrl) throw new Error("缺少自定义云端 TTS 地址");
+  if (!endpointUrl) throw new Error("缺少自定義雲端 TTS 地址");
   if (!text) throw new Error("缺少合成文本");
 
   const controller = new AbortController();
@@ -83,11 +83,11 @@ export async function synthesize(opts: CustomCloudSynthesizeOptions): Promise<Cu
   } catch (err) {
     clearTimeout(timer);
     if (err instanceof Error && err.name === "AbortError") {
-      log({ phase: "error", error: `合成超时（${timeoutMs}ms）`, durationMs: Date.now() - startedAt });
-      throw new Error(`自定义云端 TTS 合成超时（${timeoutMs}ms）`);
+      log({ phase: "error", error: `合成超時（${timeoutMs}ms）`, durationMs: Date.now() - startedAt });
+      throw new Error(`自定義雲端 TTS 合成超時（${timeoutMs}ms）`);
     }
     log({ phase: "error", error: err instanceof Error ? err.message : String(err), durationMs: Date.now() - startedAt });
-    throw new Error(`自定义云端 TTS 请求失败: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`自定義雲端 TTS 請求失敗: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
     clearTimeout(timer);
   }
@@ -95,7 +95,7 @@ export async function synthesize(opts: CustomCloudSynthesizeOptions): Promise<Cu
   if (!resp.ok) {
     const preview = (await resp.text().catch(() => "")).slice(0, 200);
     log({ phase: "error", status: resp.status, bodyPreview: preview, durationMs: Date.now() - startedAt });
-    throw new Error(`自定义云端 TTS 合成失败: ${resp.status} ${preview}`.trim());
+    throw new Error(`自定義雲端 TTS 合成失敗: ${resp.status} ${preview}`.trim());
   }
 
   const contentType = resp.headers.get("Content-Type") ?? "";
@@ -108,7 +108,7 @@ export async function synthesize(opts: CustomCloudSynthesizeOptions): Promise<Cu
       format?: unknown;
     };
     if (typeof data.audioBase64 !== "string" || !data.audioBase64.trim()) {
-      throw new Error("自定义云端 TTS 响应缺少 audioBase64");
+      throw new Error("自定義雲端 TTS 響應缺少 audioBase64");
     }
     audio = Buffer.from(data.audioBase64, "base64");
     resultFormat = normalizeFormat(data.format, format);
@@ -117,7 +117,7 @@ export async function synthesize(opts: CustomCloudSynthesizeOptions): Promise<Cu
   }
 
   if (audio.length === 0) {
-    throw new Error("自定义云端 TTS 返回空音频");
+    throw new Error("自定義雲端 TTS 返回空音頻");
   }
 
   log({

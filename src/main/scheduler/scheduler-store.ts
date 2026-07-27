@@ -37,33 +37,33 @@ function uniq(values: string[]): string[] {
 
 function validateTimeOfDay(timeOfDay: string, label: string): void {
   const match = /^(\d{2}):(\d{2})$/.exec(timeOfDay);
-  if (!match) throw new Error(`${label}格式必须是 HH:mm`);
+  if (!match) throw new Error(`${label}格式必須是 HH:mm`);
   const hours = Number(match[1]);
   const minutes = Number(match[2]);
   if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
-    throw new Error(`${label}必须是有效时间`);
+    throw new Error(`${label}必須是有效時間`);
   }
 }
 
 function validateSchedule(schedule: ScheduleConfig): void {
-  if (!schedule || typeof schedule !== "object") throw new Error("缺少调度配置");
+  if (!schedule || typeof schedule !== "object") throw new Error("缺少調度配置");
   if (schedule.kind === "daily") {
-    validateTimeOfDay(schedule.timeOfDay, "每日时间");
+    validateTimeOfDay(schedule.timeOfDay, "每日時間");
   } else if (schedule.kind === "weekly") {
     if (!Number.isInteger(schedule.dayOfWeek) || schedule.dayOfWeek < 0 || schedule.dayOfWeek > 6) {
-      throw new Error("星期必须是 0-6");
+      throw new Error("星期必須是 0-6");
     }
-    validateTimeOfDay(schedule.timeOfDay, "每周时间");
+    validateTimeOfDay(schedule.timeOfDay, "每週時間");
   } else if (schedule.kind === "interval") {
-    if (!Number.isInteger(schedule.every) || schedule.every <= 0) throw new Error("间隔必须是正整数");
-    if (schedule.unit === "minutes" && schedule.every > 1440) throw new Error("分钟间隔不能超过 1440");
-    if (schedule.unit === "hours" && schedule.every > 168) throw new Error("小时间隔不能超过 168");
-    if (schedule.unit !== "minutes" && schedule.unit !== "hours") throw new Error("间隔单位无效");
+    if (!Number.isInteger(schedule.every) || schedule.every <= 0) throw new Error("間隔必須是正整數");
+    if (schedule.unit === "minutes" && schedule.every > 1440) throw new Error("分鐘間隔不能超過 1440");
+    if (schedule.unit === "hours" && schedule.every > 168) throw new Error("小時間隔不能超過 168");
+    if (schedule.unit !== "minutes" && schedule.unit !== "hours") throw new Error("間隔單位無效");
   } else if (schedule.kind === "once") {
     const runAt = new Date(schedule.runAt);
-    if (Number.isNaN(runAt.getTime())) throw new Error("一次性运行时间无效");
+    if (Number.isNaN(runAt.getTime())) throw new Error("一次性運行時間無效");
   } else {
-    throw new Error("未知调度类型");
+    throw new Error("未知調度類型");
   }
 }
 
@@ -88,6 +88,10 @@ function normalizeLoadedTask(raw: unknown): ScheduledTask | null {
     lastFiredAt: typeof task.lastFiredAt === "string" ? task.lastFiredAt : undefined,
     toolMode: normalizeToolMode(task.toolMode),
     allowedToolIds: uniq(Array.isArray(task.allowedToolIds) ? task.allowedToolIds : []),
+    managedBy: task.managedBy === "daily-ritual" ? "daily-ritual" : undefined,
+    ritualId: ["morning", "afternoon", "evening"].includes(String(task.ritualId))
+      ? task.ritualId as ScheduledTask["ritualId"]
+      : undefined,
     createdAt: typeof task.createdAt === "string" ? task.createdAt : new Date(0).toISOString(),
     updatedAt: typeof task.updatedAt === "string" ? task.updatedAt : new Date(0).toISOString(),
   };
@@ -138,12 +142,12 @@ export function createSchedulerStore(deps: StoreDeps) {
   function addTask(input: NewScheduledTaskInput): ScheduledTask {
     const title = String(input.title ?? "").trim();
     const prompt = String(input.prompt ?? "").trim();
-    if (!title) throw new Error("标题不能为空");
-    if (!prompt) throw new Error("提示词不能为空");
+    if (!title) throw new Error("標題不能為空");
+    if (!prompt) throw new Error("提示詞不能為空");
     validateSchedule(input.schedule);
     const now = deps.now();
     const next = computeInitialNextFireAt(input.schedule, now);
-    if (input.schedule.kind === "once" && !next) throw new Error("一次性任务时间必须晚于当前时间");
+    if (input.schedule.kind === "once" && !next) throw new Error("一次性任務時間必須晚於當前時間");
     const task: ScheduledTask = {
       id: nextTaskId(),
       title,
@@ -153,6 +157,10 @@ export function createSchedulerStore(deps: StoreDeps) {
       nextFireAt: next ? next.toISOString() : null,
       toolMode: normalizeToolMode(input.toolMode),
       allowedToolIds: uniq(input.allowedToolIds ?? []),
+      managedBy: input.managedBy === "daily-ritual" ? "daily-ritual" : undefined,
+      ritualId: ["morning", "afternoon", "evening"].includes(String(input.ritualId))
+        ? input.ritualId
+        : undefined,
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     };
@@ -164,15 +172,15 @@ export function createSchedulerStore(deps: StoreDeps) {
 
   function updateTask(id: string, patch: ScheduledTaskPatch): ScheduledTask {
     const idx = tasks.findIndex(t => t.id === id);
-    if (idx < 0) throw new Error("任务不存在");
+    if (idx < 0) throw new Error("任務不存在");
     const current = tasks[idx];
     const now = deps.now();
     const schedule = patch.schedule ?? current.schedule;
     validateSchedule(schedule);
     const title = patch.title !== undefined ? String(patch.title).trim() : current.title;
     const prompt = patch.prompt !== undefined ? String(patch.prompt).trim() : current.prompt;
-    if (!title) throw new Error("标题不能为空");
-    if (!prompt) throw new Error("提示词不能为空");
+    if (!title) throw new Error("標題不能為空");
+    if (!prompt) throw new Error("提示詞不能為空");
     const scheduleChanged = patch.schedule !== undefined;
     const enabling = patch.enabled === true && current.enabled === false;
     const hasExplicitNextFireAt = Object.prototype.hasOwnProperty.call(patch, "nextFireAt");
@@ -180,7 +188,7 @@ export function createSchedulerStore(deps: StoreDeps) {
       ? (patch.nextFireAt ? new Date(patch.nextFireAt) : null)
       : (scheduleChanged ? computeInitialNextFireAt(schedule, now) : (current.nextFireAt ? new Date(current.nextFireAt) : null));
     if (next && Number.isNaN(next.getTime())) next = null;
-    if (schedule.kind === "once" && scheduleChanged && !next) throw new Error("一次性任务时间必须晚于当前时间");
+    if (schedule.kind === "once" && scheduleChanged && !next) throw new Error("一次性任務時間必須晚於當前時間");
     if (enabling) {
       if (!next || Number.isNaN(next.getTime())) {
         next = computeInitialNextFireAt(schedule, now);

@@ -38,7 +38,7 @@ describe("tts-dispatcher mimo", () => {
       text: "hello",
       apiKey: "k",
       voiceAudioPath: "C:\\voices\\cyrene.mp3",
-      promptText: "温柔一点",
+      promptText: "溫柔一點",
     });
 
     expect(result.format).toBe("wav");
@@ -47,7 +47,7 @@ describe("tts-dispatcher mimo", () => {
       apiKey: "k",
       voiceAudioPath: "C:\\voices\\cyrene.mp3",
       text: "hello",
-      stylePrompt: "温柔一点",
+      stylePrompt: "溫柔一點",
     }));
   });
 });
