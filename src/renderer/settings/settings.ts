@@ -863,6 +863,14 @@ const timeoutTestInput = document.getElementById("timeout-test") as HTMLInputEle
 const timeoutTestReset = document.getElementById("timeout-test-reset-btn") as HTMLButtonElement;
 const timeoutMemoryJudgeInput = document.getElementById("timeout-memory-judge") as HTMLInputElement;
 const timeoutMemoryJudgeReset = document.getElementById("timeout-memory-judge-reset-btn") as HTMLButtonElement;
+
+const timeoutProfileTotalBudgetInput = document.getElementById("timeout-profile-total-budget") as HTMLInputElement;
+const timeoutProfileTotalBudgetReset = document.getElementById("timeout-profile-total-budget-reset-btn") as HTMLButtonElement;
+const timeoutProfilePerAttemptInput = document.getElementById("timeout-profile-per-attempt") as HTMLInputElement;
+const timeoutProfilePerAttemptReset = document.getElementById("timeout-profile-per-attempt-reset-btn") as HTMLButtonElement;
+const timeoutProfileRemainingInput = document.getElementById("timeout-profile-remaining") as HTMLInputElement;
+const timeoutProfileRemainingReset = document.getElementById("timeout-profile-remaining-reset-btn") as HTMLButtonElement;
+
 const fcModeLangGraphButton = document.getElementById("fc-mode-langgraph") as HTMLButtonElement;
 const fcModeEnableOptimizationButton = document.getElementById("fc-mode-enable-optimization") as HTMLButtonElement;
 const fcModeDisableOptimizationButton = document.getElementById("fc-mode-disable-optimization") as HTMLButtonElement;
@@ -1576,6 +1584,10 @@ async function loadGeneralSettings(): Promise<void> {
   }
 }
 
+function timeoutToString(timeout: number) {
+  return timeout === -1 ? "" : String(timeout);
+}
+
 async function loadTimeoutSettings() {
   try {
     const cfg = await window.settings!.getTimeoutSettings();
@@ -1586,6 +1598,9 @@ async function loadTimeoutSettings() {
     timeoutUserChoiceInput.value = String(cfg.userChoiceTimeout / 1000);
     timeoutTestInput.value = String(cfg.testTimeout);
     timeoutMemoryJudgeInput.value = String(cfg.memoryJudgeTimeout);
+    timeoutProfileTotalBudgetInput.value = timeoutToString(cfg.profileTotalBudgetMs);
+    timeoutProfilePerAttemptInput.value = timeoutToString(cfg.profilePerAttemptTimeoutMs);
+    timeoutProfileRemainingInput.value = timeoutToString(cfg.profileMinimumRemainingBudgetMs);
     setTimeoutSaveStatus("时间设置保存后，对后续请求生效．");
   } catch {
     setTimeoutSaveStatus("读取偏好失败", "is-error");
@@ -1593,6 +1608,21 @@ async function loadTimeoutSettings() {
 }
 
 function parsePositiveIntOrThrow(input: string, th: any) {
+  if (!/^[0-9]+$/.test(input)){
+    throw th;
+  }
+  if (isNaN(input as any)){
+    throw th;
+  }
+  const result = parseInt(input);
+  if (Number.isNaN(result) || result <= 0) {
+    throw th;
+  }
+  return result;
+}
+
+function parseN1IntOrThrow(input: string, th: any) {
+  if (input === "") return -1;
   if (!/^[0-9]+$/.test(input)){
     throw th;
   }
@@ -1617,6 +1647,9 @@ async function saveTimeoutSettings(saveTestTimeout: boolean) {
         visionTimeout: parsePositiveIntOrThrow(timeoutVisionInput.value, "视觉模型单次 API 超时"),
         userChoiceTimeout: 1000 * parsePositiveIntOrThrow(timeoutUserChoiceInput.value, "工具请求确认时间限制"),
         memoryJudgeTimeout: parsePositiveIntOrThrow(timeoutMemoryJudgeInput.value, "记忆总结阶段 API 超时"),
+        profileTotalBudgetMs: parseN1IntOrThrow(timeoutProfileTotalBudgetInput.value, "阶段总时间限制"),
+        profilePerAttemptTimeoutMs: parseN1IntOrThrow(timeoutProfilePerAttemptInput.value, "单次请求超时"),
+        profileMinimumRemainingBudgetMs: parseN1IntOrThrow(timeoutProfileRemainingInput.value, "最小余量"),
       };
     } else {
       settings = {
@@ -1656,6 +1689,10 @@ timeoutSummaryReset.addEventListener("click", () => { timeoutSummaryInput.value 
 timeoutVisionReset.addEventListener("click", () => { timeoutVisionInput.value = String(DEFAULT_VISION_TIMEOUT_MS) });
 timeoutMemoryJudgeReset.addEventListener("click", () => { timeoutMemoryJudgeInput.value = String(DEFAULT_MEMORY_JUDGE_MS) });
 timeoutUserChoiceReset.addEventListener("click", () => { timeoutUserChoiceInput.value = "60" });
+
+timeoutProfileTotalBudgetReset.addEventListener("click", () => { timeoutProfileTotalBudgetInput.value = "" });
+timeoutProfilePerAttemptReset.addEventListener("click", () => { timeoutProfilePerAttemptInput.value = "" });
+timeoutProfileRemainingReset.addEventListener("click", () => { timeoutProfileRemainingInput.value = "" });
 
 fcModeLangGraphButton.addEventListener("click", async () => {
   await window.settings!.saveConfig({ disableLangGraph: false });

@@ -8,6 +8,9 @@ export type TimeoutSettings = {
   userChoiceTimeout: number,
   testTimeout: number,
   searchTimeout: number,
+  profileTotalBudgetMs: number,
+  profilePerAttemptTimeoutMs: number,
+  profileMinimumRemainingBudgetMs: number,
 }
 export const DEFAULT_CALL_TIMEOUT_MS = 30000;
 export const DEFAULT_PER_ROUND_TIMEOUT_MS = 75_000;
@@ -26,4 +29,7 @@ export const DEFAULT_TIMEOUT_SETTINGS: TimeoutSettings = {
   memoryJudgeTimeout: DEFAULT_MEMORY_JUDGE_MS,
   userChoiceTimeout: 60000,
   searchTimeout: DEFAULT_SEARCH_TIMEOUT_MS,
+  profileTotalBudgetMs: -1,
+  profilePerAttemptTimeoutMs: -1,
+  profileMinimumRemainingBudgetMs: -1,
 };

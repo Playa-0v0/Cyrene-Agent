@@ -286,6 +286,36 @@
           <hr class="api-section-divider" />
           <div class="panel-heading">
             <div>
+              <h1>新版 LangGraph 模式 - ActionGate / CITA 阶段超时设置</h1>
+              <p>配置 ActionGate / CITA 阶段超时时间．单位ms（1s=1000ms）．</p>
+            </div>
+          </div>
+          <div class="settings-list">
+            <label class="field field--full">
+              <span>阶段总时间限制（ms）</span>
+              <div class="timeout-row">
+                <input id="timeout-profile-total-budget" type="number" placeholder="留空为默认（8s~40s），单位ms（1s=1000ms）" autocomplete="off" />
+                <button type="button" class="timeout-reset" id="timeout-profile-total-budget-reset-btn" title="重置为默认">↻</button>
+              </div>
+            </label>
+            <label class="field field--full">
+              <span>单次请求超时（ms）</span>
+              <div class="timeout-row">
+                <input id="timeout-profile-per-attempt" type="number" placeholder="留空为默认（4s~20s），单位ms（1s=1000ms）" autocomplete="off" />
+                <button type="button" class="timeout-reset" id="timeout-profile-per-attempt-reset-btn" title="重置为默认">↻</button>
+              </div>
+            </label>
+            <label class="field field--full">
+              <span>最小余量（ms）：阶段剩余时间低于该限制则不再重试．</span>
+              <div class="timeout-row">
+                <input id="timeout-profile-remaining" type="number" placeholder="留空为默认（0.5~0.8s），单位ms（1s=1000ms）" autocomplete="off" />
+                <button type="button" class="timeout-reset" id="timeout-profile-remaining-reset-btn" title="重置为默认">↻</button>
+              </div>
+            </label>
+          </div>
+          <hr class="api-section-divider" />
+          <div class="panel-heading">
+            <div>
               <h1>其它时间设置</h1>
             </div>
           </div>

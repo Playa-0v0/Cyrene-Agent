@@ -10,6 +10,7 @@ import type {
   StructuredOutputProfile,
   StructuredOutputStage,
 } from "./types";
+import { getTimeoutSettings } from "../../timeout-manager";
 
 export interface StructuredGenerationResponse {
   text: string;
@@ -71,13 +72,34 @@ export async function runStructuredOutput<T, TRequest>(
 ): Promise<StructuredOutputRunResult<T>> {
   const now = input.now ?? Date.now;
   const startedAt = now();
-  const policy = input.profile.repair[input.stage];
+  let policy = input.profile.repair[input.stage];
   let attempts = 0;
   let repairCount = 0;
   let errors: StructuredValidationError[] = [];
   let lastFinishReason = "unknown";
   let candidateCount = 0;
   let validCandidateCount = 0;
+
+  const timeoutSettings = getTimeoutSettings();
+  let policyOverride = false;
+  const clonePolicyIfNeeded = () => {
+    if (!policyOverride) {
+      policy = { ...policy };
+      policyOverride = true;
+    }
+  };
+  if (timeoutSettings.profileTotalBudgetMs !== -1) {
+    clonePolicyIfNeeded();
+    policy.totalBudgetMs = timeoutSettings.profileTotalBudgetMs;
+  }
+  if (timeoutSettings.profilePerAttemptTimeoutMs !== -1) {
+    clonePolicyIfNeeded();
+    policy.perAttemptTimeoutMs = timeoutSettings.profilePerAttemptTimeoutMs;
+  }
+  if (timeoutSettings.profileMinimumRemainingBudgetMs !== -1) {
+    clonePolicyIfNeeded();
+    policy.minimumRemainingBudgetMs = timeoutSettings.profileMinimumRemainingBudgetMs;
+  }
 
   const finish = (
     result: StructuredOutputRunResult<T>,

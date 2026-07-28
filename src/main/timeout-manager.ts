@@ -20,6 +20,9 @@ function normalizeTimeoutSettings(input: Partial<TimeoutSettings> | null | undef
     visionTimeout: input?.visionTimeout || DEFAULT_VISION_TIMEOUT_MS,
     userChoiceTimeout: input?.userChoiceTimeout || 60000,
     searchTimeout: input?.searchTimeout || DEFAULT_SEARCH_TIMEOUT_MS,
+    profileTotalBudgetMs: input?.profileTotalBudgetMs || -1,
+    profilePerAttemptTimeoutMs: input?.profilePerAttemptTimeoutMs || -1,
+    profileMinimumRemainingBudgetMs: input?.profileMinimumRemainingBudgetMs || -1,
   };
 }
 
