@@ -136,20 +136,35 @@
   --md-copy-border:       var(--rb-border-soft);
   --md-katex-text:        var(--rb-text-default);
 
-  /* ===== Weather card (light pink surface on top of dark UI) ===== */
-  --rb-weather-bg:        #F9CBDF;
-  --rb-weather-bg-2:      #f0b5d0;
-  --rb-weather-bg-3:      #eeacd2;
-  --rb-weather-card-border: rgba(180, 100, 150, 0.2);
-  --rb-weather-border:    rgba(140, 60, 110, 0.15);
-  --rb-weather-border-strong: rgba(140, 60, 110, 0.12);
-  --rb-weather-shadow:    rgba(180, 100, 150, 0.15);
-  --rb-weather-text-strong: #5a1f3a;
-  --rb-weather-text-default: #6b2745;
-  --rb-weather-text-muted: #8a3b5a;
-  --rb-weather-text-faint: #a85a7a;
-  --rb-weather-temp:      #b84a7a;
-  --rb-weather-temp-hi:   #c45a3a;
-  --rb-weather-temp-lo:   #3a7ab0;
-  --rb-weather-accent:    #9d2b5c;
+  /* ===== Weather card (glass-morphism on dark UI) ===== */
+  --rb-weather-bg:          rgba(34, 33, 56, 0.58);
+  --rb-weather-card-border: rgba(255, 255, 255, 0.09);
+  --rb-weather-border:      rgba(167, 159, 196, 0.14);
+  --rb-weather-text-strong: #efeaf8;
+  --rb-weather-text-default: #d8d0ee;
+  --rb-weather-text-muted:  #a79fc4;
+  --rb-weather-text-faint:  #6f698c;
+  --rb-weather-accent:      #ff8fbf;
+  --rb-weather-detail-bg:   rgba(255, 255, 255, 0.045);
+  --rb-weather-detail-border: rgba(255, 255, 255, 0.07);
+  --rb-weather-icon-bg:     linear-gradient(135deg, rgba(255,143,191,0.16), rgba(157,140,255,0.16));
+  --rb-weather-panel-bg:    rgba(255, 255, 255, 0.03);
+  --rb-weather-panel-border: rgba(255, 255, 255, 0.06);
+  --rb-weather-tag-bg:      linear-gradient(135deg, rgba(255,143,191,0.22), rgba(157,140,255,0.22));
+
+  /* Chat typography (adjustable via settings sliders) */
+  --rb-chat-line-height:   1.75;
+  --rb-chat-para-spacing:  0.5em;
+
+  /* Weather illustration (CSS pure-graphic weather icons) */
+  --rb-weather-sun-core-1:  #ffe08a;
+  --rb-weather-sun-core-2:  #ffb14d;
+  --rb-weather-sun-ray:     #ffc95c;
+  --rb-weather-sun-glow:    rgba(255, 190, 90, 0.45);
+  --rb-weather-cloud:       #ffffff;
+  --rb-weather-cloud-shadow: rgba(190, 170, 215, 0.35);
+  --rb-weather-rain:        #7db4ff;
+  --rb-weather-snow:        #a8c8ff;
+  --rb-weather-bolt-1:      #ffe08a;
+  --rb-weather-bolt-2:      #ff9d4d;
 }

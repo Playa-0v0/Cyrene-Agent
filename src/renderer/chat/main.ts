@@ -323,8 +323,16 @@ function scheduleHistoryRender(): void {
 
       const result = renderMarkdown(text);
       if (result.mode === "html") {
-        bubble.innerHTML = result.content;
+        bubble.removeAttribute("data-md-mode");
+        // 原子替换：先在内存中构建 DOM，再一次性替换，避免清空→等待→插入导致的闪烁
+        const prevHeight = bubble.getBoundingClientRect().height;
+        const tpl = document.createElement("template");
+        tpl.innerHTML = result.content;
+        bubble.style.minHeight = `${prevHeight}px`;
+        bubble.replaceChildren(tpl.content.cloneNode(true));
+        requestAnimationFrame(() => { bubble.style.minHeight = ""; });
       } else {
+        bubble.setAttribute("data-md-mode", "text");
         bubble.textContent = result.content;
       }
       bubble.removeAttribute("data-md-pending");
@@ -1439,7 +1447,26 @@ function buildApprovalCardEl(req: {
   return card;
 }
 
-/** 构建天气卡片 DOM 元素（不插入，由调用方决定位置）。 */
+/** 中文天气描述 → CSS 插画类别（5 种：weather-clear / cloudy / rain / snow / thunder）。 */
+function weatherIllustrationClass(text: string): string {
+  if (/雷/.test(text)) return "weather-thunder";
+  if (/大雪|暴雪|中雪|小雪|阵雪|雪/.test(text)) return "weather-snow";
+  if (/大雨|暴雨|中雨|小雨|阵雨|强阵雨|冻雨|雨/.test(text)) return "weather-rain";
+  if (/晴/.test(text)) return "weather-clear";
+  return "weather-cloudy"; // 多云、阴、雾、霾、扬沙等兜底
+}
+
+/** SVG 内联图标映射（与 HTML 参考设计完全一致）。 */
+const W_SVG = {
+  humidity: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.7s6.5 7 6.5 11.3a6.5 6.5 0 0 1-13 0C5.5 9.7 12 2.7 12 2.7z"/></svg>`,
+  wind: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg>`,
+  windDir: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.6 4.1A2 2 0 1 1 11 8H2M12.6 19.9A2 2 0 1 0 14 16H2M17.7 7.7A2.5 2.5 0 1 1 19.5 12H2"/></svg>`,
+  precip: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 16.6A5 5 0 0 0 18 7a7 7 0 1 0-13.9 1.6A4.5 4.5 0 0 0 5.5 17H17"/><path d="M8 19v2M12 18v2M16 19v2"/></svg>`,
+  pressure: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15l3.5-3.5"/><path d="M20.2 15.5a8.5 8.5 0 1 0-16.4 0"/></svg>`,
+  feels: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4a2 2 0 1 0-4 0v9.3a4.5 4.5 0 1 0 4 0z"/></svg>`,
+};
+
+/** 构建天气卡片 DOM 元素（不插入，由调用方决定位置）。类名严格对齐 weather-cards.html。 */
 function buildWeatherCardEl(data: Record<string, unknown>): HTMLElement {
   const card = document.createElement("div");
   card.className = "weather-card";
@@ -1449,63 +1476,198 @@ function buildWeatherCardEl(data: Record<string, unknown>): HTMLElement {
   const timeStr = formatTime(Date.now());
 
   const temp = Number(data.temp ?? 0);
-  const feelsLike = Number(data.feelsLike ?? temp);
+  const feelsLike = data.feelsLike != null ? Number(data.feelsLike) : null;
   const humidity = Number(data.humidity ?? 0);
-  const precip = Number(data.precip ?? 0);
-  const pressure = Number(data.pressure ?? 0);
-  const icon = escapeHtml(String(data.icon ?? "🌤️"));
+  const precip = data.precip != null ? Number(data.precip) : null;
+  const pressure = data.pressure != null ? Number(data.pressure) : null;
   const windDir = escapeHtml(String(data.windDir ?? ""));
   const windScale = escapeHtml(String(data.windScale ?? ""));
-  const visibility = data.visibility != null ? `${data.visibility}km` : "-";
-  const uv = escapeHtml(String(data.uv ?? "-"));
+  const visibility = data.visibility != null ? Number(data.visibility) : null;
+  const uv = data.uv != null ? Number(data.uv) : null;
   const aqi = data.aqi != null ? Number(data.aqi) : null;
-  const aqiText = escapeHtml(String(data.aqiText ?? ""));
-  const kaomoji = aqi != null ? escapeHtml(aqiKaomojiText(Number(aqi))) : "";
+  const aqiText = data.aqiText ? escapeHtml(String(data.aqiText)) : "";
+  const kaomoji = aqi != null ? escapeHtml(aqiKaomojiText(aqi)) : "";
   const city = escapeHtml(String(data.city ?? ""));
   const adm = escapeHtml(String(data.adm ?? ""));
   const desc = escapeHtml(String(data.text ?? ""));
   const source = escapeHtml(String(data.source ?? ""));
+  const illClass = weatherIllustrationClass(desc);
+  const forecast = Array.isArray(data.forecast) ? data.forecast as Array<Record<string, unknown>> : [];
+
+  // 主网格：有降水/气压 → 4格，否则 → 3格
+  const hasPrecipOrPressure = precip != null || pressure != null;
+  // 高级区：只展示有数据的字段
+  const advItems: string[] = [];
+  if (pressure != null && pressure > 0) {
+    advItems.push(`<div class="adv-item"><div class="adv-icon">${W_SVG.pressure}</div><div class="adv-text"><span class="adv-label">气压</span><span class="adv-value">${Math.round(pressure)} hPa</span></div></div>`);
+  }
+  if (feelsLike != null) {
+    advItems.push(`<div class="adv-item"><div class="adv-icon">${W_SVG.feels}</div><div class="adv-text"><span class="adv-label">体感温度</span><span class="adv-value">${feelsLike}°C</span></div></div>`);
+  }
+  if (uv != null) {
+    advItems.push(`<div class="adv-item"><div class="adv-icon">${W_SVG.humidity}</div><div class="adv-text"><span class="adv-label">紫外线</span><span class="adv-value">${uv}</span></div></div>`);
+  }
+  if (visibility != null) {
+    advItems.push(`<div class="adv-item"><div class="adv-icon">${W_SVG.humidity}</div><div class="adv-text"><span class="adv-label">能见度</span><span class="adv-value">${visibility} km</span></div></div>`);
+  }
+  if (aqi != null) {
+    advItems.push(`<div class="adv-item"><div class="adv-icon">${W_SVG.humidity}</div><div class="adv-text"><span class="adv-label">空气质量</span><span class="adv-value">${aqi} ${aqiText} ${kaomoji}</span></div></div>`);
+  }
+  const hasAdv = advItems.length > 0;
+
+  // 预报区
+  const hasForecast = forecast.length > 0;
+  const forecastRows = forecast.map((d) => {
+    const hi = Number(d.hi ?? 0);
+    const lo = Number(d.lo ?? 0);
+    const textDay = escapeHtml(String(d.textDay ?? ""));
+    const weekDay = escapeHtml(String(d.weekDay ?? ""));
+    const dateLabel = escapeHtml(String(d.date ?? ""));
+    const fcIllClass = weatherIllustrationClass(textDay);
+    // 简化插画：只用 emoji 代替，避免预报行太占空间
+    const fcIcon = textDay.includes("雷") ? "⛈️" : textDay.includes("雪") ? "❄️" : textDay.includes("雨") ? "🌧️" : textDay.includes("晴") ? "☀️" : "⛅";
+    return `<div class="forecast-row">
+      <span class="forecast-date">${dateLabel} ${weekDay}</span>
+      <span class="forecast-icon">${fcIcon}</span>
+      <span class="forecast-text">${textDay}</span>
+      <span class="forecast-lo">${lo}°</span>
+      <span class="forecast-bar"><span class="forecast-bar-fill" style="width:${Math.min(100, Math.max(10, (lo + 20) * 1.5))}%"></span></span>
+      <span class="forecast-hi">${hi}°</span>
+    </div>`;
+  }).join("");
 
   card.innerHTML = `
-    <div class="w-header">
-      <div class="w-datetime"><span class="w-date">${dateStr}</span><span class="w-time">${timeStr} 更新</span></div>
-      <div class="w-loc"><span class="w-city">${city}</span><span class="w-adm">${adm}</span></div>
-    </div>
-    <div class="w-main">
-      <div class="w-icon-box"><span class="w-icon">${icon}</span><span class="w-desc">${desc}</span></div>
-      <div class="w-temp-box">
-        <div class="w-temp">${temp}<span class="w-deg">°</span></div>
-        ${data.hi != null ? `<div class="w-hilo"><span class="w-hi">↑${data.hi}°</span><span class="w-sep">|</span><span class="w-lo">↓${data.lo}°</span></div>` : ""}
+    <header class="card-header">
+      <div class="date-block">
+        <span class="date-text">${dateStr}</span>
+        <span class="update-text"><span class="update-dot"></span><span>${timeStr} 更新</span></span>
+      </div>
+      <div class="location">
+        <div class="location-row">
+          <span class="province">${adm}</span>
+          <span class="city">${city}</span>
+        </div>
+        <span class="source-tag">${source}</span>
+      </div>
+    </header>
+
+    <section class="current-weather">
+      <div class="illustration ${illClass}">
+        <div class="sun">
+          <div class="sun-rays">
+            <span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span>
+          </div>
+          <div class="sun-core"></div>
+        </div>
+        <div class="cloud"></div>
+        <div class="rain"><span></span><span></span><span></span></div>
+        <div class="snow"><span>❄</span><span>❄</span><span>❄</span></div>
+        <div class="bolt"></div>
+      </div>
+      <div class="current-info">
+        <div class="temp-row">
+          <span class="temp-value">${temp}</span>
+          <span class="temp-unit">°C</span>
+        </div>
+        <div class="weather-desc">${desc}</div>
+        ${feelsLike != null ? `<span class="feels-like">体感 ${feelsLike}°C</span>` : ""}
+      </div>
+    </section>
+
+    <section class="details-grid${hasPrecipOrPressure ? "" : " three"}">
+      <div class="detail-item">
+        <div class="detail-icon">${W_SVG.humidity}</div>
+        <div class="detail-text">
+          <span class="detail-label">湿度</span>
+          <span class="detail-value">${humidity}%</span>
+        </div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-icon">${W_SVG.windDir}</div>
+        <div class="detail-text">
+          <span class="detail-label">风向</span>
+          <span class="detail-value">${windDir}</span>
+        </div>
+      </div>
+      ${hasPrecipOrPressure ? `
+      <div class="detail-item">
+        <div class="detail-icon">${W_SVG.wind}</div>
+        <div class="detail-text">
+          <span class="detail-label">风速</span>
+          <span class="detail-value">${windScale}</span>
+        </div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-icon">${W_SVG.precip}</div>
+        <div class="detail-text">
+          <span class="detail-label">降水量</span>
+          <span class="detail-value">${precip != null ? precip.toFixed(1) : "0"} mm</span>
+        </div>
+      </div>
+      ` : `
+      <div class="detail-item">
+        <div class="detail-icon">${W_SVG.wind}</div>
+        <div class="detail-text">
+          <span class="detail-label">风力</span>
+          <span class="detail-value">${windScale}</span>
+        </div>
+      </div>
+      `}
+    </section>
+
+    ${hasAdv ? `
+    <button class="advanced-toggle" type="button" aria-expanded="false">
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
+      <span class="toggle-label">展开高级数据</span>
+    </button>
+    <div class="advanced-panel">
+      <div class="advanced-panel-inner">
+        <div class="advanced-content">
+          ${advItems.join("\n")}
+        </div>
       </div>
     </div>
-    <div class="w-feels">体感 ${feelsLike}°C</div>
-    <div class="w-quick">
-      <div class="w-qitem"><div class="w-qicon">💧</div><div class="w-qlabel">湿度</div><div class="w-qvalue">${humidity}%</div></div>
-      <div class="w-qitem"><div class="w-qicon">💨</div><div class="w-qlabel">风力</div><div class="w-qvalue">${windScale}</div></div>
-      <div class="w-qitem"><div class="w-qicon">🌧️</div><div class="w-qlabel">降水</div><div class="w-qvalue">${precip}mm</div></div>
-      <div class="w-qitem"><div class="w-qicon"><svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true"><title>气压</title><path d="M4 42H44" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><rect x="8" y="28" width="6" height="14" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><rect x="21" y="18" width="6" height="24" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><rect x="34" y="6" width="6" height="36" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></svg></div><div class="w-qlabel">气压</div><div class="w-qvalue">${pressure || "-"}</div></div>
-    </div>
-    <button class="w-expand" type="button">查看更多 <span class="w-arrow">▼</span></button>
-    <div class="w-details">
-      <div class="w-detail-grid">
-        <div class="w-ditem"><span class="w-dicon">🌡️</span><div><div class="w-dlabel">体感温度</div><div class="w-dvalue">${feelsLike}°C</div></div></div>
-        <div class="w-ditem"><span class="w-dicon">💨</span><div><div class="w-dlabel">风向风力</div><div class="w-dvalue">${windDir} ${windScale}</div></div></div>
-        <div class="w-ditem"><span class="w-dicon">🔆</span><div><div class="w-dlabel">紫外线</div><div class="w-dvalue">${uv}</div></div></div>
-        <div class="w-ditem"><span class="w-dicon">👁️</span><div><div class="w-dlabel">能见度</div><div class="w-dvalue">${visibility}</div></div></div>
-        ${aqi != null ? `<div class="w-ditem"><span class="w-dicon">🌿</span><div><div class="w-dlabel">空气质量</div><div class="w-dvalue">${aqi} ${aqiText} <span class="w-kaomoji">${kaomoji}</span></div></div></div>` : ""}
+    ` : ""}
+
+    ${hasForecast ? `
+    <button class="forecast-toggle" type="button" aria-expanded="false">
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
+      <span class="fc-toggle-label">未来预报</span>
+    </button>
+    <div class="forecast-panel">
+      <div class="forecast-panel-inner">
+        <div class="forecast-content">
+          ${forecastRows}
+        </div>
       </div>
     </div>
-    <div class="w-source"><span>${icon} ${source}</span><span>${timeStr} 更新</span></div>
+    ` : ""}
+
+    <footer class="card-footer">${source} · ${timeStr} 更新</footer>
   `;
 
-  // 展开按钮点击切换
-  const expandBtn = card.querySelector(".w-expand") as HTMLButtonElement | null;
-  if (expandBtn) {
-    expandBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      card.classList.toggle("expanded");
-    });
-  }
+  // 折叠切换绑定
+  const bindToggle = (selector: string, openClass: string, labelSelector: string, openText: string, closeText: string) => {
+    const btn = card.querySelector(selector) as HTMLButtonElement | null;
+    if (btn) {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const open = card.classList.toggle(openClass);
+        btn.setAttribute("aria-expanded", String(open));
+        const label = card.querySelector(labelSelector);
+        if (label) label.textContent = open ? closeText : openText;
+      });
+    }
+  };
+  bindToggle(".advanced-toggle", "advanced-open", ".toggle-label", "展开高级数据", "收起高级数据");
+  bindToggle(".forecast-toggle", "forecast-open", ".fc-toggle-label", "未来预报", "收起预报");
 
   return card;
 }
@@ -1619,6 +1781,46 @@ function appendBubbleForMessage(messageId: string): HTMLElement | null {
   bubble.hidden = true;
   body.appendChild(bubble);
   return bubble;
+}
+
+/**
+ * 终态升级：将流式气泡替换为终态 Markdown HTML，不走全局 render()。
+ * - 原子替换（内存构建 → replaceChildren）
+ * - 滚动：只在用户接近底部时滚到底部
+ * - 升级后标记 has-rich-content（含表格/代码块/公式时固定宽度）
+ */
+function finalizeStreamingBubble(messageId: string, rawContent: string): void {
+  const bubble = getLastBubbleForMessage(messageId);
+  if (!bubble) return;
+
+  // 终态 Markdown 渲染
+  const result = renderMarkdown(rawContent);
+
+  // 判断是否在底部
+  const wasAtBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
+
+  if (result.mode === "html") {
+    bubble.removeAttribute("data-md-mode");
+    bubble.classList.remove("is-streaming");
+    // 原子替换：内存构建 DOM → replaceChildren
+    const tpl = document.createElement("template");
+    tpl.innerHTML = result.content;
+    bubble.replaceChildren(tpl.content.cloneNode(true));
+    // 含表格/代码块/公式 → 固定宽度防止布局跳动
+    const hasRich = bubble.querySelector(".katex-display, .code-block, table");
+    if (hasRich) bubble.classList.add("has-rich-content");
+  } else {
+    bubble.setAttribute("data-md-mode", "text");
+    bubble.textContent = result.content;
+  }
+  bubble.hidden = false;
+
+  // 滚动：只在用户接近底部时滚到底部
+  if (wasAtBottom) {
+    requestAnimationFrame(() => {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    });
+  }
 }
 
 function renderMessageAttachments(body: HTMLElement, attachments: MessageAttachment[] | undefined): void {
@@ -1926,6 +2128,7 @@ function render(preserveScroll = false): void {
     row.appendChild(body);
     messagesEl.appendChild(row);
   }
+
   if (!preserveScroll) messagesEl.scrollTop = messagesEl.scrollHeight;
 
   // 历史消息渐进渲染：纯文本占位 -> Markdown HTML
@@ -3138,6 +3341,7 @@ async function triggerCyreneGreeting(): Promise<void> {
           startNextStreamingBubble = false;
           if (bubble) {
             if (!streamSession) {
+              bubble.classList.add("is-streaming");
               streamSession = createStreamingMarkdownSession(getMd(), bubble, streamMsgId, messagesEl);
             }
             streamSession.append(next);
@@ -3272,7 +3476,7 @@ async function triggerCyreneGreeting(): Promise<void> {
     await runDone;
     offEvent();
 
-    // flush + dispose 流式 Markdown session（终态 render 会全量重建）
+    // flush + dispose 流式 Markdown session（终态 finalizeStreamingBubble 会原子替换）
     if (streamSession) {
       streamSession.flush();
       streamSession.dispose();
@@ -3296,7 +3500,10 @@ async function triggerCyreneGreeting(): Promise<void> {
       latestMsg.ttsCacheKey = cache.cacheKey;
       void saveSession();
     });
-    render();
+
+    // 终态：只升级当前流式气泡的 Markdown，不调 render() 全量重建
+    finalizeStreamingBubble(streamMsgId, streamContent);
+
     if (pendingWeatherCard) {
       const card = buildWeatherCardEl(pendingWeatherCard);
       messagesEl.appendChild(card);
@@ -3321,7 +3528,8 @@ async function triggerCyreneGreeting(): Promise<void> {
       });
     }
     void saveSession();
-    render();
+    // 错误时也用单气泡升级，不走全量 render()
+    finalizeStreamingBubble(streamMsgId, userMessage);
   } finally {
     sending = false;
     sendBtn.disabled = false;
@@ -3667,6 +3875,7 @@ async function send(): Promise<void> {
           startNextStreamingBubble = false;
           if (bubble) {
             if (!streamSession) {
+              bubble.classList.add("is-streaming");
               streamSession = createStreamingMarkdownSession(getMd(), bubble, streamMsgId, messagesEl);
             }
             streamSession.append(next);
@@ -3823,7 +4032,7 @@ async function send(): Promise<void> {
     await runDone;
     offEvent();
 
-    // flush + dispose 流式 Markdown session（终态 render 会全量重建）
+    // flush + dispose 流式 Markdown session（终态 finalizeStreamingBubble 会原子替换）
     if (streamSession) {
       streamSession.flush();
       streamSession.dispose();
@@ -3847,8 +4056,11 @@ async function send(): Promise<void> {
       latestMsg.ttsCacheKey = cache.cacheKey;
       void saveSession();
     });
-    render();
-    // 天气卡片在 render 后追加到末尾（模型回复之后）
+
+    // 终态：只升级当前流式气泡的 Markdown，不调 render() 全量重建
+    finalizeStreamingBubble(streamMsgId, streamContent);
+
+    // 天气卡片追加到末尾（模型回复之后）
     if (pendingWeatherCard) {
       console.log("[Chat] 插入天气卡片");
       const card = buildWeatherCardEl(pendingWeatherCard);
@@ -3875,7 +4087,9 @@ async function send(): Promise<void> {
       });
     }
     void saveSession();
-    render();  } finally {
+    // 错误时也用单气泡升级，不走全量 render()
+    finalizeStreamingBubble(streamMsgId, userMessage);
+  } finally {
     sending = false;
     sendBtn.disabled = false;
     chatHintEl.textContent = formatModelHint(currentModelConfig);

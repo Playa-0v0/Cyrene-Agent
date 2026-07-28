@@ -10,6 +10,59 @@ import type { ChatRequest, ChatResponse } from "./vendors/types";
 import type { ChatMessage } from "./vendors/types";
 import type { TrustedAskUserProfile } from "../../shared/ask-clarification";
 
+const ASK_CLARIFICATION_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    intro: { type: "string", minLength: 1, maxLength: 300 },
+    questions: {
+      type: "array",
+      minItems: 1,
+      maxItems: 3,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          field: { type: "string", minLength: 1, maxLength: 120 },
+          question: { type: "string", minLength: 1, maxLength: 500 },
+          type: {
+            type: "string",
+            enum: ["single_select", "multi_select", "text"],
+          },
+          options: {
+            type: "array",
+            maxItems: 3,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                value: { type: "string", minLength: 1, maxLength: 200 },
+                label: { type: "string", minLength: 1, maxLength: 200 },
+              },
+              required: ["value", "label"],
+            },
+          },
+          allowCustom: { type: "boolean" },
+          freeTextPlaceholder: { type: "string", maxLength: 300 },
+        },
+        required: [
+          "field",
+          "question",
+          "type",
+          "options",
+          "allowCustom",
+          "freeTextPlaceholder",
+        ],
+      },
+    },
+    deferredFields: {
+      type: "array",
+      items: { type: "string", minLength: 1, maxLength: 120 },
+    },
+  },
+  required: ["intro", "questions", "deferredFields"],
+} as const;
+
 function record(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${label} must be an object`);
@@ -190,6 +243,8 @@ export async function resolveAskClarification(
       maxTokens: 1_600,
       structuredOutput: {
         mode: "prompt_json",
+        name: "ask_clarification",
+        schema: ASK_CLARIFICATION_SCHEMA,
         sendJsonObjectHint: true,
       },
     });

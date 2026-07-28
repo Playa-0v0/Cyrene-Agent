@@ -20,6 +20,8 @@ export interface SemanticGeneratorResult {
   thinking?: string;
   finishReason?: string;
   refusal?: string;
+  /** LangChain responseFormat result; absent on the legacy generator path. */
+  structuredValue?: unknown;
 }
 
 export type SemanticTextGenerator = (

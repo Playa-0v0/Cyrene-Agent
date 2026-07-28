@@ -84,9 +84,17 @@ function requestForProfile(profile: StructuredOutputProfile): StructuredOutputRe
       strict: true,
     };
   }
-  if (profile.mode === "provider_json_object") return { mode: "json_object" };
+  if (profile.mode === "provider_json_object") {
+    return {
+      mode: "json_object",
+      name: "cita_turn_understanding",
+      schema: TURN_UNDERSTANDING_SCHEMA,
+    };
+  }
   return {
     mode: "prompt_json",
+    name: "cita_turn_understanding",
+    schema: TURN_UNDERSTANDING_SCHEMA,
     sendJsonObjectHint: profile.requestHints.sendJsonObject,
   };
 }
@@ -209,6 +217,7 @@ export class RemoteSemanticEngine implements CitaSemanticEngine {
             text: generated.text,
             finishReason: generated.finishReason,
             refusal: generated.refusal,
+            structuredValue: generated.structuredValue,
           };
         },
         parseSchema: parseTurnUnderstanding,

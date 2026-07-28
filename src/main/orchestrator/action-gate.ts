@@ -189,9 +189,13 @@ function structuredOutputFor(
       strict: true,
     };
   }
-  if (profile.mode === "provider_json_object") return { mode: "json_object" };
+  if (profile.mode === "provider_json_object") {
+    return { mode: "json_object", name: "action_decision", schema };
+  }
   return {
     mode: "prompt_json",
+    name: "action_decision",
+    schema,
     sendJsonObjectHint: profile.requestHints.sendJsonObject,
   };
 }
@@ -482,6 +486,7 @@ export async function runActionGate(input: RunActionGateInput): Promise<ActionGa
         text: response.text,
         finishReason: response.finishReason,
         refusal: response.refusal,
+        structuredValue: response.structuredValue,
       };
     },
     parseSchema: parseActionDecisionValue,

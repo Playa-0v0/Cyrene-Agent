@@ -268,6 +268,20 @@ interface ModelSettings {
   stickerEnabled: boolean;
   stickerSize: "small" | "standard" | "large";
   stickerSimilarityThreshold: number;
+  /** 整个聊天请求的超时（秒）。30-1800，默认 300。 */
+  chatRequestTimeoutSec: number;
+  /** 总轮数。5-30，默认 12。 */
+  maxIterations: number;
+  /** Plan 步骤失败后重规划次数。1-5，默认 2。 */
+  maxReplans: number;
+  /** 引用过期重新决策次数。0-3，默认 1。 */
+  maxRefresh: number;
+  /** 单次 LLM 调用超时（秒）。30-120，默认 75。 */
+  perCallTimeoutSec: number;
+  /** CITA 结构化输出重试总预算（秒）。4-30，默认 8。 */
+  citaRepairBudgetSec: number;
+  /** Action Gate 结构化输出重试总预算（秒）。5-40，默认 10。 */
+  actionGateRepairBudgetSec: number;
   vision?: {
     baseUrl: string;
     apiKey: string;
@@ -382,6 +396,8 @@ interface GeneralSettings {
   petAlwaysOnTop: boolean;
   petVisible: boolean;
   petZoom: number;
+  chatLineHeight: number;
+  chatParaSpacing: number;
   disableGpuElectron?: boolean;
   sidebarVisible: boolean;
   tasksVisible: boolean;
@@ -644,6 +660,13 @@ if (!window.settings) {
         runtimeSync: "off",
         stickerEnabled: true,
         stickerSize: "standard",
+        chatRequestTimeoutSec: 300,
+        maxIterations: 12,
+        maxReplans: 2,
+        maxRefresh: 1,
+        perCallTimeoutSec: 75,
+        citaRepairBudgetSec: 8,
+        actionGateRepairBudgetSec: 10,
       }),
     saveConfig: (c) => Promise.resolve(c as ModelSettings),
     getGeneral: () => Promise.resolve({
@@ -654,6 +677,8 @@ if (!window.settings) {
       petAlwaysOnTop: true,
       petVisible: true,
       petZoom: 1,
+      chatLineHeight: 1.75,
+      chatParaSpacing: 0.5,
       sidebarVisible: true,
       tasksVisible: true,
       launchAtLogin: false,
@@ -802,6 +827,17 @@ const visionFieldsWrap = document.getElementById("vision-fields-wrap") as HTMLEl
 const testVisionBtn = document.getElementById("test-vision-btn") as HTMLButtonElement;
 const visionTestStatus = document.getElementById("vision-test-status") as HTMLElement;
 
+// 高级运行设置
+const chatRequestTimeoutSecInput = document.getElementById("chat-request-timeout-sec") as HTMLInputElement;
+const maxIterationsInput = document.getElementById("max-iterations") as HTMLInputElement;
+const maxReplansInput = document.getElementById("max-replans") as HTMLInputElement;
+const maxRefreshInput = document.getElementById("max-refresh") as HTMLInputElement;
+const perCallTimeoutSecInput = document.getElementById("per-call-timeout-sec") as HTMLInputElement;
+const citaRepairBudgetSecInput = document.getElementById("cita-repair-budget-sec") as HTMLInputElement;
+const actionGateRepairBudgetSecInput = document.getElementById("action-gate-repair-budget-sec") as HTMLInputElement;
+const advancedToggle = document.getElementById("advanced-toggle") as HTMLButtonElement;
+const advancedFieldsWrap = document.getElementById("advanced-fields-wrap") as HTMLElement;
+
 // 渲染端内存缓存：保存每个厂商上一次填写的 baseUrl / model / apiKey
 // 切厂商时从这里读，保存时同步进去；持久化由 main 进程的 saveModelSettings 负责（perProvider 字段）。
 const providerProfileCache: Record<string, ProviderProfile> = {};
@@ -822,6 +858,10 @@ const petAlwaysOnTopInput = document.getElementById("pet-always-on-top") as HTML
 const petVisibleInput = document.getElementById("pet-visible") as HTMLInputElement;
 const petZoomInput = document.getElementById("pet-zoom") as HTMLInputElement;
 const petZoomVal = document.getElementById("pet-zoom-val") as HTMLElement;
+const chatLineHeightInput = document.getElementById("chat-line-height") as HTMLInputElement;
+const chatLineHeightVal = document.getElementById("chat-line-height-val") as HTMLElement;
+const chatParaSpacingInput = document.getElementById("chat-para-spacing") as HTMLInputElement;
+const chatParaSpacingVal = document.getElementById("chat-para-spacing-val") as HTMLElement;
 const launchAtLoginInput = document.getElementById("launch-at-login") as HTMLInputElement;
 const uiThemeSelect = document.getElementById("ui-theme-select") as HTMLElement;
 const uiFontCurrent = document.getElementById("ui-font-current") as HTMLElement;
@@ -1522,6 +1562,13 @@ async function loadConfig(): Promise<void> {
     const threshold = cfg.stickerSimilarityThreshold ?? 0.55;
     stickerThresholdInput.value = String(threshold);
     stickerThresholdVal.textContent = threshold.toFixed(2);
+    chatRequestTimeoutSecInput.value = String(cfg.chatRequestTimeoutSec ?? 300);
+    maxIterationsInput.value = String(cfg.maxIterations ?? 12);
+    maxReplansInput.value = String(cfg.maxReplans ?? 2);
+    maxRefreshInput.value = String(cfg.maxRefresh ?? 1);
+    perCallTimeoutSecInput.value = String(cfg.perCallTimeoutSec ?? 75);
+    citaRepairBudgetSecInput.value = String(cfg.citaRepairBudgetSec ?? 8);
+    actionGateRepairBudgetSecInput.value = String(cfg.actionGateRepairBudgetSec ?? 10);
     applyFcOptimizeSelection(cfg.optimizeFirstRound, cfg.disableLangGraph);
     toggleEnableThinking.checked = cfg.thinkingOverride === 1;
     toggleDisableThinking.checked = cfg.thinkingOverride === -1;
@@ -1561,6 +1608,12 @@ async function loadGeneralSettings(): Promise<void> {
     petVisibleInput.checked = cfg.petVisible;
     petZoomInput.value = String(cfg.petZoom ?? 1);
     petZoomVal.textContent = Math.round((cfg.petZoom ?? 1) * 100) + "%";
+    chatLineHeightInput.value = String(cfg.chatLineHeight ?? 1.75);
+    chatLineHeightVal.textContent = (cfg.chatLineHeight ?? 1.75).toFixed(2);
+    document.documentElement.style.setProperty("--rb-chat-line-height", String(cfg.chatLineHeight ?? 1.75));
+    chatParaSpacingInput.value = String(cfg.chatParaSpacing ?? 0.5);
+    chatParaSpacingVal.textContent = (cfg.chatParaSpacing ?? 0.5).toFixed(2) + "em";
+    document.documentElement.style.setProperty("--rb-chat-para-spacing", (cfg.chatParaSpacing ?? 0.5) + "em");
     disableGpuInput.checked = cfg.disableGpuElectron ?? false;
     sidebarVisibleInput.checked = cfg.sidebarVisible ?? true;
     tasksVisibleInput.checked = cfg.tasksVisible ?? true;
@@ -1739,6 +1792,23 @@ stickerEnabledInput.addEventListener("change", () => {
   setCyreneSaveStatus("有未保存的更改");
 });
 
+// 高级运行设置折叠
+advancedToggle.addEventListener("click", () => {
+  const expanded = advancedToggle.getAttribute("aria-expanded") === "true";
+  const next = !expanded;
+  advancedToggle.setAttribute("aria-expanded", String(next));
+  if (next) advancedFieldsWrap.removeAttribute("hidden");
+  else advancedFieldsWrap.setAttribute("hidden", "");
+});
+
+// 任何高级字段改动都标记"有未保存的更改"
+[
+  chatRequestTimeoutSecInput, maxIterationsInput, maxReplansInput, maxRefreshInput,
+  perCallTimeoutSecInput, citaRepairBudgetSecInput, actionGateRepairBudgetSecInput,
+].forEach((el) => {
+  el.addEventListener("input", () => setCyreneSaveStatus("有未保存的更改"));
+});
+
 stickerSizeSelect.querySelectorAll<HTMLButtonElement>(".option-block").forEach((button) => {
   button.addEventListener("click", () => {
     const value = button.dataset.value;
@@ -1850,6 +1920,19 @@ petZoomInput.addEventListener("input", () => {
 petZoomInput.addEventListener("change", () => {
   window.settings?.setPetZoom(Number(petZoomInput.value));
   setAppearanceSaveStatus("已应用", "is-ok");
+});
+
+// 行间距滑块
+chatLineHeightInput.addEventListener("input", () => {
+  const val = Number(chatLineHeightInput.value);
+  chatLineHeightVal.textContent = val.toFixed(2);
+  document.documentElement.style.setProperty("--rb-chat-line-height", String(val));
+});
+// 段间距滑块
+chatParaSpacingInput.addEventListener("input", () => {
+  const val = Number(chatParaSpacingInput.value);
+  chatParaSpacingVal.textContent = val.toFixed(2) + "em";
+  document.documentElement.style.setProperty("--rb-chat-para-spacing", val + "em");
 });
 
 uiThemeSelect.querySelectorAll<HTMLButtonElement>(".option-block").forEach((button) => {
@@ -2972,6 +3055,8 @@ appearanceForm.addEventListener("submit", async (e) => {
       petAlwaysOnTop: petAlwaysOnTopInput.checked,
       petVisible: petVisibleInput.checked,
       petZoom: Number(petZoomInput.value),
+      chatLineHeight: Number(chatLineHeightInput.value),
+      chatParaSpacing: Number(chatParaSpacingInput.value),
     }));
     setAppearanceSaveStatus("已保存", "is-ok");
   } catch {
@@ -3004,7 +3089,26 @@ cyrenePanel.addEventListener("submit", async (e) => {
   e.preventDefault();
   setCyreneSaveStatus("保存中…");
   try {
-    await window.settings!.saveConfig({ runtimeSync: getRuntimeSyncValue(), stickerEnabled: stickerEnabledInput.checked, stickerSize: getStickerSizeValue(), stickerSimilarityThreshold: parseFloat(stickerThresholdInput.value) });
+    const parsedTimeoutSec = Math.max(30, Math.min(1800, parseInt(chatRequestTimeoutSecInput.value, 10) || 300));
+    const parsedMaxIterations = Math.max(5, Math.min(30, parseInt(maxIterationsInput.value, 10) || 12));
+    const parsedMaxReplans = Math.max(1, Math.min(5, parseInt(maxReplansInput.value, 10) || 2));
+    const parsedMaxRefresh = Math.max(0, Math.min(3, parseInt(maxRefreshInput.value, 10) || 1));
+    const parsedPerCallSec = Math.max(30, Math.min(120, parseInt(perCallTimeoutSecInput.value, 10) || 75));
+    const parsedCitaSec = Math.max(4, Math.min(30, parseInt(citaRepairBudgetSecInput.value, 10) || 8));
+    const parsedAgSec = Math.max(5, Math.min(40, parseInt(actionGateRepairBudgetSecInput.value, 10) || 10));
+    await window.settings!.saveConfig({
+      runtimeSync: getRuntimeSyncValue(),
+      stickerEnabled: stickerEnabledInput.checked,
+      stickerSize: getStickerSizeValue(),
+      stickerSimilarityThreshold: parseFloat(stickerThresholdInput.value),
+      chatRequestTimeoutSec: parsedTimeoutSec,
+      maxIterations: parsedMaxIterations,
+      maxReplans: parsedMaxReplans,
+      maxRefresh: parsedMaxRefresh,
+      perCallTimeoutSec: parsedPerCallSec,
+      citaRepairBudgetSec: parsedCitaSec,
+      actionGateRepairBudgetSec: parsedAgSec,
+    });
     setCyreneSaveStatus("已保存", "is-ok");
   } catch {
     setCyreneSaveStatus("保存失败", "is-error");

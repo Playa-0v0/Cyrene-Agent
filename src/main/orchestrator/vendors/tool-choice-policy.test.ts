@@ -41,12 +41,12 @@ describe("resolveToolChoicePolicy", () => {
 
   test("chooses the strongest available mode instead of assuming named support", () => {
     expect(resolveToolChoicePolicy({
-      providerId: "required-or-auto", model: "m", transport: "openai",
+      providerId: "qwen", model: "qwen3-7b", transport: "openai",
       reasoning: { mode: "off" }, requestedToolName: "music_search",
       supportedModes: ["required", "auto"],
     })).toEqual({ kind: "required" });
     expect(resolveToolChoicePolicy({
-      providerId: "omit-only", model: "m", transport: "openai",
+      providerId: "qwen", model: "qwen3-7b", transport: "openai",
       reasoning: { mode: "off" }, requestedToolName: "music_search",
       supportedModes: ["omit"],
     })).toEqual({ kind: "omit" });

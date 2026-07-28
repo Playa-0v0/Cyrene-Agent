@@ -8,6 +8,8 @@ export interface AppearanceSettingsInput {
   petAlwaysOnTop: boolean;
   petVisible: boolean;
   petZoom: number;
+  chatLineHeight: number;
+  chatParaSpacing: number;
 }
 
 export function buildAppearanceSettingsPatch(input: AppearanceSettingsInput): AppearanceSettingsInput {

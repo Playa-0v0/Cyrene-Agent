@@ -4,7 +4,7 @@
  * main.ts 只从 `./markdown/init` 导入，不直接依赖内部模块。
  */
 
-export { renderMarkdown, escapeHtml, getMd } from "./markdown-renderer";
+export { renderMarkdown, escapeHtml, getMd, MARKDOWN_PARSE_LIMIT, MESSAGE_CHAR_LIMIT, RENDER_VERSION } from "./markdown-renderer";
 export { initCodeBlockController } from "./code-block-controller";
 export { normalizeLang, getLanguageDisplayName } from "./language-normalizer";
 export { createStreamingMarkdownSession } from "./streaming-markdown-session";

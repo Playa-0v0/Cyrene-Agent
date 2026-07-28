@@ -154,10 +154,14 @@ function extractNativeFcTools(adapter: FakeAdapter): string[] {
 }
 
 beforeEach(() => {
+  process.env.CYRENE_LEGACY_STRUCTURED_OUTPUT = "1";
   vi.spyOn(contextRefRegistry, "resolve").mockImplementation((() => ({})) as never);
   globalThis.fetch = vi.fn(async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  delete process.env.CYRENE_LEGACY_STRUCTURED_OUTPUT;
+  vi.restoreAllMocks();
+});
 
 // ── 测试 ──────────────────────────────────
 

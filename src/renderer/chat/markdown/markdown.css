@@ -131,16 +131,58 @@
   text-decoration: underline;
 }
 
-/* ── 通用段落/标题/列表 ──────────────────────────────────── */
-.msg__bubble p {
-  margin: 6px 0;
-  line-height: 1.6;
+/* ── Markdown 容器基础 ───────────────────────────────────── */
+/* 覆盖气泡的 white-space: pre-wrap，避免标签间换行文本节点被渲染 */
+.msg__bubble {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
+/* 流式阶段：固定宽度，防止公式/代码块因气泡变宽而移动 */
+.msg__bubble.is-streaming {
+  width: min(42rem, 100%);
+}
+
+/* 含复杂内容的终态消息：保持稳定宽度 */
+.msg__bubble.has-rich-content {
+  width: min(42rem, 100%);
+}
+
+/* ── 清除浏览器默认块级间距，统一用 > * + * 控制 ──────── */
+.msg__bubble > * {
+  margin-block: 0;
+}
+
+/* 相邻块级元素之间的统一间距 */
+.msg__bubble > * + * {
+  margin-top: var(--rb-chat-para-spacing, 0.5em);
+}
+
+/* ── 段落 ──────────────────────────────────────────────── */
+/* 只限制正文节点，不影响 KaTeX 内部（让 KaTeX 用自己的字体指标） */
+.msg__bubble > p,
+.msg__bubble > ul,
+.msg__bubble > ol,
+.msg__bubble > blockquote,
+.msg__bubble > pre,
+.msg__bubble > h1,
+.msg__bubble > h2,
+.msg__bubble > h3,
+.msg__bubble > h4 {
+  line-height: var(--rb-chat-line-height, 1.75);
+}
+
+/* 列表项内的正文 */
+.msg__bubble li {
+  line-height: var(--rb-chat-line-height, 1.75);
+}
+
+/* 不让 .msg__bubble 通配选择器作用到 KaTeX 内部 */
+
+/* ── 标题 ──────────────────────────────────────────────── */
 .msg__bubble h1,
 .msg__bubble h2,
 .msg__bubble h3 {
-  margin: 16px 0 8px;
   color: var(--rb-text-strong);
   line-height: 1.3;
 }
@@ -149,21 +191,32 @@
 .msg__bubble h2 { font-size: 1.15em; }
 .msg__bubble h3 { font-size: 1.05em; }
 
+/* ── 列表 ──────────────────────────────────────────────── */
 .msg__bubble ul,
 .msg__bubble ol {
-  margin: 6px 0;
-  padding-left: 24px;
+  padding-left: 1.35em;
 }
 
 .msg__bubble li {
-  margin: 3px 0;
-  line-height: 1.5;
+  margin: 0.12em 0;
+  line-height: 1.65;
+}
+
+/* 列表项内如果有段落，不要重新撑开 */
+.msg__bubble li > p {
+  margin: 0;
 }
 
 .msg__bubble hr {
   border: none;
   border-top: 1px solid var(--md-table-border);
   margin: 12px 0;
+}
+
+/* ── 纯文本降级模式 ─────────────────────────────────────── */
+/* 当 markdown-it 解析失败或超长文本降级时，保留换行显示 */
+.msg__bubble[data-md-mode="text"] {
+  white-space: pre-wrap;
 }
 
 /* ── 代码块滚动条 ────────────────────────────────────────── */
@@ -211,12 +264,41 @@
   font-size: 1.05em;
 }
 
-/* 块级公式居中 */
-.msg__bubble .katex-display {
-  margin: 12px 0;
+/* 块级公式：外层负责垂直布局和自然高度 */
+/* margin 设为 0，让 > * + * 规则统一控制间距 */
+.msg__bubble .math-block {
+  display: block;
+  margin: 0;
+  padding: 0.4em 0;
+  overflow: visible;
+}
+
+/* 内层只负责横向滚动 */
+.msg__bubble .math-block__scroll {
+  display: block;
+  max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 4px 0;
+  padding-block: 0.2em;
+}
+
+/* KaTeX 自己负责真实高度 */
+.msg__bubble .math-block .katex-display {
+  margin: 0;
+  overflow: visible;
+  text-align: left;             /* 左对齐：避免流式时公式随气泡宽度变化而移动 */
+}
+
+.msg__bubble .math-block .katex-display > .katex {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+}
+
+
+/* 块级公式不应该被 > * + * 再叠加 margin */
+.msg__bubble .katex-display + * {
+  margin-top: var(--rb-chat-para-spacing, 0.5em);
 }
 
 /* KaTeX 错误（无效 LaTeX）显示为红色提示 */

@@ -80,14 +80,14 @@ describe("OpenAICompatAdapter", () => {
     expect(JSON.parse(req.body).tool_choice).toBe("auto");
   });
 
-  test("maps a must-call intent to named OpenAI tool_choice when supported", () => {
-    const adapter = new OpenAICompatAdapter("test-openai", capability);
+  test("maps a must-call intent to named OpenAI tool_choice when reasoning is off", () => {
+    const adapter = new OpenAICompatAdapter("qwen", { ...capability, id: "qwen" });
     const req = adapter.buildRequest({
-      model: "m",
+      model: "qwen3-7b",
       messages: [{ role: "user", content: "搜歌" }],
       tools: [{ name: "music_search", description: "搜索", parameters: { type: "object" } }],
       toolChoiceIntent: { mode: "must_call", toolName: "music_search" },
-    }, { provider: "p", baseUrl: "https://e.test/v1", model: "m", apiKey: "sk-test" });
+    }, { provider: "qwen", baseUrl: "https://e.test/v1", model: "qwen3-7b", apiKey: "sk-test", reasoning: { mode: "off" } });
 
     expect(JSON.parse(req.body).tool_choice).toEqual({
       type: "function",

@@ -16,6 +16,8 @@ export interface StructuredGenerationResponse {
   text: string;
   finishReason?: string;
   refusal?: string;
+  /** Already parsed by LangChain; when present, legacy JSON candidate extraction is bypassed. */
+  structuredValue?: unknown;
 }
 
 export interface StructuredRepairContext {
@@ -187,12 +189,14 @@ export async function runStructuredOutput<T, TRequest>(
     if (normalizedFinish === "truncated") {
       errors = [validationError("format", "TRUNCATED_OUTPUT", "repair")];
     } else {
-      const candidates = extractJsonCandidates(response.text);
-      candidateCount = candidates.length;
+      const candidateValues = response.structuredValue !== undefined
+        ? [response.structuredValue]
+        : extractJsonCandidates(response.text).map((candidate) => candidate.value);
+      candidateCount = candidateValues.length;
       const valid: T[] = [];
-      for (const candidate of candidates) {
+      for (const candidate of candidateValues) {
         try {
-          valid.push(input.parseSchema(candidate.value));
+          valid.push(input.parseSchema(candidate));
         } catch {
           // Schema error details stay local; raw model output is never returned to repair.
         }
@@ -200,8 +204,8 @@ export async function runStructuredOutput<T, TRequest>(
       validCandidateCount = valid.length;
       if (valid.length === 0) {
         errors = [validationError(
-          candidates.length === 0 ? "format" : "schema",
-          candidates.length === 0 ? "NO_JSON_OBJECT" : "NO_SCHEMA_VALID_OBJECT",
+          candidateValues.length === 0 ? "format" : "schema",
+          candidateValues.length === 0 ? "NO_JSON_OBJECT" : "NO_SCHEMA_VALID_OBJECT",
           "repair",
         )];
       } else if (valid.length > 1) {

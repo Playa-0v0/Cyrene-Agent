@@ -2040,6 +2040,40 @@ body {
 .vision-config-heading h2 { margin: 0 0 4px; font-size: 16px; }
 .vision-config-heading p { margin: 0; font-size: 12px; opacity: 0.7; }
 
+/* 高级运行设置折叠标题 */
+.advanced-toggle {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  margin-bottom: 16px;
+  font: inherit;
+}
+.advanced-toggle:focus-visible {
+  outline: 2px solid var(--rb-accent, #4ea1ff);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.advanced-toggle-text { flex: 1; min-width: 0; }
+.advanced-toggle-text h2 { margin: 0 0 4px; font-size: 16px; }
+.advanced-toggle-text p { margin: 0; font-size: 12px; opacity: 0.7; }
+.advanced-chevron {
+  font-size: 14px;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+  margin-left: auto;
+}
+.advanced-toggle[aria-expanded="false"] .advanced-chevron {
+  transform: rotate(-90deg);
+}
+#advanced-fields-wrap[hidden] { display: none; }
+
 /* 多模态开关行 */
 .vision-multimodal-row {
   display: flex;

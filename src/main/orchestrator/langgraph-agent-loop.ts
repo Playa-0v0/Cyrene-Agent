@@ -11,6 +11,8 @@ import {
   classifyStructuredOutputEndpoint,
   resolveStructuredOutputProfile,
 } from "./structured-output/profiles";
+import { dispatchChatGeneration } from "./structured-output/dispatcher";
+import { invokeLangChainStructured } from "./structured-output/langchain-invoker";
 import { ExecutionLedger } from "./execution-ledger";
 import { resolveNativeToolCall } from "./native-function-calling";
 import { normalizeToolExecutionOutcome } from "./tool-outcome-normalizer";
@@ -40,7 +42,13 @@ import type { ToolDefinition } from "./tool-registry";
 import { controlledInputType, controlledInputKind } from "./tool-registry";
 import type { ToolCallResult, ToolExecutionOutcome } from "./types";
 import type { TwoPhaseEvent, TwoPhaseFcResult, AgentLoopSettings } from "./two-phase-fc-loop";
-import type { ChatMessage, ChatRequest, ChatVendorAdapter, ToolCall } from "./vendors/types";
+import type {
+  ChatMessage,
+  ChatRequest,
+  ChatResponse,
+  ChatVendorAdapter,
+  ToolCall,
+} from "./vendors/types";
 import { perf } from "../perf-trace";
 import {
   debugLog,
@@ -110,7 +118,6 @@ async function callAdapter(
 ): Promise<ReturnType<ChatVendorAdapter["parseResponse"]>> {
   if (signal?.aborted) throw new Error("E_AGENT_GRAPH_CANCELLED");
   const effectiveRequest = adapter.applyCacheHints?.(request, settings) ?? request;
-  const http = adapter.buildRequest(effectiveRequest, settings);
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
@@ -119,25 +126,83 @@ async function callAdapter(
     controller.abort();
   }, timeoutMs);
   try {
-    const fetchTimer = perf.begin(`llm_http_fetch[${adapter.id}]`);
-    const response = await fetch(http.url, {
-      method: "POST",
-      headers: http.headers,
-      body: http.body,
-      signal: controller.signal,
+    return await dispatchChatGeneration<ChatResponse>({
+      request: effectiveRequest,
+      provider: adapter.id,
+      endpointKind: classifyStructuredOutputEndpoint({
+        providerId: adapter.id,
+        configuredBaseUrl: settings.baseUrl,
+        officialBaseUrl: adapter.capability.baseUrl,
+      }),
+      langchain: async () => {
+        const generated = await invokeLangChainStructured(
+          effectiveRequest,
+          {
+            ...settings,
+            provider: adapter.id,
+            explicitTransport: adapter.transport,
+          },
+          controller.signal,
+        );
+        return {
+          assistantMessage: { role: "assistant", content: generated.text },
+          text: generated.text,
+          toolCalls: [],
+          finishReason: generated.finishReason,
+          raw: { backend: "langchain" },
+          structuredValue: generated.structuredValue,
+        };
+      },
+      legacy: async () => {
+        const http = adapter.buildRequest(effectiveRequest, settings);
+        const fetchTimer = perf.begin(`llm_http_fetch[${adapter.id}]`);
+        const response = await fetch(http.url, {
+          method: "POST",
+          headers: http.headers,
+          body: http.body,
+          signal: controller.signal,
+        });
+        fetchTimer.end(`status=${response.status}`);
+        if (!response.ok) {
+          const body = await response.text().catch(() => "");
+          // 结构化诊断日志：打印最终 wire-level 请求关键字段 + HTTP 响应
+          // 不打印 API Key、完整 messages、完整工具 schema
+          try {
+            const wireBody = JSON.parse(http.body as string) as Record<string, unknown>;
+            console.error("[LLM-HTTP] failed request", {
+              provider: adapter.id,
+              model: wireBody.model,
+              tool_choice: wireBody.tool_choice,
+              thinking: wireBody.thinking,
+              enable_thinking: wireBody.enable_thinking,
+              reasoning_effort: wireBody.reasoning_effort,
+              toolNames: Array.isArray(wireBody.tools)
+                ? (wireBody.tools as Array<Record<string, unknown>>).map(
+                    (t) => (t.function as Record<string, unknown> | undefined)?.name ?? t.name,
+                  )
+                : undefined,
+              messageCount: Array.isArray(wireBody.messages) ? wireBody.messages.length : undefined,
+              httpStatus: response.status,
+              responseBody: body.slice(0, 500),
+            });
+          } catch {
+            console.error("[LLM-HTTP] failed request (non-JSON body)", {
+              provider: adapter.id,
+              httpStatus: response.status,
+              responseBody: body.slice(0, 500),
+            });
+          }
+          throw new AgentRuntimeError(
+            "E_MODEL_REQUEST_FAILED",
+            `模型请求失败：HTTP ${response.status}${body ? ` - ${body.slice(0, 200)}` : ""}`,
+          );
+        }
+        const parseTimer = perf.begin("llm_parse_response");
+        const result = adapter.parseResponse(await response.json());
+        parseTimer.end();
+        return result;
+      },
     });
-    fetchTimer.end(`status=${response.status}`);
-    if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new AgentRuntimeError(
-        "E_MODEL_REQUEST_FAILED",
-        `模型请求失败：HTTP ${response.status}${body ? ` - ${body.slice(0, 200)}` : ""}`,
-      );
-    }
-    const parseTimer = perf.begin("llm_parse_response");
-    const result = adapter.parseResponse(await response.json());
-    parseTimer.end();
-    return result;
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", abort);
@@ -796,9 +861,16 @@ export async function runLangGraphAgentLoop(options: LangGraphAgentLoopOptions):
               tool: selectedTool,
               ...(lastError instanceof Error ? { protocolFeedback: lastError.message } : {}),
             }, async (request) => {
-              const response = await perf.track("execute_native_tool_llm", () => invokeWithFallback(() => request));
-              trackUsage(response.usage);
-              return response;
+              try {
+                const response = await perf.track("execute_native_tool_llm", () => invokeWithFallback(() => request));
+                trackUsage(response.usage);
+                return response;
+              } catch (err) {
+                // HTTP 失败的详细诊断已在 callAdapter 中打印（[LLM-HTTP] failed request）
+                // 这里只标记 Native FC 上下文
+                console.error(`[NativeFC] invoke failed: tool=${selectedTool.id} model=${request.model} tools=${request.tools?.length ?? 0}`);
+                throw err;
+              }
             });
             args = parseAndValidateToolCallArguments(
               resolved,

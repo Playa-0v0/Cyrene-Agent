@@ -39,7 +39,7 @@
         <button type="button" class="nav-item" data-section="disclaimer"><span><svg class="nav-item__icon" width="18" height="18" viewBox="0 0 48 48" fill="none" aria-hidden="true"><title>免责声明</title><rect x="13" y="10" width="28" height="34" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M35 10V4H8C7.44772 4 7 4.44772 7 5V38H13" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 22H33" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 30H33" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>免责声明</button>
       </nav>
 
-      <footer class="settings-nav__footer">昔涟 v0.8.9</footer>
+      <footer class="settings-nav__footer">昔涟 v0.9.0</footer>
     </aside>
 
     <main class="settings-main">
@@ -211,6 +211,51 @@
 
               <button type="button" class="save-btn save-btn--ghost" id="test-vision-btn">测试视觉模型</button>
               <div class="save-status" id="vision-test-status"></div>
+            </div>
+          </div>
+
+          <!-- 高级运行设置 -->
+          <div class="vision-config-section">
+            <button type="button" class="advanced-toggle" id="advanced-toggle" aria-expanded="true" aria-controls="advanced-fields-wrap">
+              <span class="vision-config-icon" aria-hidden="true">⏱</span>
+              <div class="advanced-toggle-text">
+                <h2>高级运行设置</h2>
+                <p>调整请求时间、轮数、重试预算。推理模型较慢时建议增大超时。</p>
+              </div>
+              <span class="advanced-chevron" aria-hidden="true">▾</span>
+            </button>
+            <div id="advanced-fields-wrap">
+              <div class="form-grid vision-fields">
+                <label class="field">
+                  <span>请求总超时（秒）</span>
+                  <input id="chat-request-timeout-sec" type="number" min="30" max="1800" step="10" placeholder="300" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>总轮数</span>
+                  <input id="max-iterations" type="number" min="5" max="30" step="1" placeholder="12" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>重规划次数</span>
+                  <input id="max-replans" type="number" min="1" max="5" step="1" placeholder="2" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>引用过期重试</span>
+                  <input id="max-refresh" type="number" min="0" max="3" step="1" placeholder="1" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>单次模型超时（秒）</span>
+                  <input id="per-call-timeout-sec" type="number" min="30" max="120" step="5" placeholder="75" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>CITA 重试预算（秒）</span>
+                  <input id="cita-repair-budget-sec" type="number" min="4" max="30" step="1" placeholder="8" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>Action Gate 重试预算（秒）</span>
+                  <input id="action-gate-repair-budget-sec" type="number" min="5" max="40" step="1" placeholder="10" autocomplete="off" />
+                </label>
+              </div>
+              <p class="vision-hint">ⓘ 改了之后保存即可，下次请求生效。下游接线将在下一阶段完成</p>
             </div>
           </div>
 
@@ -533,6 +578,20 @@
                   <button id="ui-font-reset" type="button" class="ghost-btn" hidden>恢复默认</button>
                 </div>
               </div>
+              <label class="setting-row">
+                <div><strong>行间距</strong><span>调整消息气泡内文字的行高（1.2 ~ 2.0）。</span></div>
+                <div class="range-row">
+                  <input id="chat-line-height" type="range" min="1.2" max="2.0" step="0.05" value="1.75" />
+                  <span id="chat-line-height-val" class="range-val">1.75</span>
+                </div>
+              </label>
+              <label class="setting-row">
+                <div><strong>段间距</strong><span>调整消息气泡内段落之间的间距（0.2 ~ 1.2em）。</span></div>
+                <div class="range-row">
+                  <input id="chat-para-spacing" type="range" min="0.2" max="1.2" step="0.05" value="0.5" />
+                  <span id="chat-para-spacing-val" class="range-val">0.5em</span>
+                </div>
+              </label>
               <div class="appearance-icon-control">
                 <div class="appearance-font-control__copy"><strong>桌面图标</strong><small>切换系统托盘与应用窗口图标。</small></div>
                 <div class="appearance-icon-options" id="ui-icon-select" role="radiogroup" aria-label="桌面图标">
@@ -663,7 +722,7 @@
             <div class="setting-row setting-row--about">
               <div>
                 <strong>关于</strong>
-                <span>昔涟 v0.8.9 · 轻量情感陪伴桌面 Agent</span>
+                <span>昔涟 v0.9.0 · 轻量情感陪伴桌面 Agent</span>
               </div>
             </div>
           </div>

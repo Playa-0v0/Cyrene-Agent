@@ -62,12 +62,18 @@ import { validateSearchApiKey } from "./orchestrator/search-backend-filter";
 import { indexConversationTurn } from "./orchestrator/history-tools";
 import { buildToneInjection } from "./orchestrator/tone-injector";
 import { getAdapter, buildVendorUrl, getAdapterForConfig, createSseReader } from "./orchestrator/vendors";
-import type { StructuredOutputRequest, VendorConfig } from "./orchestrator/vendors";
+import type {
+  ChatResponse,
+  StructuredOutputRequest,
+  VendorConfig,
+} from "./orchestrator/vendors";
 import {
   classifyStructuredOutputEndpoint,
   resolveStructuredOutputProfile,
 } from "./orchestrator/structured-output/profiles";
 import { normalizeFinishReason } from "./orchestrator/structured-output/finish-reason";
+import { dispatchChatGeneration } from "./orchestrator/structured-output/dispatcher";
+import { invokeLangChainStructured } from "./orchestrator/structured-output/langchain-invoker";
 import { testVendorConnection } from "./orchestrator/vendors/test-connection";
 import { migrateLegacyMinimaxDefaults } from "./orchestrator/vendors/minimax-defaults";
 import { getCapability, getCapabilityOrOpenAI } from "./orchestrator/vendors/capabilities";
@@ -570,6 +576,20 @@ interface ModelSettings {
   stickerEnabled: boolean;
   stickerSize: StickerSize;
   stickerSimilarityThreshold: number;
+  /** 整个聊天请求的总超时（秒）。30-1800，默认 300。 */
+  chatRequestTimeoutSec: number;
+  /** 总轮数。5-30，默认 12。 */
+  maxIterations: number;
+  /** Plan 步骤失败后重规划次数。1-5，默认 2。 */
+  maxReplans: number;
+  /** 引用过期重新决策次数。0-3，默认 1。 */
+  maxRefresh: number;
+  /** 单次 LLM 调用超时（秒）。30-120，默认 75。 */
+  perCallTimeoutSec: number;
+  /** CITA 结构化输出重试总预算（秒）。4-30，默认 8。 */
+  citaRepairBudgetSec: number;
+  /** Action Gate 结构化输出重试总预算（秒）。5-40，默认 10。 */
+  actionGateRepairBudgetSec: number;
   rerankerMode: "light" | "standard" | "none";
   embeddingModel: "minilm" | "bgem3";
   // 视觉模型配置（可选）。undefined 或未启用 = 不支持看图，read_image 诚实拒绝。
@@ -841,6 +861,13 @@ const DEFAULT_MODEL_SETTINGS: ModelSettings = {
   stickerEnabled: true,
   stickerSize: "standard",
   stickerSimilarityThreshold: 0.55,
+  chatRequestTimeoutSec: 300,
+  maxIterations: 12,
+  maxReplans: 2,
+  maxRefresh: 1,
+  perCallTimeoutSec: 75,
+  citaRepairBudgetSec: 8,
+  actionGateRepairBudgetSec: 10,
   rerankerMode: "light",
   embeddingModel: "minilm",
   multimodal: false,
@@ -1139,6 +1166,28 @@ function normalizeModelSettings(input: Partial<ModelSettings> | null | undefined
     stickerSimilarityThreshold: typeof input?.stickerSimilarityThreshold === "number"
       ? Math.max(0.3, Math.min(0.9, input.stickerSimilarityThreshold))
       : 0.55,
+    chatRequestTimeoutSec: typeof input?.chatRequestTimeoutSec === "number"
+      && Number.isFinite(input.chatRequestTimeoutSec)
+      ? Math.max(30, Math.min(1800, Math.round(input.chatRequestTimeoutSec)))
+      : 300,
+    maxIterations: typeof input?.maxIterations === "number" && Number.isFinite(input.maxIterations)
+      ? Math.max(5, Math.min(30, Math.round(input.maxIterations)))
+      : 12,
+    maxReplans: typeof input?.maxReplans === "number" && Number.isFinite(input.maxReplans)
+      ? Math.max(1, Math.min(5, Math.round(input.maxReplans)))
+      : 2,
+    maxRefresh: typeof input?.maxRefresh === "number" && Number.isFinite(input.maxRefresh)
+      ? Math.max(0, Math.min(3, Math.round(input.maxRefresh)))
+      : 1,
+    perCallTimeoutSec: typeof input?.perCallTimeoutSec === "number" && Number.isFinite(input.perCallTimeoutSec)
+      ? Math.max(30, Math.min(120, Math.round(input.perCallTimeoutSec)))
+      : 75,
+    citaRepairBudgetSec: typeof input?.citaRepairBudgetSec === "number" && Number.isFinite(input.citaRepairBudgetSec)
+      ? Math.max(4, Math.min(30, Math.round(input.citaRepairBudgetSec)))
+      : 8,
+    actionGateRepairBudgetSec: typeof input?.actionGateRepairBudgetSec === "number" && Number.isFinite(input.actionGateRepairBudgetSec)
+      ? Math.max(5, Math.min(40, Math.round(input.actionGateRepairBudgetSec)))
+      : 10,
     rerankerMode: input?.rerankerMode === "standard" || input?.rerankerMode === "none" ? input.rerankerMode : "light",
     embeddingModel: input?.embeddingModel === "bgem3" ? "bgem3" : "minilm",
     vision: normalizeVisionConfig(rawVision),
@@ -2001,6 +2050,7 @@ async function callChatCompletionsNonStream(
   thinking?: string;
   finishReason: string;
   refusal?: string;
+  structuredValue?: unknown;
 }> {
   const cfg: VendorConfig = {
     provider: settings.provider,
@@ -2011,7 +2061,7 @@ async function callChatCompletionsNonStream(
     reasoning: reasoningOverride ?? settings.reasoning,
   };
   const adapter = getAdapterForConfig(cfg);
-  const http = adapter.buildRequest({
+  const chatRequest = {
     model: cfg.model,
     messages,
     ...(temperature !== undefined ? { temperature } : {}),
@@ -2019,7 +2069,7 @@ async function callChatCompletionsNonStream(
     ...(options?.structuredOutput ? { structuredOutput: options.structuredOutput } : {}),
     ...(options?.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
     ...(options?.extraBody ? { extraBody: options.extraBody } : {}),
-  }, cfg);
+  };
 
   const controller = new AbortController();
   const abort = (): void => controller.abort(signal?.reason);
@@ -2029,19 +2079,49 @@ async function callChatCompletionsNonStream(
   console.log(`[TIMING] ${label} START (non-stream) timeout=${timeoutMs}ms msgLen=${messages.length} sysLen=${messages[0]?.content?.length ?? 0}`);
 
   try {
-    const response = await fetch(http.url, {
-      method: "POST",
-      headers: http.headers,
-      body: http.body,
-      signal: controller.signal,
+    const parsed = await dispatchChatGeneration<ChatResponse>({
+      request: chatRequest,
+      provider: adapter.id,
+      endpointKind: classifyStructuredOutputEndpoint({
+        providerId: adapter.id,
+        configuredBaseUrl: cfg.baseUrl,
+        officialBaseUrl: adapter.capability.baseUrl,
+      }),
+      langchain: async () => {
+        const generated = await invokeLangChainStructured(
+          chatRequest,
+          {
+            ...cfg,
+            provider: adapter.id,
+            explicitTransport: adapter.transport,
+          },
+          controller.signal,
+        );
+        return {
+          assistantMessage: { role: "assistant" as const, content: generated.text },
+          text: generated.text,
+          toolCalls: [],
+          finishReason: generated.finishReason,
+          raw: { backend: "langchain" },
+          structuredValue: generated.structuredValue,
+        };
+      },
+      legacy: async () => {
+        const http = adapter.buildRequest(chatRequest, cfg);
+        const response = await fetch(http.url, {
+          method: "POST",
+          headers: http.headers,
+          body: http.body,
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({})) as Record<string, unknown>;
+          const errMsg = (errorData as { error?: { message?: string } }).error?.message;
+          throw new Error(errMsg || `模型请求失败：HTTP ${response.status}`);
+        }
+        return adapter.parseResponse(await response.json());
+      },
     });
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({})) as Record<string, unknown>;
-      const errMsg = (errorData as { error?: { message?: string } }).error?.message;
-      throw new Error(errMsg || `模型请求失败：HTTP ${response.status}`);
-    }
-    const json = await response.json();
-    const parsed = adapter.parseResponse(json);
     if (parsed.usage) {
       recordUsage(parsed.usage.input, parsed.usage.output, 1);
     }
@@ -2052,6 +2132,7 @@ async function callChatCompletionsNonStream(
       thinking: parsed.thinking,
       finishReason: parsed.finishReason,
       refusal: parsed.refusal,
+      structuredValue: parsed.structuredValue,
     };
   } catch (error) {
     const totalTime = Date.now() - startTime;
@@ -5019,9 +5100,15 @@ app.whenReady().then(async () => {
             strict: true,
           }
         : profile.mode === "provider_json_object"
-          ? { mode: "json_object" }
+          ? {
+              mode: "json_object",
+              name: "chat_social_atoms",
+              schema: SOCIAL_EXTRACTION_SCHEMA,
+            }
           : {
               mode: "prompt_json",
+              name: "chat_social_atoms",
+              schema: SOCIAL_EXTRACTION_SCHEMA,
               sendJsonObjectHint: profile.requestHints.sendJsonObject,
             };
       const response = await callChatCompletionsNonStream(

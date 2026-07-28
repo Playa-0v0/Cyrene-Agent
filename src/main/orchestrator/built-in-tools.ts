@@ -394,11 +394,22 @@ let weatherEnabledGetter: (() => boolean) | null = null;
 let weatherCardCallback: ((card: WeatherCardData) => void) | null = null;
 
 /** 天气卡片结构化数据（发给渲染端渲染 MBE 卡片用）。 */
+export interface WeatherForecastDay {
+  date: string;       // "7月29日"
+  weekDay: string;    // "周二"
+  textDay: string;    // "多云"
+  textNight: string;  // "晴"
+  hi: number;         // 最高温
+  lo: number;         // 最低温
+  windDir: string;    // 风向
+  windScale: string;  // 风力
+}
+
 export interface WeatherCardData {
   city: string;
   adm: string;
   temp: number;
-  feelsLike: number;
+  feelsLike?: number;
   text: string;
   icon: string;
   hi?: number;
@@ -406,14 +417,15 @@ export interface WeatherCardData {
   humidity: number;
   windDir: string;
   windScale: string;
-  precip: number;
-  pressure: number;
+  precip?: number;
+  pressure?: number;
   visibility?: number;
-  uv?: string;
+  uv?: number;
   aqi?: number;
   aqiText?: string;
   source: string;
   updateTime: string;
+  forecast?: WeatherForecastDay[];
 }
 
 /** WMO 天气代码 → emoji 图标。 */
@@ -509,12 +521,13 @@ async function omFetchWeather(city: string): Promise<string> {
   if (!loc) {
     return `[错误] 找不到城市"${city}"，请确认城市名（支持中文/拼音）。`;
   }
-  const params = [
+  const currentParams = [
     "temperature_2m", "relative_humidity_2m", "apparent_temperature",
     "precipitation", "weather_code", "wind_speed_10m", "wind_direction_10m",
-    "surface_pressure",
+    "surface_pressure", "uv_index", "visibility",
   ].join(",");
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=${params}`;
+  const dailyParams = ["temperature_2m_max", "temperature_2m_min", "weather_code", "wind_speed_10m_max", "wind_direction_10m_dominant"].join(",");
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=${currentParams}&daily=${dailyParams}&timezone=auto`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), WEATHER_TIMEOUT_MS);
   try {
@@ -525,6 +538,15 @@ async function omFetchWeather(city: string): Promise<string> {
         temperature_2m: number; relative_humidity_2m: number; apparent_temperature: number;
         precipitation: number; weather_code: number; wind_speed_10m: number;
         wind_direction_10m: number; surface_pressure: number;
+        uv_index: number; visibility: number;
+      };
+      daily?: {
+        time: string[];
+        temperature_2m_max: number[];
+        temperature_2m_min: number[];
+        weather_code: number[];
+        wind_speed_10m_max: number[];
+        wind_direction_10m_dominant: number[];
       };
     };
     const c = data.current;
@@ -533,6 +555,27 @@ async function omFetchWeather(city: string): Promise<string> {
     const windDir = omWindDir(c.wind_direction_10m);
     const adm = loc.admin1 ? `${loc.admin1}` : loc.country;
     const icon = weatherIconFromCode(c.weather_code);
+
+    // 解析 3 天预报（今天 + 未来 2 天）
+    const weekNames = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+    const forecast: WeatherForecastDay[] = [];
+    if (data.daily?.time) {
+      const d = data.daily;
+      const count = Math.min(d.time.length, 3);
+      for (let i = 0; i < count; i++) {
+        const dt = new Date(d.time[i] + "T00:00:00");
+        forecast.push({
+          date: `${dt.getMonth() + 1}月${dt.getDate()}日`,
+          weekDay: i === 0 ? "今天" : weekNames[dt.getDay()],
+          textDay: omWeatherCodeText(d.weather_code[i]),
+          textNight: omWeatherCodeText(d.weather_code[i]),
+          hi: Math.round(d.temperature_2m_max[i]),
+          lo: Math.round(d.temperature_2m_min[i]),
+          windDir: omWindDir(d.wind_direction_10m_dominant[i]),
+          windScale: `${Math.round(d.wind_speed_10m_max[i])}km/h`,
+        });
+      }
+    }
 
     const weatherData = {
       city: loc.name,
@@ -545,6 +588,8 @@ async function omFetchWeather(city: string): Promise<string> {
       windSpeed: `${c.wind_speed_10m}km/h`,
       precipitation: c.precipitation,
       pressure: Math.round(c.surface_pressure),
+      uv: c.uv_index,
+      visibility: Math.round(c.visibility / 1000), // m → km
       source: "Open-Meteo",
       updateTime: new Date().toLocaleString("zh-CN", { hour: "2-digit", minute: "2-digit", timeZone: currentUserTimezone() }),
     };
@@ -556,7 +601,10 @@ async function omFetchWeather(city: string): Promise<string> {
         feelsLike: weatherData.feelsLike, text: weatherData.weather, icon,
         humidity: weatherData.humidity, windDir: weatherData.windDirection,
         windScale: weatherData.windSpeed, precip: weatherData.precipitation,
-        pressure: weatherData.pressure, source: weatherData.source, updateTime: weatherData.updateTime,
+        pressure: weatherData.pressure, uv: weatherData.uv, visibility: weatherData.visibility,
+        source: weatherData.source, updateTime: weatherData.updateTime,
+        hi: forecast[0]?.hi, lo: forecast[0]?.lo,
+        forecast,
       });
     }
 
@@ -622,32 +670,67 @@ async function amapFetchWeather(city: string, key: string): Promise<string> {
   if (!district) {
     return `[错误] 找不到城市"${city}"，请确认城市名（支持中文，如"无锡"）。`;
   }
-  const url = `https://restapi.amap.com/v3/weather/weatherInfo?city=${district.adcode}&extensions=base&key=${key}`;
+
+  // 并行请求实况 + 预报
+  const baseUrl = `https://restapi.amap.com/v3/weather/weatherInfo?city=${district.adcode}&key=${key}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), WEATHER_TIMEOUT_MS);
   try {
-    const resp = await fetch(url, { signal: ctrl.signal });
-    if (!resp.ok) return `[错误] 天气查询失败：HTTP ${resp.status}`;
-    const data = await resp.json() as { status?: string; lives?: Array<{
+    const [baseResp, forecastResp] = await Promise.all([
+      fetch(`${baseUrl}&extensions=base`, { signal: ctrl.signal }),
+      fetch(`${baseUrl}&extensions=all`, { signal: ctrl.signal }),
+    ]);
+
+    // 解析实况
+    if (!baseResp.ok) return `[错误] 天气查询失败：HTTP ${baseResp.status}`;
+    const baseData = await baseResp.json() as { status?: string; lives?: Array<{
       province: string; city: string; weather: string; temperature: string;
       winddirection: string; windpower: string; humidity: string; reporttime: string;
     }> };
-    if (data.status !== "1" || !data.lives || data.lives.length === 0) {
-      return `[错误] 天气查询失败：高德返回 status=${data.status ?? "?"}`;
+    if (baseData.status !== "1" || !baseData.lives || baseData.lives.length === 0) {
+      return `[错误] 天气查询失败：高德返回 status=${baseData.status ?? "?"}`;
     }
-    const w = data.lives[0];
+    const w = baseData.lives[0];
     const icon = weatherIconFromText(w.weather);
+
+    // 解析预报
+    const forecast: WeatherForecastDay[] = [];
+    if (forecastResp.ok) {
+      const fcData = await forecastResp.json() as { status?: string; forecasts?: Array<{
+        city: string; adcode: string; province: string;
+        casts: Array<{
+          date: string; week: string; dayweather: string; nightweather: string;
+          daytemp: string; nighttemp: string; daywind: string; nightwind: string;
+          daypower: string; nightpower: string;
+        }>;
+      }> };
+      if (fcData.status === "1" && fcData.forecasts?.[0]?.casts) {
+        const weekMap: Record<string, string> = { "1": "周一", "2": "周二", "3": "周三", "4": "周四", "5": "周五", "6": "周六", "7": "周日" };
+        const today = new Date().toISOString().slice(0, 10);
+        for (const c of fcData.forecasts[0].casts) {
+          const dt = new Date(c.date + "T00:00:00");
+          forecast.push({
+            date: `${dt.getMonth() + 1}月${dt.getDate()}日`,
+            weekDay: c.date === today ? "今天" : (weekMap[c.week] ?? `周${c.week}`),
+            textDay: c.dayweather,
+            textNight: c.nightweather,
+            hi: Number(c.daytemp),
+            lo: Number(c.nighttemp),
+            windDir: c.daywind,
+            windScale: `${c.daypower}级`,
+          });
+        }
+      }
+    }
+
     const weatherData = {
       city: w.city,
       region: w.province,
       weather: w.weather,
       temperature: Number(w.temperature),
-      feelsLike: Number(w.temperature),
       humidity: Number(w.humidity),
       windDirection: w.winddirection,
       windSpeed: `${w.windpower}级`,
-      precipitation: 0,
-      pressure: 0,
       source: "高德天气",
       updateTime: w.reporttime.slice(11, 16) || new Date().toLocaleString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
     };
@@ -656,10 +739,12 @@ async function amapFetchWeather(city: string, key: string): Promise<string> {
     if (weatherCardCallback) {
       weatherCardCallback({
         city: weatherData.city, adm: weatherData.region, temp: weatherData.temperature,
-        feelsLike: weatherData.feelsLike, text: weatherData.weather, icon,
+        text: weatherData.weather, icon,
         humidity: weatherData.humidity, windDir: weatherData.windDirection,
-        windScale: weatherData.windSpeed, precip: weatherData.precipitation,
-        pressure: weatherData.pressure, source: weatherData.source, updateTime: weatherData.updateTime,
+        windScale: weatherData.windSpeed,
+        source: weatherData.source, updateTime: weatherData.updateTime,
+        hi: forecast[0]?.hi, lo: forecast[0]?.lo,
+        forecast,
       });
     }
 

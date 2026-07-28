@@ -107,12 +107,16 @@ function options(adapter: FakeAdapter, executeTool = vi.fn(async () => ({
 }
 
 beforeEach(() => {
+  process.env.CYRENE_LEGACY_STRUCTURED_OUTPUT = "1";
   // 测试用的 context ref（ctx_song_1 等）未在全局 registry 注册，
   // mock resolve 使引用验证始终通过，让测试聚焦于 agent loop 流程。
   vi.spyOn(contextRefRegistry, "resolve").mockImplementation((() => ({})) as never);
   globalThis.fetch = vi.fn(async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  delete process.env.CYRENE_LEGACY_STRUCTURED_OUTPUT;
+  vi.restoreAllMocks();
+});
 
 describe("runLangGraphAgentLoop native Function Calling runtime", () => {
   it("executes a non-reference tool after discarding an invented target ref", async () => {

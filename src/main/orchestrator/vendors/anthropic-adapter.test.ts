@@ -59,16 +59,28 @@ describe("AnthropicAdapter", () => {
     expect(JSON.parse(req.body).tool_choice).toEqual({ type: "auto" });
   });
 
-  test("maps a must-call intent to named Anthropic tool_choice when supported", () => {
-    const adapter = new AnthropicAdapter("test-anthropic", anthropicCap);
+  test("maps a must-call intent to named Anthropic tool_choice when reasoning is off", () => {
+    const adapter = new AnthropicAdapter("claude", { ...anthropicCap, id: "claude" });
     const req = adapter.buildRequest({
-      model: "m",
+      model: "claude-sonnet-4-6",
       messages: [{ role: "user", content: "搜歌" }],
       tools: [{ name: "music_search", description: "搜索", parameters: { type: "object" } }],
       toolChoiceIntent: { mode: "must_call", toolName: "music_search" },
-    }, { provider: "p", baseUrl: "https://e.test/v1", model: "m", apiKey: "sk-test" });
+    }, { provider: "Claude（Anthropic）", baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-4-6", apiKey: "sk-test", reasoning: { mode: "off" } });
 
     expect(JSON.parse(req.body).tool_choice).toEqual({ type: "tool", name: "music_search" });
+  });
+
+  test("downgrades must-call to auto when reasoning=auto (server may default thinking on)", () => {
+    const adapter = new AnthropicAdapter("claude", { ...anthropicCap, id: "claude" });
+    const req = adapter.buildRequest({
+      model: "claude-sonnet-4-6",
+      messages: [{ role: "user", content: "搜歌" }],
+      tools: [{ name: "music_search", description: "搜索", parameters: { type: "object" } }],
+      toolChoiceIntent: { mode: "must_call", toolName: "music_search" },
+    }, { provider: "Claude（Anthropic）", baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-4-6", apiKey: "sk-test" });
+
+    expect(JSON.parse(req.body).tool_choice).toEqual({ type: "auto" });
   });
 
   test("uses auto for must-call intent while extended thinking is enabled", () => {

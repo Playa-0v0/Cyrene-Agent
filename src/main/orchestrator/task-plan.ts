@@ -357,6 +357,29 @@ function planSchema(): object {
   };
 }
 
+function replanSchema(): object {
+  const plan = planSchema() as {
+    properties: {
+      steps: {
+        items: object;
+      };
+    };
+  };
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      replacementSteps: {
+        type: "array",
+        minItems: 1,
+        maxItems: 10,
+        items: plan.properties.steps.items,
+      },
+    },
+    required: ["replacementSteps"],
+  };
+}
+
 function parsePlan(value: unknown, skillIds: string[], conversationId: string): TaskPlan {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("TaskPlan must be an object");
@@ -456,11 +479,17 @@ export async function runCreatePlan(input: RunCreatePlanInput): Promise<TaskPlan
     loadedSkills: input.loadedSkillInstructions?.slice(0, 6000) ?? "（无）",
   });
 
+  const schema = planSchema();
   const structuredOutput = input.profile.mode === "provider_json_schema"
-    ? { mode: "json_schema" as const, name: "task_plan", schema: planSchema(), strict: true }
+    ? { mode: "json_schema" as const, name: "task_plan", schema, strict: true }
     : input.profile.mode === "provider_json_object"
-      ? { mode: "json_object" as const }
-      : { mode: "prompt_json" as const, sendJsonObjectHint: input.profile.requestHints.sendJsonObject };
+      ? { mode: "json_object" as const, name: "task_plan", schema }
+      : {
+          mode: "prompt_json" as const,
+          name: "task_plan",
+          schema,
+          sendJsonObjectHint: input.profile.requestHints.sendJsonObject,
+        };
 
   const request: ChatRequest = {
     model: input.model,
@@ -481,7 +510,12 @@ export async function runCreatePlan(input: RunCreatePlanInput): Promise<TaskPlan
     buildRequest: () => request,
     generate: async (req, signal) => {
       const response = await input.generate(req, signal);
-      return { text: response.text, finishReason: response.finishReason, refusal: response.refusal };
+      return {
+        text: response.text,
+        finishReason: response.finishReason,
+        refusal: response.refusal,
+        structuredValue: response.structuredValue,
+      };
     },
     parseSchema: (value) => parsePlan(value, input.skillIds, input.conversationId),
     validateBusiness: (plan) => ({ status: "accepted", value: plan }),
@@ -544,6 +578,17 @@ export async function runReplan(input: RunReplanInput): Promise<PlanStep[]> {
       .map((c) => ({ capabilityId: c.capabilityId, description: c.description, evidence: c.completionEvidence })),
   });
 
+  const schema = replanSchema();
+  const structuredOutput = input.profile.mode === "provider_json_schema"
+    ? { mode: "json_schema" as const, name: "replacement_steps", schema, strict: true }
+    : input.profile.mode === "provider_json_object"
+      ? { mode: "json_object" as const, name: "replacement_steps", schema }
+      : {
+          mode: "prompt_json" as const,
+          name: "replacement_steps",
+          schema,
+          sendJsonObjectHint: input.profile.requestHints.sendJsonObject,
+        };
   const request: ChatRequest = {
     model: input.model,
     messages: [
@@ -552,6 +597,7 @@ export async function runReplan(input: RunReplanInput): Promise<PlanStep[]> {
     ],
     stream: false,
     maxTokens: 800,
+    structuredOutput,
   };
 
   const result = await runStructuredOutput<{ replacementSteps: PlanStep[] }, ChatRequest>({
@@ -561,7 +607,12 @@ export async function runReplan(input: RunReplanInput): Promise<PlanStep[]> {
     buildRequest: () => request,
     generate: async (req, signal) => {
       const response = await input.generate(req, signal);
-      return { text: response.text, finishReason: response.finishReason, refusal: response.refusal };
+      return {
+        text: response.text,
+        finishReason: response.finishReason,
+        refusal: response.refusal,
+        structuredValue: response.structuredValue,
+      };
     },
     parseSchema: (value) => {
       if (!value || typeof value !== "object") throw new Error("invalid");

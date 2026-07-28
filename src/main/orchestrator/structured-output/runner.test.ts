@@ -7,7 +7,12 @@ interface Value {
 }
 
 function baseInput(
-  responses: Array<{ text: string; finishReason?: string; refusal?: string } | Error>,
+  responses: Array<{
+    text: string;
+    finishReason?: string;
+    refusal?: string;
+    structuredValue?: unknown;
+  } | Error>,
 ): StructuredOutputRunInput<Value, { attempt: number; minimal: boolean }> {
   let index = 0;
   return {
@@ -44,6 +49,25 @@ describe("runStructuredOutput", () => {
       attempts: 1,
       repairCount: 0,
     });
+  });
+
+  test("uses LangChain's parsed value without running legacy JSON candidate extraction", async () => {
+    const input = baseInput([{
+      text: "this text is deliberately not JSON",
+      finishReason: "stop",
+      structuredValue: { decision: "respond" },
+    }]);
+    const parseSchema = vi.fn(input.parseSchema);
+    input.parseSchema = parseSchema;
+
+    const result = await runStructuredOutput(input);
+
+    expect(result).toMatchObject({
+      outcome: "success",
+      value: { decision: "respond" },
+      attempts: 1,
+    });
+    expect(parseSchema).toHaveBeenCalledWith({ decision: "respond" });
   });
 
   test("repairs multiple schema-valid objects instead of choosing one", async () => {

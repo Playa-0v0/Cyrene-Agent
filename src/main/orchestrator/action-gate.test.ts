@@ -115,8 +115,10 @@ describe("buildActionGateRequest", () => {
       repair: { attempt: 0, minimal: false, errors: [] },
     });
 
-    expect(request.structuredOutput).toEqual({
+    expect(request.structuredOutput).toMatchObject({
       mode: "prompt_json",
+      name: "action_decision",
+      schema: expect.any(Object),
       sendJsonObjectHint: false,
     });
     expect(String(request.messages.at(-1)?.content)).toContain('"outputSchema"');

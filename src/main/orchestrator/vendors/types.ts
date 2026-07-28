@@ -76,10 +76,16 @@ export type StructuredOutputRequest =
     }
   | {
       mode: "json_object";
+      /** LangChain responseFormat schema; legacy wire adapters ignore it. */
+      name?: string;
+      schema?: object;
     }
   | {
       mode: "prompt_json";
       sendJsonObjectHint: boolean;
+      /** LangChain responseFormat schema; legacy wire adapters ignore it. */
+      name?: string;
+      schema?: object;
     };
 
 /**
@@ -162,6 +168,8 @@ export interface ChatResponse {
   toolCalls: ToolCall[];
   finishReason: string;
   raw: unknown;
+  /** LangChain responseFormat result; absent on the legacy adapter path. */
+  structuredValue?: unknown;
   /** API 返回的 token 用量（OpenAI: prompt_tokens/completion_tokens；Anthropic: input_tokens/output_tokens）。
    *  未上报时为 undefined，由调用方兜底。 */
   usage?: { input: number; output: number };

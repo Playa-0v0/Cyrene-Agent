@@ -176,8 +176,13 @@ function buildRouterRequest(input: RunTaskRouterInput): ChatRequest {
   const structuredOutput = input.profile.mode === "provider_json_schema"
     ? { mode: "json_schema" as const, name: "task_route", schema, strict: true }
     : input.profile.mode === "provider_json_object"
-      ? { mode: "json_object" as const }
-      : { mode: "prompt_json" as const, sendJsonObjectHint: input.profile.requestHints.sendJsonObject };
+      ? { mode: "json_object" as const, name: "task_route", schema }
+      : {
+          mode: "prompt_json" as const,
+          name: "task_route",
+          schema,
+          sendJsonObjectHint: input.profile.requestHints.sendJsonObject,
+        };
 
   return {
     model: input.model,
@@ -188,7 +193,9 @@ function buildRouterRequest(input: RunTaskRouterInput): ChatRequest {
     ],
     stream: false,
     maxTokens: 300,
-    temperature: 0,
+    // Kimi k2.6 只允许 temperature=1，发 0 会被拒。
+    // 省略让服务端用默认值，其他模型继续 temperature=0 保证确定性。
+    ...(input.model.match(/^kimi-k2\.6(?:$|-)/i) ? {} : { temperature: 0 }),
     structuredOutput,
   };
 }
@@ -225,6 +232,7 @@ export async function runTaskRouter(input: RunTaskRouterInput): Promise<TaskRout
           text: response.text,
           finishReason: response.finishReason,
           refusal: response.refusal,
+          structuredValue: response.structuredValue,
         };
       },
       parseSchema: parseTaskRoute,
