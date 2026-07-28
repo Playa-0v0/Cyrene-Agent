@@ -890,10 +890,6 @@ const openStickerManagerBtn = document.getElementById("open-sticker-manager-btn"
 const addStickerBtn = document.getElementById("add-sticker-btn") as HTMLButtonElement;
 const stickerThresholdInput = document.getElementById("sticker-threshold") as HTMLInputElement;
 const stickerThresholdVal = document.getElementById("sticker-threshold-val") as HTMLElement;
-const timeoutChatRequestInput = document.getElementById("timeout-chat-request") as HTMLInputElement;
-const timeoutChatRequestReset = document.getElementById("timeout-chat-request-reset-btn") as HTMLButtonElement;
-const timeoutPerRoundInput = document.getElementById("timeout-per-round") as HTMLInputElement;
-const timeoutPerRoundReset = document.getElementById("timeout-per-round-reset-btn") as HTMLButtonElement;
 const timeoutSummaryInput = document.getElementById("timeout-summary") as HTMLInputElement;
 const timeoutSummaryReset = document.getElementById("timeout-summary-reset-btn") as HTMLButtonElement;
 const timeoutVisionInput = document.getElementById("timeout-vision") as HTMLInputElement;
@@ -1652,8 +1648,6 @@ function timeoutToString(timeout: number) {
 async function loadTimeoutSettings() {
   try {
     const cfg = await window.settings!.getTimeoutSettings();
-    timeoutChatRequestInput.value = String(cfg.chatRequestTimeout);
-    timeoutPerRoundInput.value = String(cfg.perRoundTimeout);
     timeoutSummaryInput.value = String(cfg.forceSummaryTimeout);
     timeoutVisionInput.value = String(cfg.visionTimeout);
     timeoutUserChoiceInput.value = String(cfg.userChoiceTimeout / 1000);
@@ -1702,9 +1696,7 @@ async function saveTimeoutSettings(saveTestTimeout: boolean) {
   try {
     if (!saveTestTimeout) {
       settings = {
-        perRoundTimeout: parsePositiveIntOrThrow(timeoutPerRoundInput.value, "工具阶段每轮 API 超时"),
         forceSummaryTimeout: parsePositiveIntOrThrow(timeoutSummaryInput.value, "工具总结阶段 API 超时"),
-        chatRequestTimeout: parsePositiveIntOrThrow(timeoutChatRequestInput.value, "单次回复总时间限制"),
         visionTimeout: parsePositiveIntOrThrow(timeoutVisionInput.value, "视觉模型单次 API 超时"),
         userChoiceTimeout: 1000 * parsePositiveIntOrThrow(timeoutUserChoiceInput.value, "工具请求确认时间限制"),
         memoryJudgeTimeout: parsePositiveIntOrThrow(timeoutMemoryJudgeInput.value, "记忆总结阶段 API 超时"),
@@ -1744,8 +1736,6 @@ async function saveTimeoutSettings(saveTestTimeout: boolean) {
 }
 
 timeoutTestReset.addEventListener("click", () => { timeoutTestInput.value = "15000" });
-timeoutChatRequestReset.addEventListener("click", () => { timeoutChatRequestInput.value = String(DEFAULT_CHAT_REQUEST_TIMEOUT_MS) });
-timeoutPerRoundReset.addEventListener("click", () => { timeoutPerRoundInput.value = String(DEFAULT_PER_ROUND_TIMEOUT_MS) });
 timeoutSummaryReset.addEventListener("click", () => { timeoutSummaryInput.value = String(DEFAULT_FORCE_SUMMARY_TIMEOUT_MS) });
 timeoutVisionReset.addEventListener("click", () => { timeoutVisionInput.value = String(DEFAULT_VISION_TIMEOUT_MS) });
 timeoutMemoryJudgeReset.addEventListener("click", () => { timeoutMemoryJudgeInput.value = String(DEFAULT_MEMORY_JUDGE_MS) });
@@ -3108,6 +3098,11 @@ cyrenePanel.addEventListener("submit", async (e) => {
       perCallTimeoutSec: parsedPerCallSec,
       citaRepairBudgetSec: parsedCitaSec,
       actionGateRepairBudgetSec: parsedAgSec,
+    });
+    // 同步超时到 TimeoutSettings（秒→毫秒）
+    await window.settings!.saveTimeoutSettings({
+      chatRequestTimeout: parsedTimeoutSec * 1000,
+      perRoundTimeout: parsedPerCallSec * 1000,
     });
     setCyreneSaveStatus("已保存", "is-ok");
   } catch {
