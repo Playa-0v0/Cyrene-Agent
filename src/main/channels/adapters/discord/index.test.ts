@@ -2,17 +2,20 @@ import { describe, expect, it } from "vitest";
 import { ApplicationCommandType, ApplicationFlags, EntryPointCommandHandlerType } from "discord.js";
 import {
   DISCORD_ACTIVITY_ENTRY_POINT,
+  buildDiscordCurrentMusicContext,
   buildDiscordActivityInstallConfig,
   buildCyreneImageQueuedReply,
   extractOwnerCodexImageRequest,
   launchCyreneDiscordGame,
   hasDiscordActivityEnabled,
   isCodexImageOwner,
+  isDiscordBotExternalDisconnect,
   normalizeDiscordInvocationText,
   shouldHandleDiscordInteraction,
   shouldHandleDiscordMessage,
 } from "./index";
 import type { DiscordChannelConfig } from "../../settings-store";
+import { isDiscordTextVoiceRequestText } from "./text-voice-request";
 
 function fakeMessage(options: {
   userId?: string;
@@ -69,6 +72,64 @@ describe("DiscordAdapter invocation text", () => {
     expect(normalizeDiscordInvocationText("/study", "bot-1")).toBe("/study");
     expect(normalizeDiscordInvocationText("/TALK", "bot-1")).toBe("/talk");
     expect(normalizeDiscordInvocationText("/collab", "bot-1")).toBe("/collab");
+  });
+});
+
+describe("DiscordAdapter text voice attachment routing", () => {
+  it("recognizes voice attachments independently from VC music playback", () => {
+    expect(isDiscordTextVoiceRequestText("能傳一段晚安的語音嗎")).toBe(true);
+    expect(isDiscordTextVoiceRequestText("能說句鳴潮牛逼嗎")).toBe(true);
+    expect(isDiscordTextVoiceRequestText("能只說句鳴潮牛逼！嗎")).toBe(true);
+  });
+
+  it("does not divert normal chat or music controls into TTS attachments", () => {
+    expect(isDiscordTextVoiceRequestText("今天過得如何？")).toBe(false);
+    expect(isDiscordTextVoiceRequestText("下一首")).toBe(false);
+    expect(isDiscordTextVoiceRequestText("暫停音樂")).toBe(false);
+  });
+});
+
+describe("DiscordAdapter current music context", () => {
+  it("gives the chat agent the current track and playlist without changing the user message", () => {
+    const context = buildDiscordCurrentMusicContext({
+      active: true,
+      paused: false,
+      current: {
+        title: "Colorful Moonlight — Sunflower Dolls",
+        url: "https://open.spotify.com/track/TRACK",
+        playlistTitle: "anime",
+        playlistUrl: "https://open.spotify.com/playlist/PLAYLIST",
+        duration: 221,
+        index: 1,
+        total: 100,
+      },
+      queue: [{ title: "Next Song", url: "https://example.com/next", index: 2, total: 100 }],
+      volume: 100,
+      repeat: "off",
+      shuffle: false,
+      autoplay: false,
+      elapsed: 212,
+    });
+
+    expect(context).toContain("Colorful Moonlight — Sunflower Dolls");
+    expect(context).toContain("https://open.spotify.com/playlist/PLAYLIST");
+    expect(context).toContain('"elapsedSeconds":212');
+    expect(context).toContain("不要要求使用者再提供歌名或連結");
+  });
+
+  it("does not inject music context while nothing is playing", () => {
+    expect(buildDiscordCurrentMusicContext(undefined)).toBeUndefined();
+    expect(buildDiscordCurrentMusicContext({
+      active: false,
+      paused: false,
+      current: null,
+      queue: [],
+      volume: 100,
+      repeat: "off",
+      shuffle: false,
+      autoplay: false,
+      elapsed: 0,
+    })).toBeUndefined();
   });
 });
 
@@ -134,6 +195,29 @@ describe("DiscordAdapter slash command security", () => {
       launchActivity: async () => { launches += 1; },
     });
     expect(launches).toBe(1);
+  });
+});
+
+describe("DiscordAdapter external voice disconnect", () => {
+  it("detects when Discord removes the bot from its voice channel", () => {
+    expect(isDiscordBotExternalDisconnect(
+      { id: "bot-1", channelId: "voice-1" },
+      { id: "bot-1", channelId: null },
+      "bot-1",
+    )).toBe(true);
+  });
+
+  it("ignores user disconnects and bot channel moves", () => {
+    expect(isDiscordBotExternalDisconnect(
+      { id: "user-1", channelId: "voice-1" },
+      { id: "user-1", channelId: null },
+      "bot-1",
+    )).toBe(false);
+    expect(isDiscordBotExternalDisconnect(
+      { id: "bot-1", channelId: "voice-1" },
+      { id: "bot-1", channelId: "voice-2" },
+      "bot-1",
+    )).toBe(false);
   });
 });
 

@@ -8,7 +8,7 @@ import { app } from "electron";
 import * as fs from "fs";
 import * as path from "path";
 
-export type CallUsageSource = "desktop" | "discord";
+export type CallUsageSource = "desktop" | "discord" | "discord-cloud";
 
 export interface CallUsageDay {
   totalMs: number;
@@ -102,7 +102,7 @@ function flushNow(): void {
 }
 
 function activeSources(store: CallUsageStore): CallUsageSource[] {
-  return (["desktop", "discord"] as const).filter((source) => store.activeSources[source]);
+  return (["desktop", "discord", "discord-cloud"] as const).filter((source) => store.activeSources[source]);
 }
 
 function addInterval(store: CallUsageStore, startMs: number, endMs: number, sources: CallUsageSource[]): void {
@@ -111,7 +111,7 @@ function addInterval(store: CallUsageStore, startMs: number, endMs: number, sour
     const day = store.days[segment.date] ?? { totalMs: 0, desktopMs: 0, discordMs: 0 };
     day.totalMs += segment.durationMs;
     if (sources.includes("desktop")) day.desktopMs += segment.durationMs;
-    if (sources.includes("discord")) day.discordMs += segment.durationMs;
+    if (sources.includes("discord") || sources.includes("discord-cloud")) day.discordMs += segment.durationMs;
     store.days[segment.date] = day;
   }
 }

@@ -1030,6 +1030,48 @@
             </div>
           </div>
 
+          <div class="channels-card channels-card--google-cloud" id="channels-google-cloud-card">
+            <div class="channels-card__header">
+              <div class="gcloud-heading">
+                <span class="gcloud-heading__mark" aria-hidden="true">G</span>
+                <div><h2>Google Cloud 備援</h2><small>Cyrene Gateway Control</small></div>
+              </div>
+              <span class="channels-status gcloud-live-status" id="channels-cloud-status">
+                <span class="channels-status__dot"></span>
+                <span class="channels-status__text">讀取狀態中</span>
+              </span>
+            </div>
+            <div class="channels-card__body">
+              <p class="channels-card__hint">這裡只控制既有的免費試用 VM 與 Discord Bot，不會建立資源、變更規格或升級計費。</p>
+              <div class="gcloud-route" aria-label="Discord 控制權位置">
+                <div class="gcloud-route__node gcloud-route__node--local">
+                  <span class="gcloud-route__icon" aria-hidden="true">⌘</span>
+                  <div><small>LOCAL PRIMARY</small><strong>這台 Mac</strong></div>
+                </div>
+                <div class="gcloud-route__line"><i></i><span id="channels-cloud-mode">讀取中</span></div>
+                <div class="gcloud-route__node gcloud-route__node--cloud">
+                  <span class="gcloud-route__icon" aria-hidden="true">☁</span>
+                  <div><small>STANDBY</small><strong>Google Cloud</strong></div>
+                </div>
+              </div>
+              <div class="gcloud-facts">
+                <article><small>VM INSTANCE</small><strong>instance-20260728-054602</strong><span id="channels-cloud-vm">讀取中</span></article>
+                <article><small>DISCORD BOT</small><strong>昔漣寶寶#9110</strong><span id="channels-cloud-bot">讀取中</span></article>
+                <article><small>FAILOVER WATCHDOG</small><strong>自動接手</strong><span id="channels-cloud-watchdog">讀取中</span></article>
+                <article><small>LOCAL HEARTBEAT</small><strong>20 秒週期</strong><span id="channels-cloud-heartbeat">讀取中</span></article>
+              </div>
+              <div class="gcloud-safety"><span aria-hidden="true">◇</span><div><strong>本機優先保護已啟用</strong><small>本機中斷後，Google Cloud 會在約 60–75 秒內接手。</small></div></div>
+              <div class="channels-card__actions gcloud-actions">
+                <button type="button" class="btn-secondary gcloud-action" id="channels-cloud-local">⌘ 本機接管</button>
+                <button type="button" class="btn-secondary gcloud-action" id="channels-cloud-remote">☁ 雲端接管</button>
+                <button type="button" class="btn-secondary" id="channels-cloud-restart">↻ 重啟雲端 Bot</button>
+                <button type="button" class="btn-secondary" id="channels-cloud-refresh" aria-label="重新整理 Google Cloud 狀態">重新整理</button>
+                <a href="https://console.cloud.google.com/compute/instancesDetail/zones/us-central1-a/instances/instance-20260728-054602?project=project-8d91f4e9-9534-454f-a32" target="_blank" rel="noopener" class="btn-secondary gcloud-console-link">Google Cloud Console ↗</a>
+              </div>
+              <p class="channels-feedback" id="channels-cloud-feedback" aria-live="polite"></p>
+            </div>
+          </div>
+
           <div class="channels-card channels-card--discord" id="channels-discord-card" tabindex="-1">
             <div class="channels-card__header">
               <h2>Discord</h2>

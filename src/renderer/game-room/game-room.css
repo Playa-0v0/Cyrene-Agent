@@ -222,7 +222,14 @@ h1 {
 
 .game-card__meta { display: block; margin-bottom: 42px; color: var(--room-gold); font: 500 11px/1.5 var(--rb-font-mono); }
 .game-card strong { display: block; margin-bottom: 10px; font-size: 27px; font-weight: 600; }
-.game-card__desc { display: block; max-width: 410px; color: var(--room-muted); font-size: 13px; line-height: 1.7; }
+.game-card__desc {
+  display: block;
+  max-width: 410px;
+  color: var(--room-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  text-wrap: balance;
+}
 .game-card__cta {
   position: static;
   display: block;

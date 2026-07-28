@@ -417,6 +417,8 @@ interface SettingsApi {
   channelsDiscordUpdateProfile: (profile: { username: string; activityText: string; status: string; avatarPath?: string; bannerPath?: string }) => Promise<{ ok: boolean; profile?: DiscordBotProfile; error?: string }>;
   channelsDiscordPickAvatar: () => Promise<string | null>;
   channelsDiscordPickBanner: () => Promise<string | null>;
+  channelsDiscordCloudStatus: () => Promise<DiscordCloudControlStatus>;
+  channelsDiscordCloudControl: (action: "local" | "cloud" | "restart-cloud") => Promise<DiscordCloudControlStatus>;
   channelsSpotifyAuthorize: (input: { clientId?: string; clientSecret?: string }) => Promise<ChannelConnectionResult>;
   channelsSpotifyGetStatus: () => Promise<SpotifyPlaybackStatus>;
   channelsSpotifyControl: (input: { command: string; value?: number; deviceId?: string; query?: string }) => Promise<{ ok: boolean; message: string }>;
@@ -496,6 +498,15 @@ interface DiscordMusicState {
   shuffle: boolean;
   autoplay: boolean;
   elapsed: number;
+}
+
+interface DiscordCloudControlStatus {
+  reachable: boolean;
+  cloudService: "active" | "inactive" | "activating" | "failed" | "unknown";
+  watchdog: "active" | "inactive" | "failed" | "unknown";
+  heartbeatAge: number | null;
+  localConnected: boolean;
+  mode: "local" | "cloud" | "transition";
 }
 
 interface DiscordMusicControlInput {
@@ -740,6 +751,8 @@ if (!window.settings) {
     channelsDiscordUpdateProfile: async () => ({ ok: false, error: "settings api unavailable" }),
     channelsDiscordPickAvatar: async () => null,
     channelsDiscordPickBanner: async () => null,
+    channelsDiscordCloudStatus: async () => ({ reachable: false, cloudService: "unknown", watchdog: "unknown", heartbeatAge: null, localConnected: false, mode: "transition" }),
+    channelsDiscordCloudControl: async () => ({ reachable: false, cloudService: "unknown", watchdog: "unknown", heartbeatAge: null, localConnected: false, mode: "transition" }),
     channelsSpotifyAuthorize: async () => ({ ok: false, error: "settings api unavailable" }),
     channelsSpotifyGetStatus: async () => ({ configured: false, connected: false, devices: [] }),
     channelsSpotifyControl: async () => ({ ok: false, message: "settings api unavailable" }),
@@ -1332,10 +1345,16 @@ petZoomInput.addEventListener("change", () => {
 });
 
 uiThemeSelect.querySelectorAll<HTMLButtonElement>(".option-block").forEach((button) => {
-  button.addEventListener("click", () => {
+  button.addEventListener("click", async () => {
     const theme = normalizeUiTheme(button.dataset.theme);
     applyUiThemeSelection(theme);
-    setGeneralSaveStatus("有未保存的更改");
+    setGeneralSaveStatus("正在套用主題…");
+    try {
+      await window.settings!.saveGeneral({ uiTheme: theme });
+      setGeneralSaveStatus("主題已套用", "is-ok");
+    } catch {
+      setGeneralSaveStatus("主題套用失敗", "is-error");
+    }
   });
 });
 
@@ -2941,6 +2960,19 @@ const channelsWechatFeedbackEl = document.getElementById("channels-wechat-feedba
 const channelsFeishuFeedbackEl = document.getElementById("channels-feishu-feedback");
 const channelsDiscordFeedbackEl = document.getElementById("channels-discord-feedback");
 
+// Google Cloud 備援控制台 DOM 元素
+const channelsCloudStatusEl = document.getElementById("channels-cloud-status");
+const channelsCloudModeEl = document.getElementById("channels-cloud-mode");
+const channelsCloudVmEl = document.getElementById("channels-cloud-vm");
+const channelsCloudBotEl = document.getElementById("channels-cloud-bot");
+const channelsCloudWatchdogEl = document.getElementById("channels-cloud-watchdog");
+const channelsCloudHeartbeatEl = document.getElementById("channels-cloud-heartbeat");
+const channelsCloudLocalBtn = document.getElementById("channels-cloud-local") as HTMLButtonElement | null;
+const channelsCloudRemoteBtn = document.getElementById("channels-cloud-remote") as HTMLButtonElement | null;
+const channelsCloudRestartBtn = document.getElementById("channels-cloud-restart") as HTMLButtonElement | null;
+const channelsCloudRefreshBtn = document.getElementById("channels-cloud-refresh") as HTMLButtonElement | null;
+const channelsCloudFeedbackEl = document.getElementById("channels-cloud-feedback");
+
 let channelsInitialized = false;
 let channelsSaveTimer: number | null = null;
 let pendingDiscordAvatarPath: string | undefined;
@@ -3369,6 +3401,46 @@ function renderChannelStatus(el: HTMLElement | null, phase: string, message?: st
   if (text) text.textContent = message ?? (phase === "running" ? "運行中" : phase === "starting" ? "啟動中" : phase === "config_missing" ? "配置缺失" : phase === "error" ? "錯誤" : "未啟用");
 }
 
+function renderGoogleCloudControl(state: DiscordCloudControlStatus): void {
+  const modeText = state.mode === "local" ? "這台 Mac 接管中" : state.mode === "cloud" ? "Google Cloud 接管中" : "正在交接";
+  if (channelsCloudStatusEl) {
+    channelsCloudStatusEl.classList.toggle("is-online", state.reachable);
+    channelsCloudStatusEl.classList.toggle("is-transition", state.mode === "transition");
+    const text = channelsCloudStatusEl.querySelector(".channels-status__text");
+    if (text) text.textContent = state.reachable ? modeText : "VM 無法連線";
+  }
+  if (channelsCloudModeEl) channelsCloudModeEl.textContent = modeText;
+  if (channelsCloudVmEl) channelsCloudVmEl.textContent = state.reachable ? "已連線 · us-central1-a" : "無法連線";
+  if (channelsCloudBotEl) channelsCloudBotEl.textContent = state.localConnected
+    ? "本機 Gateway 運行中"
+    : state.cloudService === "active"
+      ? "雲端 Gateway 運行中"
+      : state.cloudService === "inactive"
+        ? "雲端待命"
+        : `雲端狀態：${state.cloudService}`;
+  if (channelsCloudWatchdogEl) channelsCloudWatchdogEl.textContent = state.watchdog === "active" ? "保護中 · 15 秒檢查" : `狀態：${state.watchdog}`;
+  if (channelsCloudHeartbeatEl) channelsCloudHeartbeatEl.textContent = state.heartbeatAge == null
+    ? "目前沒有本機心跳"
+    : `${state.heartbeatAge} 秒前收到`;
+  channelsCloudLocalBtn?.classList.toggle("is-active", state.mode === "local");
+  channelsCloudRemoteBtn?.classList.toggle("is-active", state.mode === "cloud");
+  channelsCloudLocalBtn?.setAttribute("aria-pressed", String(state.mode === "local"));
+  channelsCloudRemoteBtn?.setAttribute("aria-pressed", String(state.mode === "cloud"));
+  if (channelsCloudRestartBtn) channelsCloudRestartBtn.disabled = state.mode === "local";
+}
+
+async function refreshGoogleCloudControl(): Promise<void> {
+  try {
+    renderGoogleCloudControl(await window.settings.channelsDiscordCloudStatus());
+  } catch (error) {
+    renderGoogleCloudControl({ reachable: false, cloudService: "unknown", watchdog: "unknown", heartbeatAge: null, localConnected: false, mode: "transition" });
+    if (channelsCloudFeedbackEl) {
+      channelsCloudFeedbackEl.textContent = error instanceof Error ? error.message : String(error);
+      channelsCloudFeedbackEl.className = "channels-feedback channels-feedback--err";
+    }
+  }
+}
+
 async function loadChannelsPanel(): Promise<void> {
   if (channelsInitialized) {
     await Promise.all([refreshDiscordProfile(), refreshDiscordMusic(), refreshSpotify(), refreshBilibili()]);
@@ -3423,6 +3495,8 @@ async function loadChannelsPanel(): Promise<void> {
     if (spotifyRefreshTimer == null) spotifyRefreshTimer = window.setInterval(() => void refreshSpotify(), 3000);
     // Phase 3.4：拉一次消息日誌
     void refreshChannelsLog();
+
+    await refreshGoogleCloudControl();
   } catch (err) {
     console.warn("[Channels] loadChannelsPanel 失敗:", err);
   }
@@ -3868,6 +3942,35 @@ async function loadChannelsPanel(): Promise<void> {
       setWechatFeedback("err", err instanceof Error ? err.message : String(err));
     }
   });
+
+  const runCloudControl = async (action: "local" | "cloud" | "restart-cloud") => {
+    const buttons = [channelsCloudLocalBtn, channelsCloudRemoteBtn, channelsCloudRestartBtn, channelsCloudRefreshBtn];
+    buttons.forEach((button) => { if (button) button.disabled = true; });
+    if (channelsCloudFeedbackEl) {
+      channelsCloudFeedbackEl.textContent = action === "local" ? "正在切換到這台 Mac…" : action === "cloud" ? "正在交給 Google Cloud…" : "正在重新啟動雲端 Bot…";
+      channelsCloudFeedbackEl.className = "channels-feedback channels-feedback--info";
+    }
+    try {
+      const state = await window.settings.channelsDiscordCloudControl(action);
+      renderGoogleCloudControl(state);
+      if (channelsCloudFeedbackEl) {
+        channelsCloudFeedbackEl.textContent = action === "local" ? "這台 Mac 已接管 Discord。" : action === "cloud" ? "Google Cloud 已接管 Discord。" : "雲端 Bot 已重新啟動。";
+        channelsCloudFeedbackEl.className = "channels-feedback channels-feedback--ok";
+      }
+    } catch (error) {
+      if (channelsCloudFeedbackEl) {
+        channelsCloudFeedbackEl.textContent = error instanceof Error ? error.message : String(error);
+        channelsCloudFeedbackEl.className = "channels-feedback channels-feedback--err";
+      }
+      await refreshGoogleCloudControl();
+    } finally {
+      buttons.forEach((button) => { if (button) button.disabled = false; });
+    }
+  };
+  channelsCloudLocalBtn?.addEventListener("click", () => void runCloudControl("local"));
+  channelsCloudRemoteBtn?.addEventListener("click", () => void runCloudControl("cloud"));
+  channelsCloudRestartBtn?.addEventListener("click", () => void runCloudControl("restart-cloud"));
+  channelsCloudRefreshBtn?.addEventListener("click", () => void refreshGoogleCloudControl());
 }
 
 function setFeishuFeedback(kind: "info" | "ok" | "err", msg: string): void {

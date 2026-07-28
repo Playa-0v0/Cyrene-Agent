@@ -57,7 +57,7 @@ describe("Spotify playback control", () => {
           tracks: { total: 1 },
           owner: { display_name: "主人" },
         }] }), { status: 200 });
-      if (url.includes("/playlists/list-one/tracks")) return new Response(JSON.stringify({ items: [{ track: {
+      if (url.includes("/playlists/list-one/items")) return new Response(JSON.stringify({ items: [{ track: {
           id: "track-one",
           name: "勇者",
           duration_ms: 195000,

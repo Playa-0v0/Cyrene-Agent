@@ -22,6 +22,15 @@ const LOG_PREFIX = "[Env]";
 export interface ModelInfo {
   provider: string;
   model: string;
+  baseUrl?: string;
+}
+
+export function modelSupportsVision(modelInfo?: ModelInfo): boolean {
+  if (!modelInfo) return false;
+  const cap = getCapability(modelInfo.provider);
+  if (cap?.supportsVision) return true;
+  // 設定頁的 OpenRouter Free 沿用 Custom profile key；Router 會依 image_url 自動篩視覺模型。
+  return /openrouter\.ai/i.test(modelInfo.baseUrl ?? "") || /^openrouter\//i.test(modelInfo.model);
 }
 
 /** 用戶信息片段（由 index.ts 注入，避免循環依賴）。 */
@@ -129,11 +138,7 @@ export function buildEnvironmentContext(modelInfo?: ModelInfo, userInfo?: UserIn
   // 模型能力邊界：把"你當前這個模型能不能看圖"作為事實告訴模型，
   // 讓它遇到圖片問題時敢於說"我看不了"，而不是硬編。
   // 沒傳 modelInfo（比如降級路徑）時保守地告訴它"看不了"。
-  let supportsVision = false;
-  if (modelInfo) {
-    const cap = getCapability(modelInfo.provider);
-    supportsVision = cap?.supportsVision ?? false;
-  }
+  const supportsVision = modelSupportsVision(modelInfo);
   lines.push(`- 當前模型是否支持查看圖片：${supportsVision ? "支持（可調 read_image 看圖）" : "不支持（看不了圖片，遇到圖片問題必須如實說明，不許編造圖片內容）"}`);
   lines.push("");
 
@@ -172,4 +177,3 @@ export function buildEnvironmentContext(modelInfo?: ModelInfo, userInfo?: UserIn
 
   return text;
 }
-

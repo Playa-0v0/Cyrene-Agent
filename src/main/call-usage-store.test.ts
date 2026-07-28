@@ -44,6 +44,21 @@ describe("daily call usage", () => {
     expect(today.active).toBe(false);
   });
 
+  it("雲端 Discord 通話會合併到 Discord，且與本機切換時不重複計時", async () => {
+    const usage = await import("./call-usage-store");
+    const start = new Date(2026, 6, 28, 20, 0, 0).getTime();
+    usage.startCallUsage("discord-cloud", start);
+    usage.startCallUsage("discord", start + 10_000);
+    usage.stopCallUsage("discord-cloud", start + 20_000);
+    usage.stopCallUsage("discord", start + 30_000);
+
+    const today = usage.getCallUsage(1, start + 30_000)[0];
+    expect(today.totalMs).toBe(30_000);
+    expect(today.desktopMs).toBe(0);
+    expect(today.discordMs).toBe(30_000);
+    expect(today.active).toBe(false);
+  });
+
   it("treats repeated starts and stops as idempotent", async () => {
     const usage = await import("./call-usage-store");
     const start = new Date(2026, 6, 26, 21, 0, 0).getTime();

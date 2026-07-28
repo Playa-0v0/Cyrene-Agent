@@ -28,6 +28,15 @@ export function mentionsBot(content: string, botUserId: string): boolean {
   return content.includes(`<@${botUserId}>`) || content.includes(`<@!${botUserId}>`);
 }
 
+/** 雲端回覆也強制使用唯一稱呼，避免 Router 輸出人格提示裡的英文別名。 */
+export function normalizeCompanionAddress(text: string): string {
+  return text
+    .replace(/\bpartner(?:'s|’s)\s+friend\b/gi, "夥伴的朋友")
+    .replace(/\bmy\s+partner\b/gi, "我的夥伴")
+    .replace(/\byu[\s_-]*ying\b/gi, "夥伴")
+    .replace(/\bpartner\b/gi, "夥伴");
+}
+
 export function sessionIdFor(userId: string, channelId: string): string {
   return createHash("sha256").update(`${userId}:${channelId}`).digest("hex").slice(0, 24);
 }

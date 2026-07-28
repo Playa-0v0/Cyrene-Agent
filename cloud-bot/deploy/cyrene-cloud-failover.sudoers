@@ -1,0 +1,1 @@
+bluearchive6888 ALL=(root) NOPASSWD: /usr/local/sbin/cyrene-local-online, /usr/local/sbin/cyrene-local-offline, /usr/local/sbin/cyrene-cloud-restart

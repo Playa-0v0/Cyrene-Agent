@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mentionsBot, normalizeInvocation, sessionIdFor, shouldHandleMessage, splitDiscordText } from "./core.js";
+import { mentionsBot, normalizeCompanionAddress, normalizeInvocation, sessionIdFor, shouldHandleMessage, splitDiscordText } from "./core.js";
 
 const baseConfig = {
   allowedUserIds: new Set<string>(),
@@ -29,6 +29,11 @@ test("可辨識 Discord 的一般與暱稱提及格式", () => {
   assert.equal(mentionsBot("<@123> favorites", "123"), true);
   assert.equal(mentionsBot("<@!123> favorites", "123"), true);
   assert.equal(mentionsBot("favorites", "123"), false);
+});
+
+test("雲端回覆把英文別名統一成夥伴", () => {
+  assert.equal(normalizeCompanionAddress("partner，這是狗狗。"), "夥伴，這是狗狗。");
+  assert.equal(normalizeCompanionAddress("YuYing，晚安。"), "夥伴，晚安。");
 });
 
 test("長訊息會切成 Discord 可接受的片段", () => {

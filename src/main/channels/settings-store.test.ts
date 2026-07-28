@@ -56,6 +56,12 @@ describe("channels/settings-store", () => {
     expect(cfg.feishu.enabled).toBe(false);
     expect(cfg.bilibili).toEqual({ enabled: false, browser: "opera-gx" });
     expect(cfg.rateLimitPerUser).toBe(10);
+    expect(cfg.discord.cloudPrimary).toBe(true);
+  });
+
+  it("Discord: 預設由雲端獨佔 Gateway，但允許手動切回本機", () => {
+    saveChannelsSettings({ discord: { enabled: true, cloudPrimary: false } });
+    expect(loadChannelsSettings().discord.cloudPrimary).toBe(false);
   });
 
   it("Bilibili: 只保存本機瀏覽器連接狀態，不保存憑證", () => {

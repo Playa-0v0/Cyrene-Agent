@@ -28,6 +28,20 @@ import { getDefaultChannelsSettings, loadChannelsSettings, type ChannelsSettings
 import { appendLog, reloadLogFromDisk } from "./message-log";
 import { appendHistory as appendChannelHistory } from "./history-log";
 import { toTraditionalTaiwan } from "../utils/opencc";
+import {
+  extractDiscordExactVoiceText,
+  extractDiscordVoiceRequestTopic,
+  inferDiscordVoiceTone,
+  isDiscordTextVoiceRequestText,
+  type DiscordVoiceTone,
+} from "./adapters/discord/text-voice-request";
+
+export {
+  extractDiscordExactVoiceText,
+  extractDiscordVoiceRequestTopic,
+  inferDiscordVoiceTone,
+  type DiscordVoiceTone,
+} from "./adapters/discord/text-voice-request";
 
 /** Phase A：用於拼接歷史對話的輕量 ChatMessage 形狀（與 orchestrator ChatMessage 兼容）。 */
 interface ChatMessage {
@@ -49,19 +63,13 @@ export interface SynthesizedChannelAudio {
   format: "wav" | "mp3";
 }
 
-/**
- * 使用者在 Discord 文字頻道明確要求一段語音。
- * 支援「能傳一段晚安的語音嗎」以及不帶主題的「能傳一段語音嗎」。
- */
-export function extractDiscordVoiceRequestTopic(text: string): string | null {
-  const cleaned = text.replace(/<@!?\d+>/g, " ").replace(/\s+/g, " ").trim();
-  const match = cleaned.match(/能傳一段(?:(.+?)的)?語音(?:嗎)?[？?]?\s*$/u);
-  if (!match) return null;
-  return match[1]?.trim() || "自由發揮一段自然、親切的內容";
+export interface ChannelTtsContext {
+  stylePrompt?: string;
+  speedMultiplier?: number;
 }
 
 export function isDiscordTextVoiceRequest(msg: IncomingMessage): boolean {
-  return msg.channel === "discord" && extractDiscordVoiceRequestTopic(msg.text) !== null;
+  return msg.channel === "discord" && isDiscordTextVoiceRequestText(msg.text);
 }
 
 /** 把能力詢問改寫成朗讀稿任務，避免模型誤以為平台不能附加音訊。 */
@@ -69,10 +77,14 @@ export function prepareDiscordVoiceAgentMessage(msg: IncomingMessage): IncomingM
   if (msg.channel !== "discord") return msg;
   const topic = extractDiscordVoiceRequestTopic(msg.text);
   if (topic === null) return msg;
+  const exactText = extractDiscordExactVoiceText(msg.text);
+  const tone = inferDiscordVoiceTone(msg.text);
   return {
     ...msg,
-    text: [
-      `請直接寫出一段關於「${topic}」、適合用昔漣口吻朗讀的自然口語內容。`,
+    text: [exactText
+      ? `請只輸出以下指定台詞，文字必須逐字一致，不可增加前言、後話或動作描寫：「${exactText}」`
+      : `請直接寫出一段關於「${topic}」、適合用昔漣口吻朗讀的自然口語內容。`,
+      `朗讀語氣：${tone.stylePrompt}`,
       "本次回答會由 Discord 語音附件功能自動合成並成功發送。",
       "只輸出要被朗讀的內容，不要解釋傳送方式，也不要討論是否能傳語音。",
     ].join("\n"),
@@ -89,9 +101,18 @@ export function shouldSynthesizeChannelTts(msg: IncomingMessage, ttsEnabled: boo
     && (raw as { source?: unknown }).source === "discord-voice";
 }
 
-/** 所有外部渠道的 AI 顯示文字都統一為台灣繁體；不改動使用者的原始輸入。 */
+/** 強制屋主稱呼一致，避免模型把人格提示中的英文別名直接輸出。 */
+export function normalizeCompanionAddress(text: string): string {
+  return text
+    .replace(/\bpartner(?:'s|’s)\s+friend\b/gi, "夥伴的朋友")
+    .replace(/\bmy\s+partner\b/gi, "我的夥伴")
+    .replace(/\byu[\s_-]*ying\b/gi, "夥伴")
+    .replace(/\bpartner\b/gi, "夥伴");
+}
+
+/** 所有外部渠道的 AI 顯示文字都統一為台灣繁體與「夥伴」稱呼；不改動使用者原始輸入。 */
 export function normalizeChannelReplyText(text: string): string {
-  return toTraditionalTaiwan(text);
+  return normalizeCompanionAddress(toTraditionalTaiwan(text));
 }
 
 const LOG = "[ChannelDispatcher]";
@@ -177,7 +198,7 @@ export interface DispatcherDeps {
   /** Phase A：讀這個 sessionId 最近 N 條對話歷史（按時間順序）。不提供時不拼歷史，行為同 Phase 0。 */
   loadRecentChannelHistory?: (sessionId: string, limit: number) => Promise<ChatMessage[]>;
   /** Phase 3：可選 — 把文本合成成音頻。失敗返回 null，dispatcher 會跳過 audio。 */
-  synthesizeTts?: (text: string) => Promise<SynthesizedChannelAudio | null>;
+  synthesizeTts?: (text: string, context?: ChannelTtsContext) => Promise<SynthesizedChannelAudio | null>;
   /** Phase 3：可選 — 桌面端鏡像廣播：bot 入站/出站消息通知給 chatWindow。 */
   broadcastChat?: (event: {
     type: "bot:incoming" | "bot:outgoing";
@@ -297,6 +318,9 @@ export class ChannelDispatcher {
     }
 
     replyText = normalizeChannelReplyText(replyText);
+    const exactVoiceText = extractDiscordExactVoiceText(msg.text);
+    if (exactVoiceText !== null) replyText = exactVoiceText;
+    if (!replyText.trim() && !sticker) return null;
 
     // 構造 OutgoingMessage parts
     const parts: OutgoingPart[] = [{ kind: "text", text: replyText }];
@@ -317,7 +341,7 @@ export class ChannelDispatcher {
       console.log(LOG, `TTS 決策: adapterCap.audio=${adapterCap?.audio}`);
       if (adapterCap?.audio) {
         try {
-          const synthesized = await this.deps.synthesizeTts(replyText);
+          const synthesized = await this.deps.synthesizeTts(replyText, inferDiscordVoiceTone(msg.text));
           console.log(LOG, `TTS 決策: 合成結果 length=${synthesized?.audio.length ?? "null"}`);
           if (synthesized && synthesized.audio.length > 0) {
             // 按引擎真實格式寫入，避免 WAV 內容被錯標成 MP3。
@@ -326,7 +350,11 @@ export class ChannelDispatcher {
             const audioPath = path.join(audioDir, `${msg.channel}-${Date.now()}.${synthesized.format}`);
             fs.writeFileSync(audioPath, synthesized.audio);
             const audioPart: OutgoingPart = { kind: "audio", filePath: audioPath, mime: synthesized.format === "wav" ? "audio/wav" : "audio/mpeg" };
-            if (audioOnlyRequested) parts.splice(0, parts.length, audioPart);
+            if (audioOnlyRequested) {
+              // 語音請求隱藏文字，但保留 agent 已匹配的貼圖；Discord 會依序發送音訊、貼圖。
+              const stickerParts = parts.filter((part) => part.kind === "sticker");
+              parts.splice(0, parts.length, audioPart, ...stickerParts);
+            }
             else parts.push(audioPart);
             console.log(LOG, `TTS 合成完成: ${synthesized.audio.length} bytes → ${audioPath}`);
           }
@@ -381,6 +409,7 @@ export class ChannelDispatcher {
       targetId: msg.chatId,
       threadId: msg.threadId,
       parts,
+      replyToMessageId: msg.messageId,
     };
     return this.downgradeToCapability(outgoing, this.deps.manager.getAdapter(msg.channel)?.capability);
   }
@@ -437,7 +466,7 @@ export function setDispatcherBuildAndRunAgent(
 }
 
 /** Phase 3.1：注入 TTS 合成（返回 mp3 Buffer 或 null） */
-export function setDispatcherSynthesizeTts(fn: (text: string) => Promise<SynthesizedChannelAudio | null>): void {
+export function setDispatcherSynthesizeTts(fn: (text: string, context?: ChannelTtsContext) => Promise<SynthesizedChannelAudio | null>): void {
   channelDispatcher.deps.synthesizeTts = fn;
 }
 

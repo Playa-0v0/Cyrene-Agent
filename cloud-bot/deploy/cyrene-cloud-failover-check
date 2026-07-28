@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+heartbeat=/run/cyrene-failover/local-heartbeat
+now=$(date +%s)
+last=0
+if [ -r "$heartbeat" ]; then
+  last=$(cat "$heartbeat" 2>/dev/null || true)
+fi
+case "$last" in
+  ''|*[!0-9]*) last=0 ;;
+esac
+age=$((now - last))
+if [ "$last" -gt 0 ] && [ "$age" -le 60 ]; then
+  systemctl stop cyrene-cloud.service
+else
+  systemctl start cyrene-cloud.service
+fi

@@ -46,6 +46,7 @@ export interface ChannelAttachment {
 /** 入站消息。adapters → dispatcher。 */
 export interface IncomingMessage {
   channel: ChannelId;
+  messageId?: string;
   /** 平臺原始 sender id。dispatcher 會 sha256 截斷成 16 字符作為 sessionId。 */
   senderId: string;
   /** 顯示名（暱稱/open_id alias），用於日誌/UI。 */
@@ -55,6 +56,8 @@ export interface IncomingMessage {
   /** 群聊/話題 id。私聊時 undefined。 */
   threadId?: string;
   text: string;
+  /** Adapter-provided trusted runtime context, injected into the agent as a system message. */
+  agentContext?: string;
   attachments?: ChannelAttachment[];
   at: Date;
   /** 原始 payload，調試用，不序列化。 */
@@ -81,6 +84,7 @@ export interface OutgoingMessage {
   targetId: string;
   threadId?: string;
   parts: OutgoingPart[];
+  replyToMessageId?: string;
 }
 
 /** 渠道狀態（UI 展示用） */

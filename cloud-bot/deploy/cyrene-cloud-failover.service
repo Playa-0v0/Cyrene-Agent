@@ -1,0 +1,7 @@
+[Unit]
+Description=Cyrene local-primary Discord failover check
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/cyrene-cloud-failover-check

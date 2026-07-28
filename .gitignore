@@ -29,6 +29,13 @@ verify-*.png
 verify-*.html
 .cyrene-cache/
 .playwright-mcp/
+scratch/
+
+# Local model weights are downloaded on demand and exceed GitHub file limits.
+models/Xenova/
+
+# Independent nested project; publish from its own repository once a remote is configured.
+city-web/
 
 # Debug previews / scratch files generated during UI work
 cyrene-*-preview.html

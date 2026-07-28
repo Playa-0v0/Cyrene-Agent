@@ -1,6 +1,6 @@
 import path from "node:path";
 import { spawn, type ChildProcessByStdio } from "node:child_process";
-import type { Readable } from "node:stream";
+import { PassThrough, type Readable } from "node:stream";
 import { constants as fsConstants, promises as fs } from "node:fs";
 import { createHash } from "node:crypto";
 import os from "node:os";
@@ -8,6 +8,9 @@ import { toTraditionalTaiwan } from "../../../utils/opencc";
 
 // 足以涵蓋 Bilibili 跨作品音樂合集，同時避免無界清單耗盡記憶體。
 const MAX_PLAYLIST_ITEMS = 500;
+const MUSIC_STARTUP_BUFFER_BYTES = 384 * 1024;
+const MUSIC_BUFFER_CAPACITY_BYTES = 2 * 1024 * 1024;
+const MUSIC_BUFFER_TIMEOUT_MS = 12_000;
 const YT_DLP_RELEASE_BASE = "https://github.com/yt-dlp/yt-dlp/releases/latest/download";
 const SUPPORTED_HOSTS = new Set([
   "youtube.com",
@@ -32,12 +35,17 @@ export interface DiscordMusicTrack {
   playbackUrl?: string;
   thumbnail?: string;
   playlistTitle?: string;
+  playlistUrl?: string;
   duration?: number;
   index: number;
   total: number;
 }
 
-export type DiscordMusicProcess = ChildProcessByStdio<null, Readable, Readable>;
+export type DiscordMusicProcess = ChildProcessByStdio<null, Readable, Readable> & {
+  /** 預先緩衝後交給 Discord 解碼器的音訊流；舊測試替身可省略。 */
+  audio?: Readable;
+  waitForBuffer?: () => Promise<number>;
+};
 
 export type DiscordMusicCommand =
   | "previous"
@@ -203,6 +211,28 @@ function entryThumbnail(entry: YtDlpEntry, fallback?: YtDlpEntry): string | unde
   return candidate && /^https?:\/\//i.test(candidate) ? candidate : undefined;
 }
 
+/** A plain, copy-friendly source URL. Bilibili links are reduced to video id + part only. */
+export function copyableDiscordMusicUrl(input: string): string | null {
+  const extracted = findDiscordMusicUrl(input) ?? input.trim();
+  try {
+    const url = new URL(extracted);
+    if (!/^https?:$/.test(url.protocol)) return null;
+    if (/^(?:www\.|m\.)?bilibili\.com$/i.test(url.hostname)) {
+      const videoId = url.pathname.match(/\/video\/(BV[A-Za-z0-9]+)/i)?.[1];
+      if (videoId) {
+        const part = Number.parseInt(url.searchParams.get("p") ?? "1", 10);
+        return `https://www.bilibili.com/video/${videoId}${part > 1 ? `?p=${part}` : ""}`;
+      }
+    }
+    if (/^(?:www\.)?b23\.tv$/i.test(url.hostname)) {
+      return `${url.protocol}//${url.host}${url.pathname}`;
+    }
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 export function cleanDiscordMusicTrackTitle(title: string, playlistTitle?: string): string {
   const normalized = title.trim();
   const part = normalized.match(/\s+p\d{1,3}\s+(.+)$/i)?.[1]?.trim();
@@ -244,7 +274,7 @@ interface SpotifyEmbedEntity extends SpotifyEmbedTrack {
   trackList?: SpotifyEmbedTrack[];
 }
 
-export function parseSpotifyEmbedHtml(html: string): DiscordMusicTrack[] {
+export function parseSpotifyEmbedHtml(html: string, playlistUrl?: string): DiscordMusicTrack[] {
   const raw = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i)?.[1];
   if (!raw) return [];
   let entity: SpotifyEmbedEntity | undefined;
@@ -271,6 +301,7 @@ export function parseSpotifyEmbedHtml(html: string): DiscordMusicTrack[] {
       playbackUrl: `ytsearch1:${buildSpotifySearchQuery(title, artist)}`,
       thumbnail: cover,
       playlistTitle,
+      playlistUrl: playlistTitle && playlistUrl ? playlistUrl : undefined,
       duration: typeof track.duration === "number" ? Math.round(track.duration / 1000) : undefined,
       index: index + 1,
       total: tracks.length,
@@ -292,7 +323,10 @@ async function resolveSpotifyReference(url: string): Promise<DiscordMusicTrack[]
     signal: AbortSignal.timeout(15_000),
   });
   if (!embed.ok) throw new Error(`Spotify Embed 讀取失敗（HTTP ${embed.status}）`);
-  const tracks = parseSpotifyEmbedHtml(await embed.text());
+  const canonicalPlaylistUrl = match[1].toLowerCase() === "playlist"
+    ? `https://open.spotify.com/playlist/${match[2]}`
+    : undefined;
+  const tracks = parseSpotifyEmbedHtml(await embed.text(), canonicalPlaylistUrl);
   if (!tracks.length) throw new Error("無法讀取這份 Spotify 清單；私人清單需要先在 Spotify 設為公開。 ");
   return tracks;
 }
@@ -723,20 +757,82 @@ async function runYtDlpJson(binary: string, args: string[]): Promise<YtDlpResult
   });
 }
 
-export async function spawnDiscordMusicStream(track: DiscordMusicTrack): Promise<DiscordMusicProcess> {
-  const binary = await ensureYtDlpBinary();
-  const source = track.playbackUrl ?? track.url;
-  return spawn(binary, [
+export function discordMusicSeekArgs(startAtSeconds = 0): string[] {
+  const seconds = Math.max(0, Math.floor(startAtSeconds));
+  if (!seconds) return [];
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainder = seconds % 60;
+  const timestamp = [hours, minutes, remainder].map((value) => String(value).padStart(2, "0")).join(":");
+  return ["--download-sections", `*${timestamp}-inf`, "--force-keyframes-at-cuts"];
+}
+
+export function discordMusicStreamArgs(source: string, startAtSeconds = 0): string[] {
+  return [
     ...bilibiliCookieArgs(source),
     "--no-playlist",
     "--no-warnings",
     "--no-progress",
-    "--format",
-    "bestaudio/best",
-    "--output",
-    "-",
+    "--retries", "5",
+    "--fragment-retries", "5",
+    "--retry-sleep", "1",
+    "--socket-timeout", "20",
+    "--format", "bestaudio/best",
+    ...discordMusicSeekArgs(startAtSeconds),
+    "--output", "-",
     source,
-  ], { stdio: ["ignore", "pipe", "pipe"] });
+  ];
+}
+
+export function attachDiscordMusicBuffer(process: ChildProcessByStdio<null, Readable, Readable>): DiscordMusicProcess {
+  const audio = new PassThrough({
+    readableHighWaterMark: MUSIC_BUFFER_CAPACITY_BYTES,
+    writableHighWaterMark: MUSIC_BUFFER_CAPACITY_BYTES,
+  });
+  let receivedBytes = 0;
+  process.stdout.on("data", (chunk: Buffer) => { receivedBytes += chunk.length; });
+  process.stdout.pipe(audio);
+
+  const waitForBuffer = async (): Promise<number> => {
+    if (receivedBytes >= MUSIC_STARTUP_BUFFER_BYTES || process.stdout.readableEnded) return receivedBytes;
+    return await new Promise<number>((resolve, reject) => {
+      let settled = false;
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        process.stdout.off("data", onData);
+        process.stdout.off("end", onEnd);
+        process.stdout.off("error", onError);
+        if (error && receivedBytes === 0) reject(error);
+        else resolve(receivedBytes);
+      };
+      const onData = () => {
+        if (receivedBytes >= MUSIC_STARTUP_BUFFER_BYTES) finish();
+      };
+      const onEnd = () => finish();
+      const onError = (error: Error) => finish(error);
+      const timer = setTimeout(
+        () => finish(new Error("音訊來源在緩衝時間內沒有傳回資料")),
+        MUSIC_BUFFER_TIMEOUT_MS,
+      );
+      process.stdout.on("data", onData);
+      process.stdout.once("end", onEnd);
+      process.stdout.once("error", onError);
+      onData();
+    });
+  };
+
+  return Object.assign(process, { audio, waitForBuffer });
+}
+
+export async function spawnDiscordMusicStream(track: DiscordMusicTrack, startAtSeconds = 0): Promise<DiscordMusicProcess> {
+  const binary = await ensureYtDlpBinary();
+  const source = track.playbackUrl ?? track.url;
+  const process = spawn(binary, discordMusicStreamArgs(source, startAtSeconds), {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return attachDiscordMusicBuffer(process);
 }
 
 export async function testBilibiliBrowserCookies(): Promise<{ profilePath: string; title: string }> {

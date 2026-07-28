@@ -2,7 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
-import { deleteDiscordMusicFavorite, deleteDiscordMusicFavorites, loadDiscordMusicFavorites, moveDiscordMusicFavorite, saveDiscordMusicFavorite } from "./music-favorites";
+import { deleteDiscordMusicFavorite, deleteDiscordMusicFavorites, loadDiscordMusicFavorites, moveDiscordMusicFavorite, saveDiscordMusicFavorite, loadDiscordMusicPlaylists, saveDiscordMusicPlaylist, saveDiscordMusicPlaylistLink, deleteDiscordMusicPlaylist } from "./music-favorites";
 
 const directory = path.join(os.tmpdir(), `cyrene-music-favorites-${process.pid}`);
 const filePath = path.join(directory, "favorites.json");
@@ -70,5 +70,61 @@ describe("Discord music favorites", () => {
     const favorites = await loadDiscordMusicFavorites(10, filePath);
     expect(await deleteDiscordMusicFavorites([favorites[0].id, favorites[2].id, favorites[2].id], filePath)).toBe(2);
     expect((await loadDiscordMusicFavorites(10, filePath)).map((entry) => entry.title)).toEqual(["C", "A"]);
+  });
+
+  it("manages multiple custom playlists", async () => {
+    // 1. Initially only default playlist exists
+    const playlists = await loadDiscordMusicPlaylists(filePath);
+    expect(playlists).toHaveLength(1);
+    expect(playlists[0].name).toBe("💖 My Favorites");
+
+    // 2. Create custom playlist
+    const customList = await saveDiscordMusicPlaylist("My Study List", "https://example.com/playlist", [], filePath);
+    expect(customList.name).toBe("My Study List");
+    expect(customList.url).toBe("https://example.com/playlist");
+
+    const playlistsAfterCreate = await loadDiscordMusicPlaylists(filePath);
+    expect(playlistsAfterCreate).toHaveLength(2);
+    expect(playlistsAfterCreate[1].id).toBe(customList.id);
+
+    // 3. Save track to the custom playlist
+    const track = { title: "Study Song", url: "https://example.com/study", index: 1, total: 1 };
+    const saved = await saveDiscordMusicFavorite(track, customList.id, filePath);
+    expect(saved.added).toBe(true);
+
+    // Check tracks in custom list
+    const customTracks = await loadDiscordMusicFavorites(10, customList.id, filePath);
+    expect(customTracks).toHaveLength(1);
+    expect(customTracks[0].title).toBe("Study Song");
+
+    // Check tracks in default list (should remain empty/unchanged)
+    const defaultTracks = await loadDiscordMusicFavorites(10, "default", filePath);
+    expect(defaultTracks).toHaveLength(0);
+
+    // 4. Delete custom playlist
+    const deleted = await deleteDiscordMusicPlaylist(customList.id, filePath);
+    expect(deleted).toBe(true);
+
+    const playlistsAfterDelete = await loadDiscordMusicPlaylists(filePath);
+    expect(playlistsAfterDelete).toHaveLength(1);
+  });
+
+  it("stores a Spotify playlist as one deduplicated link without copying its tracks", async () => {
+    const url = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=test";
+    const first = await saveDiscordMusicPlaylistLink("Today's Top Hits", url, filePath);
+    const duplicate = await saveDiscordMusicPlaylistLink(
+      "Duplicate title",
+      "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+      filePath,
+    );
+
+    expect(first.added).toBe(true);
+    expect(first.playlist).toMatchObject({
+      name: "Today's Top Hits",
+      url: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+      tracks: [],
+    });
+    expect(duplicate).toMatchObject({ added: false, playlist: { id: first.playlist.id } });
+    expect(await loadDiscordMusicPlaylists(filePath)).toHaveLength(2);
   });
 });

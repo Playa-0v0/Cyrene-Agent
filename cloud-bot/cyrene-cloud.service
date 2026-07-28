@@ -1,0 +1,25 @@
+[Unit]
+Description=Cyrene Cloud Discord Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bluearchive6888
+Group=bluearchive6888
+WorkingDirectory=/home/bluearchive6888/cyrene-deploy/cyrene-gcp-free/cloud-bot
+EnvironmentFile=/home/bluearchive6888/cyrene-deploy/cyrene-gcp-free/cloud-bot/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

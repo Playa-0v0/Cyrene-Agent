@@ -10,12 +10,26 @@ services:
     envVars:
       - key: DISCORD_BOT_TOKEN
         sync: false
-      - key: LLM_API_KEY
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: SPOTIFY_REFRESH_TOKEN
         sync: false
       - key: LLM_BASE_URL
-        value: https://api.openai.com/v1
+        value: https://openrouter.ai/api/v1
       - key: LLM_MODEL
-        value: gpt-4.1-mini
+        value: openrouter/free
+      - key: LLM_VISION_MODEL
+        value: openrouter/free
       - key: DISCORD_REQUIRE_MENTION
         value: "true"
       - key: BOT_ACTIVITY

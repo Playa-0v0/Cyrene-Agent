@@ -2109,9 +2109,9 @@ body {
 }
 
 .chat-sessions__item.is-active {
-  background: var(--rb-pink-50);
+  background: rgba(236, 72, 153, 0.14);
   border-color: var(--rb-pink-500);
-  box-shadow: 0 0 0 2px var(--rb-pink-100);
+  box-shadow: 0 0 0 2px rgba(236, 72, 153, 0.12);
 }
 
 /* 左側：標題 + meta 縱向堆疊，吃滿剩餘寬度 */
@@ -3328,6 +3328,51 @@ body {
 .bilibili-portal-link { display:inline-flex; align-items:center; text-decoration:none; }
 @media (max-width:620px) { .bilibili-session { grid-template-columns:1fr; } .bilibili-session__rail { max-width:180px; } }
 @media (prefers-reduced-motion:reduce) { .bilibili-session__line i { transition:none; } }
+
+/* ===== Google Cloud 本機優先備援控制台 ===== */
+.channels-card--google-cloud {
+  --gcloud-blue:#7aa2ff;
+  --gcloud-cyan:#62d9ff;
+  --gcloud-violet:#a984ff;
+  border-color:rgba(122,162,255,.34);
+  background:
+    radial-gradient(circle at 88% -12%, rgba(98,217,255,.15), transparent 36%),
+    radial-gradient(circle at 10% 110%, rgba(169,132,255,.16), transparent 42%),
+    linear-gradient(145deg, rgba(23,27,55,.94), rgba(23,17,48,.88));
+  box-shadow:0 22px 56px rgba(4,7,28,.28), inset 0 1px rgba(255,255,255,.045);
+}
+.gcloud-heading { display:flex; align-items:center; gap:12px; }
+.gcloud-heading__mark { display:grid; place-items:center; width:34px; height:34px; border-radius:11px; color:#fff; font:800 17px/1 ui-monospace,SFMono-Regular,Menlo,monospace; background:conic-gradient(from 45deg,#4285f4 0 25%,#34a853 0 50%,#fbbc05 0 75%,#ea4335 0); box-shadow:0 0 0 4px rgba(122,162,255,.08); }
+.gcloud-heading h2 { margin:0; }
+.gcloud-heading small { display:block; margin-top:3px; color:rgba(255,255,255,.42); font:700 9px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.17em; text-transform:uppercase; }
+.gcloud-live-status .channels-status__dot { background:#77809b; box-shadow:none; }
+.gcloud-live-status.is-online .channels-status__dot { background:#58e5ae; box-shadow:0 0 0 4px rgba(88,229,174,.1),0 0 14px rgba(88,229,174,.45); }
+.gcloud-live-status.is-transition .channels-status__dot { background:#ffd166; animation:gcloud-pulse 1.2s ease-in-out infinite; }
+@keyframes gcloud-pulse { 50% { opacity:.38; transform:scale(.82); } }
+.gcloud-route { display:grid; grid-template-columns:minmax(170px,1fr) minmax(140px,1.15fr) minmax(170px,1fr); align-items:center; gap:16px; margin:18px 0; padding:16px; border:1px solid rgba(122,162,255,.18); border-radius:18px; background:rgba(5,9,28,.28); }
+.gcloud-route__node { display:flex; align-items:center; gap:11px; min-width:0; }
+.gcloud-route__node--cloud { justify-content:flex-end; text-align:right; }
+.gcloud-route__icon { display:grid; place-items:center; flex:none; width:38px; height:38px; border:1px solid rgba(255,255,255,.13); border-radius:13px; background:rgba(255,255,255,.055); color:#dbe7ff; font-size:17px; }
+.gcloud-route__node small { display:block; color:rgba(255,255,255,.38); font:700 8px/1 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.14em; }
+.gcloud-route__node strong { display:block; margin-top:5px; color:#f5f7ff; font-size:13px; }
+.gcloud-route__line { position:relative; display:grid; place-items:center; min-height:38px; }
+.gcloud-route__line::before,.gcloud-route__line::after { content:""; position:absolute; top:50%; width:7px; height:7px; border-radius:50%; background:var(--gcloud-cyan); box-shadow:0 0 14px var(--gcloud-cyan); transform:translateY(-50%); }
+.gcloud-route__line::before { left:0; }.gcloud-route__line::after { right:0; }
+.gcloud-route__line i { position:absolute; inset:auto 3px 50%; height:1px; background:linear-gradient(90deg,var(--gcloud-cyan),var(--gcloud-violet)); opacity:.72; }
+.gcloud-route__line span { z-index:1; padding:5px 10px; border:1px solid rgba(122,162,255,.22); border-radius:999px; background:#181a39; color:#dbe7ff; font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:nowrap; }
+.gcloud-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.gcloud-facts article { min-width:0; padding:14px 15px; border:1px solid rgba(255,255,255,.075); border-radius:15px; background:rgba(255,255,255,.035); }
+.gcloud-facts small { display:block; color:rgba(255,255,255,.38); font:700 8px/1 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.13em; }
+.gcloud-facts strong { display:block; overflow:hidden; margin:8px 0 5px; color:#f4f5ff; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.gcloud-facts span { color:rgba(217,226,255,.58); font-size:10px; }
+.gcloud-safety { display:flex; gap:10px; align-items:center; margin-top:12px; padding:11px 13px; border:1px solid rgba(88,229,174,.12); border-radius:13px; background:rgba(88,229,174,.055); }
+.gcloud-safety > span { color:#58e5ae; font-size:20px; }
+.gcloud-safety div { display:grid; gap:2px; }.gcloud-safety strong { color:#c9f8e6; font-size:11px; }.gcloud-safety small { color:rgba(255,255,255,.46); font-size:10px; }
+.gcloud-actions { margin-top:14px; }.gcloud-action.is-active { border-color:rgba(98,217,255,.7); background:linear-gradient(135deg,rgba(68,118,255,.8),rgba(142,88,226,.8)); color:#fff; box-shadow:0 8px 22px rgba(76,91,214,.22); }
+.gcloud-console-link { display:inline-flex; align-items:center; text-decoration:none; }
+#channels-cloud-feedback { margin:9px 0 0; }
+@media (max-width:720px) { .gcloud-route { grid-template-columns:1fr; }.gcloud-route__node--cloud { justify-content:flex-start; text-align:left; }.gcloud-route__line { min-height:28px; }.gcloud-route__line i { inset:0 50% 0 auto; width:1px; height:auto; }.gcloud-route__line::before,.gcloud-route__line::after { left:50%; right:auto; top:0; transform:translate(-50%,-50%); }.gcloud-route__line::after { top:auto; bottom:0; transform:translate(-50%,50%); }.gcloud-facts { grid-template-columns:1fr; } }
+@media (prefers-reduced-motion:reduce) { .gcloud-live-status.is-transition .channels-status__dot { animation:none; } }
 
 .discord-identity {
   position: relative;

@@ -103,6 +103,21 @@ function registerChannelsIpc(): void {
     return { ok: true };
   });
 
+  ipcMain.handle(IPC.CHANNELS_DISCORD_CLOUD_STATUS, async () => {
+    const adapter = channelManager.getAdapter("discord") as DiscordAdapter | undefined;
+    if (!adapter) throw new Error("Discord adapter 未初始化");
+    return await adapter.getCloudControlStatus();
+  });
+
+  ipcMain.handle(IPC.CHANNELS_DISCORD_CLOUD_CONTROL, async (_event, action: unknown) => {
+    if (action !== "local" && action !== "cloud" && action !== "restart-cloud") {
+      throw new Error("不支援的 Google Cloud 控制動作");
+    }
+    const adapter = channelManager.getAdapter("discord") as DiscordAdapter | undefined;
+    if (!adapter) throw new Error("Discord adapter 未初始化");
+    return await adapter.controlCloud(action);
+  });
+
   // ── 微信 IPC (iLink 直連版) ───────────────────────────────────────────────────────
 
   ipcMain.handle(IPC.CHANNELS_WECHAT_RUNTIME_DETECT, () => {

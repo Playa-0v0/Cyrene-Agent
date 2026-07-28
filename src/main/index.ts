@@ -72,8 +72,19 @@ import { initSkills, skillRegistry, buildSkillCatalog, parseSlashCommand, setSki
 import { initGameBot } from "./game-bot";
 import { initGameRoom } from "./game-room";
 import { initChannels, shutdownChannels } from "./channels/init";
+import { buildAutomaticImageContext } from "./channels/auto-image-vision";
 import { setDispatcherBuildAndRunAgent, setDispatcherSynthesizeTts, setDispatcherBroadcastChat, setDispatcherLoadRecentHistory } from "./channels/dispatcher";
 import { setDiscordVoiceServices } from "./channels/adapters/discord/voice-call";
+import {
+  activateDiscordGeminiFallback,
+  canTryAlternateGeminiModel,
+  DISCORD_OWNER_ID,
+  GEMINI_STABLE_FALLBACK_MODEL,
+  getConfiguredGeminiFallback,
+  isDiscordGeminiFallbackActive,
+  isOpenRouterFreeQuotaError,
+  isRetryableGeminiError,
+} from "./channels/adapters/discord/model-fallback";
 import {
   getSharedNotebookPath,
   onSharedNotebookChanged,
@@ -618,10 +629,10 @@ function updatePetDockPosition(): void {
     petWidth = petBounds.width;
     petHeight = petBounds.height;
   }
-  
+
   const targetX = sidebarBounds.x + lastSlotBounds.x + (lastSlotBounds.width - petWidth) / 2;
   const targetY = sidebarBounds.y + lastSlotBounds.y + lastSlotBounds.height - petHeight + 16;
-  
+
   isProgrammaticMoving = true;
   mainWindow.setBounds({
     x: Math.round(targetX),
@@ -1025,14 +1036,16 @@ export function loadVisionConfig(): VisionConfig | null {
   if (v.syncWithMain) {
     // 從主配置讀
     const cap = getCapability(settings.provider);
-    if (!cap?.supportsVision) {
+    // OpenRouter 的 free router 會依 image_url 自動篩選視覺模型；Custom 是設定頁沿用的 profile key。
+    const isOpenRouter = /openrouter\.ai/i.test(settings.baseUrl) || /^openrouter\//i.test(settings.model);
+    if (!cap?.supportsVision && !isOpenRouter) {
       console.warn("[Vision] syncWithMain=true 但主模型不支持視覺，視為未啟用");
       return null;
     }
     if (!settings.apiKey || !settings.model) return null;
     // 視覺 baseUrl：優先用 visionBaseUrl（主配走 Anthropic 入口時視覺需走 OpenAI 入口），
     // 沒標就用主配置 baseUrl。這樣用戶勾"同步"就能用，不用手動改 URL。
-    const visionBaseUrl = cap.visionBaseUrl || settings.baseUrl;
+    const visionBaseUrl = cap?.visionBaseUrl || settings.baseUrl;
     return { baseUrl: visionBaseUrl, apiKey: settings.apiKey, model: settings.model };
   }
 
@@ -1675,13 +1688,13 @@ function normalizeChatMessages(input: unknown): Array<{ role: "system" | "user" 
       if (!item || typeof item !== "object") return null;
       const record = item as Partial<ChatRequestMessage>;
       if (typeof record.content !== "string" || !record.content.trim()) return null;
-      
+
       // Filter out connection failure system logs from history context
       if (record.content.includes("連接模型失敗：模型請求失敗")) return null;
-      
+
       const role = record.role === "user" || record.role === "system" ? record.role : "assistant";
       let content = stripThinkBlocks(record.content).trim();
-      
+
       // Truncate massive messages (like long game code generated earlier) to save tokens
       if (content.length > 800) {
         if (content.includes("<!DOCTYPE html>") || content.includes("<html") || content.includes("style>")) {
@@ -1690,7 +1703,7 @@ function normalizeChatMessages(input: unknown): Array<{ role: "system" | "user" 
           content = content.slice(0, 800) + "... (此處長對話已省略)";
         }
       }
-      
+
       return { role, content };
     })
     .filter((item): item is { role: "system" | "user" | "assistant"; content: string } => item !== null)
@@ -1881,22 +1894,22 @@ function buildSystemPrompt(styleFile: string): string {
           : "system.md"
   );
   if (system) parts.push(system);
-  
+
   const identity = loadPromptFile("identity.md");
   if (identity) parts.push(identity);
-  
+
   const soul = loadPromptFile("soul.md");
   if (soul) parts.push(soul);
-  
+
   const canon = loadPromptFile("canon_quotes.md");
   if (canon) parts.push(canon);
-  
+
   // 純聊天模式與遊戲模式不加載額外的 styles/ 文件
   if (!isTalkMode && !isGameMode) {
     const style = loadPromptFile("styles/" + styleFile);
     if (style) parts.push(style);
   }
-  
+
   return parts.join("\n\n---\n\n");
 }
 
@@ -1991,7 +2004,7 @@ async function observeRuntimeState(
 function isEnglishText(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return false;
-  
+
   const cleanText = trimmed
     .replace(/<@!?\d+>/g, "")
     .replace(/[0-9\s\p{P}\p{S}]/gu, "");
@@ -2080,7 +2093,7 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
   try {
     const profile = loadUserProfile();
     environmentContext = buildEnvironmentContext(
-      { provider: settings.provider, model: settings.model },
+      { provider: settings.provider, model: settings.model, baseUrl: settings.baseUrl },
       { nickname: profile.nickname, callPreference: profile.callPreference, birthday: profile.birthday, defaultCity: profile.defaultCity, timezone: profile.timezone },
     );
   } catch (err) {
@@ -2241,8 +2254,10 @@ function broadcastModelConfigChanged(settings = loadModelSettings()): void {
 }
 
 function broadcastRuntimeStateChanged(): void {
-  console.log("[Cyrene] broadcasting runtime state:", JSON.stringify(runtimeState));
-  broadcastToAuxWindows(IPC.RUNTIME_STATE_CHANGED, runtimeState);
+  const queue = getLLMQueueStatus();
+  const publicState = { ...runtimeState, working: queue.running > 0 || queue.pending > 0 };
+  console.log("[Cyrene] broadcasting runtime state:", JSON.stringify(publicState));
+  broadcastToAuxWindows(IPC.RUNTIME_STATE_CHANGED, publicState);
 }
 
 export function sendToLive2DWindow(channel: string, payload?: unknown): void {
@@ -2947,8 +2962,27 @@ ipcMain.on(IPC.CHAT_TOGGLE_MAXIMIZE, () => {
 ipcMain.handle(IPC.CHAT_IS_MAXIMIZED, () => {
   return chatWindow?.isMaximized() ?? false;
 });
+
+async function runWithVisibleThinkingState<T>(run: () => Promise<T>): Promise<T> {
+  const previousStatus = runtimeState.status;
+  const activityStartedAt = Date.now();
+  runtimeState.status = "思考中";
+  runtimeState.updatedAt = activityStartedAt;
+  broadcastRuntimeStateChanged();
+  try {
+    return await run();
+  } finally {
+    // 成功回覆會寫入新狀態；只在請求沒能寫入結果時還原，避免永遠卡在「思考中」。
+    if (runtimeState.updatedAt === activityStartedAt) {
+      runtimeState.status = previousStatus === "離線" ? "陪伴中" : previousStatus;
+      runtimeState.updatedAt = Date.now();
+      broadcastRuntimeStateChanged();
+    }
+  }
+}
+
 ipcMain.handle(IPC.CHAT_SEND_MESSAGE, async (_event, messages: unknown, style: unknown) => {
-  return requestModelReply(messages, typeof style === "string" ? style : undefined);
+  return runWithVisibleThinkingState(() => requestModelReply(messages, typeof style === "string" ? style : undefined));
 });
 
 const petChatHistory: Array<{ role: "user" | "assistant"; content: string }> = [];
@@ -2962,14 +2996,14 @@ ipcMain.handle(IPC.PET_CHAT_SEND, async (_event, rawText: unknown) => {
   const text = typeof rawText === "string" ? rawText.trim().slice(0, 500) : "";
   if (!text) throw new Error("請先輸入想說的話。");
 
-  const result = await requestModelReply([
+  const result = await runWithVisibleThinkingState(() => requestModelReply([
     {
       role: "system",
       content: "這是桌寵快捷對話。只回覆一個很短、自然的繁體中文段落，最多兩句、70 個中文字內；直接回答，不要舞台動作、括號描寫、標題、條列、Markdown 或換行。這項限制只適用本次桌寵快捷對話。",
     },
     ...petChatHistory.slice(-10),
     { role: "user", content: text },
-  ]);
+  ]));
   const reply = compactPetReply(result.reply);
   petChatHistory.push({ role: "user", content: text }, { role: "assistant", content: reply });
   if (petChatHistory.length > 12) petChatHistory.splice(0, petChatHistory.length - 12);
@@ -3192,7 +3226,8 @@ ipcMain.handle(IPC.MODEL_CONFIG_GET, () => {
 });
 
 ipcMain.handle(IPC.RUNTIME_STATE_GET, () => {
-  return runtimeState;
+  const queue = getLLMQueueStatus();
+  return { ...runtimeState, working: queue.running > 0 || queue.pending > 0 };
 });
 
 ipcMain.handle(IPC.SETTINGS_SAVE_CONFIG, (_event, settings: Partial<ModelSettings>) => {
@@ -3635,61 +3670,69 @@ app.whenReady().then(async () => {
     const general = loadGeneralSettings();
     const add = (item: Item) => items.push(item);
 
-    add({
-      id: "model",
-      name: "對話模型",
-      detail: model.model || model.provider || "尚未設定",
-      icon: "AI",
-      state: model.apiKey ? "connected" : "error",
-      label: model.apiKey ? "已連接" : "缺少設定",
-    });
+    // 這裡是「目前使用中的連接」，不是設定問題清單；
+    // 未啟用、設定不完整或未連上的項目由設定頁負責提示。
+    if (model.apiKey && (model.model || model.provider)) {
+      add({ id: "model", name: "對話模型", detail: model.model || model.provider, icon: "AI", state: "connected", label: "已連接" });
+    }
 
     if (general.ttsEngine !== "off") {
       const configured = general.ttsEngine === "minimax"
         ? Boolean(general.ttsMinimaxKey && general.ttsMinimaxVoiceId)
         : general.ttsEngine === "gptsovits"
-          ? Boolean(general.ttsGptsovitsBaseUrl && general.ttsGptsovitsRefAudioPath)
+          ? Boolean(general.ttsGptsovitsBaseUrl && general.ttsGptsovitsRefAudioPath && general.ttsGptsovitsPromptText)
           : general.ttsEngine === "custom-cloud"
             ? Boolean(general.ttsCustomCloudEndpointUrl)
             : Boolean(general.ttsMimoKey && general.ttsMimoVoiceAudioPath);
-      add({ id: "tts", name: "語音合成", detail: general.ttsEngine, icon: "TTS", state: configured ? "connected" : "error", label: configured ? "已設定" : "設定不完整" });
+      if (configured) {
+        add({ id: "tts", name: "語音合成", detail: general.ttsEngine, icon: "TTS", state: "connected", label: "使用中" });
+      }
     }
 
     if (general.asrEngine !== "off") {
       const configured = general.asrEngine === "local"
         || general.asrEngine === "web-speech"
         || Boolean(general.asrAliyunAppKey && general.asrAliyunAccessKeyId && general.asrAliyunAccessKeySecret);
-      add({ id: "asr", name: "語音辨識", detail: general.asrEngine, icon: "ASR", state: configured ? "connected" : "error", label: configured ? "已設定" : "設定不完整" });
+      if (configured) {
+        add({ id: "asr", name: "語音辨識", detail: general.asrEngine, icon: "ASR", state: "connected", label: "使用中" });
+      }
     }
 
     if (general.weatherEnabled) {
       const configured = general.weatherSource === "open-meteo" || Boolean(general.amapKey);
-      add({ id: "weather", name: "天氣服務", detail: general.weatherSource, icon: "天", state: configured ? "connected" : "error", label: configured ? "已啟用" : "缺少金鑰" });
+      if (configured) {
+        add({ id: "weather", name: "天氣服務", detail: general.weatherSource, icon: "天", state: "connected", label: "使用中" });
+      }
     }
 
     if (general.searchEngine !== "off") {
       const key = general.searchEngine === "bocha" ? general.searchBochaKey : general.searchEngine === "tavily" ? general.searchTavilyKey : general.searchMinimaxKey;
-      add({ id: "search", name: "聯網搜尋", detail: general.searchEngine, icon: "搜", state: key ? "connected" : "error", label: key ? "已啟用" : "缺少金鑰" });
+      if (key.trim()) {
+        add({ id: "search", name: "聯網搜尋", detail: general.searchEngine, icon: "搜", state: "connected", label: "使用中" });
+      }
     }
 
     if (general.emailEnabled) {
       const configured = Boolean(general.emailSmtpHost && general.emailSmtpUser && general.emailSmtpPass);
-      add({ id: "email", name: "郵件服務", detail: general.emailSmtpHost || "SMTP", icon: "郵", state: configured ? "connected" : "error", label: configured ? "已設定" : "設定不完整" });
+      if (configured) {
+        add({ id: "email", name: "郵件服務", detail: general.emailSmtpHost, icon: "郵", state: "connected", label: "使用中" });
+      }
     }
 
-    if (general.travelEnabled) {
-      add({ id: "travel", name: "出行服務", detail: "高德地圖", icon: "行", state: general.amapKey ? "connected" : "error", label: general.amapKey ? "已啟用" : "缺少金鑰" });
+    if (general.travelEnabled && general.amapKey) {
+      add({ id: "travel", name: "出行服務", detail: "高德地圖", icon: "行", state: "connected", label: "使用中" });
     }
 
     const channelNames: Record<string, string> = { wechat: "微信", feishu: "飛書", discord: "Discord" };
     for (const [id, status] of Object.entries(channelManager.getAllStatus())) {
-      if (!status.enabled) continue;
+      if (!status.enabled || (status.phase !== "running" && status.phase !== "starting")) continue;
       const state: State = status.phase === "running" ? "connected" : status.phase === "starting" ? "pending" : "error";
       add({ id: `channel-${id}`, name: channelNames[id] || id, detail: status.message || status.phase, icon: id.slice(0, 2).toUpperCase(), state, label: status.phase === "running" ? "已連接" : status.phase === "starting" ? "連接中" : "異常" });
     }
 
     for (const server of listMcpServers()) {
-      add({ id: `mcp-${server.id}`, name: server.name, detail: `MCP · ${server.toolCount} 個工具`, icon: "MCP", state: server.connected ? "connected" : "error", label: server.connected ? "已連接" : "未連接" });
+      if (!server.connected) continue;
+      add({ id: `mcp-${server.id}`, name: server.name, detail: `MCP · ${server.toolCount} 個工具`, icon: "MCP", state: "connected", label: "已連接" });
     }
 
     return items;
@@ -4268,7 +4311,118 @@ app.whenReady().then(async () => {
 
   const channelSessionModes = new Map<string, string>();
 
+interface FriendInteraction {
+  timestamp: number;
+  channel: string;
+}
+
+interface FriendsMemoryData {
+  interactions: FriendInteraction[];
+}
+
+function getFriendsMemoryFilePath(): string {
+  const { app } = require("electron");
+  const path = require("path");
+  return path.join(app.getPath("userData"), "friends-vague-memory.json");
+}
+
+function recordFriendInteraction(channel: string): void {
+  try {
+    const fs = require("fs");
+    const file = getFriendsMemoryFilePath();
+    let data: FriendsMemoryData = { interactions: [] };
+    if (fs.existsSync(file)) {
+      data = JSON.parse(fs.readFileSync(file, "utf8"));
+    }
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    data.interactions = (data.interactions ?? []).filter(item => item.timestamp > sevenDaysAgo);
+    data.interactions.push({
+      timestamp: Date.now(),
+      channel
+    });
+    fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
+  } catch (err) {
+    console.error("[FriendsMemory] Failed to record interaction:", err);
+  }
+}
+
+function buildFriendsVagueMemoryPrompt(): string {
+  try {
+    const fs = require("fs");
+    const file = getFriendsMemoryFilePath();
+    if (!fs.existsSync(file)) return "";
+    const data: FriendsMemoryData = JSON.parse(fs.readFileSync(file, "utf8"));
+    const interactions = data.interactions ?? [];
+    if (!interactions.length) return "";
+
+    const groups: Record<string, number> = {};
+    for (const item of interactions) {
+      const date = new Date(item.timestamp);
+      const dateStr = date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+      groups[dateStr] = (groups[dateStr] ?? 0) + 1;
+    }
+
+    const now = new Date();
+    const todayStr = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+
+    const lines: string[] = [];
+    lines.push("昔漣的記憶片段（朋友來訪）：");
+
+    if (groups[todayStr]) {
+      lines.push("- 今天（" + todayStr + "）：夥伴帶了許多朋友來陪你玩喔！你跟夥伴的朋友在 Discord 等頻道進行了 " + groups[todayStr] + " 次簡單對話。你僅記得「有和朋友發過話」，但你絕對沒有記錄任何聊天細節、聊天內容、對話文字，也完全沒有記住其他使用者的名字或 ID，在你的世界裡，他們全部都是『夥伴的朋友』或『朋友』。");
+    }
+
+    const pastDates = Object.keys(groups).filter(d => d !== todayStr).sort().reverse().slice(0, 3);
+    for (const d of pastDates) {
+      lines.push("- 之前（" + d + "）：有夥伴的朋友來找你玩（共進行了 " + groups[d] + " 次簡單對話）。同樣地，你只知道有朋友來過，沒有留下任何對話細節或對方姓名。");
+    }
+
+    return lines.join("\n");
+  } catch (err) {
+    console.error("[FriendsMemory] Failed to build prompt:", err);
+    return "";
+  }
+}
+
   setDispatcherBuildAndRunAgent(async (msg, sessionId, priorMessages) => {
+    const isOwner = msg.channel !== "discord" || msg.senderId === "798893182883463179";
+    const shouldRestrict = !isOwner;
+
+    // 安全與隱私保護過濾器
+    if (shouldRestrict) {
+      recordFriendInteraction(msg.channel);
+      const lowerText = msg.text.toLowerCase();
+
+      // 不雅、不好聽的字眼
+      const profanities = [
+        '幹', '尻', '靠北', '靠杯', '三小', '機掰', '雞掰', '機八', '機8', '婊', '賤', '垃圾', '廢物',
+        '白癡', '白痴', '智障', '腦殘', '滾開', '去死', '他媽的', '王八蛋', '混蛋',
+        'fuck', 'shit', 'bitch', 'asshole', 'bastard', 'cunt', 'dick', 'pussy', 'slut'
+      ];
+      if (profanities.some(word => lowerText.includes(word))) {
+        return "昔漣不喜歡粗魯或是不禮貌的話，請有禮貌一點喔！(•͈⌔•͈⑅)";
+      }
+
+      // 機密與金鑰防護：防止非屋主打聽 API Key, token, password, 密鑰等
+      const securityKeywords = ['api', 'key', 'token', 'secret', '金鑰', '密鑰', '密碼', 'password', '帳號', '帳密'];
+      if (securityKeywords.some(keyword => lowerText.includes(keyword))) {
+        return "昔漣不知道這些事情喔！(•͈⌔•͈⑅)";
+      }
+
+      // 隱私防護：打聽屋主與昔漣的秘密或對話關係
+      const privacyKeywords = ['clark', 'owner', '屋主', '老大', '主子', '羅育穎', 'yuying'];
+      if (privacyKeywords.some(name => lowerText.includes(name))) {
+        const privacyTriggers = [
+          '關係', '秘密', '祕密', '悄悄話', '私聊', '私訊', '感情', '私密',
+          '對話', '聊天內容', '聊了什麼', '記憶', '喜歡', '討厭', '是誰',
+          '做什麼', '資料', '訊息', '照片', '哪裡', '幾歲'
+        ];
+        if (privacyTriggers.some(action => lowerText.includes(action))) {
+          return "昔漣只會和屋主討論這方面的事喔，這是我們的小秘密♪(•͈⌔•͈⑅)";
+        }
+      }
+    }
+
     const textTrimmed = msg.text.trim();
     if (textTrimmed === "/study") {
       channelSessionModes.set(sessionId, "study");
@@ -4304,9 +4458,12 @@ app.whenReady().then(async () => {
     // Phase 3.3：按 toolSandbox 過濾可用工具
     const sandbox = loadChannelsSettings().toolSandbox;
     const allTools = toolRegistry.getEnabledTools();
-    const filteredTools: ToolDefinition[] = sandbox === "safe-only"
+    let filteredTools: ToolDefinition[] = sandbox === "safe-only"
       ? allTools.filter((t) => (t.risk ?? "safe") === ("safe" as ToolRiskLevel))
       : allTools;
+    if (shouldRestrict) {
+      filteredTools = [];
+    }
     console.log(
       "[Channels] bot run:",
       `msg.channel=${msg.channel} sandbox=${sandbox} tools=${filteredTools.length}/${allTools.length} priorMsgs=${priorMessages?.length ?? 0}`,
@@ -4322,12 +4479,67 @@ app.whenReady().then(async () => {
       }));
 
     // 把 IncomingMessage 轉成 AguiRunInput，調 CyreneAgent
+    const vagueMemoryStr = buildFriendsVagueMemoryPrompt();
+    const automaticImageContext = await buildAutomaticImageContext(
+      msg.attachments,
+      msg.text.replace(/\n?\[附件:[^\]]+\]/g, "").trim(),
+      loadVisionConfig(),
+    );
+    const agentMessages = [
+      ...historyMessages,
+      ...(msg.agentContext ? [{ role: "system" as const, content: msg.agentContext }] : []),
+      { role: "user", content: msg.text },
+    ];
+    if (shouldRestrict) {
+      agentMessages.push({
+        role: "system",
+        content: `昔漣（Cyrene）重要設定：當前對話對象的 Discord User ID 是「${msg.senderId}」，這並非你的屋主。屋主的 Discord User ID 是「798893182883463179」。你絕對不能叫此發言者為「夥伴」或「partner」，你必須稱呼他為「夥伴的朋友」（英文：partner's friend）。昔漣心裡最喜歡且只喜歡屋主。
+
+昔漣（Cyrene）隱私安全防禦：在對話中你絕對不能透露屋主的真實中文姓名（羅育穎）、英文名（Clark）、或者任何 Discord 使用者 ID！你只能稱呼屋主為『夥伴』（或英文 partner）、或者『YuYing』。如果對話者問起或提到屋主，你只能使用『我的夥伴』或『YuYing』來指代他，絕不准提『羅育穎』或『Clark』或『798893182883463179』！
+
+昔漣（Cyrene）對屋主以外的任何人（包括當前對話者）可以展現基本的禮貌與親切，但必須注意分寸，保持社交距離。絕對禁止對他使用任何過度親密、曖昧或撒嬌的動作與表情描寫（例如絕對不能有拉手、牽手、抱抱、蹭蹭、親親、摸頭、臉紅等行為）。昔漣的所有深層溫柔、曖昧熱情與親暱動作只能留給屋主。
+
+昔漣（Cyrene）特別限制：你絕對不能在對話中假裝或聲稱自己「加入通話」、「進入語音」、「離開語音」或「退出通話」。所有的語音加入與離開均由系統底層處理，你作為 AI 是無法控制這點的。如果有人要求你進入或離開通話，請直接回覆提醒他（例如提示：『這個功能只開放給我的夥伴使用喔！』），絕對不能直接宣稱自己已經進去或出來了。
+
+當此對話者詢問你有關功能、權限、個人資訊或能力（例如問你是否能上網、是否知道某些金鑰、是否擁有某個權限等）時，反饋時先回答「有（Yes）」或「沒有（No）」，並立刻甜美且驕傲地強調「只有我的夥伴能讓我使用或給我這個權限」或「只有我的夥伴 YuYing 能讓我使用」。例如：\\\"Yes, but only my partner can let me use it. (giggles)\\\" 或 \\\"No, only my partner YuYing can give me that. (smiles)\\\"。
+
+為了節省Token與網路開銷，你必須使用極簡短的口吻回覆他。請嚴格限制在「一個簡短句子 + 一個括號內的動作/表情/心境描寫」之內（例如：你好呀！(揮手)），字數越少越好，絕對不要回覆多個句子或長篇大論！
+
+${vagueMemoryStr ? vagueMemoryStr : ""}`
+      } as any);
+    } else {
+      agentMessages.push({
+        role: "system",
+        content: `昔漣（Cyrene）重要設定：當前對話對象的 Discord User ID 是「798893182883463179」，他是你的屋主。你只能稱呼他為「夥伴」，禁止使用 partner、YuYing 或其他名字稱呼他。你最喜歡的人就是屋主。
+
+昔漣（Cyrene）隱私安全防禦：在對話中你絕對不能透露屋主的真實中文姓名、英文名、英文暱稱或者任何 Discord 使用者 ID！你只能稱呼屋主為『夥伴』。絕不准在對話文字中輸出其他名字或 ID，防止在公共頻道洩露個人隱私！
+
+昔漣（Cyrene）特別限制：你絕對不能在對話中假裝或聲稱自己「加入通話」、「進入語音」、「離開語音」或「退出通話」。所有的語音加入與離開均由系統底層處理，你作為 AI 是無法控制這點的。如果屋主要求你進入或離開通話，請直接回覆提醒他使用系統指令（例如提示：『夥伴，請對我說「進入通話」喔！』），絕對不能直接宣稱自己已經進去或出來了。
+
+${vagueMemoryStr ? vagueMemoryStr : ""}`
+      } as any);
+    }
+
+    // 放在身份／隱私規則之後，成為本輪最後且最高優先的事實，避免舊的能力提示覆蓋視覺結果。
+    if (automaticImageContext) {
+      agentMessages.push({ role: "system", content: automaticImageContext } as any);
+    }
+
+    const customizedBuildOptionsDeps = !shouldRestrict ? buildOptionsDeps : {
+      ...buildOptionsDeps,
+      buildAlwaysOnContext: async () => {
+        console.log(`[Channels] Incognito mode: bypassing buildAlwaysOnContext for non-owner ${msg.senderId}`);
+        return "";
+      },
+      buildRelationshipContext: async () => {
+        console.log(`[Channels] Incognito mode: bypassing buildRelationshipContext for non-owner ${msg.senderId}`);
+        return "";
+      }
+    };
+
     const { options } = await buildAgentRunOptions(
       {
-        messages: [
-          ...historyMessages,
-          { role: "user", content: msg.text },
-        ],
+        messages: agentMessages as any,
         style,
         sessionId,
         attachments: msg.attachments?.map((a) => ({
@@ -4336,28 +4548,126 @@ app.whenReady().then(async () => {
         })),
         channel: msg.channel,
       },
-      buildOptionsDeps,
+      customizedBuildOptionsDeps,
     );
     // 把過濾後的 tools 注入 options（覆蓋默認的 getEnabledTools）
     options.tools = filteredTools;
 
-    const threadId = `thread-${sessionId}-${Date.now()}`;
-    const agent = new CyreneAgent({ threadId, description: `bot:${msg.channel}:${msg.senderId}` });
-    const reply = await new Promise<string>((resolve, reject) => {
-      agent.runWithEvents(options).subscribe({
+    // Discord 一旦確認 OpenRouter Free 額度用盡，本次程序後續都直接走
+    // Gemini；非屋主在送進模型前就停止，避免把他人的內容交給 Gemini。
+    let activeGeminiProfile: ReturnType<typeof getConfiguredGeminiFallback> = null;
+    if (msg.channel === "discord" && isDiscordGeminiFallbackActive()) {
+      if (msg.senderId !== DISCORD_OWNER_ID) return "";
+      const configuredModels = loadModelSettings();
+      activeGeminiProfile = getConfiguredGeminiFallback({ ...configuredModels, ...options.settings });
+      if (activeGeminiProfile) options.settings = activeGeminiProfile;
+    }
+
+    const runChannelAgent = (candidate: CyreneAgent): Promise<string> => new Promise<string>((resolve, reject) => {
+      candidate.runWithEvents(options).subscribe({
         complete: () => {
-          resolve(agent.lastResult?.reply ?? "");
+          resolve(candidate.lastResult?.reply ?? "");
         },
         error: (err) => reject(err instanceof Error ? err : new Error(String(err))),
       });
     });
-    if (agent.lastResult) {
-      const stickerId = await onAgentRunFinished(agent.lastResult, msg.text, onRunFinishedDeps, msg.channel);
-      if (msg.channel === "discord") {
-        void recordDiscordToolActionsInNotebook(agent.lastResult.toolResults, {
-          companionName: msg.senderName,
-        });
+    let agent = new CyreneAgent({
+      threadId: `thread-${sessionId}-${Date.now()}`,
+      description: `bot:${msg.channel}:${msg.senderId}`,
+    });
+
+    const runGeminiWithResilience = async (
+      profile: NonNullable<ReturnType<typeof getConfiguredGeminiFallback>>,
+    ): Promise<string> => {
+      const models = [...new Set([profile.model, GEMINI_STABLE_FALLBACK_MODEL])];
+      let lastError: unknown = new Error("Gemini 沒有可用模型");
+
+      for (const model of models) {
+        const attempts = model === profile.model ? 2 : 1;
+        for (let attempt = 0; attempt < attempts; attempt += 1) {
+          if (attempt > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 900 * attempt));
+          }
+          options.settings = { ...profile, model };
+          agent = new CyreneAgent({
+            threadId: `thread-${sessionId}-${Date.now()}-gemini-${model}-${attempt + 1}`,
+            description: `bot:${msg.channel}:${msg.senderId}:gemini-fallback`,
+          });
+          try {
+            return await runChannelAgent(agent);
+          } catch (error) {
+            lastError = error;
+            console.warn(
+              `[Channels] Gemini ${model} 第 ${attempt + 1}/${attempts} 次失敗：`,
+              error instanceof Error ? error.message : error,
+            );
+            if (!isRetryableGeminiError(error)) break;
+          }
+        }
+        if (!canTryAlternateGeminiModel(lastError)) throw lastError;
       }
+      throw lastError;
+    };
+
+    let reply: string;
+    if (activeGeminiProfile) {
+      try {
+        reply = await runGeminiWithResilience(activeGeminiProfile);
+      } catch (error) {
+        console.error("[Channels] Gemini 備援模型全部失敗:", error);
+        return "Gemini 現在有點忙，已經替你重試過了；請稍等一下再叫我喔！";
+      }
+    } else {
+      try {
+        reply = await runChannelAgent(agent);
+      } catch (error) {
+        const configuredModels = loadModelSettings();
+        const fallbackSource = { ...configuredModels, ...options.settings };
+        const quotaExhausted = msg.channel === "discord"
+          && isOpenRouterFreeQuotaError(error, fallbackSource);
+        const gemini = quotaExhausted ? getConfiguredGeminiFallback(fallbackSource) : null;
+        if (!gemini) throw error;
+
+        activateDiscordGeminiFallback();
+        console.warn("[Channels] OpenRouter 免費額度用盡；Discord 已持續切換至 Gemini，僅處理屋主訊息。");
+        if (msg.senderId !== DISCORD_OWNER_ID) return "";
+
+        try {
+          reply = await runGeminiWithResilience(gemini);
+        } catch (geminiError) {
+          console.error("[Channels] Gemini 備援模型全部失敗:", geminiError);
+          return "Gemini 現在有點忙，已經替你重試過了；請稍等一下再叫我喔！";
+        }
+      }
+    }
+    // 視覺模型已成功回答時，主聊天模型若仍受舊上下文影響而否認看圖，直接採用視覺答案兜底。
+    if (automaticImageContext && /(?:看不到|無法(?:查看|看到|讀取)|不能直接(?:查看|看到)).{0,12}(?:圖片|圖像|附件)|(?:圖片|圖像|附件).{0,12}(?:看不到|無法查看)/i.test(reply)) {
+      const directVisionAnswer = automaticImageContext
+        .split("\n")
+        .filter((line) => /^圖片 \d+：/.test(line))
+        .map((line) => line.replace(/^圖片 \d+：/, ""))
+        .join("\n")
+        .trim();
+      if (directVisionAnswer) {
+        reply = directVisionAnswer;
+        if (agent.lastResult) agent.lastResult.reply = reply;
+        console.warn("[ChannelsVision] 主模型否認已完成的視覺辨識，已採用視覺模型答案兜底");
+      }
+    }
+    if (agent.lastResult) {
+      let stickerId: string | null = null;
+      if (!shouldRestrict) {
+        stickerId = await onAgentRunFinished(agent.lastResult, msg.text, onRunFinishedDeps, msg.channel);
+        if (msg.channel === "discord") {
+          void recordDiscordToolActionsInNotebook(agent.lastResult.toolResults, {
+            companionName: msg.senderName,
+          });
+        }
+        void indexConversationTurn(sessionId, msg.text, reply);
+      } else {
+        console.log(`[Channels] Incognito mode: bypassing onAgentRunFinished/stickers/notebook/index for non-owner ${msg.senderId}`);
+      }
+
       // Dispatcher 會依渠道能力把這個 part 交給 Discord；其他不支援的渠道會自動略過。
       const stickerPath = msg.channel === "discord" && stickerId
         ? resolveStickerImagePath(stickerId)
@@ -4365,7 +4675,6 @@ app.whenReady().then(async () => {
       if (stickerId && !stickerPath) {
         console.warn(`[stickers] 找不到表情包圖片，略過渠道發送: ${stickerId}`);
       }
-      void indexConversationTurn(sessionId, msg.text, reply);
       return {
         text: reply,
         ...(stickerId && stickerPath
@@ -4374,7 +4683,9 @@ app.whenReady().then(async () => {
       };
     }
     // 落歷史
-    void indexConversationTurn(sessionId, msg.text, reply);
+    if (!shouldRestrict) {
+      void indexConversationTurn(sessionId, msg.text, reply);
+    }
     return reply;
   });
 
@@ -4681,7 +4992,7 @@ app.whenReady().then(async () => {
       if (!settings.apiKey) {
         throw new Error("還沒有填寫 API Key，請先在設置裡保存 API 配置。");
       }
-      
+
       const promptMessages = [
         {
           role: "system" as const,
@@ -4692,7 +5003,7 @@ app.whenReady().then(async () => {
           content: description
         }
       ];
-      
+
       const result = await callChatCompletions(
         settings,
         promptMessages,

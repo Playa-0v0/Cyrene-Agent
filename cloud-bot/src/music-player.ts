@@ -4,6 +4,7 @@ import { access, chmod, mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
 import {
+  type AudioResource,
   AudioPlayerStatus,
   NoSubscriberBehavior,
   StreamType,
@@ -21,10 +22,32 @@ import type { CloudFavorite } from "./favorites.js";
 const YT_DLP_RELEASE_BASE = "https://github.com/yt-dlp/yt-dlp/releases/latest/download";
 const FFMPEG_RELEASE_BASE = "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1";
 
+export function extractPlayableUrl(value: string): URL {
+  const candidate = value.match(/https?:\/\/[^\s<>"'。！？、，；：】》」』]+/iu)?.[0]
+    ?.replace(/[)\]}>。，、！？；：”’]+$/u, "");
+  if (!candidate) throw new Error("找不到網址，請貼上包含 http:// 或 https:// 的內容。");
+  const url = new URL(candidate);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("只支援 http:// 或 https:// 音樂網址。");
+  }
+  return url;
+}
+
 type RunningTrack = {
   favorite: CloudFavorite;
   ytDlp: ChildProcess;
   ffmpeg: ChildProcess;
+};
+
+export type CloudMusicSnapshot = {
+  current: CloudFavorite | null;
+  upcoming: CloudFavorite[];
+  history: CloudFavorite[];
+  queueLength: number;
+  voiceActive: boolean;
+  status: "playing" | "paused" | "idle";
+  volumePercent: number;
+  elapsedMs?: number;
 };
 
 export class CloudMusicPlayer {
@@ -32,6 +55,9 @@ export class CloudMusicPlayer {
   private connection: VoiceConnection | null = null;
   private queue: CloudFavorite[] = [];
   private running: RunningTrack | null = null;
+  private resource: AudioResource | null = null;
+  private history: CloudFavorite[] = [];
+  private volumePercent = 100;
   private advancing = false;
   private toolsPromise: Promise<{ ytDlp: string; ffmpeg: string }> | null = null;
 
@@ -72,10 +98,82 @@ export class CloudMusicPlayer {
     return first;
   }
 
+  async playUrl(channel: VoiceBasedChannel, value: string): Promise<CloudFavorite> {
+    const url = extractPlayableUrl(value);
+    const entry = await this.resolveTrack(url);
+    await this.playFavorites(channel, [entry]);
+    return entry;
+  }
+
+  snapshot(): CloudMusicSnapshot {
+    const state = this.player.state.status;
+    return {
+      current: this.running?.favorite ?? null,
+      upcoming: [...this.queue],
+      history: [...this.history].reverse(),
+      queueLength: this.queue.length,
+      // 暫停播放時仍然留在 Discord 語音頻道，也屬於陪伴通話。
+      voiceActive: this.connection !== null,
+      status: state === AudioPlayerStatus.Paused || state === AudioPlayerStatus.AutoPaused
+        ? "paused"
+        : state === AudioPlayerStatus.Playing || state === AudioPlayerStatus.Buffering
+          ? "playing"
+          : "idle",
+      volumePercent: this.volumePercent,
+      elapsedMs: this.resource?.playbackDuration ?? 0,
+    };
+  }
+
+  pauseOrResume(): "playing" | "paused" | "idle" {
+    const state = this.player.state.status;
+    if (state === AudioPlayerStatus.Paused || state === AudioPlayerStatus.AutoPaused) {
+      this.player.unpause();
+      return "playing";
+    }
+    if (state === AudioPlayerStatus.Playing || state === AudioPlayerStatus.Buffering) {
+      this.player.pause();
+      return "paused";
+    }
+    return "idle";
+  }
+
+  skip(): boolean {
+    if (!this.connection || !this.running) return false;
+    this.stopProcesses();
+    this.player.stop(true);
+    return true;
+  }
+
+  setVolume(percent: number): number {
+    this.volumePercent = Math.max(0, Math.min(150, Math.round(percent)));
+    this.resource?.volume?.setVolume(this.volumePercent / 100);
+    return this.volumePercent;
+  }
+
+  clearQueue(): number {
+    const removed = this.queue.length;
+    this.queue = [];
+    return removed;
+  }
+
+  remove(position: number): CloudFavorite | null {
+    const index = Math.max(0, Math.floor(position) - 1);
+    if (index >= this.queue.length) return null;
+    return this.queue.splice(index, 1)[0] ?? null;
+  }
+
+  previous(): boolean {
+    const previous = this.history.at(-2);
+    if (!previous || !this.connection || !this.running) return false;
+    this.queue.unshift(previous);
+    return this.skip();
+  }
+
   stop(): void {
     this.queue = [];
     this.stopProcesses();
     this.player.stop(true);
+    this.resource = null;
     try { this.connection?.destroy(); } catch { /* 已經斷線 */ }
     this.connection = null;
   }
@@ -129,7 +227,9 @@ export class CloudMusicPlayer {
       ffmpeg.once("error", (error) => console.error("[CloudMusic] 無法啟動 ffmpeg", error));
 
       const resource = createAudioResource(ffmpeg.stdout, { inputType: StreamType.Raw, inlineVolume: true });
-      resource.volume?.setVolume(1);
+      resource.volume?.setVolume(this.volumePercent / 100);
+      this.resource = resource;
+      this.history = [...this.history.filter((entry) => entry.url !== favorite.url), favorite].slice(-50);
       this.player.play(resource);
       console.log(`[CloudMusic] 開始播放：${favorite.title}`);
     } finally {
@@ -146,6 +246,28 @@ export class CloudMusicPlayer {
     }
   }
 
+  private async resolveTrack(url: URL): Promise<CloudFavorite> {
+    const tools = await this.ensureTools();
+    const metadata = await readTrackMetadata(tools.ytDlp, url.toString());
+    const firstEntry = Array.isArray(metadata.entries) && metadata.entries[0] && typeof metadata.entries[0] === "object"
+      ? metadata.entries[0] as Record<string, unknown>
+      : metadata;
+    const resolvedTitle = typeof firstEntry.title === "string" && firstEntry.title.trim()
+      ? firstEntry.title.trim()
+      : typeof firstEntry.fulltitle === "string" && firstEntry.fulltitle.trim()
+        ? firstEntry.fulltitle.trim()
+        : url.hostname;
+    console.log(`[CloudMusic] 媒體資訊：${resolvedTitle}`);
+    return {
+      id: `direct-${Date.now()}`,
+      title: resolvedTitle,
+      url: typeof firstEntry.webpage_url === "string" && firstEntry.webpage_url ? firstEntry.webpage_url : url.toString(),
+      thumbnail: typeof firstEntry.thumbnail === "string" ? firstEntry.thumbnail : undefined,
+      duration: typeof firstEntry.duration === "number" && Number.isFinite(firstEntry.duration) ? firstEntry.duration : undefined,
+      savedAt: new Date().toISOString(),
+    };
+  }
+
   private async ensureTools(): Promise<{ ytDlp: string; ffmpeg: string }> {
     if (!this.toolsPromise) {
       const toolsDir = path.join(this.dataDir, "tools");
@@ -159,6 +281,46 @@ export class CloudMusicPlayer {
     }
     return await this.toolsPromise;
   }
+
+  isVoiceConnected(): boolean {
+    return this.connection !== null;
+  }
+}
+
+async function readTrackMetadata(ytDlp: string, url: string): Promise<Record<string, unknown>> {
+  return await new Promise((resolve, reject) => {
+    const process = spawn(ytDlp, [
+      "--dump-single-json",
+      "--no-playlist",
+      "--skip-download",
+      "--no-warnings",
+      url,
+    ], { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    const timeout = setTimeout(() => {
+      process.kill("SIGKILL");
+      reject(new Error("讀取歌曲資訊逾時，請稍後再試。"));
+    }, 30_000);
+    process.stdout?.on("data", (chunk: Buffer) => { stdout = `${stdout}${chunk.toString("utf8")}`.slice(-5_000_000); });
+    process.stderr?.on("data", (chunk: Buffer) => { stderr = `${stderr}${chunk.toString("utf8")}`.slice(-2_000); });
+    process.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    process.once("close", (code) => {
+      clearTimeout(timeout);
+      if (code !== 0) {
+        reject(new Error(`無法讀取歌曲資訊：${stderr.trim().slice(-500) || `yt-dlp ${code}`}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout) as Record<string, unknown>);
+      } catch {
+        reject(new Error("歌曲資訊格式不正確，請換一個網址。"));
+      }
+    });
+  });
 }
 
 function platformAsset(kind: "yt-dlp" | "ffmpeg"): string {

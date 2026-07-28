@@ -168,6 +168,16 @@ export interface DiscordChannelConfig extends ChannelRuntimeConfig {
   presenceStatus?: "online" | "idle" | "dnd" | "invisible";
   /** Bot 的「正在玩」活動文字；重連後自動恢復。 */
   activityText?: string;
+  /** 雲端 Bot 為唯一 Discord Gateway；本機保留設定但不重複登入。 */
+  cloudPrimary?: boolean;
+  /** 雲端 Bot 的健康檢查 URL（例：https://xxx.onrender.com/health） */
+  cloudPingUrl?: string;
+  /** 桌面程式在線時由本機接管；心跳消失後由 VM 自動接手。 */
+  cloudStandbyEnabled?: boolean;
+  /** 自動接手 VM 的 SSH 連線資料；SSH 私鑰內容不會寫入設定檔。 */
+  cloudStandbyHost?: string;
+  cloudStandbyUser?: string;
+  cloudStandbyKeyPath?: string;
 }
 
 /** Spotify Premium / Web API OAuth 設定。私密欄位一律加密落盤。 */
@@ -217,7 +227,7 @@ export interface ChannelsSettings {
 const DEFAULT_SETTINGS: ChannelsSettings = {
   wechat: { enabled: false },
   feishu: { enabled: false },
-  discord: { enabled: false, requireMention: true, voiceEnabled: true },
+  discord: { enabled: false, requireMention: true, voiceEnabled: true, cloudPrimary: true },
   spotify: { enabled: false },
   bilibili: { enabled: false, browser: "opera-gx" },
   inboundPort: 0,
@@ -287,6 +297,12 @@ function normalize(input: Partial<ChannelsSettings> | null | undefined): Channel
         : undefined,
       requireMention: safeBool(d?.requireMention, true),
       voiceEnabled: safeBool(d?.voiceEnabled, true),
+      cloudPrimary: safeBool(d?.cloudPrimary, true),
+      cloudPingUrl: typeof d?.cloudPingUrl === "string" ? d.cloudPingUrl.trim() : undefined,
+      cloudStandbyEnabled: safeBool(d?.cloudStandbyEnabled, false),
+      cloudStandbyHost: typeof d?.cloudStandbyHost === "string" ? d.cloudStandbyHost.trim() : undefined,
+      cloudStandbyUser: typeof d?.cloudStandbyUser === "string" ? d.cloudStandbyUser.trim() : undefined,
+      cloudStandbyKeyPath: typeof d?.cloudStandbyKeyPath === "string" ? d.cloudStandbyKeyPath.trim() : undefined,
       ...(["online", "idle", "dnd", "invisible"].includes(d?.presenceStatus ?? "")
         ? { presenceStatus: d!.presenceStatus }
         : {}),

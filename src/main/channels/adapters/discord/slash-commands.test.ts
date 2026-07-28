@@ -3,7 +3,7 @@ import {
   buildDiscordMusicControls,
   buildDiscordMusicModes,
   buildDiscordMusicHistory,
-  buildDiscordMusicFavorites,
+  buildDiscordMusicPlaylists,
   buildDiscordMusicLibrary,
   buildDiscordSpotifyPlaylists,
   buildDiscordSpotifyArtists,
@@ -25,14 +25,14 @@ describe("Discord slash commands", () => {
 
   it("covers chat, voice, music controls, queue editing and status", () => {
     expect(DISCORD_SLASH_COMMAND_NAMES).toEqual(expect.arrayContaining([
-      "chat", "draw", "game", "join", "leave", "play", "nowplaying", "previous", "pause", "resume", "next", "stop",
-      "queue", "history", "save", "like", "favorites", "spotify", "clear", "remove", "volume", "repeat", "mode", "autoplay", "status", "help",
+      "chat", "draw", "game", "join", "leave", "play", "nowplaying",
+      "queue", "history", "like", "favorites", "spotify", "clear", "remove", "status", "help",
     ]));
   });
 
   it("uses short lowercase English names", () => {
     for (const name of DISCORD_SLASH_COMMAND_NAMES) expect(name).toMatch(/^[a-z]+$/);
-    expect(DISCORD_SLASH_COMMAND_NAMES).toContain("next");
+    expect(DISCORD_SLASH_COMMAND_NAMES).toContain("play");
     expect(DISCORD_SLASH_COMMAND_NAMES).not.toContain("skip");
   });
 
@@ -49,7 +49,7 @@ describe("Discord slash commands", () => {
     expect(embed.author?.name).toContain("昔漣寶寶");
     expect(embed.title).toContain("聊天");
     expect(embed.fields?.map((field) => field.name)).toEqual(expect.arrayContaining([
-      "💬  Chat & Voice", "🎮  Play together", "🎨  Codex image", "🎧  Play music", "♡  Your library", "⚙  Playback", "✦  Quick start",
+      "💬  Chat & Voice", "🎮  Play & Draw", "🎧  Music Playback", "♡  Music Library", "⚙  Playback Queue", "✦  Quick start",
     ]));
     expect(embed.thumbnail?.url).toBe("https://example.com/avatar.png");
     expect(payload.components[0].toJSON().components.map((button) => "custom_id" in button ? button.custom_id : undefined)).toEqual([
@@ -66,8 +66,8 @@ describe("Discord slash commands", () => {
       "cyrene:music:previous",
       "cyrene:music:toggle",
       "cyrene:music:skip",
+      "cyrene:music:favorite",
       "cyrene:music:stop",
-      "cyrene:music:queue",
     ]);
   });
 
@@ -99,6 +99,13 @@ describe("Discord slash commands", () => {
     expect("label" in row.components[0] ? row.components[0].label : undefined).toBe("Shuffle");
     expect("label" in row.components[1] ? row.components[1].label : undefined).toBe("Repeat");
     expect("emoji" in row.components[1] ? row.components[1].emoji?.name : undefined).toBe("🔂");
+    expect(row.components.map((button) => "custom_id" in button ? button.custom_id : undefined)).toEqual([
+      "cyrene:music:shuffle-toggle",
+      "cyrene:music:repeat-cycle",
+      "cyrene:music:autoplay-toggle",
+      "cyrene:music:source-link",
+      "cyrene:music:favorites",
+    ]);
   });
 
   it("toggles auto play from the player", () => {
@@ -130,44 +137,57 @@ describe("Discord slash commands", () => {
       "cyrene:music:volume-down",
       "cyrene:music:volume-display",
       "cyrene:music:volume-up",
-      "cyrene:music:favorite",
-      "cyrene:music:favorites",
+      "cyrene:music:queue",
+      "cyrene:music:history",
     ]);
     expect("label" in row.components[0] ? row.components[0].label : undefined).toBe("−");
     expect("label" in row.components[1] ? row.components[1].label : undefined).toBe("100%");
     expect("disabled" in row.components[1] ? row.components[1].disabled : undefined).toBe(true);
     expect("label" in row.components[2] ? row.components[2].label : undefined).toBe("+");
-    expect("label" in row.components[4] ? row.components[4].label : undefined).toBe("Playlists");
+    expect("label" in row.components[4] ? row.components[4].label : undefined).toBe("History");
     expect(musicRequestFromButton("cyrene:music:favorite")).toEqual({ command: "favorite" });
     expect(musicRequestFromButton("cyrene:music:favorites")).toEqual({ command: "favorites" });
     expect(musicRequestFromButton("cyrene:music:volume-down", false, false, "off", false, 100)).toEqual({ command: "volume", value: 75 });
     expect(musicRequestFromButton("cyrene:music:volume-up", false, false, "off", false, 100)).toEqual({ command: "volume", value: 125 });
     expect(musicRequestFromButton("cyrene:music:volume-down", false, false, "off", false, 0)).toEqual({ command: "volume", value: 0 });
     expect(musicRequestFromButton("cyrene:music:volume-up", false, false, "off", false, 150)).toEqual({ command: "volume", value: 150 });
-    const payload = buildDiscordMusicFavorites([{
-      id: "favorite-one",
-      title: "勇者",
-      url: "https://www.youtube.com/watch?v=song",
-      playlistTitle: "葬送的芙莉蓮",
-      savedAt: "2026-07-26T10:00:00.000Z",
-    }]);
-    expect(payload.embeds[0].toJSON().author?.name).toContain("PRIVATE FAVORITES");
+    const playlists = [{
+      id: "default",
+      name: "💖 My Favorites",
+      tracks: [{
+        id: "favorite-one",
+        title: "勇者",
+        url: "https://www.youtube.com/watch?v=song",
+        playlistTitle: "葬送的芙莉蓮",
+        savedAt: "2026-07-26T10:00:00.000Z",
+      }],
+      createdAt: "2026-07-26T10:00:00.000Z"
+    }];
+    const payload = buildDiscordMusicPlaylists(playlists, "default");
+    expect(payload.embeds[0].toJSON().author?.name).toContain("💖 My Favorites");
     expect(payload.components[0].toJSON().components[0]).toMatchObject({
       custom_id: "cyrene:music:favorites-select",
     });
-    expect(payload.components[1].toJSON().components.map((button) => "custom_id" in button ? button.custom_id : undefined)).toEqual([
+    expect(payload.components[1].toJSON().components.map((button: any) => "custom_id" in button ? button.custom_id : undefined)).toEqual([
+      "cyrene:music:playlist-back",
+      "cyrene:music:playlist-play-all",
       "cyrene:music:favorites-add",
       "cyrene:music:favorites-delete",
-      "cyrene:music:favorites-up",
-      "cyrene:music:favorites-down",
     ]);
-    expect(payload.embeds[0].toJSON().description).toContain("▶️");
   });
 
   it("offers a singular like command with an optional song URL", () => {
     const command = DISCORD_SLASH_COMMANDS.find((item) => item.name === "like");
     expect(command?.options?.[0]).toMatchObject({ name: "url", required: false });
     expect(DISCORD_SLASH_COMMAND_NAMES).not.toContain("favorite");
+  });
+
+  it("describes play and spotify as official Spotify device controls", () => {
+    const play = DISCORD_SLASH_COMMANDS.find((item) => item.name === "play");
+    const spotify = DISCORD_SLASH_COMMANDS.find((item) => item.name === "spotify");
+    expect(play?.description).toContain("官方 Spotify 裝置");
+    expect(play?.description).not.toMatch(/YouTube|Bilibili|SoundCloud/);
+    expect(spotify?.description).toContain("官方 Spotify 裝置");
   });
 
   it("builds a private selectable Spotify playlist list", () => {
@@ -183,6 +203,23 @@ describe("Discord slash commands", () => {
     expect(embed.description).toContain("My Mix");
     expect(payload.components[0].toJSON().components[0]).toMatchObject({
       custom_id: "cyrene:music:spotify-select",
+    });
+  });
+
+  it("labels a locally saved Spotify playlist as a link instead of an empty playlist", () => {
+    const payload = buildDiscordSpotifyPlaylists([{
+      id: "saved:local-list",
+      name: "Saved Mix",
+      url: "https://open.spotify.com/playlist/local-list",
+      total: 0,
+      savedLink: true,
+    }]);
+    expect(payload.embeds[0].toJSON().description).toContain("已儲存連結");
+    expect(payload.components[0].toJSON().components[0]).toMatchObject({
+      options: [expect.objectContaining({
+        value: "saved:local-list",
+        description: "已儲存的 playlist 連結",
+      })],
     });
   });
 
@@ -245,14 +282,37 @@ describe("Discord slash commands", () => {
     });
     const embed = payload.embeds[0].toJSON();
     expect(embed.title).toBe("勇者");
-    expect(embed.url).toContain("bilibili.com");
+    expect(embed.url).toBeUndefined();
     expect(embed.thumbnail?.url).toBe("https://example.com/cover.jpg");
     expect(embed.description).toContain("葬送的芙莉蓮 音樂集");
     expect(embed.description).toContain("00:42");
     expect(embed.footer?.text).toContain("VOL 75%");
     expect(payload.components).toHaveLength(3);
     expect(payload.components.map((row) => row.toJSON().components.length)).toEqual([5, 5, 5]);
-    expect(payload.components[2].toJSON().components[1]).toMatchObject({ label: "75%", disabled: true });
+    expect(payload.components[1].toJSON().components[1]).toMatchObject({ label: "75%", disabled: true });
+    expect(payload.components[2].toJSON().components[3]).toMatchObject({ custom_id: "cyrene:music:source-link", label: "Copy" });
+  });
+
+  it("turns a disconnected player into a resumable card with one blue Play action", () => {
+    const payload = buildDiscordMusicPlayer({
+      active: false,
+      resumable: true,
+      paused: true,
+      current: { title: "ADAMAS — LiSA", url: "https://open.spotify.com/track/one", duration: 225, index: 44, total: 100, playlistTitle: "anime" },
+      queue: [{ title: "Sign — Uchida Aya", url: "https://example.com/next", index: 45, total: 100 }],
+      volume: 100,
+      repeat: "off",
+      shuffle: true,
+      autoplay: false,
+      elapsed: 210,
+    });
+    const embed = payload.embeds[0].toJSON();
+    const controls = payload.components[0].toJSON().components;
+    expect(embed.author?.name).toContain("READY TO RESUME");
+    expect(embed.description).toContain("03:30");
+    expect(controls[1]).toMatchObject({ custom_id: "cyrene:music:toggle", label: "Play" });
+    expect("disabled" in controls[1] ? controls[1].disabled : false).not.toBe(true);
+    expect(controls.filter((button) => "disabled" in button && button.disabled === true)).toHaveLength(4);
   });
 
   it("builds a compact private queue card", () => {

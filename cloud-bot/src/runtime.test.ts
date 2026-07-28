@@ -21,13 +21,13 @@ test("對話能寫入磁碟並在重啟後恢復", async () => {
   }
 });
 
-test("健康檢查回傳 Discord 狀態", async () => {
-  const server = startHealthServer(0, () => ({ discord: "connecting" }));
+test("健康檢查回傳 Discord 與雲端通話狀態", async () => {
+  const server = startHealthServer(0, () => ({ discord: "connecting", voiceActive: true }));
   await new Promise<void>((resolve) => server.once("listening", resolve));
   const address = server.address();
   assert.ok(address && typeof address !== "string");
   const response = await fetch(`http://127.0.0.1:${address.port}/health`);
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true, discord: "connecting" });
+  assert.deepEqual(await response.json(), { ok: true, discord: "connecting", voiceActive: true });
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 });

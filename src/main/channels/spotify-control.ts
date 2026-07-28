@@ -249,6 +249,7 @@ export async function getSpotifyPlaylists(limit = 25): Promise<SpotifyPlaylistSu
       external_urls?: { spotify?: string };
       images?: Array<{ url?: string }>;
       tracks?: { total?: number };
+      items?: { total?: number };
       owner?: { display_name?: string };
     } | null>;
   }>(`/me/playlists?limit=${safeLimit}`);
@@ -259,7 +260,7 @@ export async function getSpotifyPlaylists(limit = 25): Promise<SpotifyPlaylistSu
       name: toTraditionalTaiwan(item.name),
       url: item.external_urls?.spotify ?? `https://open.spotify.com/playlist/${item.id}`,
       imageUrl: item.images?.[0]?.url,
-      total: item.tracks?.total ?? 0,
+      total: item.tracks?.total ?? item.items?.total ?? 0,
       owner: item.owner?.display_name ? toTraditionalTaiwan(item.owner.display_name) : undefined,
     }));
 }
@@ -281,6 +282,14 @@ export async function getSpotifyPlaylistTracks(
     const limit = Math.min(100, safeMax - offset);
     const payload = await spotifyApi<{
       items?: Array<{
+        item?: {
+          id?: string;
+          name?: string;
+          duration_ms?: number;
+          artists?: Array<{ name?: string }>;
+          external_urls?: { spotify?: string };
+          album?: { images?: Array<{ url?: string }> };
+        } | null;
         track?: {
           id?: string;
           name?: string;
@@ -291,10 +300,10 @@ export async function getSpotifyPlaylistTracks(
         } | null;
       } | null>;
       next?: string | null;
-    }>(`/playlists/${encodeURIComponent(playlist.id)}/tracks?limit=${limit}&offset=${offset}`);
+    }>(`/playlists/${encodeURIComponent(playlist.id)}/items?limit=${limit}&offset=${offset}`);
     const items = payload?.items ?? [];
     for (const item of items) {
-      const track = item?.track;
+      const track = item?.item || item?.track;
       if (!track?.id || !track.name) continue;
       collected.push({
         id: track.id,
@@ -314,6 +323,7 @@ export async function getSpotifyPlaylistTracks(
     playbackUrl: `ytsearch1:${buildSpotifySearchQuery(track.name, track.artists)}`,
     thumbnail: track.imageUrl,
     playlistTitle: playlist.name,
+    playlistUrl: playlist.url,
     duration: track.duration,
     index: index + 1,
     total: tracks.length,

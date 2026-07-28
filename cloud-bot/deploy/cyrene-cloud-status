@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+cloud=$(systemctl is-active cyrene-cloud.service 2>/dev/null || true)
+watchdog=$(systemctl is-active cyrene-cloud-failover.timer 2>/dev/null || true)
+heartbeat_age=-1
+if [ -r /run/cyrene-failover/local-heartbeat ]; then
+  now=$(date +%s)
+  last=$(cat /run/cyrene-failover/local-heartbeat 2>/dev/null || true)
+  case "$last" in
+    ''|*[!0-9]*) last=0 ;;
+  esac
+  if [ "$last" -gt 0 ]; then heartbeat_age=$((now - last)); fi
+fi
+printf '{"reachable":true,"cloudService":"%s","watchdog":"%s","heartbeatAge":%s}\n' "$cloud" "$watchdog" "$heartbeat_age"

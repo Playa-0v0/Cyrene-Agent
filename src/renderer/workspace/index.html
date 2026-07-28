@@ -185,11 +185,11 @@
         <span class="info-tab">狀態</span>
       </div>
 
-      <div class="profile-card">
-        <img class="profile-card__avatar" src="/avatars/cyrene-avatar.png" alt="昔漣" />
+      <div class="profile-card" id="profile-card">
+        <div class="profile-card__live-status" id="profile-status-symbol" role="img" aria-label="昔漣目前狀態">🌸</div>
         <div class="profile-card__text">
           <div class="profile-card__name">昔漣</div>
-          <div class="profile-card__status-hint" id="online-label">剛睡醒 · 心情平靜</div>
+          <div class="profile-card__status-hint" id="online-label" aria-live="polite">正在讀取狀態…</div>
         </div>
       </div>
 
@@ -232,7 +232,7 @@
         <!-- 接下來 (日程) -->
         <div class="next-card" id="schedule-tab-content">
           <!-- 待辦日程標題 -->
-          <div class="schedule-header" id="schedule-summary">
+          <div class="schedule-header" id="schedule-summary" hidden>
             <div class="schedule-count-box">
               <span class="schedule-count-num" id="schedule-todo-count">0</span>
               <span class="schedule-count-label">個待辦日程</span>
@@ -339,10 +339,10 @@
             <div class="call-chart-footer" id="call-chart-peak-desc">🎙️ 本週尚無通話紀錄</div>
           </section>
 
-          <div class="schedule-divider"></div>
+          <div class="schedule-divider" hidden></div>
 
           <!-- 定時任務 -->
-          <div class="tasks-section">
+          <div class="tasks-section" hidden>
             <div class="tasks-section-header">⏰ 定時任務</div>
             <div class="card-empty-content" id="next-task-label">
               暫無已啟用定時任務
@@ -356,7 +356,7 @@
         <div class="conn-card">
           <div class="card-header">
             <span>連接狀態</span>
-            <span class="card-header__link">管理</span>
+            <button type="button" class="card-header__link" id="connection-manage-btn">管理</button>
           </div>
           <div class="conn-list" id="connection-status-list">
             <div class="card-empty-content">正在讀取連接狀態…</div>

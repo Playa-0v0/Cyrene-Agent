@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Cyrene desktop heartbeat
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=15s
+AccuracySec=2s
+Unit=cyrene-cloud-failover.service
+
+[Install]
+WantedBy=timers.target

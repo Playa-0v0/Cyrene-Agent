@@ -1,5 +1,8 @@
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  attachDiscordMusicBuffer,
   findDiscordMusicUrl,
   buildSpotifySearchQuery,
   formatMusicDuration,
@@ -13,11 +16,65 @@ import {
   selectBilibiliTracks,
   bilibiliCookieArgs,
   configureBilibiliBrowserCookies,
+  discordMusicSeekArgs,
+  discordMusicStreamArgs,
+  copyableDiscordMusicUrl,
 } from "./music-source";
 
 afterEach(() => configureBilibiliBrowserCookies(false));
 
 describe("Discord music request parsing", () => {
+  it("holds a startup cushion before handing audio to Discord", async () => {
+    const stdout = new PassThrough();
+    const process = Object.assign(new EventEmitter(), {
+      stdout,
+      stderr: new PassThrough(),
+      stdin: null,
+      stdio: [null, stdout, new PassThrough()],
+      exitCode: null,
+      killed: false,
+      kill: () => true,
+    });
+    const buffered = attachDiscordMusicBuffer(process as never);
+    const ready = buffered.waitForBuffer!();
+    stdout.write(Buffer.alloc(384 * 1024));
+
+    await expect(ready).resolves.toBeGreaterThanOrEqual(384 * 1024);
+    expect((buffered.audio as PassThrough).readableLength).toBeGreaterThanOrEqual(384 * 1024);
+    buffered.audio?.destroy();
+    stdout.destroy();
+  });
+
+  it("retries transient downloads and keeps stdout streaming for buffered playback", () => {
+    expect(discordMusicStreamArgs("ytsearch1:Song Artist")).toEqual([
+      "--no-playlist",
+      "--no-warnings",
+      "--no-progress",
+      "--retries", "5",
+      "--fragment-retries", "5",
+      "--retry-sleep", "1",
+      "--socket-timeout", "20",
+      "--format", "bestaudio/best",
+      "--output", "-",
+      "ytsearch1:Song Artist",
+    ]);
+  });
+
+  it("builds an accurate yt-dlp section for resuming a disconnected song", () => {
+    expect(discordMusicSeekArgs(210)).toEqual([
+      "--download-sections",
+      "*00:03:30-inf",
+      "--force-keyframes-at-cuts",
+    ]);
+    expect(discordMusicSeekArgs(0)).toEqual([]);
+  });
+
+  it("returns a title-free copyable Bilibili URL and keeps only the selected part", () => {
+    expect(copyableDiscordMusicUrl("【影片名稱】 https://www.bilibili.com/video/BV1ABC123/?p=5&spm_id_from=333.1"))
+      .toBe("https://www.bilibili.com/video/BV1ABC123?p=5");
+    expect(copyableDiscordMusicUrl("https://b23.tv/abc123?share_source=copy_web"))
+      .toBe("https://b23.tv/abc123");
+  });
   it("only applies Opera GX cookies to Bilibili sources", () => {
     configureBilibiliBrowserCookies(true);
     expect(bilibiliCookieArgs("https://www.bilibili.com/video/BVTEST")).toEqual([
@@ -62,13 +119,14 @@ describe("Discord music request parsing", () => {
       } } } } },
     };
     const html = `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify(data)}</script>`;
-    const tracks = parseSpotifyEmbedHtml(html);
+    const tracks = parseSpotifyEmbedHtml(html, "https://open.spotify.com/playlist/MYMIX");
     expect(tracks).toHaveLength(2);
     expect(tracks[0]).toMatchObject({
       title: "First Song — First Artist",
       url: "https://open.spotify.com/track/ONE",
       playbackUrl: "ytsearch1:First Song First Artist",
       playlistTitle: "My Mix",
+      playlistUrl: "https://open.spotify.com/playlist/MYMIX",
       duration: 183,
       index: 1,
       total: 2,

@@ -1,3 +1,5 @@
+import "../ui/theme";
+
 declare global {
   interface Window {
     sidebar?: {
@@ -16,8 +18,8 @@ declare global {
       onChanged: (cb: (config: { model: string; provider: string; connected: boolean }) => void) => () => void;
     };
     runtimeState?: {
-      get: () => Promise<{ status: string; feeling: string }>;
-      onChanged: (cb: (state: { status: string; feeling: string }) => void) => () => void;
+      get: () => Promise<{ status: string; feeling: string; working?: boolean }>;
+      onChanged: (cb: (state: { status: string; feeling: string; working?: boolean }) => void) => () => void;
     };
     tokenUsage?: {
       get: (days: number) => Promise<Array<{ date: string; input: number; output: number }>>;
@@ -69,22 +71,47 @@ const agentCoreStatusEl = document.getElementById("agent-core-status");
 const agentSessionCountEl = document.getElementById("agent-session-count");
 
 const infoTabs = document.querySelectorAll(".info-tab");
+const profileCard = document.getElementById("profile-card");
 const statsCard = document.querySelector(".stats-tab-content") as HTMLElement | null;
 const nextCard = document.querySelector(".next-card") as HTMLElement | null;
 const connCard = document.querySelector(".conn-card") as HTMLElement | null;
 const connectionStatusList = document.getElementById("connection-status-list");
 const petSlot = document.getElementById("pet-slot");
+const cardSection = document.querySelector(".card-section") as HTMLElement | null;
 
 // 預設只顯示「概覽」卡片，隱藏「日程」與「狀態」
 if (nextCard) nextCard.style.display = "none";
 if (connCard) connCard.style.display = "none";
 
 const infoPanel = document.querySelector(".info-panel") as HTMLElement | null;
+const compactInfoPanelQuery = window.matchMedia("(max-width: 1120px)");
+let infoPanelRequestedVisible = true;
 
-function setInfoPanelVisible(visible: boolean) {
-  if (infoPanel) {
-    infoPanel.style.display = visible ? "flex" : "none";
-  }
+function setInfoPanelVisible(visible: boolean): boolean {
+  infoPanelRequestedVisible = visible;
+  infoPanel?.classList.toggle("is-tab-hidden", !visible);
+  infoPanel?.style.removeProperty("display");
+  return visible && !compactInfoPanelQuery.matches;
+}
+
+let petDockLayoutRevision = 0;
+
+function syncPetDockVisibilityAfterLayout(visible: boolean) {
+  const revision = ++petDockLayoutRevision;
+
+  // Avoid briefly drawing the pet at the previous tab's coordinates while the
+  // info panel is still being laid out.
+  window.sidebar?.setPetDockVisible(false);
+  if (!visible) return;
+
+  if (cardSection) cardSection.scrollTop = 0;
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      if (revision !== petDockLayoutRevision) return;
+      reportSlotBounds();
+      window.sidebar?.setPetDockVisible(true);
+    });
+  });
 }
 
 // 1. 左側選單分頁切換邏輯
@@ -101,15 +128,12 @@ tabs.forEach((tab) => {
     // 如果是共同筆記本、遊戲房或考試模式，隱藏右側資訊面板以騰出全寬空間，並將停靠在裡面的桌寵暫時隱藏（不讓其彈出到桌面）
     if (targetTab === "notebook" || targetTab === "game-room" || targetTab === "exam") {
       setInfoPanelVisible(false);
-      window.sidebar?.setPetDockVisible(false);
+      syncPetDockVisibilityAfterLayout(false);
     } else {
-      setInfoPanelVisible(true);
+      const panelVisible = setInfoPanelVisible(true);
       const activeInfoTab = document.querySelector(".info-tab.is-active")?.textContent?.trim();
-      window.sidebar?.setPetDockVisible(activeInfoTab === "概覽");
+      syncPetDockVisibilityAfterLayout(panelVisible && activeInfoTab === "概覽");
     }
-    
-    // 即時重新上報桌寵停靠狀態與座標
-    reportSlotBounds();
 
     if (targetTab === "chat") {
       iframe.src = "../chat/index.html";
@@ -124,13 +148,19 @@ tabs.forEach((tab) => {
     } else if (targetTab === "game-room") {
       iframe.src = "../game-room/index.html";
     } else if (targetTab === "channels") {
-      iframe.src = "../settings/index.html#channels-discord";
+      iframe.src = "../settings/index.html#channels";
     } else if (targetTab === "stickers") {
       iframe.src = "../paint/index.html";
     } else if (targetTab === "settings") {
       iframe.src = "../settings/index.html#general";
     }
   });
+});
+
+compactInfoPanelQuery.addEventListener("change", () => {
+  const activeInfoTab = document.querySelector(".info-tab.is-active")?.textContent?.trim();
+  const panelVisible = infoPanelRequestedVisible && !compactInfoPanelQuery.matches;
+  syncPetDockVisibilityAfterLayout(panelVisible && activeInfoTab === "概覽");
 });
 
 let activeMode = "chat";
@@ -236,14 +266,11 @@ infoTabs.forEach((tab) => {
 
     const tabText = tab.textContent?.trim();
     const showDockSlot = tabText === "概覽";
+    if (profileCard) profileCard.hidden = !showDockSlot;
     if (petSlot) petSlot.hidden = !showDockSlot;
-    window.sidebar?.setPetDockVisible(showDockSlot);
-    
-    // 即時重新上報桌寵停靠狀態與座標
-    reportSlotBounds();
 
     if (tabText === "概覽") {
-      if (statsCard) statsCard.style.display = "block";
+      if (statsCard) statsCard.style.display = "flex";
       if (nextCard) nextCard.style.display = "none";
       if (connCard) connCard.style.display = "none";
     } else if (tabText === "日程") {
@@ -255,6 +282,8 @@ infoTabs.forEach((tab) => {
       if (nextCard) nextCard.style.display = "none";
       if (connCard) connCard.style.display = "block";
     }
+
+    syncPetDockVisibilityAfterLayout(showDockSlot);
   });
 });
 
@@ -282,6 +311,13 @@ resetBtn?.addEventListener("click", () => {
 const panelChatBtn = document.getElementById("panel-chat-btn");
 const panelCallBtn = document.getElementById("panel-call-btn");
 const panelModelBtn = document.getElementById("panel-model-btn");
+const connectionManageBtn = document.getElementById("connection-manage-btn");
+
+function openSettingsSection(section: string) {
+  const settingsTab = document.querySelector('.sidebar__tab[data-tab="settings"]') as HTMLElement | null;
+  settingsTab?.click();
+  iframe.src = `../settings/index.html#${section}`;
+}
 
 panelChatBtn?.addEventListener("click", () => {
   const chatTab = document.querySelector('.sidebar__tab[data-tab="chat"]') as HTMLElement;
@@ -293,32 +329,85 @@ panelCallBtn?.addEventListener("click", () => {
 });
 
 panelModelBtn?.addEventListener("click", () => {
-  const settingsTab = document.querySelector('.sidebar__tab[data-tab="settings"]') as HTMLElement;
-  if (settingsTab) {
-    settingsTab.click();
-    iframe.src = "../settings/index.html#api";
-  }
+  openSettingsSection("api");
 });
 
+connectionManageBtn?.addEventListener("click", () => openSettingsSection("api"));
 
 
 // 4. 連接與狀態同步
 async function initStatusSync() {
+  const profileStatusSymbol = document.getElementById("profile-status-symbol");
+  let latestRuntimeState = { status: "陪伴中", feeling: "平靜" };
+  let modelConnected = false;
+  let callActive = false;
+  let backgroundWorkActive = false;
+  const liveStatusEmoji: Record<string, string> = {
+    陪伴中: "🌸", 思考中: "💭", 工作中: "⚡", 聶聽中: "🫧", 提醒中: "🔔", 通話中: "📞", 離線: "💤",
+  };
+  const liveFeelingEmoji: Record<string, string> = {
+    平靜: "🌿", 開心: "✨", 溫柔: "🌸", 激動: "🎉", 撒嬌: "🥺", 擔心: "💙", 難過: "💧", 感動: "🥹", 害羞: "🌹",
+  };
+  const overviewStatusEmoji = document.getElementById("ws-status-emoji");
+  const overviewStatusValue = document.getElementById("ws-status-val");
+  const overviewFeelingEmoji = document.getElementById("ws-feeling-emoji");
+  const overviewFeelingValue = document.getElementById("ws-feeling-val");
+
+  const renderLiveProfile = () => {
+    const status = !modelConnected
+      ? "離線"
+      : callActive
+        ? "通話中"
+        : backgroundWorkActive
+          ? "工作中"
+          : latestRuntimeState.status || "陪伴中";
+    const feeling = latestRuntimeState.feeling || "平靜";
+    const symbols: Record<string, string> = {
+      陪伴中: "🌸",
+      思考中: "💭",
+      工作中: "⚡",
+      聶聽中: "🫧",
+      提醒中: "🔔",
+      通話中: "📞",
+      離線: "💤",
+    };
+    if (onlineLabelEl) {
+      onlineLabelEl.textContent = status === "離線"
+        ? "離線 · 尚未連接模型"
+        : `${status} · 心情${feeling}`;
+    }
+    if (profileStatusSymbol) {
+      profileStatusSymbol.textContent = symbols[status] || "🌸";
+      profileStatusSymbol.setAttribute("aria-label", `昔漣目前${status}，心情${feeling}`);
+      profileStatusSymbol.dataset.active = String(
+        status === "思考中" || status === "工作中" || status === "聶聽中" || status === "通話中",
+      );
+    }
+    if (overviewStatusEmoji) overviewStatusEmoji.textContent = liveStatusEmoji[status] || "💬";
+    if (overviewStatusValue) overviewStatusValue.textContent = `狀態：${status}`;
+    if (overviewFeelingEmoji) overviewFeelingEmoji.textContent = liveFeelingEmoji[feeling] || "🌿";
+    if (overviewFeelingValue) overviewFeelingValue.textContent = `心情：${feeling}`;
+  };
+
   // 對話模型同步
   if (window.modelConfig) {
     try {
       const cfg = await window.modelConfig.get();
+      modelConnected = cfg.connected;
       if (modelNameEl) modelNameEl.textContent = cfg.model || "未連接";
       if (headerModelStatusEl) headerModelStatusEl.textContent = `${cfg.model || "模型"} 已連接`;
       if (agentCoreStatusEl) agentCoreStatusEl.textContent = cfg.connected ? "Agent Core 運行中" : "Agent Core 未連接";
+      renderLiveProfile();
     } catch (err) {
       console.error("Failed to load model config:", err);
     }
 
     window.modelConfig.onChanged((cfg) => {
+      modelConnected = cfg.connected;
       if (modelNameEl) modelNameEl.textContent = cfg.model || "未連接";
       if (headerModelStatusEl) headerModelStatusEl.textContent = `${cfg.model || "模型"} 已連接`;
       if (agentCoreStatusEl) agentCoreStatusEl.textContent = cfg.connected ? "Agent Core 運行中" : "Agent Core 未連接";
+      renderLiveProfile();
     });
   }
 
@@ -353,26 +442,19 @@ async function initStatusSync() {
     const updateRuntimeDisplay = async () => {
       try {
         const config = await window.modelConfig!.get();
-        const syncEnabled = config.runtimeSync === "local" || config.runtimeSync === "llm";
         const state = await window.runtimeState!.get();
-
-        if (onlineLabelEl) {
-          onlineLabelEl.textContent = `剛睡醒 · 心情${state.feeling || "平靜"}`;
-        }
-
-        if (!syncEnabled) {
-          if (wsStatusEmoji) wsStatusEmoji.textContent = "⚙️";
-          if (wsStatusVal) wsStatusVal.textContent = "狀態：請到設置裡開啟";
-          if (wsFeelingEmoji) wsFeelingEmoji.textContent = "⚙️";
-          if (wsFeelingVal) wsFeelingVal.textContent = "心情：請到設置裡開啟";
-        } else {
-          const status = state.status || "陪伴中";
-          const feeling = state.feeling || "平靜";
-          if (wsStatusEmoji) wsStatusEmoji.textContent = STATUS_EMOJI[status] || "💬";
-          if (wsStatusVal) wsStatusVal.textContent = `狀態：${status}`;
-          if (wsFeelingEmoji) wsFeelingEmoji.textContent = FEELING_EMOJI[feeling] || "🌿";
-          if (wsFeelingVal) wsFeelingVal.textContent = `心情：${feeling}`;
-        }
+        modelConnected = config.connected;
+        latestRuntimeState = {
+          status: state.status || "陪伴中",
+          feeling: state.feeling || "平靜",
+        };
+        backgroundWorkActive = state.working === true;
+        const { status, feeling } = latestRuntimeState;
+        if (wsStatusEmoji) wsStatusEmoji.textContent = STATUS_EMOJI[status] || "💬";
+        if (wsStatusVal) wsStatusVal.textContent = `狀態：${status}`;
+        if (wsFeelingEmoji) wsFeelingEmoji.textContent = FEELING_EMOJI[feeling] || "🌿";
+        if (wsFeelingVal) wsFeelingVal.textContent = `心情：${feeling}`;
+        renderLiveProfile();
       } catch (err) {
         console.error("Failed to update runtime display:", err);
       }
@@ -381,6 +463,7 @@ async function initStatusSync() {
     void updateRuntimeDisplay();
     window.runtimeState.onChanged(() => { void updateRuntimeDisplay(); });
     window.modelConfig.onChanged(() => { void updateRuntimeDisplay(); });
+    window.setInterval(() => void updateRuntimeDisplay(), 5_000);
   }
 
   // 5. 數據統計讀取 (今日概覽)
@@ -502,6 +585,8 @@ async function initStatusSync() {
       const today = new Date();
       const weekdays = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
       const current = data[data.length - 1] ?? { totalMs: 0, desktopMs: 0, discordMs: 0, active: false };
+      callActive = current.active;
+      renderLiveProfile();
 
       const todayVal = document.getElementById("call-usage-today-val");
       const sourceDetail = document.getElementById("call-usage-source-detail");
@@ -549,7 +634,7 @@ async function initStatusSync() {
   }
 
   void updateCallUsageStats();
-  window.setInterval(() => void updateCallUsageStats(), 60_000);
+  window.setInterval(() => void updateCallUsageStats(), 5_000);
 
   async function updateScheduleVisibility() {
     const summary = document.getElementById("schedule-summary");
@@ -624,6 +709,10 @@ async function updateConnectionStatus() {
   try {
     const items = await window.connectionStatus.get();
     connectionStatusList.replaceChildren();
+    if (items.length === 0) {
+      connectionStatusList.innerHTML = '<div class="card-empty-content">尚無使用中的連接</div>';
+      return;
+    }
     for (const item of items) {
       const row = document.createElement("div");
       row.className = "conn-item";
@@ -666,7 +755,7 @@ function reportSlotBounds() {
   if (!window.sidebar?.reportSlotBounds) return;
   
   const currentTab = document.querySelector(".sidebar__tab.is-active")?.getAttribute("data-tab");
-  const usesFullWidth = currentTab === "notebook" || currentTab === "game-room";
+  const usesFullWidth = currentTab === "notebook" || currentTab === "game-room" || currentTab === "exam";
 
   const activeInfoTab = document.querySelector(".info-tab.is-active")?.textContent?.trim();
   const isOverview = activeInfoTab === "概覽";
@@ -713,7 +802,7 @@ if (window.sidebar?.onPetDockChanged) {
 // 初始化時：預設為停靠並上報槽位座標
 if (petSlot) {
   petSlot.classList.add("is-docked");
-  setTimeout(reportSlotBounds, 800);
+  setTimeout(() => syncPetDockVisibilityAfterLayout(true), 800);
 }
 
 // 點擊停靠槽：當桌寵在外面時，點擊可以直接將其召回

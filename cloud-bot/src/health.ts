@@ -9,5 +9,5 @@ export function startHealthServer(port: number, status: () => Record<string, unk
     }
     response.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     response.end(JSON.stringify({ ok: true, ...status() }));
-  }).listen(port, "0.0.0.0");
+  }).listen(port, "127.0.0.1");
 }

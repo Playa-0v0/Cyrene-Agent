@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+install -d -o root -g root -m 0755 /run/cyrene-failover
+date +%s > /run/cyrene-failover/local-heartbeat
+systemctl stop cyrene-cloud.service
