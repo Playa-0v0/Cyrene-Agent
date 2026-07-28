@@ -3202,7 +3202,7 @@ function switchSection(section: string): void {
   else disposeMusicPanel();
   placeholderPanel.classList.toggle(
     "is-hidden",
-    isApi || isAppearance || isGeneral || isPreferences || isCyrene || isDisclaimer || isMemory || isUser || isChat || isTasks || isPlugins || isSkills || isTokens || isChannels || isTts || isAsr || isMusic,
+    isApi || isApiAdvanced || isAppearance || isGeneral || isPreferences || isCyrene || isDisclaimer || isMemory || isUser || isChat || isTasks || isPlugins || isSkills || isTokens || isChannels || isTts || isAsr || isMusic,
   );
 
   if (
