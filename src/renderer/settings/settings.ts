@@ -3059,6 +3059,9 @@ apiRuntimeForm.addEventListener("submit", async (e) => {
     await window.settings!.saveTimeoutSettings({
       chatRequestTimeout: parsedTimeoutSec * 1000,
       perRoundTimeout: parsedPerCallSec * 1000,
+      profileTotalBudgetMs: parseN1SecToMsOrThrow(timeoutProfileTotalBudgetInput.value, "Action Gate 总阶段时限"),
+      profilePerAttemptTimeoutMs: parseN1SecToMsOrThrow(timeoutProfilePerAttemptInput.value, "阶段内单次尝试超时"),
+      profileMinimumRemainingBudgetMs: parseN1SecToMsOrThrow(timeoutProfileRemainingInput.value, "最小剩余时间"),
     });
     setRuntimeSaveStatus("已保存", "is-ok");
   } catch {

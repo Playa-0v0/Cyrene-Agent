@@ -275,6 +275,13 @@
               <input id="per-call-timeout-sec" type="number" min="30" max="120" step="5" placeholder="75" autocomplete="off" />
             </label>
             <label class="field field--full">
+              <span>阶段内单次尝试超时（秒）</span>
+              <div class="timeout-row">
+                <input id="timeout-profile-per-attempt" type="number" min="1" step="1" placeholder="留空为默认（4~20s）" autocomplete="off" />
+                <button type="button" class="timeout-reset" id="timeout-profile-per-attempt-reset-btn" title="重置为默认">↻</button>
+              </div>
+            </label>
+            <label class="field field--full">
               <span>总轮数</span>
               <input id="max-iterations" type="number" min="5" max="30" step="1" placeholder="12" autocomplete="off" />
             </label>
@@ -294,34 +301,11 @@
               <span>Action Gate 重试预算（秒）</span>
               <input id="action-gate-repair-budget-sec" type="number" min="5" max="40" step="1" placeholder="10" autocomplete="off" />
             </label>
-          </div>
-          <div class="form-actions">
-            <div class="save-status" id="runtime-save-status">等待保存</div>
-            <button type="submit" class="save-btn">保存设置</button>
-          </div>
-        </form>
-
-
-        <form class="settings-panel is-hidden" id="api-timeout-form" data-panel="api-advanced">
-          <div class="panel-heading">
-            <div>
-              <h1>LangGraph ActionGate / CITA 阶段超时</h1>
-              <p>配置 ActionGate / CITA 阶段的重试超时策略（单位：秒）．留空使用默认值．</p>
-            </div>
-          </div>
-          <div class="settings-list">
             <label class="field field--full">
-              <span>阶段总时间预算（秒）</span>
+              <span>Action Gate 总阶段时限（秒）</span>
               <div class="timeout-row">
                 <input id="timeout-profile-total-budget" type="number" min="1" step="1" placeholder="留空为默认（8~40s）" autocomplete="off" />
                 <button type="button" class="timeout-reset" id="timeout-profile-total-budget-reset-btn" title="重置为默认">↻</button>
-              </div>
-            </label>
-            <label class="field field--full">
-              <span>单次尝试超时（秒）</span>
-              <div class="timeout-row">
-                <input id="timeout-profile-per-attempt" type="number" min="1" step="1" placeholder="留空为默认（4~20s）" autocomplete="off" />
-                <button type="button" class="timeout-reset" id="timeout-profile-per-attempt-reset-btn" title="重置为默认">↻</button>
               </div>
             </label>
             <label class="field field--full">
@@ -332,6 +316,14 @@
               </div>
             </label>
           </div>
+          <div class="form-actions">
+            <div class="save-status" id="runtime-save-status">等待保存</div>
+            <button type="submit" class="save-btn">保存设置</button>
+          </div>
+        </form>
+
+
+        <form class="settings-panel is-hidden" id="api-timeout-form" data-panel="api-advanced">
           <hr class="api-section-divider" />
           <div class="panel-heading">
             <div>
