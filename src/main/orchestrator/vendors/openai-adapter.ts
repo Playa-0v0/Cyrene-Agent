@@ -10,6 +10,7 @@ import { resolveReasoningCapability } from "../../../shared/reasoning";
 import { applyReasoningPreference } from "./reasoning";
 import { getTimeoutSettings } from "../../timeout-manager";
 import { resolveAutomaticToolChoicePolicy, resolveToolChoicePolicy } from "./tool-choice-policy";
+import { loadModelSettings } from "../..";
 
 function buildUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim().replace(/\/+$/, "");
@@ -71,6 +72,7 @@ export class OpenAICompatAdapter implements ChatVendorAdapter {
     if (req.repetitionPenalty !== undefined) body.repetition_penalty = req.repetitionPenalty;
     // maxTokens：调用方显式传时才塞（流式场景下通常不传）
     if (req.maxTokens !== undefined) body.max_tokens = req.maxTokens;
+    if (loadModelSettings().disableMaxToken) body.max_tokens = undefined;
     const tools = toWireTools(req.tools);
     if (tools) {
       body.tools = tools;

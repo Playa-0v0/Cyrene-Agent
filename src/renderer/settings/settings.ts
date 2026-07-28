@@ -878,6 +878,7 @@ const fcModeDisableOptimizationButton = document.getElementById("fc-mode-disable
 
 const toggleEnableThinking = document.getElementById("toggle-enable-thinking") as HTMLInputElement;
 const toggleDisableThinking = document.getElementById("toggle-disable-thinking") as HTMLInputElement;
+const toggleDisableMaxToken = document.getElementById("toggle-disable-max-token") as HTMLInputElement;
 
 const NAV_LABELS: Record<string, { emoji: string; title: string; hint: string }> = {
   memory: { emoji: `<img src="../icons/mimi.png" width="24" height="24" alt="" aria-hidden="true" style="vertical-align:-3px" />`, title: "记忆", hint: "管理长期记忆与画像" },
@@ -1524,6 +1525,7 @@ async function loadConfig(): Promise<void> {
     applyFcOptimizeSelection(cfg.optimizeFirstRound, cfg.disableLangGraph);
     toggleEnableThinking.checked = cfg.thinkingOverride === 1;
     toggleDisableThinking.checked = cfg.thinkingOverride === -1;
+    toggleDisableMaxToken.checked = !!cfg.disableMaxToken;
 
     // 视觉模型配置已并入 applyPreset（preferredVision 参数）。
 
@@ -3044,6 +3046,7 @@ apiForm.addEventListener("submit", async (e) => {
         model: visionModelInput.value.trim(),
       },
       thinkingOverride: toggleEnableThinking.checked ? 1 : toggleDisableThinking.checked ? -1 : 0,
+      disableMaxToken: toggleDisableMaxToken.checked,
     });
     setSaveStatus("已保存", "is-ok");
   } catch {

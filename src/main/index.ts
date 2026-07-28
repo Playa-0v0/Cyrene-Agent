@@ -579,6 +579,7 @@ interface ModelSettings {
   disableLangGraph?: boolean,
   optimizeFirstRound?: boolean;
   thinkingOverride?: -1 | 0 | 1;
+  disableMaxToken?: boolean;
 }
 
 /** 视觉模型配置（独立视觉模型，非多模态直发场景）。全空 = 未启用。 */
@@ -1145,6 +1146,7 @@ function normalizeModelSettings(input: Partial<ModelSettings> | null | undefined
     optimizeFirstRound: input?.optimizeFirstRound,
     disableLangGraph: input?.disableLangGraph,
     thinkingOverride: input?.thinkingOverride,
+    disableMaxToken: input?.disableMaxToken,
   };
 }
 

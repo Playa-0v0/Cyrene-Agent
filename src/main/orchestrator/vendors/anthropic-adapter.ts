@@ -14,6 +14,7 @@ import { resolveReasoningCapability } from "../../../shared/reasoning";
 import { applyReasoningPreference } from "./reasoning";
 import { getTimeoutSettings } from "../../timeout-manager";
 import { resolveAutomaticToolChoicePolicy, resolveToolChoicePolicy } from "./tool-choice-policy";
+import { loadModelSettings } from "../..";
 
 const ANTHROPIC_VERSION = "2023-06-01";
 const DEFAULT_MAX_TOKENS = 4096;
@@ -97,7 +98,7 @@ export class AnthropicAdapter implements ChatVendorAdapter {
     const { system, messages } = toWireMessages(req.messages);
     const body: Record<string, unknown> = {
       model: req.model,
-      max_tokens: req.maxTokens ?? DEFAULT_MAX_TOKENS,
+      max_tokens: loadModelSettings().disableMaxToken ? undefined : req.maxTokens ?? DEFAULT_MAX_TOKENS,
       messages,
       stream: req.stream ?? false,
     };
