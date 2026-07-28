@@ -835,8 +835,6 @@ const maxRefreshInput = document.getElementById("max-refresh") as HTMLInputEleme
 const perCallTimeoutSecInput = document.getElementById("per-call-timeout-sec") as HTMLInputElement;
 const citaRepairBudgetSecInput = document.getElementById("cita-repair-budget-sec") as HTMLInputElement;
 const actionGateRepairBudgetSecInput = document.getElementById("action-gate-repair-budget-sec") as HTMLInputElement;
-const advancedToggle = document.getElementById("advanced-toggle") as HTMLButtonElement;
-const advancedFieldsWrap = document.getElementById("advanced-fields-wrap") as HTMLElement;
 
 // 渲染端内存缓存：保存每个厂商上一次填写的 baseUrl / model / apiKey
 // 切厂商时从这里读，保存时同步进去；持久化由 main 进程的 saveModelSettings 负责（perProvider 字段）。
@@ -1780,15 +1778,6 @@ runtimeSyncSelect.querySelectorAll<HTMLButtonElement>(".option-block").forEach((
 
 stickerEnabledInput.addEventListener("change", () => {
   setCyreneSaveStatus("有未保存的更改");
-});
-
-// 高级运行设置折叠
-advancedToggle.addEventListener("click", () => {
-  const expanded = advancedToggle.getAttribute("aria-expanded") === "true";
-  const next = !expanded;
-  advancedToggle.setAttribute("aria-expanded", String(next));
-  if (next) advancedFieldsWrap.removeAttribute("hidden");
-  else advancedFieldsWrap.setAttribute("hidden", "");
 });
 
 // 任何高级字段改动都标记"有未保存的更改"
