@@ -258,7 +258,7 @@
         </form>
 
 
-        <form class="settings-panel is-hidden" id="api-timeout-form" data-panel="api-advanced">
+        <form class="settings-panel is-hidden" id="api-runtime-form" data-panel="api-advanced">
           <div class="panel-heading">
             <div>
               <h1>运行与超时设置</h1>
@@ -295,7 +295,14 @@
               <input id="action-gate-repair-budget-sec" type="number" min="5" max="40" step="1" placeholder="10" autocomplete="off" />
             </label>
           </div>
-          <hr class="api-section-divider" />
+          <div class="form-actions">
+            <div class="save-status" id="runtime-save-status">等待保存</div>
+            <button type="submit" class="save-btn">保存设置</button>
+          </div>
+        </form>
+
+
+        <form class="settings-panel is-hidden" id="api-timeout-form" data-panel="api-advanced">
           <div class="panel-heading">
             <div>
               <h1>LangGraph ActionGate / CITA 阶段超时</h1>

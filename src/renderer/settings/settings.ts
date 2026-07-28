@@ -745,6 +745,7 @@ const bgmAudio = new Audio("/audio/bgm.mp3");
 bgmAudio.preload = "auto";
 bgmAudio.loop = true;
 const apiForm = document.getElementById("api-form") as HTMLFormElement;
+const apiRuntimeForm = document.getElementById("api-runtime-form") as HTMLFormElement;
 const apiTimeoutForm = document.getElementById("api-timeout-form") as HTMLFormElement;
 const apiFcModeForm = document.getElementById("api-fc-mode-form") as HTMLFormElement;
 const appearanceForm = document.getElementById("appearance-form") as HTMLFormElement;
@@ -766,6 +767,7 @@ const saveStatus = document.getElementById("save-status") as HTMLElement;
 const appearanceSaveStatus = document.getElementById("appearance-save-status") as HTMLElement;
 const generalSaveStatus = document.getElementById("general-save-status") as HTMLElement;
 const timeoutSaveStatus = document.getElementById("timeout-save-status") as HTMLElement;
+const runtimeSaveStatus = document.getElementById("runtime-save-status") as HTMLElement;
 const preferencesSaveStatus = document.getElementById("preferences-save-status") as HTMLElement;
 const cyreneSaveStatus = document.getElementById("cyrene-save-status") as HTMLElement;
 
@@ -1262,6 +1264,12 @@ function setTimeoutSaveStatus(text: string, cls?: string): void {
   timeoutSaveStatus.textContent = text;
   timeoutSaveStatus.className = "save-status";
   if (cls) timeoutSaveStatus.classList.add(cls);
+}
+
+function setRuntimeSaveStatus(text: string, cls?: string): void {
+  runtimeSaveStatus.textContent = text;
+  runtimeSaveStatus.className = "save-status";
+  if (cls) runtimeSaveStatus.classList.add(cls);
 }
 
 function fillPresetOptions(): void {
@@ -3017,11 +3025,10 @@ async function renderSchedulerList(): Promise<void> {
   }
 }
 
-apiTimeoutForm.addEventListener("submit", async (e) => {
+apiRuntimeForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-  setTimeoutSaveStatus("保存中…");
+  setRuntimeSaveStatus("保存中…");
   try {
-    // 保存高级运行设置（轮数、重试预算等）
     const parsedTimeoutSec = Math.max(30, Math.min(1800, parseInt(chatRequestTimeoutSecInput.value, 10) || 300));
     const parsedMaxIterations = Math.max(5, Math.min(30, parseInt(maxIterationsInput.value, 10) || 12));
     const parsedMaxReplans = Math.max(1, Math.min(5, parseInt(maxReplansInput.value, 10) || 2));
@@ -3043,7 +3050,16 @@ apiTimeoutForm.addEventListener("submit", async (e) => {
       chatRequestTimeout: parsedTimeoutSec * 1000,
       perRoundTimeout: parsedPerCallSec * 1000,
     });
-    // 保存其它超时设置（ms）
+    setRuntimeSaveStatus("已保存", "is-ok");
+  } catch {
+    setRuntimeSaveStatus("保存失败", "is-error");
+  }
+});
+
+apiTimeoutForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setTimeoutSaveStatus("保存中…");
+  try {
     await saveTimeoutSettings(false);
     setTimeoutSaveStatus("已保存", "is-ok");
   } catch {
@@ -3336,6 +3352,7 @@ function switchSection(section: string): void {
   const isAsr = section === "asr";
   const isMusic = section === "music";
   apiForm.classList.toggle("is-hidden", !isApi);
+  apiRuntimeForm.classList.toggle("is-hidden", !isApiAdvanced);
   apiTimeoutForm.classList.toggle("is-hidden", !isApiAdvanced);
   apiFcModeForm.classList.toggle("is-hidden", !isApiAdvanced);
   appearanceForm.classList.toggle("is-hidden", !isAppearance);
