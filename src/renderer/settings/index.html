@@ -274,7 +274,7 @@
               <span>单次模型超时（秒）</span>
               <input id="per-call-timeout-sec" type="number" min="30" max="120" step="5" placeholder="75" autocomplete="off" />
             </label>
-            <label class="field field--full">
+            <label class="field field--full" data-mode="langgraph">
               <span>阶段内单次尝试超时（秒）</span>
               <div class="timeout-row">
                 <input id="timeout-profile-per-attempt" type="number" min="1" step="1" placeholder="留空为默认（4~20s）" autocomplete="off" />
@@ -293,22 +293,22 @@
               <span>引用过期重试</span>
               <input id="max-refresh" type="number" min="0" max="3" step="1" placeholder="1" autocomplete="off" />
             </label>
-            <label class="field field--full">
+            <label class="field field--full" data-mode="twophase">
               <span>CITA 重试预算（秒）</span>
               <input id="cita-repair-budget-sec" type="number" min="4" max="30" step="1" placeholder="8" autocomplete="off" />
             </label>
-            <label class="field field--full">
+            <label class="field field--full" data-mode="langgraph">
               <span>Action Gate 重试预算（秒）</span>
               <input id="action-gate-repair-budget-sec" type="number" min="5" max="40" step="1" placeholder="10" autocomplete="off" />
             </label>
-            <label class="field field--full">
+            <label class="field field--full" data-mode="langgraph">
               <span>Action Gate 总阶段时限（秒）</span>
               <div class="timeout-row">
                 <input id="timeout-profile-total-budget" type="number" min="1" step="1" placeholder="留空为默认（8~40s）" autocomplete="off" />
                 <button type="button" class="timeout-reset" id="timeout-profile-total-budget-reset-btn" title="重置为默认">↻</button>
               </div>
             </label>
-            <label class="field field--full">
+            <label class="field field--full" data-mode="langgraph">
               <span>最小剩余时间（秒）：低于此值不再重试</span>
               <div class="timeout-row">
                 <input id="timeout-profile-remaining" type="number" min="0.1" step="0.1" placeholder="留空为默认（0.5~0.8s）" autocomplete="off" />

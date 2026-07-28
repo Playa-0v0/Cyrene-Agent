@@ -321,6 +321,10 @@ body {
   grid-column: 1 / -1;
 }
 
+[data-mode].is-hidden-mode {
+  display: none;
+}
+
 .field span {
   font: var(--rb-text-small-em);
   color: var(--rb-text-default);

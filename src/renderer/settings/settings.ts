@@ -1235,6 +1235,13 @@ function applyFcOptimizeSelection(optimizeFirstRound?: boolean, disableLangGraph
   fcModeLangGraphButton.className = !disableLangGraph ? "fc-mode-option is-active" : "fc-mode-option";
   fcModeEnableOptimizationButton.className = (disableLangGraph && optimizeFirstRound) ? "fc-mode-option is-active" : "fc-mode-option";
   fcModeDisableOptimizationButton.className = (disableLangGraph && !optimizeFirstRound) ? "fc-mode-option is-active" : "fc-mode-option";
+  // 根据模式显隐相关参数
+  const isLangGraph = !disableLangGraph;
+  document.querySelectorAll<HTMLElement>("[data-mode]").forEach(el => {
+    const mode = el.dataset.mode;
+    if (mode === "langgraph") el.classList.toggle("is-hidden-mode", !isLangGraph);
+    else if (mode === "twophase") el.classList.toggle("is-hidden-mode", isLangGraph);
+  });
 }
 
 function renderUiFont(font: UiFont): void {
