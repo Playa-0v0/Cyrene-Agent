@@ -578,6 +578,7 @@ interface ModelSettings {
   multimodal: boolean;
   disableLangGraph?: boolean,
   optimizeFirstRound?: boolean;
+  thinkingOverride?: -1 | 0 | 1;
 }
 
 /** 视觉模型配置（独立视觉模型，非多模态直发场景）。全空 = 未启用。 */
@@ -1143,6 +1144,7 @@ function normalizeModelSettings(input: Partial<ModelSettings> | null | undefined
     multimodal,
     optimizeFirstRound: input?.optimizeFirstRound,
     disableLangGraph: input?.disableLangGraph,
+    thinkingOverride: input?.thinkingOverride,
   };
 }
 
@@ -1160,7 +1162,7 @@ function loadModelSettings0(): ModelSettings {
   }
 }
 
-function loadModelSettings(): ModelSettings {
+export function loadModelSettings(): ModelSettings {
   if (modelSettingsCache !== null) return modelSettingsCache;
   return modelSettingsCache = loadModelSettings0();
 }
@@ -3418,6 +3420,7 @@ ipcMain.handle(IPC.CHAT_GET_REASONING_STATE, () => {
     providerId: cap.id,
     model: settings.model,
     preference: settings.perProvider?.[settings.provider]?.reasoning,
+    thinkingOverride: settings.thinkingOverride,
   };
 });
 

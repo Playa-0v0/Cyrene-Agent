@@ -4205,11 +4205,12 @@ clearBtn.addEventListener("click", clearChat);
       const state = await window.chat!.getReasoningState() as {
         providerKey: string; providerId: string; model: string;
         preference?: { mode: string; effort?: string };
+        thinkingOverride?: -1 | 0 | 1;
       };
       reasoningProviderKey = state.providerKey;
       // 动态 import 纯函数（vite tree-shake 后仍可执行）
       const { computeReasoningDropdown, formatReasoningTriggerLabel } = await import("./reasoning-dropdown");
-      const view = computeReasoningDropdown(state.providerId, state.model, state.preference);
+      const view = computeReasoningDropdown(state.providerId, state.model, state.preference, state.thinkingOverride);
       reasoningDropdownDisabled = view.disabled;
       reasoningActivePreference = view.activePreference;
 
@@ -4296,10 +4297,6 @@ clearBtn.addEventListener("click", clearChat);
   const reasoningTrigger = document.querySelector<HTMLElement>('.dropdown-trigger[data-dropdown="reasoning-dropdown"]');
   if (reasoningTrigger) {
     reasoningTrigger.addEventListener("click", async (e) => {
-      if (reasoningDropdownDisabled) {
-        e.stopImmediatePropagation(); // 当控件 disabled 时阻止原 handler 打开下拉
-        return;
-      }
       await rebuildReasoningDropdown();
       // 不阻止原 handler：原 handler 会 closeAll() + openDropdown(id, t)
     }, true); // capture phase: 在原 handler (bubble 注册) 之前执行

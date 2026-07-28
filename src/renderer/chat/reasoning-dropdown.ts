@@ -53,10 +53,39 @@ export function computeReasoningDropdown(
   providerId: string,
   model: string,
   saved: ReasoningPreference | undefined,
+  thinkingOverride?: -1 | 0 | 1,
 ): ReasoningDropdownView {
   const cap = resolveReasoningCapability(providerId, model);
   // 用户修正 #2：必须用 resolveEffectiveReasoning，不能 saved ?? auto
-  const effective = resolveEffectiveReasoning(saved, cap);
+  const effective = resolveEffectiveReasoning(saved, cap, thinkingOverride);
+
+  if (thinkingOverride === 1) {
+    const items: ReasoningDropdownItem[] = [
+      { label: "跟随模型", preference: { mode: "auto" } },
+    ];
+    items.push({ label: "关闭", preference: { mode: "off" } });
+    items.push({ label: "开启", preference: { mode: "on" } });
+    return {
+      disabled: false,
+      statusText: statusTextFor(effective),
+      activePreference: effective,
+      items,
+    };
+  } else if (thinkingOverride === -1) {
+    return {
+      disabled: true,
+      statusText: "跟随模型",
+      activePreference: effective,
+      items: [
+        {
+          label: "跟随模型",
+          preference: { mode: "auto" },
+          disabled: true,
+          hint: "当前模型未配置推理控制",
+        },
+      ],
+    };
+  }
 
   // ── fixed-on：始终开启，控件整体禁用，单项 disabled ──
   if (cap.control === "fixed-on") {

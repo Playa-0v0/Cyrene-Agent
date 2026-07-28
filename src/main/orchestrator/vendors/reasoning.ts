@@ -17,6 +17,7 @@
 //   - 互斥字段防御：每个 requestStyle 只用自己专属字段，路径互不交叉
 //   - 日志只记 provider / model / requested / effective mode-effort；不记 apiKey / 消息 / reasoning 内容
 
+import { loadModelSettings } from "../..";
 import {
   resolveEffectiveReasoning,
   type ReasoningCapability,
@@ -35,7 +36,7 @@ export function applyReasoningPreference(
   capability: ReasoningCapability,
   context: ApplyReasoningContext,
 ): Record<string, unknown> {
-  const effective = resolveEffectiveReasoning(preference, capability);
+  const effective = resolveEffectiveReasoning(preference, capability, loadModelSettings().thinkingOverride);
   const result: Record<string, unknown> = { ...body };
 
   // 日志（用户 spec §六 #7）

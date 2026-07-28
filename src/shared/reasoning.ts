@@ -319,11 +319,12 @@ export function resolveReasoningCapability(
 export function resolveEffectiveReasoning(
   preference: ReasoningPreference | undefined,
   capability: ReasoningCapability,
+  thinkingOverride?: -1 | 0 | 1,
 ): ReasoningPreference {
   const pref = preference ?? { mode: "auto" };
 
   // 1. 不支持 / 动态路由 → 强制 auto
-  if (capability.control === "none" || capability.control === "dynamic") {
+  if (thinkingOverride === -1 || (thinkingOverride !== 1 && (capability.control === "none" || capability.control === "dynamic"))) {
     return { mode: "auto" };
   }
 

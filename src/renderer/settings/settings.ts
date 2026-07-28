@@ -276,6 +276,7 @@ interface ModelSettings {
   multimodal: boolean;
   disableLangGraph?: boolean;
   optimizeFirstRound?: boolean;
+  thinkingOverride?: -1 | 0 | 1;
 }
 
 type ScheduleConfig =
@@ -874,6 +875,9 @@ const timeoutProfileRemainingReset = document.getElementById("timeout-profile-re
 const fcModeLangGraphButton = document.getElementById("fc-mode-langgraph") as HTMLButtonElement;
 const fcModeEnableOptimizationButton = document.getElementById("fc-mode-enable-optimization") as HTMLButtonElement;
 const fcModeDisableOptimizationButton = document.getElementById("fc-mode-disable-optimization") as HTMLButtonElement;
+
+const toggleEnableThinking = document.getElementById("toggle-enable-thinking") as HTMLInputElement;
+const toggleDisableThinking = document.getElementById("toggle-disable-thinking") as HTMLInputElement;
 
 const NAV_LABELS: Record<string, { emoji: string; title: string; hint: string }> = {
   memory: { emoji: `<img src="../icons/mimi.png" width="24" height="24" alt="" aria-hidden="true" style="vertical-align:-3px" />`, title: "记忆", hint: "管理长期记忆与画像" },
@@ -1518,6 +1522,8 @@ async function loadConfig(): Promise<void> {
     stickerThresholdInput.value = String(threshold);
     stickerThresholdVal.textContent = threshold.toFixed(2);
     applyFcOptimizeSelection(cfg.optimizeFirstRound, cfg.disableLangGraph);
+    toggleEnableThinking.checked = cfg.thinkingOverride === 1;
+    toggleDisableThinking.checked = cfg.thinkingOverride === -1;
 
     // 视觉模型配置已并入 applyPreset（preferredVision 参数）。
 
@@ -1705,6 +1711,17 @@ fcModeEnableOptimizationButton.addEventListener("click", async () => {
 fcModeDisableOptimizationButton.addEventListener("click", async () => {
   await window.settings!.saveConfig({ optimizeFirstRound: false, disableLangGraph: true });
   applyFcOptimizeSelection(false, true);
+});
+
+toggleEnableThinking.addEventListener("change", () => {
+  if (toggleEnableThinking.checked) {
+    toggleDisableThinking.checked = false;
+  }
+});
+toggleDisableThinking.addEventListener("change", () => {
+  if (toggleDisableThinking.checked) {
+    toggleEnableThinking.checked = false;
+  }
 });
 
 runtimeSyncSelect.querySelectorAll<HTMLButtonElement>(".option-block").forEach((button) => {
@@ -3026,6 +3043,7 @@ apiForm.addEventListener("submit", async (e) => {
         apiKey: visionApiKeyInput.value.trim(),
         model: visionModelInput.value.trim(),
       },
+      thinkingOverride: toggleEnableThinking.checked ? 1 : toggleDisableThinking.checked ? -1 : 0,
     });
     setSaveStatus("已保存", "is-ok");
   } catch {

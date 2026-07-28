@@ -1,3 +1,4 @@
+import { loadModelSettings } from "../..";
 import { resolveEffectiveReasoning, resolveReasoningCapability, type ReasoningPreference } from "../../../shared/reasoning";
 import type { Transport } from "./types";
 
@@ -22,6 +23,7 @@ function isThinkingEnabled(input: AutomaticToolChoicePolicyInput): boolean {
   return resolveEffectiveReasoning(
     input.reasoning,
     resolveReasoningCapability(input.providerId, input.model),
+    loadModelSettings().thinkingOverride,
   ).mode === "on";
 }
 
