@@ -70,6 +70,8 @@ export const IPC = {
   SETTINGS_SAVE_TIMEOUT_SETTINGS: "settings:save-timeout-settings",
   UI_THEME_GET: "ui-theme:get",
   UI_THEME_CHANGED: "ui-theme:changed",
+  UI_THEME_RADIUS_GET: "ui-theme-radius:get",
+  UI_THEME_RADIUS_CHANGED: "ui-theme-radius:changed",
   UI_FONT_GET: "ui-font:get",
   UI_FONT_CHANGED: "ui-font:changed",
   SETTINGS_PICK_UI_FONT: "settings:pick-ui-font",

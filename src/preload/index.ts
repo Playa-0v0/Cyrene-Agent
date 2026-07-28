@@ -211,6 +211,12 @@ const cyreneThemeApi = {
     ipcRenderer.on(IPC.UI_THEME_CHANGED, listener);
     return () => ipcRenderer.off(IPC.UI_THEME_CHANGED, listener);
   },
+  getRadius: () => ipcRenderer.invoke(IPC.UI_THEME_RADIUS_GET) as Promise<boolean>,
+  onRadiusChanged: (callback: (theme: boolean) => void) => {
+    const listener = (_e: unknown, theme: boolean) => callback(theme);
+    ipcRenderer.on(IPC.UI_THEME_RADIUS_CHANGED, listener);
+    return () => ipcRenderer.off(IPC.UI_THEME_RADIUS_CHANGED, listener);
+  },
 };
 
 contextBridge.exposeInMainWorld("cyreneTheme", cyreneThemeApi);

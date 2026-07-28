@@ -35,6 +35,10 @@ body {
   border: 1px solid rgba(255, 190, 226, 0.36);
 }
 
+[data-ui-radius="false"] .tasks {
+  border-radius: 0px;
+}
+
 .tasks::before {
   content: "";
   position: absolute;

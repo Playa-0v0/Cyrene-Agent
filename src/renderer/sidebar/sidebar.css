@@ -32,6 +32,10 @@ body {
   transition: background 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
 }
 
+[data-ui-radius="false"] .sidebar {
+  border-radius: 0px;
+}
+
 .sidebar::before {
   content: "";
   position: absolute;

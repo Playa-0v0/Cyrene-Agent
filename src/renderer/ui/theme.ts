@@ -7,6 +7,8 @@ declare global {
     cyreneTheme?: {
       get: () => Promise<UiTheme>;
       onChanged: (callback: (theme: UiTheme) => void) => () => void;
+      getRadius: () => Promise<boolean>;
+      onRadiusChanged: (callback: (theme: boolean) => void) => () => void;
     };
     cyreneFont?: {
       get: () => Promise<UiFont>;
@@ -17,6 +19,10 @@ declare global {
 
 function applyTheme(theme: unknown): void {
   document.documentElement.dataset.uiTheme = normalizeUiTheme(theme);
+}
+
+function applyRadius(radius: boolean): void {
+  document.documentElement.dataset.uiRadius = radius ? undefined : "false";
 }
 
 const CUSTOM_FONT_STYLE_ID = "cyrene-custom-font";
@@ -46,6 +52,14 @@ void window.cyreneTheme?.get()
 
 window.cyreneTheme?.onChanged((theme) => {
   applyTheme(theme);
+});
+
+void window.cyreneTheme?.getRadius()
+  .then(applyRadius)
+  .catch(() => applyRadius(true));
+
+window.cyreneTheme?.onRadiusChanged((theme) => {
+  applyRadius(theme);
 });
 
 applyFont(DEFAULT_UI_FONT);

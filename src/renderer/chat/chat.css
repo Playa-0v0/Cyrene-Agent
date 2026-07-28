@@ -35,6 +35,10 @@ body {
   border: 1px solid var(--rb-border-strong);
 }
 
+[data-ui-radius="false"] .chat {
+  border-radius: 0px;
+}
+
 .chat::before {
   content: "";
   position: absolute;

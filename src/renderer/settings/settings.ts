@@ -386,6 +386,7 @@ interface GeneralSettings {
   launchAtLogin: boolean;
   language: "zh-CN";
   uiTheme: UiTheme;
+  uiThemeRadius: boolean;
   uiFont: UiFont;
   uiIcon: UiIcon;
   defaultChatMode: DefaultChatMode;
@@ -814,6 +815,7 @@ const musicEnabledInput = document.getElementById("music-enabled") as HTMLInputE
 const musicVolumeInput = document.getElementById("music-volume") as HTMLInputElement;
 const soundEnabledInput = document.getElementById("sound-enabled") as HTMLInputElement;
 const soundVolumeInput = document.getElementById("sound-volume") as HTMLInputElement;
+const disableRadiusInput = document.getElementById("disable-radius") as HTMLInputElement;
 const petAlwaysOnTopInput = document.getElementById("pet-always-on-top") as HTMLInputElement;
 const petVisibleInput = document.getElementById("pet-visible") as HTMLInputElement;
 const petZoomInput = document.getElementById("pet-zoom") as HTMLInputElement;
@@ -1535,6 +1537,7 @@ async function loadGeneralSettings(): Promise<void> {
     syncMusicPlayback();
     soundEnabledInput.checked = cfg.soundEnabled;
     soundVolumeInput.value = String(cfg.soundVolume);
+    disableRadiusInput.checked = !cfg.uiThemeRadius;
     petAlwaysOnTopInput.checked = cfg.petAlwaysOnTop;
     petVisibleInput.checked = cfg.petVisible;
     petZoomInput.value = String(cfg.petZoom ?? 1);
@@ -1718,6 +1721,11 @@ musicVolumeInput.addEventListener("input", () => {
 
 soundEnabledInput.addEventListener("change", () => setGeneralSaveStatus("有未保存的更改"));
 soundVolumeInput.addEventListener("input", () => setGeneralSaveStatus("有未保存的更改"));
+
+disableRadiusInput.addEventListener("change", async () => {
+  await window.settings!.saveGeneral({ uiThemeRadius: !disableRadiusInput.checked });
+  setAppearanceSaveStatus("已应用", "is-ok");
+});
 
 petAlwaysOnTopInput.addEventListener("change", () => {
   window.settings?.setPetAlwaysOnTop(petAlwaysOnTopInput.checked);
@@ -2897,6 +2905,7 @@ appearanceForm.addEventListener("submit", async (e) => {
     await window.settings!.saveGeneral(buildAppearanceSettingsPatch({
       uiTheme: getUiThemeValue(),
       uiIcon: getUiIconValue(),
+      uiThemeRadius: !disableRadiusInput.checked,
       petAlwaysOnTop: petAlwaysOnTopInput.checked,
       petVisible: petVisibleInput.checked,
       petZoom: Number(petZoomInput.value),

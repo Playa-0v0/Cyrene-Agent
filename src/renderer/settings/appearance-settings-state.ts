@@ -3,6 +3,7 @@ import type { UiIcon } from "../../shared/ui-icon";
 
 export interface AppearanceSettingsInput {
   uiTheme: UiTheme;
+  uiThemeRadius: boolean;
   uiIcon: UiIcon;
   petAlwaysOnTop: boolean;
   petVisible: boolean;

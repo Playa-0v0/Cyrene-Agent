@@ -31,6 +31,10 @@ body {
   border: 1px solid rgba(255, 190, 226, 0.36);
 }
 
+[data-ui-radius="false"] .settings-shell {
+  border-radius: 0px;
+}
+
 .settings-shell::before {
   content: "";
   position: absolute;
