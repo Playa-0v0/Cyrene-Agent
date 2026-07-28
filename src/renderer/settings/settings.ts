@@ -3028,10 +3028,38 @@ async function renderSchedulerList(): Promise<void> {
   }
 }
 
-apiTimeoutForm.addEventListener("submit", (e) => {
+apiTimeoutForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   setTimeoutSaveStatus("保存中…");
-  saveTimeoutSettings(false);
+  try {
+    // 保存高级运行设置（轮数、重试预算等）
+    const parsedTimeoutSec = Math.max(30, Math.min(1800, parseInt(chatRequestTimeoutSecInput.value, 10) || 300));
+    const parsedMaxIterations = Math.max(5, Math.min(30, parseInt(maxIterationsInput.value, 10) || 12));
+    const parsedMaxReplans = Math.max(1, Math.min(5, parseInt(maxReplansInput.value, 10) || 2));
+    const parsedMaxRefresh = Math.max(0, Math.min(3, parseInt(maxRefreshInput.value, 10) || 1));
+    const parsedPerCallSec = Math.max(30, Math.min(120, parseInt(perCallTimeoutSecInput.value, 10) || 75));
+    const parsedCitaSec = Math.max(4, Math.min(30, parseInt(citaRepairBudgetSecInput.value, 10) || 8));
+    const parsedAgSec = Math.max(5, Math.min(40, parseInt(actionGateRepairBudgetSecInput.value, 10) || 10));
+    await window.settings!.saveConfig({
+      chatRequestTimeoutSec: parsedTimeoutSec,
+      maxIterations: parsedMaxIterations,
+      maxReplans: parsedMaxReplans,
+      maxRefresh: parsedMaxRefresh,
+      perCallTimeoutSec: parsedPerCallSec,
+      citaRepairBudgetSec: parsedCitaSec,
+      actionGateRepairBudgetSec: parsedAgSec,
+    });
+    // 同步超时到 TimeoutSettings（秒→毫秒）
+    await window.settings!.saveTimeoutSettings({
+      chatRequestTimeout: parsedTimeoutSec * 1000,
+      perRoundTimeout: parsedPerCallSec * 1000,
+    });
+    // 保存其它超时设置（ms）
+    await saveTimeoutSettings(false);
+    setTimeoutSaveStatus("已保存", "is-ok");
+  } catch {
+    setTimeoutSaveStatus("保存失败", "is-error");
+  }
 });
 
 appearanceForm.addEventListener("submit", async (e) => {
@@ -3079,30 +3107,11 @@ cyrenePanel.addEventListener("submit", async (e) => {
   e.preventDefault();
   setCyreneSaveStatus("保存中…");
   try {
-    const parsedTimeoutSec = Math.max(30, Math.min(1800, parseInt(chatRequestTimeoutSecInput.value, 10) || 300));
-    const parsedMaxIterations = Math.max(5, Math.min(30, parseInt(maxIterationsInput.value, 10) || 12));
-    const parsedMaxReplans = Math.max(1, Math.min(5, parseInt(maxReplansInput.value, 10) || 2));
-    const parsedMaxRefresh = Math.max(0, Math.min(3, parseInt(maxRefreshInput.value, 10) || 1));
-    const parsedPerCallSec = Math.max(30, Math.min(120, parseInt(perCallTimeoutSecInput.value, 10) || 75));
-    const parsedCitaSec = Math.max(4, Math.min(30, parseInt(citaRepairBudgetSecInput.value, 10) || 8));
-    const parsedAgSec = Math.max(5, Math.min(40, parseInt(actionGateRepairBudgetSecInput.value, 10) || 10));
     await window.settings!.saveConfig({
       runtimeSync: getRuntimeSyncValue(),
       stickerEnabled: stickerEnabledInput.checked,
       stickerSize: getStickerSizeValue(),
       stickerSimilarityThreshold: parseFloat(stickerThresholdInput.value),
-      chatRequestTimeoutSec: parsedTimeoutSec,
-      maxIterations: parsedMaxIterations,
-      maxReplans: parsedMaxReplans,
-      maxRefresh: parsedMaxRefresh,
-      perCallTimeoutSec: parsedPerCallSec,
-      citaRepairBudgetSec: parsedCitaSec,
-      actionGateRepairBudgetSec: parsedAgSec,
-    });
-    // 同步超时到 TimeoutSettings（秒→毫秒）
-    await window.settings!.saveTimeoutSettings({
-      chatRequestTimeout: parsedTimeoutSec * 1000,
-      perRoundTimeout: parsedPerCallSec * 1000,
     });
     setCyreneSaveStatus("已保存", "is-ok");
   } catch {
