@@ -41,6 +41,19 @@ export class SelectionSetCache {
     return s;
   }
 
+  latest(
+    conversationId: string,
+    source?: MusicSelectionSet["source"],
+  ): MusicSelectionSet | null {
+    this.evictExpired();
+    const ids = [...(this.byConversation.get(conversationId) ?? [])].reverse();
+    for (const id of ids) {
+      const set = this.bySetId.get(id);
+      if (set && (!source || set.source === source)) return set;
+    }
+    return null;
+  }
+
   touch(setId: string): void {
     const s = this.bySetId.get(setId);
     if (!s) return;
@@ -48,6 +61,14 @@ export class SelectionSetCache {
     if (!conv) return;
     conv.delete(setId);
     conv.add(setId);
+  }
+
+  markPresented(setId: string, conversationId: string, trackIds: string[], presentedAt = Date.now()): void {
+    const set = this.get(setId, conversationId);
+    if (!set) throw new Error("E_SET_NOT_FOUND");
+    set.presentedAt = presentedAt;
+    set.presentedTrackIds = [...trackIds];
+    this.touch(setId);
   }
 
   evictExpired(): void {

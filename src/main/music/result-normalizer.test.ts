@@ -37,8 +37,20 @@ describe("result-normalizer", () => {
   });
 
   it("returns empty array on failure", () => {
-    expect(normalizeDailyRecommendations({ success: false, error: "x" })).toEqual([]);
     expect(normalizeSearchResults({ success: false, error: "x" })).toEqual([]);
+  });
+
+  it("preserves a structured daily recommendation failure", () => {
+    expect(() => normalizeDailyRecommendations({
+      success: false,
+      songs: [],
+      error: { code: "E_DAILY_RECOMMEND_FAILED", message: "upstream unavailable" },
+    })).toThrow(/E_DAILY_RECOMMEND_FAILED.*upstream unavailable/);
+  });
+
+  it("rejects legacy human-readable daily recommendation text", () => {
+    expect(() => normalizeDailyRecommendations("📅 今日推荐 (1首): ..."))
+      .toThrow(/E_DAILY_RECOMMEND_INVALID_RESPONSE/);
   });
 
   it("clamps to 30 tracks max", () => {

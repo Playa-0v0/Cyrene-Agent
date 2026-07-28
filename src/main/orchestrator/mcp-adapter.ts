@@ -57,7 +57,7 @@ export async function connectMcpServer(config: McpServerConfig): Promise<string[
   };
 
   const client = new Client(
-    { name: "cyrene", version: "0.4.3" },
+    { name: "cyrene", version: "0.8.0" },
     { capabilities: {} },
   );
 
@@ -144,12 +144,16 @@ export async function connectMcpServer(config: McpServerConfig): Promise<string[
             }
           }
           const output = texts.join("\n") || JSON.stringify(result.content);
+          if (result.isError === true) {
+            throw new Error(`E_MCP_TOOL_FAILED${output ? `: ${output}` : ""}`);
+          }
           console.log(LOG_PREFIX, "工具返回 [" + toolId + "]:", output.slice(0, 200));
           return output;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error(LOG_PREFIX, "工具调用失败 [" + toolId + "]:", msg);
-          return "[MCP 工具调用失败] " + msg;
+          if (msg.startsWith("E_MCP_TOOL_FAILED")) throw err;
+          throw new Error(`E_MCP_TOOL_FAILED: ${msg}`);
         }
       },
     };

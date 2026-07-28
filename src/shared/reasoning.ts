@@ -10,7 +10,7 @@
 //   - main/orchestrator/vendors/reasoning.ts：纯函数 applyReasoningPreference
 //
 // providerId 必须与 main/orchestrator/vendors/capabilities.ts 的 ProviderCapability.id
-// 完全一致：chatgpt / claude / deepseek / glm / kimi / qwen / minimax / mimo / volcengine / unknown。
+// 完全一致：chatgpt / claude / deepseek / glm / kimi / qwen / minimax / mimo / doubao / unknown。
 //
 // 规则优先级：第一条匹配的 capability 生效（find() + first-match-wins）。
 // 排序原则：具体型号在前，宽泛系列在后（Qwen /-thinking$/ 必须在 /^qwen3/ 之前；
@@ -278,13 +278,13 @@ export const MODEL_REASONING_RULES: readonly ModelReasoningRule[] = [
   } },
   { providerId: "mimo", modelPattern: /.*/, capability: UNKNOWN_CAPABILITY },
 
-  // ── volcengine（火山 AgentPlan）──
-  { providerId: "volcengine", modelPattern: /^ark-code-latest/i, capability: {
-    control: "dynamic",
-    requestStyle: "none",
-    supportsDisable: false,
+  // ── doubao（火山方舟）──
+  { providerId: "doubao", modelPattern: /^doubao-seed-/i, capability: {
+    control: "toggle",
+    requestStyle: "thinking-type",
+    supportsDisable: true,
   } },
-  { providerId: "volcengine", modelPattern: /.*/, capability: UNKNOWN_CAPABILITY },
+  { providerId: "doubao", modelPattern: /.*/, capability: UNKNOWN_CAPABILITY },
 ];
 
 /**

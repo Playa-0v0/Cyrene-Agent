@@ -5,7 +5,7 @@ import { MouseFocusController } from "./live2d/focus";
 import { ExpressionResetController } from "./live2d/expression-reset";
 import { MouthSyncController } from "./live2d/mouth-sync";
 import { SpeakingMotionController } from "./live2d/speaking-motion";
-import { OpenerBubbleController } from "./live2d/opener-bubble";
+// OpenerBubbleController 已被移除（主动开口子系统整体删除）。
 import { ClickThroughController } from "./live2d/click-through";
 import { Live2DRendererLifecycleTracker } from "./live2d/lifecycle-diagnostics";
 import { resolveAsset } from "../shared/renderer-base";
@@ -48,7 +48,6 @@ let expressionReset: ExpressionResetController | null = null;
 let mouthSync: MouthSyncController | null = null;
 let speakingMotion: SpeakingMotionController | null = null;
 let clickThrough: ClickThroughController | null = null;
-let openerBubble: OpenerBubbleController | null = null;
 let petZoomOff: (() => void) | null = null;
 let petVisibilityOff: (() => void) | null = null;
 let petVisible = true;
@@ -82,13 +81,7 @@ const manager = new Live2DManager({
     expressionReset = new ExpressionResetController(model);
     mouthSync = new MouthSyncController(model);
     speakingMotion = new SpeakingMotionController(model);
-    // Opener 主动开口气泡
     const speechOffs: Array<() => void> = [];
-    const openerBubbleEl = document.getElementById("opener-bubble");
-    if (openerBubbleEl) {
-      openerBubble = new OpenerBubbleController(openerBubbleEl);
-      speechOffs.push(trackSubscription("live2dSpeech:onShowBubble", openerBubble.attach()));
-    }
     speechOffs.push(
       trackSubscription("live2dSpeech:onPrepare", window.live2dSpeech?.onPrepare(() => {
         void expressionReset?.resetNow();
@@ -170,7 +163,6 @@ const manager = new Live2DManager({
           mouthSync: mouthSync !== null,
           speakingMotion: speakingMotion !== null,
           clickThrough: clickThrough !== null,
-          openerBubble: openerBubble !== null,
         },
         petVisible,
         isDragging,
@@ -194,8 +186,6 @@ window.addEventListener("beforeunload", () => {
   expressionReset = null;
   for (const off of live2dSpeechOffs) off();
   live2dSpeechOffs = [];
-  openerBubble?.dispose();
-  openerBubble = null;
   mouthSync?.dispose();
   mouthSync = null;
   speakingMotion?.dispose();

@@ -35,4 +35,9 @@ describe("sanitizeLogLine", () => {
   it("preserves delimiter after Authorization Bearer value", () => {
     expect(sanitizeLogLine("Authorization: Bearer abc; next")).toBe("Authorization: Bearer <redacted>; next");
   });
+  it("redacts generic API key fields", () => {
+    expect(sanitizeLogLine("apiKey=secret-value; next")).toBe("apiKey=<redacted>; next");
+    expect(sanitizeLogLine('"api_key":"secret-value"')).toBe('"api_key":"<redacted>"');
+    expect(sanitizeLogLine("x-api-key: secret-value")).toBe("x-api-key: <redacted>");
+  });
 });

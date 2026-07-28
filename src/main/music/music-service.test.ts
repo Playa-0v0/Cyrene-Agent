@@ -3,12 +3,14 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 
-const { beginTool, checkTool, cancelTool, searchTool, dailyTool, isRegistered, openExternal } = vi.hoisted(() => ({
+const { beginTool, checkTool, cancelTool, validateTool, searchTool, dailyTool, playTool, isRegistered, openExternal } = vi.hoisted(() => ({
   beginTool: vi.fn(),
   checkTool: vi.fn(),
   cancelTool: vi.fn(),
+  validateTool: vi.fn(),
   searchTool: vi.fn(),
   dailyTool: vi.fn(),
+  playTool: vi.fn(),
   isRegistered: vi.fn(),
   openExternal: vi.fn(),
 }));
@@ -26,8 +28,18 @@ vi.mock("./music-mcp-client", () => ({
       verifyContractOnConnect: vi.fn().mockResolvedValue({ ok: true, missing: [], schemaMismatch: [] }),
       close,
       getRootPid: vi.fn().mockReturnValue(undefined),
-      callDataTool: (name: string, args: unknown) => name === "cloud_music_search" ? searchTool(args) : dailyTool(args),
-      callAuthTool: (name: string, args: unknown) => name === "cyrene_music_login_begin" ? beginTool(args) : name === "cyrene_music_login_check" ? checkTool(args) : cancelTool(args),
+      callDataTool: (name: string, args: unknown) => name === "cloud_music_search"
+        ? searchTool(args)
+        : name === "cloud_music_play"
+          ? playTool(args)
+          : dailyTool(args),
+      callAuthTool: (name: string, args: unknown) => name === "cyrene_music_login_begin"
+        ? beginTool(args)
+        : name === "cyrene_music_login_check"
+          ? checkTool(args)
+          : name === "cyrene_music_validate_session"
+            ? validateTool(args)
+            : cancelTool(args),
     };
   }),
 }));
@@ -49,8 +61,10 @@ vi.mock("electron", () => ({
 import { MusicService } from "./music-service";
 
 beforeEach(() => {
-  beginTool.mockReset(); checkTool.mockReset(); cancelTool.mockReset();
+  beginTool.mockReset(); checkTool.mockReset(); cancelTool.mockReset(); validateTool.mockReset();
   searchTool.mockReset(); dailyTool.mockReset();
+  playTool.mockReset();
+  playTool.mockImplementation((args: { id: string; type: string }) => `已发送播放指令: ${args.type} ${args.id}`);
   isRegistered.mockReset(); openExternal.mockReset();
   clientInstances.length = 0;
 });
@@ -85,6 +99,16 @@ async function freshServiceWithTmpPaths(): Promise<{ svc: MusicService; accountP
 }
 
 describe("MusicService", () => {
+  it("uses the dedicated three-state validator instead of a fake QR session", async () => {
+    validateTool.mockResolvedValue({ state: "valid", profile: { userId: "1", nickname: "alice" } });
+    const s = new MusicService(PATHS);
+
+    const result = await (s as unknown as { validateSessionThreeState(): Promise<unknown> }).validateSessionThreeState();
+
+    expect(result).toEqual({ state: "valid", profile: { userId: "1", nickname: "alice" } });
+    expect(validateTool).toHaveBeenCalledWith({});
+    expect(checkTool).not.toHaveBeenCalled();
+  });
   it("getDailyRecommendations rejects when backend not ready (stopped initial)", async () => {
     const s = new MusicService(PATHS);
     expect(s.getBackendState()).toBe("stopped");
@@ -95,8 +119,11 @@ describe("MusicService", () => {
     searchTool.mockResolvedValue({ success: true, items: [{ id: 1, name: "X", artist: "Y" }] });
     const s = new MusicService(PATHS);
     await s.start();
-    const set = await s.searchTracks("X", "c1");
+    const set = await s.searchTracks("X", "c1", undefined, { resolutionRunId: "run-1" });
     expect(set.source).toBe("search");
+    expect(set.provider).toBe("netease-cloud-music");
+    expect(set.resolutionRunId).toBe("run-1");
+    expect(set.presentedAt).toBeUndefined();
     expect(set.tracks).toHaveLength(1);
     expect(set.tracks[0].artists).toEqual(["Y"]);
   });
@@ -144,6 +171,12 @@ describe("MusicService", () => {
       .rejects.toThrow(/E_TRACK_NOT_IN_SET/);
     const ok = await s.presentTracks({ setId: set.setId, conversationId: "c1", trackIds: ["1"] });
     expect(ok.cardRef).toContain(set.setId);
+    expect(s.getSelectionSet(set.setId, "c1")).not.toHaveProperty("presentedAt");
+    s.markTracksPresented(set.setId, "c1", ["1"]);
+    expect(s.getSelectionSet(set.setId, "c1")).toEqual(expect.objectContaining({
+      presentedAt: expect.any(Number),
+      presentedTrackIds: ["1"],
+    }));
   });
 
   it("presentTracks limits to 5 selected", async () => {
@@ -166,25 +199,98 @@ describe("MusicService", () => {
 
   it("playTrack rejects non-numeric id", async () => {
     const s = new MusicService(PATHS);
-    await expect(s.playTrack("not-num")).rejects.toThrow(/E_INVALID_ID/);
+    await expect(s.playTrackFromUi("not-num")).rejects.toThrow(/E_INVALID_ID/);
   });
 
-  it("playTrack returns client_unavailable when protocol missing", async () => {
-    isRegistered.mockResolvedValue(false);
+  it("playTrack preserves the MCP browser fallback state", async () => {
+    playTool.mockResolvedValue(
+      "⚠️ 未检测到客户端，已在浏览器中播放: https://music.163.com/#/song?id=123",
+    );
     const s = new MusicService(PATHS);
-    const r = await s.playTrack("123");
-    expect(r.state).toBe("client_unavailable");
-    expect(r.errorCode).toBe("E_PROTOCOL_NOT_REGISTERED");
+    const r = await s.playTrackFromUi("123");
+    expect(r.state).toBe("web_fallback");
+    expect(playTool).toHaveBeenCalledWith({ id: "123", type: "song" });
   });
 
-  it("playTrack dispatches when protocol registered", async () => {
-    isRegistered.mockResolvedValue(true);
-    openExternal.mockResolvedValue(undefined);
+  it("playTrack dispatches through the MCP tool", async () => {
     const s = new MusicService(PATHS);
-    const r = await s.playTrack("123");
+    const r = await s.playTrackFromUi("123");
     expect(r.state).toBe("dispatched");
     expect(r.resourceType).toBe("song");
     expect(r.resourceId).toBe("123");
+    expect(playTool).toHaveBeenCalledWith({ id: "123", type: "song" });
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it("plays a resolved candidate only inside the Agent run that fetched it", async () => {
+    searchTool.mockResolvedValue([{ id: 123, name: "稻香", artist: "周杰伦" }]);
+    isRegistered.mockResolvedValue(true);
+    openExternal.mockResolvedValue(undefined);
+    const s = new MusicService(PATHS);
+    await s.start();
+    const set = await s.searchTracks("稻香", "c1", 5, { resolutionRunId: "run-1", purpose: "play" });
+
+    await expect(s.playTrack({
+      provider: set.provider,
+      setId: set.setId,
+      trackId: "123",
+      conversationId: "c1",
+      runId: "run-2",
+    })).rejects.toThrow(/E_TRACK_NOT_PLAYABLE/);
+
+    await expect(s.playTrack({
+      provider: set.provider,
+      setId: set.setId,
+      trackId: "123",
+      conversationId: "c1",
+      runId: "run-1",
+    })).resolves.toEqual(expect.objectContaining({ state: "dispatched" }));
+  });
+
+  it("plays only the displayed subset across later Agent runs", async () => {
+    searchTool.mockResolvedValue([
+      { id: 123, name: "稻香", artist: "周杰伦" },
+      { id: 456, name: "晴天", artist: "周杰伦" },
+    ]);
+    isRegistered.mockResolvedValue(true);
+    openExternal.mockResolvedValue(undefined);
+    const s = new MusicService(PATHS);
+    await s.start();
+    const set = await s.searchTracks("周杰伦", "c1", 5, { resolutionRunId: "run-1" });
+    await s.presentTracks({ setId: set.setId, conversationId: "c1", trackIds: ["456"] });
+    s.markTracksPresented(set.setId, "c1", ["456"]);
+
+    await expect(s.playTrack({
+      provider: set.provider,
+      setId: set.setId,
+      trackId: "123",
+      conversationId: "c1",
+      runId: "run-later",
+    })).rejects.toThrow(/E_TRACK_NOT_PLAYABLE/);
+    await expect(s.playTrack({
+      provider: set.provider,
+      setId: set.setId,
+      trackId: "456",
+      conversationId: "c1",
+      runId: "run-later",
+    })).resolves.toEqual(expect.objectContaining({ state: "dispatched" }));
+  });
+
+  it("rejects a provider or track id not contained in the real candidate set", async () => {
+    searchTool.mockResolvedValue([{ id: 123, name: "稻香", artist: "周杰伦" }]);
+    const s = new MusicService(PATHS);
+    await s.start();
+    const set = await s.searchTracks("稻香", "c1", 5, { resolutionRunId: "run-1", purpose: "play" });
+
+    await expect(s.playTrack({ ...set, trackId: "999", runId: "run-1" } as never))
+      .rejects.toThrow(/E_TRACK_NOT_IN_SET/);
+    await expect(s.playTrack({
+      provider: "qq-music",
+      setId: set.setId,
+      trackId: "123",
+      conversationId: "c1",
+      runId: "run-1",
+    })).rejects.toThrow(/E_PROVIDER_MISMATCH/);
   });
 
   // ── New spec-required methods ──────────────────────────────
@@ -237,7 +343,7 @@ describe("MusicService", () => {
 
   // ── logout() ───────────────────────────────────────────────
 
-  it("logout() on a fresh service cancels login, closes client, removes account file and runtime cookies, sets signed_out", async () => {
+  it("logout() on a fresh service cancels login, removes account file and runtime cookies, sets signed_out", async () => {
     cancelTool.mockResolvedValue({ ok: true, status: "cancelled" });
     beginTool.mockResolvedValue({ loginSessionId: "sess-1" });
 
@@ -253,7 +359,6 @@ describe("MusicService", () => {
       // Track that the service was constructed with one MCP client whose close
       // we can later inspect.
       expect(clientInstances).toHaveLength(1);
-      const clientInstance = clientInstances[0]!;
 
       // Bring the service to "ready" and start a login session so the orchestrator
       // actually has a currentSessionId to cancel.
@@ -265,13 +370,11 @@ describe("MusicService", () => {
 
       // 1. orchestrator.cancelLogin was called -> routed through MCP cancel RPC.
       expect(cancelTool).toHaveBeenCalledTimes(1);
-      // 2. client.close was called exactly once on the service's client instance.
-      expect(clientInstance.close).toHaveBeenCalledTimes(1);
-      // 3. vault.delete removed account.enc.
+      // 2. vault.delete removed account.enc.
       await expect(fs.stat(accountPath)).rejects.toThrow(/ENOENT/);
-      // 4. runtime cookies.json removed.
+      // 3. runtime cookies.json removed.
       await expect(fs.stat(cookiesPath)).rejects.toThrow(/ENOENT/);
-      // 5. accountState reports signed_out.
+      // 4. accountState reports signed_out.
       expect(svc.getAccountState()).toBe("signed_out");
       expect(svc.getActiveProfile()).toBeNull();
     } finally {
@@ -279,7 +382,7 @@ describe("MusicService", () => {
     }
   });
 
-  it("logout() succeeds even when there is no account file and client.close throws", async () => {
+  it("logout() succeeds even when there is no account file", async () => {
     cancelTool.mockResolvedValue({ ok: true, status: "cancelled" });
     beginTool.mockResolvedValue({ loginSessionId: "sess-2" });
 
@@ -287,10 +390,6 @@ describe("MusicService", () => {
     try {
       // Ensure no account.enc exists.
       await expect(fs.stat(accountPath)).rejects.toThrow(/ENOENT/);
-      // Force the underlying MCP client's close() to throw — logout must swallow
-      // this so the rest of the cleanup still runs.
-      expect(clientInstances).toHaveLength(1);
-      clientInstances[0]!.close.mockRejectedValueOnce(new Error("transport already closed"));
 
       // Start the service and a login session so cancelLogin has something to cancel.
       await svc.start();
@@ -299,7 +398,6 @@ describe("MusicService", () => {
       await expect(svc.logout()).resolves.toBeUndefined();
 
       expect(cancelTool).toHaveBeenCalledTimes(1);
-      expect(clientInstances[0]!.close).toHaveBeenCalledTimes(1);
       expect(svc.getAccountState()).toBe("signed_out");
     } finally {
       await cleanup();

@@ -10,6 +10,9 @@ const PATTERNS: Array<{ pattern: RegExp; replace: string }> = [
   { pattern: /(["']?cookies?["']?\s*[:=]\s*)(\{[^}]+\})/g, replace: "$1<redacted>" },
   // Authorization: Bearer <token> (case-insensitive; stop at ; , whitespace ) })
   { pattern: /(\bAuthorization\s*:\s*Bearer\s+)[^\s;,)}]+/gi, replace: "$1<redacted>" },
+  // Generic API key fields in logs (apiKey=, api_key:, x-api-key:)
+  { pattern: /(["'])(api[_-]?key|x-api-key)\1\s*:\s*["'][^"']*["']/gi, replace: "$1$2$1:\"<redacted>\"" },
+  { pattern: /(\b(?:api[_-]?key|x-api-key)\b\s*[:=]\s*)["']?[^"'\s,;)}]+["']?/gi, replace: "$1<redacted>" },
 ];
 
 export function sanitizeLogLine(line: string): string {

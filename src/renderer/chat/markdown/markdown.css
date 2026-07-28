@@ -1,0 +1,236 @@
+/* ============================================================
+   Markdown 渲染样式
+   - 代码块、行内代码、表格、引用、链接
+   - 全部使用 CSS 变量（--rb-* 和 --md-*），不写死颜色
+   - 深色/浅色主题由 tokens.css + theme.css 的变量覆盖适配
+   ============================================================ */
+
+/* ── 代码块容器 ──────────────────────────────────────────── */
+.code-block {
+  margin: 12px 0;
+  border-radius: var(--rb-radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--md-code-border);
+  background: var(--md-code-bg);
+}
+
+.code-block__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.15);
+  border-bottom: 1px solid var(--md-code-border);
+  font-size: 11px;
+}
+
+.code-block__language {
+  font-weight: 600;
+  color: var(--rb-text-muted);
+  letter-spacing: 0.3px;
+}
+
+.code-block__copy {
+  padding: 2px 10px;
+  border-radius: var(--rb-radius-sm);
+  border: 1px solid var(--md-copy-border);
+  background: var(--md-copy-bg);
+  color: var(--md-copy-text);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.code-block__copy:hover {
+  border-color: var(--rb-pink-300);
+  color: var(--rb-text-strong);
+}
+
+.code-block__copy.is-copied {
+  color: #22c55e;
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+/* Shiki 输出的 pre.shiki */
+.code-block__code pre {
+  margin: 0;
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-family: "Cascadia Code", "JetBrains Mono", "Fira Code", "Consolas", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  background: transparent !important; /* Shiki 自带背景由 .code-block 控制 */
+}
+
+.code-block__code pre code {
+  font-family: inherit;
+  background: transparent !important;
+}
+
+/* fallback 纯文本代码块（Shiki 未就绪时） */
+.code-block__code pre:not(.shiki) {
+  color: var(--rb-text-default);
+  white-space: pre;
+}
+
+/* ── 行内代码 ────────────────────────────────────────────── */
+.msg__bubble code:not(.code-block__code code) {
+  padding: 2px 6px;
+  border-radius: var(--rb-radius-xs);
+  background: var(--md-inline-code-bg);
+  color: var(--md-inline-code-text);
+  font-family: "Cascadia Code", "JetBrains Mono", "Fira Code", "Consolas", monospace;
+  font-size: 0.9em;
+}
+
+/* ── 表格 ────────────────────────────────────────────────── */
+.msg__bubble table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.msg__bubble th,
+.msg__bubble td {
+  padding: 6px 12px;
+  border: 1px solid var(--md-table-border);
+  text-align: left;
+}
+
+.msg__bubble th {
+  background: var(--md-quote-bg);
+  font-weight: 600;
+  color: var(--rb-text-strong);
+}
+
+/* ── 引用 ────────────────────────────────────────────────── */
+.msg__bubble blockquote {
+  margin: 8px 0;
+  padding: 8px 16px;
+  border-left: 3px solid var(--md-quote-border);
+  background: var(--md-quote-bg);
+  color: var(--rb-text-muted);
+  border-radius: 0 var(--rb-radius-sm) var(--rb-radius-sm) 0;
+}
+
+.msg__bubble blockquote p {
+  margin: 4px 0;
+}
+
+/* ── 链接 ────────────────────────────────────────────────── */
+.msg__bubble a {
+  color: var(--md-link-color);
+  text-decoration: none;
+  transition: color 120ms ease;
+}
+
+.msg__bubble a:hover {
+  color: var(--md-link-hover);
+  text-decoration: underline;
+}
+
+/* ── 通用段落/标题/列表 ──────────────────────────────────── */
+.msg__bubble p {
+  margin: 6px 0;
+  line-height: 1.6;
+}
+
+.msg__bubble h1,
+.msg__bubble h2,
+.msg__bubble h3 {
+  margin: 16px 0 8px;
+  color: var(--rb-text-strong);
+  line-height: 1.3;
+}
+
+.msg__bubble h1 { font-size: 1.3em; }
+.msg__bubble h2 { font-size: 1.15em; }
+.msg__bubble h3 { font-size: 1.05em; }
+
+.msg__bubble ul,
+.msg__bubble ol {
+  margin: 6px 0;
+  padding-left: 24px;
+}
+
+.msg__bubble li {
+  margin: 3px 0;
+  line-height: 1.5;
+}
+
+.msg__bubble hr {
+  border: none;
+  border-top: 1px solid var(--md-table-border);
+  margin: 12px 0;
+}
+
+/* ── 代码块滚动条 ────────────────────────────────────────── */
+.code-block__code pre::-webkit-scrollbar {
+  height: 6px;
+}
+
+.code-block__code pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.code-block__code pre::-webkit-scrollbar-thumb {
+  background: var(--rb-border-strong);
+  border-radius: 3px;
+}
+
+/* ── 流式 Markdown 渲染容器 ──────────────────────────────── */
+.markdown-stream {
+  width: 100%;
+}
+
+.markdown-stream__stable {
+  /* committed blocks 只追加，不重建 */
+}
+
+.markdown-stream__active {
+  /* mutable tail 可替换 */
+}
+
+/* ── KaTeX 数学公式 ──────────────────────────────────────── */
+/* KaTeX 自带 katex.min.css 处理排版；这里只覆盖颜色以适配主题 */
+
+/* 流式代码块（Phase 3）：与终态代码块共用 .code-block 样式，
+   额外标记 --streaming 用于细微差异（如无 Shiki 高亮时的等宽字体） */
+.code-block--streaming .code-block__code pre code {
+  color: var(--rb-text-default);
+  font-family: "Cascadia Code", "JetBrains Mono", "Fira Code", "Consolas", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.msg__bubble .katex {
+  color: var(--md-katex-text, var(--rb-text-default));
+  font-size: 1.05em;
+}
+
+/* 块级公式居中 */
+.msg__bubble .katex-display {
+  margin: 12px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+}
+
+/* KaTeX 错误（无效 LaTeX）显示为红色提示 */
+.msg__bubble .katex-error {
+  color: var(--rb-pink-400, #f472b6);
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+/* 块级公式滚动条 */
+.msg__bubble .katex-display::-webkit-scrollbar {
+  height: 4px;
+}
+.msg__bubble .katex-display::-webkit-scrollbar-thumb {
+  background: var(--rb-border-strong);
+  border-radius: 2px;
+}

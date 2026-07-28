@@ -1,4 +1,4 @@
-import type { MusicTrack } from "./types";
+import { MusicInputError, type MusicTrack } from "./types";
 
 interface UpstreamSong {
   id: string | number;
@@ -34,8 +34,25 @@ function toTrack(s: UpstreamSong): MusicTrack {
 }
 
 export function normalizeDailyRecommendations(payload: unknown): MusicTrack[] {
-  const p = payload as { success?: boolean; songs?: UpstreamSong[]; error?: string };
-  if (!p?.success || !Array.isArray(p.songs)) return [];
+  const p = payload as {
+    success?: boolean;
+    songs?: UpstreamSong[];
+    error?: string | { code?: string; message?: string };
+  };
+  if (!p || typeof p !== "object") {
+    throw new MusicInputError("E_DAILY_RECOMMEND_INVALID_RESPONSE");
+  }
+  if (!p.success) {
+    const error = p.error;
+    const code = typeof error === "object" && error?.code
+      ? error.code
+      : "E_DAILY_RECOMMEND_FAILED";
+    const message = typeof error === "object" ? error?.message : error;
+    throw new MusicInputError(code, `${code}: ${message || "unknown error"}`);
+  }
+  if (!Array.isArray(p.songs)) {
+    throw new MusicInputError("E_DAILY_RECOMMEND_INVALID_RESPONSE");
+  }
   return p.songs.slice(0, MAX_TRACKS).map(toTrack);
 }
 

@@ -137,12 +137,11 @@ describe("computeReasoningDropdown — MiMo", () => {
   });
 });
 
-describe("computeReasoningDropdown — 火山", () => {
-  test("ark-code-latest → disabled，单项 跟随动态路由", () => {
-    const v = computeReasoningDropdown("volcengine", "ark-code-latest", undefined);
-    expect(v.disabled).toBe(true);
-    expect(v.statusText).toBe("跟随动态路由");
-    expect(labels(v)).toEqual(["跟随动态路由"]);
+describe("computeReasoningDropdown — 豆包", () => {
+  test("doubao-seed-2-1 → 可选择跟随、关闭或开启", () => {
+    const v = computeReasoningDropdown("doubao", "doubao-seed-2-1-pro-260628", undefined);
+    expect(v.disabled).toBe(false);
+    expect(labels(v)).toEqual(["跟随模型", "关闭", "开启"]);
   });
 });
 

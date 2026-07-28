@@ -208,8 +208,11 @@ export async function runFunctionCallingLoop(
         console.log(LOG_PREFIX, "执行工具:", tc.name, JSON.stringify(args).slice(0, 200));
 
         let output: string;
+        let status: ToolCallResult["status"] = "failed";
+        let errorCode: string | undefined;
         if (!tool || !tool.enabled) {
           output = "[错误] 工具不可用: " + tc.name;
+          errorCode = "E_TOOL_UNAVAILABLE";
           console.warn(LOG_PREFIX, output);
         } else {
           // 权限网关：内置工具默认 safe，MCP 工具按其 risk 字段判定
@@ -223,6 +226,7 @@ export async function runFunctionCallingLoop(
           });
           if (!perm.allowed) {
             output = "[已拒绝] " + (perm.reason || "权限不足");
+            errorCode = "E_PERMISSION_DENIED";
             console.warn(LOG_PREFIX, "权限拒绝 [" + tc.name + "]:", perm.reason);
           } else {
             // ToolContext 注入：声明 needsContext 的工具拿到用户当前问题。
@@ -232,16 +236,18 @@ export async function runFunctionCallingLoop(
               : undefined;
             try {
               output = await tool.execute(args, ctx);
+              status = "succeeded";
               console.log(LOG_PREFIX, "工具返回 [" + tc.name + "]:", output.slice(0, 200));
             } catch (err) {
               const errMsg = err instanceof Error ? err.message : String(err);
               output = "[工具执行失败] " + errMsg;
+              errorCode = "E_TOOL_EXECUTION_FAILED";
               console.error(LOG_PREFIX, "工具执行失败 [" + tc.name + "]:", errMsg);
             }
           }
         }
 
-        allToolResults.push({ toolId: tc.name, args, output });
+        allToolResults.push({ toolId: tc.name, args, output, status, ...(errorCode ? { errorCode } : {}) });
         // execResults 进 conversation，截断防单条大结果爆窗
         execResults.push({ toolCall: tc, output: truncateToolResult(output) });
       }

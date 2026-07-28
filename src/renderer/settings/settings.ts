@@ -3,11 +3,11 @@ import "./settings.css";
 import "../ui/theme";
 import neteaseLogoUrl from "./assets/netease-logo.svg?url";
 import {
-  CHAT_DEFAULT_IDENTITY_LABEL,
   formatChatRelativeTime,
   type ChatSessionMetaUI,
 } from "../../shared/chat-ui";
 import {
+  normalizeChatSocialContextEnabled,
   normalizeDefaultChatMode,
   normalizeMobileMessageSegmentationMode,
   normalizeProactiveChatMode,
@@ -20,13 +20,32 @@ import {
   type SegmentedOutputMode,
 } from "../../shared/preferences";
 import { isProactiveDeliveryTargetSelectable } from "../../shared/proactive-delivery";
+import { TIMEZONE_OPTIONS, FALLBACK_TIMEZONE, normalizeTimezoneOptionValue } from "./timezone-options";
 import { normalizeUiTheme, type UiTheme } from "../../shared/ui-theme";
 import { DEFAULT_UI_FONT, normalizeUiFont, type UiFont } from "../../shared/ui-font";
 import { normalizeUiIcon, type UiIcon } from "../../shared/ui-icon";
 import { buildAppearanceSettingsPatch } from "./appearance-settings-state";
+import { getCitaUiState } from "./cita-settings-state";
 import { requestTrackPlayback } from "./music-playback";
 import { type ReasoningPreference } from "../../shared/reasoning";
 import { type LoginFlowState } from "../../shared/music-types";
+import { renderMarkdown } from "../chat/markdown/markdown-renderer";
+import workFlowDocMd from "../../../docs/model-work-test/work-flow-test-results-2026-07-24.md?raw";
+import {
+  DEFAULT_CUSTOM_STYLE,
+  normalizeCustomStyleConfig,
+  type CustomStyleConfig,
+  type DiversityPreference,
+  type RepetitionLevel,
+} from "../../shared/style-sampling";
+import {
+  CUSTOM_ENDPOINT_PROVIDERS,
+  getCustomEndpointMode,
+  getCustomEndpointPresentation,
+  getCustomEndpointProvider,
+  validateCustomEndpointConfig,
+  type CustomEndpointMode,
+} from "./custom-endpoint-state";
 import {
   deriveNeteaseViewState,
   type MusicStatusSnapshot,
@@ -70,7 +89,7 @@ function showModal (options: { title: string; message: string; icon?: string; co
   var msgEl = _cyModalOverlay.querySelector("#cy-modal-message") as HTMLElement;
   var cancelBtn = _cyModalOverlay.querySelector("#cy-modal-cancel") as HTMLButtonElement;
   var confirmBtn = _cyModalOverlay.querySelector("#cy-modal-confirm") as HTMLButtonElement;
-  iconEl.textContent = options.icon || "📌";
+  iconEl.innerHTML = options.icon || "📌";
   titleEl.textContent = options.title;
   msgEl.textContent = options.message;
   cancelBtn.textContent = options.cancelText || "取消";
@@ -90,6 +109,58 @@ function showModal (options: { title: string; message: string; icon?: string; co
   });
 }
 
+/**
+ * 富文本模态框（基于 cy-modal 样式但使用独立 overlay，避免与 showModal 冲突）。
+ * 用于"音色快速复刻"这种需要展示多组说明（规格 / 费用 / 过期规则）的场景。
+ * 调用方负责传入安全的 HTML（项目内固定字符串）；若内容来自用户/网络必须先 escapeHtml。
+ */
+let _cyHtmlModalOverlay: HTMLElement | null = null;
+function _initHtmlModalOverlay(): void {
+  if (_cyHtmlModalOverlay) return;
+  _cyHtmlModalOverlay = document.createElement("div");
+  _cyHtmlModalOverlay.id = "cy-html-modal-overlay";
+  _cyHtmlModalOverlay.className = "cy-modal-overlay is-hidden";
+  _cyHtmlModalOverlay.innerHTML = [
+    '<div class="cy-modal cy-html-modal" role="dialog" aria-modal="true">',
+    '  <div class="cy-modal__head">',
+    '    <span class="cy-modal__icon" id="cy-html-modal-icon">📌</span>',
+    '    <h3 class="cy-modal__title" id="cy-html-modal-title">说明</h3>',
+    '  </div>',
+    '  <hr class="cy-modal__divider">',
+    '  <div class="cy-html-modal__body" id="cy-html-modal-body"></div>',
+    '  <div class="cy-modal__actions">',
+    '    <button type="button" class="btn-primary" id="cy-html-modal-confirm">知道了</button>',
+    '  </div>',
+    '</div>',
+  ].join("\n");
+  document.body.appendChild(_cyHtmlModalOverlay);
+}
+
+function showHtmlModal(options: { title: string; htmlBody: string; icon?: string; confirmText?: string }): Promise<void> {
+  _initHtmlModalOverlay();
+  if (!_cyHtmlModalOverlay) return Promise.resolve();
+  const iconEl = _cyHtmlModalOverlay.querySelector("#cy-html-modal-icon") as HTMLElement;
+  const titleEl = _cyHtmlModalOverlay.querySelector("#cy-html-modal-title") as HTMLElement;
+  const bodyEl = _cyHtmlModalOverlay.querySelector("#cy-html-modal-body") as HTMLElement;
+  const confirmBtn = _cyHtmlModalOverlay.querySelector("#cy-html-modal-confirm") as HTMLButtonElement;
+  iconEl.innerHTML = options.icon || "📌";
+  titleEl.textContent = options.title;
+  bodyEl.innerHTML = options.htmlBody;
+  confirmBtn.textContent = options.confirmText || "知道了";
+  _cyHtmlModalOverlay.classList.remove("is-hidden");
+  return new Promise((resolve) => {
+    const cleanup = () => {
+      _cyHtmlModalOverlay?.classList.add("is-hidden");
+      confirmBtn.removeEventListener("click", onConfirm);
+      resolve();
+    };
+    const onConfirm = () => cleanup();
+    confirmBtn.addEventListener("click", onConfirm);
+  });
+}
+
+// escapeHtml() 已定义在文件下方（settings.ts:3738），此处复用即可。
+
 // Inline input modal (Electron 禁用了 window.prompt，所以自己实现)
 let _cyInputOverlay: HTMLElement | null = null;
 function _initInputOverlay(): void {
@@ -100,7 +171,7 @@ function _initInputOverlay(): void {
   _cyInputOverlay.innerHTML = [
     '<div class="cy-modal" role="dialog" aria-modal="true" style="width:min(420px,90vw);">',
     '  <div class="cy-modal__head">',
-    '    <span class="cy-modal__icon" id="cy-input-icon">✏️</span>',
+    '    <span class="cy-modal__icon" id="cy-input-icon"><svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="display:inline;vertical-align:-2px"><path d="M5.32497 43.4996L13.81 43.4998L44.9227 12.3871L36.4374 3.90186L5.32471 35.0146L5.32497 43.4996Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M27.9521 12.3872L36.4374 20.8725" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>',
     '    <h3 class="cy-modal__title" id="cy-input-title">请输入</h3>',
     '  </div>',
     '  <hr class="cy-modal__divider">',
@@ -133,7 +204,7 @@ function showInputModal(options: {
   const inputEl = _cyInputOverlay.querySelector("#cy-input-field") as HTMLInputElement;
   const cancelBtn = _cyInputOverlay.querySelector("#cy-input-cancel") as HTMLButtonElement;
   const confirmBtn = _cyInputOverlay.querySelector("#cy-input-confirm") as HTMLButtonElement;
-  iconEl.textContent = options.icon || "✏️";
+  iconEl.textContent = options.icon || `<svg width="22" height="22" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="display:inline;vertical-align:-2px"><path d="M5.32497 43.4996L13.81 43.4998L44.9227 12.3871L36.4374 3.90186L5.32471 35.0146L5.32497 43.4996Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M27.9521 12.3872L36.4374 20.8725" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   titleEl.textContent = options.title;
   msgEl.textContent = options.message;
   inputEl.value = options.defaultValue || "";
@@ -198,11 +269,11 @@ interface ModelSettings {
   stickerSize: "small" | "standard" | "large";
   stickerSimilarityThreshold: number;
   vision?: {
-    syncWithMain: boolean;
     baseUrl: string;
     apiKey: string;
     model: string;
   };
+  multimodal: boolean;
   optimizeFirstRound?: boolean;
 }
 
@@ -278,8 +349,7 @@ interface ModelPreset {
   iconUrl: string;
   // 厂商官网链接，显示在预设下拉框旁边，方便用户直接跳转注册/查看文档。
   websiteUrl?: string;
-  // 视觉模型的 OpenAI 兼容 baseUrl。仅当主配走 Anthropic 入口、视觉要走 OpenAI 入口时才标
-  // （如 MiniMax 主配 /anthropic，视觉走 /v1）。勾选"同步主模型"时 UI 用它填视觉框。
+  // 视觉模型的 OpenAI 兼容 baseUrl。主模型与视觉模型入口不同时使用。
   visionBaseUrl?: string;
   // 该厂商默认主模型是否支持视觉。true 时设置页加载默认勾选"同步主模型"，
   // 多模态用户开箱即用。与 capabilities.ts 的 supportsVision 镜像，需手动同步。
@@ -294,9 +364,15 @@ interface ModelPreset {
   defaultVisionModel?: string;
   // 独立视觉模型的候选列表（用于视觉模型输入框的 datalist）。
   visionModels?: string[];
+  // 自定义端点的云端/本地变体共用一张可见卡片，但分别持久化配置。
+  customEndpointMode?: CustomEndpointMode;
+  hiddenInPresetList?: boolean;
 }
 
 interface GeneralSettings {
+  citaEnabled: boolean;
+  citaSemanticEngine: "remote" | "local";
+  chatSocialContextEnabled: boolean;
   musicEnabled: boolean;
   musicVolume: number;
   soundEnabled: boolean;
@@ -313,17 +389,21 @@ interface GeneralSettings {
   uiFont: UiFont;
   uiIcon: UiIcon;
   defaultChatMode: DefaultChatMode;
+  currentStyleId?: string;
+  customStyle: CustomStyleConfig;
   segmentedOutputMode: SegmentedOutputMode;
   mobileMessageSegmentation: MobileMessageSegmentationMode;
   proactiveChatMode: ProactiveChatMode;
   proactiveDeliveryTarget: ProactiveDeliveryTarget;
+  screenshotHotkey?: string;
 }
 
 interface UserApi {
-  getProfile: () => Promise<{ nickname: string; callPreference: string; birthday: string; timezone: string; avatarPath: string; defaultCity: string }>;
+  getProfile: () => Promise<{ nickname: string; callPreference: string; birthday: string; timezone: string; avatarPath: string; defaultCity: string; gender: string }>;
   saveProfile: (profile: Record<string, unknown>) => Promise<unknown>;
   uploadAvatar: () => Promise<{ avatarPath: string } | null>;
   getAvatar: () => Promise<string | null>;
+  onAvatarChanged: (callback: () => void) => () => void;
 }
 
 interface MemoryPanelPayload {
@@ -375,6 +455,7 @@ interface SettingsApi {
   saveConfig: (config: Partial<ModelSettings>) => Promise<ModelSettings>;
   getGeneral: () => Promise<GeneralSettings>;
   saveGeneral: (config: Partial<GeneralSettings>) => Promise<GeneralSettings>;
+  openCustomStylePrompt?: () => Promise<{ ok: boolean; filePath?: string; error?: string }>;
   getTimeoutSettings: () => Promise<TimeoutSettings>;
   saveTimeoutSettings: (config: Partial<TimeoutSettings>) => Promise<TimeoutSettings>;
   pickUiFont: () => Promise<string | null>;
@@ -406,12 +487,14 @@ interface SettingsApi {
   listMcpServers?: () => Promise<Array<{ id: string; name: string; connected: boolean; toolCount: number; toolIds: string[] }>>;
   getPermissionLevel?: () => Promise<{ level: "read-only" | "scoped" | "per-action" | "full" }>;
   setPermissionLevel?: (level: string) => Promise<{ ok: boolean; level?: string; error?: string }>;
-  testConnection?: (config: { provider: string; baseUrl: string; model: string; apiKey: string }) => Promise<{ ok: boolean; latency: number; sample?: string; error?: string }>;
+  testConnection?: (config: { provider: string; baseUrl: string; model: string; apiKey: string; explicitTransport?: "openai" | "anthropic" | "auto"; reasoning?: ReasoningPreference }) => Promise<{ ok: boolean; latency: number; sample?: string; error?: string }>;
   testVision?: (config: { baseUrl: string; apiKey: string; model: string }) => Promise<{ ok: boolean; latency: number; sample?: string; error?: string }>;
   // main → settings：要求切到指定标签（窗口已打开时由 main 发这个事件）
   onSwitchSection?: (callback: (section: string) => void) => (() => void) | void;
   channelsGetStatus: () => Promise<Record<string, { phase?: string; message?: string }>>;
   onChannelsStatusChanged: (callback: (status: unknown) => void) => (() => void) | void;
+  beginScreenshotHotkeyCapture: () => Promise<boolean>;
+  endScreenshotHotkeyCapture: () => Promise<boolean>;
 }
 
 declare global {
@@ -430,16 +513,16 @@ const MIMO_ICON_URL =
   "https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/light/xiaomimimo.png";
 
 const MODEL_PRESETS: ModelPreset[] = [
-  // 当前已适配 9 家：MiniMax / DeepSeek / 火山 AgentPlan / 智谱 GLM / Kimi / Qwen / ChatGPT / Claude / MiMo
+  // 当前已适配 9 家：MiniMax / DeepSeek / 豆包 / 智谱 GLM / Kimi / Qwen / ChatGPT / Claude / MiMo
   // 顺序按使用频率 + 适配优先级；未在此清单内的厂商已硬删，需要时再补回。
   {
     providerName: "MiniMax（稀宇科技）",
     shortName: "MiniMax",
-    baseUrl: "https://api.minimaxi.com/anthropic",
+    baseUrl: "https://api.minimaxi.com/v1",
     mainModels: ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.5"],
-    iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/minimax.svg",
+    iconUrl: "../icons/providers/minimax.svg",
     websiteUrl: "https://platform.minimaxi.com/",
-    // 主配走 /anthropic，但视觉要走 OpenAI 入口 /v1。勾"同步"时 UI 自动用这个，用户不用手改。
+    // 主模型和视觉模型默认都走 OpenAI 兼容入口。
     visionBaseUrl: "https://api.minimaxi.com/v1",
     supportsVision: true,
   },
@@ -451,17 +534,21 @@ const MODEL_PRESETS: ModelPreset[] = [
     shortName: "DeepSeek",
     baseUrl: "https://api.deepseek.com",
     mainModels: ["deepseek-v4-pro", "deepseek-v4-flash"],
-    iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/deepseek.svg",
+    iconUrl: "../icons/providers/deepseek.svg",
     websiteUrl: "https://platform.deepseek.com/",
   },
   {
-    providerName: "火山 AgentPlan（火山引擎）",
-    shortName: "火山",
-    baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3",
-    mainModels: ["ark-code-latest"],
-    iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/doubao.svg",
-    websiteUrl: "https://www.volcengine.com/product/agent-plan",
-    // 火山方舟是聚合平台，路由到 doubao-seed 等多模态子模型时支持视觉
+    providerName: "豆包（火山方舟）",
+    shortName: "豆包",
+    baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+    mainModels: [
+      "doubao-seed-2-1-pro-260628",
+      "doubao-seed-2-0-pro-260215",
+      "doubao-seed-2-0-lite-260428",
+      "doubao-seed-2-0-mini-260428",
+    ],
+    iconUrl: "../icons/providers/volcengine.svg",
+    websiteUrl: "https://www.volcengine.com/product/ark",
     supportsVision: true,
   },
   {
@@ -469,7 +556,7 @@ const MODEL_PRESETS: ModelPreset[] = [
     shortName: "GLM",
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
     mainModels: ["glm-5.1", "glm-5-turbo", "glm-4.7"],
-    iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/zhipu.svg",
+    iconUrl: "../icons/providers/glm.svg",
     websiteUrl: "https://open.bigmodel.cn/",
   },
   {
@@ -477,7 +564,7 @@ const MODEL_PRESETS: ModelPreset[] = [
     shortName: "Kimi",
     baseUrl: "https://api.moonshot.cn/v1",
     mainModels: ["kimi-k2.6", "kimi-k2.5", "kimi-k2-thinking"],
-    iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/moonshot.svg",
+    iconUrl: "../icons/providers/kimi.svg",
     websiteUrl: "https://platform.moonshot.cn/",
     // k2.6 / k2.7-code 支持 image_url 多模态
     supportsVision: true,
@@ -487,16 +574,16 @@ const MODEL_PRESETS: ModelPreset[] = [
     shortName: "Qwen",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     mainModels: ["qwen-max", "qwen-plus", "qwen-turbo"],
-    iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/qwen.svg",
+    iconUrl: "../icons/providers/qwen.svg",
     websiteUrl: "https://bailian.console.aliyun.com/",
   },
   {
     providerName: "ChatGPT（OpenAI）",
     shortName: "ChatGPT",
     baseUrl: "https://api.openai.com/v1",
-    // 国内多数用户走中转站，型号命名各家不一；预设留空，由用户在型号输入框里自行填写。
-    mainModels: [],
-    iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/openai.svg",
+    // 官方入口只推荐已纳入结构化输出 Profile 的型号；代理与自定义型号走“自定义端点”。
+    mainModels: ["gpt-5.6"],
+    iconUrl: "../icons/providers/openai.svg",
     websiteUrl: "https://platform.openai.com/",
   },
   {
@@ -504,7 +591,7 @@ const MODEL_PRESETS: ModelPreset[] = [
     shortName: "Claude",
     baseUrl: "https://api.anthropic.com/v1",
     mainModels: ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-4-6"],
-    iconUrl: "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/claude.svg",
+    iconUrl: "../icons/providers/claude.svg",
     websiteUrl: "https://console.anthropic.com/",
   },
   {
@@ -512,7 +599,7 @@ const MODEL_PRESETS: ModelPreset[] = [
     shortName: "MiMo",
     baseUrl: "https://api.xiaomimimo.com/v1",
     mainModels: ["mimo-v2.5-pro"],
-    iconUrl: MIMO_ICON_URL,
+    iconUrl: "../icons/providers/xiaomimimo.svg",
     websiteUrl: "https://mimo.mi.com/",
     visionBaseUrl: "https://api.xiaomimimo.com/v1",
     supportsVision: true,
@@ -520,6 +607,23 @@ const MODEL_PRESETS: ModelPreset[] = [
     independentVision: true,
     defaultVisionModel: "mimo-v2.5",
     visionModels: ["mimo-v2.5"],
+  },
+  {
+    providerName: CUSTOM_ENDPOINT_PROVIDERS.cloud,
+    shortName: "自定义",
+    baseUrl: "",
+    mainModels: [],
+    iconUrl: "../icons/providers/custom-endpoint.svg",
+    customEndpointMode: "cloud",
+  },
+  {
+    providerName: CUSTOM_ENDPOINT_PROVIDERS.local,
+    shortName: "本地模型",
+    baseUrl: "",
+    mainModels: [],
+    iconUrl: "../icons/providers/custom-endpoint.svg",
+    customEndpointMode: "local",
+    hiddenInPresetList: true,
   },
 ];
 
@@ -552,15 +656,22 @@ if (!window.settings) {
       launchAtLogin: false,
       language: "zh-CN",
       uiTheme: "classic",
-      defaultChatMode: "collab",
+      defaultChatMode: "work",
+      currentStyleId: "default",
+      customStyle: DEFAULT_CUSTOM_STYLE,
       segmentedOutputMode: "off",
       mobileMessageSegmentation: "off",
       proactiveChatMode: "off",
       proactiveDeliveryTarget: "local",
+      chatSocialContextEnabled: false,
+      screenshotHotkey: "Alt+Shift+S",
     }),
     saveGeneral: (c) => Promise.resolve(c as GeneralSettings),
+    openCustomStylePrompt: async () => ({ ok: false, error: "settings api unavailable" }),
     channelsGetStatus: () => Promise.resolve({}),
     onChannelsStatusChanged: () => () => {},
+    beginScreenshotHotkeyCapture: () => Promise.resolve(true),
+    endScreenshotHotkeyCapture: () => Promise.resolve(true),
     openSidebar: () => {},
     closeSidebar: () => {},
     openTasks: () => {},
@@ -656,7 +767,7 @@ let schedulerTasks: ScheduledTask[] = [];
 let schedulerTools: SchedulerToolInfo[] = [];
 let editingSchedulerTaskId: string | null = null;
 
-const presetSelect = document.getElementById("preset-select") as HTMLSelectElement;
+const presetCards = document.getElementById("preset-cards") as HTMLElement;
 const presetWebsiteLink = document.getElementById("preset-website-link") as HTMLAnchorElement;
 // 模式按钮已删除——baseUrl 永远可改、模型名永远可手填（datalist 出预设建议）
 // provider 不再暴露给用户（从预设内部拿，保证 capabilities 匹配不出错）。
@@ -667,19 +778,24 @@ const baseUrlResetBtn = document.getElementById("base-url-reset-btn") as HTMLBut
 const modelInput = document.getElementById("model-input") as HTMLInputElement;
 const modelInputSuggestions = document.getElementById("model-input-suggestions") as HTMLDataListElement;
 const apiKeyInput = document.getElementById("api-key") as HTMLInputElement;
+const apiKeyLabel = document.getElementById("api-key-label") as HTMLElement;
+const apiKeyHint = document.getElementById("api-key-hint") as HTMLElement;
 const testConnectionBtn = document.getElementById("test-connection-btn") as HTMLButtonElement | null;
 // API 协议下拉（auto / openai / anthropic）—— 用户显式 override transport
 const transportSelect = document.getElementById("transport-select") as HTMLSelectElement;
+const transportHint = document.getElementById("transport-hint") as HTMLElement;
+const customEndpointControls = document.getElementById("custom-endpoint-controls") as HTMLElement;
+const customEndpointSummary = document.getElementById("custom-endpoint-summary") as HTMLElement;
+const customEndpointGuideBtn = document.getElementById("custom-endpoint-guide-btn") as HTMLButtonElement;
+const workFlowAdaptBtn = document.getElementById("work-flow-adapt-btn") as HTMLButtonElement | null;
+const apiNoteText = document.getElementById("api-note-text") as HTMLElement;
 
 // 视觉模型配置区元素
-// 同步主模型改为胶囊按钮组：[与主聊天模型相同] / [独立配置]
-const visionSyncBlocks = document.getElementById("vision-sync-blocks") as HTMLElement;
-const visionSyncMainBtn = visionSyncBlocks.querySelector('[data-vision-sync="main"]') as HTMLButtonElement;
-const visionSyncIndepBtn = visionSyncBlocks.querySelector('[data-vision-sync="independent"]') as HTMLButtonElement;
+const multimodalToggle = document.getElementById("multimodal-toggle") as HTMLInputElement;
 const visionBaseUrlInput = document.getElementById("vision-base-url") as HTMLInputElement;
 const visionApiKeyInput = document.getElementById("vision-api-key") as HTMLInputElement;
 const visionModelInput = document.getElementById("vision-model") as HTMLInputElement;
-const visionFieldsWrap = document.querySelector(".vision-fields") as HTMLElement;
+const visionFieldsWrap = document.getElementById("vision-fields-wrap") as HTMLElement;
 const testVisionBtn = document.getElementById("test-vision-btn") as HTMLButtonElement;
 const visionTestStatus = document.getElementById("vision-test-status") as HTMLElement;
 
@@ -689,6 +805,7 @@ const providerProfileCache: Record<string, ProviderProfile> = {};
 
 // 当前激活的厂商：每次 applyPreset 后更新；用于"切到下一家厂商前先把当前那家的输入框值缓存住"
 let activeProvider: string = "";
+let customEndpointMode: CustomEndpointMode = "cloud";
 const runtimeSyncSelect = document.getElementById("runtime-sync") as HTMLElement;
 const runtimeSyncNote = document.getElementById("runtime-sync-note") as HTMLElement;
 const stickerEnabledInput = document.getElementById("sticker-enabled") as HTMLInputElement;
@@ -714,6 +831,12 @@ const mobileMessageSegmentationSelect = document.getElementById("mobile-message-
 const proactiveChatSelect = document.getElementById("proactive-chat-select") as HTMLElement;
 const proactiveDeliveryRow = document.getElementById("proactive-delivery-row") as HTMLElement;
 const proactiveDeliverySelect = document.getElementById("proactive-delivery-select") as HTMLElement;
+const chatSocialContextEnabledInput = document.getElementById("chat-social-context-enabled") as HTMLInputElement;
+const citaEnabledInput = document.getElementById("cita-enabled") as HTMLInputElement;
+const citaEngineSelect = document.getElementById("cita-engine-select") as HTMLElement;
+const screenshotHotkeyInput = document.getElementById("screenshot-hotkey-input") as HTMLInputElement | null;
+const customStyleSamplingBtn = document.getElementById("custom-style-sampling-btn") as HTMLButtonElement | null;
+const customStylePromptBtn = document.getElementById("custom-style-prompt-btn") as HTMLButtonElement | null;
 const openChromeGpu = document.getElementById("open-chrome-gpu") as HTMLElement;
 const disableGpuInput = document.getElementById("disable-gpu-electron") as HTMLInputElement;
 const sidebarVisibleInput = document.getElementById("sidebar-visible") as HTMLInputElement;
@@ -741,23 +864,22 @@ const fcModeEnableOptimizationButton = document.getElementById("fc-mode-enable-o
 const fcModeDisableOptimizationButton = document.getElementById("fc-mode-disable-optimization") as HTMLButtonElement;
 
 const NAV_LABELS: Record<string, { emoji: string; title: string; hint: string }> = {
-  memory: { emoji: "🧠", title: "记忆", hint: "管理长期记忆与画像" },
-  chat: { emoji: "💬", title: "聊天", hint: "管理聊天窗口与会话" },
-  user: { emoji: "👤", title: "用户信息", hint: "编辑你的个人资料" },
-  tasks: { emoji: "⏰", title: "定时任务", hint: "管理定时提醒与日程" },
-  identity: { emoji: "💼", title: "职位", hint: "自定义昔涟的身份定位与工作职责" },
-  skills: { emoji: "✨", title: "Skill", hint: "管理 agent 的 skill 指令（约束如何用工具）" },
-  plugins: { emoji: "🔌", title: "插件", hint: "扩展功能与第三方集成" },
-  preferences: { emoji: "🫧", title: "偏好设置", hint: "设置聊天窗口和输出行为的默认偏好" },
-  appearance: { emoji: "🎨", title: "外观设置", hint: "调整窗口布局、界面主题与昔涟桌宠" },
-  general: { emoji: "⚙️", title: "通用设置", hint: "管理窗口、音频和系统行为" },
-  api: { emoji: "🔑", title: "API 设置", hint: "选择预设后只需要填写 API Key。" },
+  memory: { emoji: `<img src="../icons/mimi.png" width="24" height="24" alt="" aria-hidden="true" style="vertical-align:-3px" />`, title: "记忆", hint: "管理长期记忆与画像" },
+  chat: { emoji: `<svg style="vertical-align:-3px" width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M33 38H22V30H36V22H44V38H39L36 41L33 38Z" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 6H36V30H17L13 34L9 30H4V6Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 18H20" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M26 18H27" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M12 18H13" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`, title: "聊天", hint: "管理聊天窗口与会话" },
+  user: { emoji: `<svg style="vertical-align:-3px" width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M44 8H4V38H19L24 43L29 38H44V8Z" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="24" cy="19" r="5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M33 32C33 27.5817 28.9706 24 24 24C19.0294 24 15 27.5817 15 32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`, title: "用户信息", hint: "编辑你的个人资料" },
+  tasks: { emoji: `<svg style="vertical-align:-3px" width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M23.9998 44.3332C34.1251 44.3332 42.3332 36.1251 42.3332 25.9999C42.3332 15.8747 34.1251 7.66656 23.9998 7.66656C13.8746 7.66656 5.6665 15.8747 5.6665 25.9999C5.6665 36.1251 13.8746 44.3332 23.9998 44.3332Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M23.7594 15.3536L23.7582 26.3624L31.5305 34.1347" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9.00001L11 4.00001" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M44 9.00001L37 4.00001" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`, title: "定时任务", hint: "管理定时提醒与日程" },
+  skills: { emoji: `<svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="vertical-align:-3px"><title>Skills</title><rect x="9" y="8" width="30" height="36" rx="2" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M18 4V10" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M30 4V10" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 19L32 19" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 27L28 27" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 35H24" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`, title: "Skills", hint: "管理 agent 的 skill 指令（约束如何用工具）" },
+  plugins: { emoji: "🔌", title: "MCP", hint: "扩展功能与第三方集成" },
+  preferences: { emoji: `<svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="vertical-align:-3px"><title>偏好设置</title><path d="M12 35.0137H9H4V8.01273C4 6.90868 4.89543 6.01367 6 6.01367H42C43.1046 6.01367 44 6.90868 44 8.01273V35.0137H36" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 32L14 42H34L24 32Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></svg>`, title: "偏好设置", hint: "设置聊天窗口和输出行为的默认偏好" },
+  appearance: { emoji: `<svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="vertical-align:-3px"><title>外观设置</title><path d="M24 44C29.9601 44 26.3359 35.136 30 31C33.1264 27.4709 44 29.0856 44 24C44 12.9543 35.0457 4 24 4C12.9543 4 4 12.9543 4 24C4 35.0457 12.9543 44 24 44Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M28 17C29.6569 17 31 15.6569 31 14C31 12.3431 29.6569 11 28 11C26.3431 11 25 12.3431 25 14C25 15.6569 26.3431 17 28 17Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M16 21C17.6569 21 19 19.6569 19 18C19 16.3431 17.6569 15 16 15C14.3431 15 13 16.3431 13 18C13 19.6569 14.3431 21 16 21Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M17 34C18.6569 34 20 32.6569 20 31C20 29.3431 18.6569 28 17 28C15.3431 28 14 29.3431 14 31C14 32.6569 15.3431 34 17 34Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></svg>`, title: "外观设置", hint: "调整窗口布局、界面主题与昔涟桌宠" },
+  general: { emoji: `<svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="vertical-align:-3px"><title>通用设置</title><path d="M18.2838 43.1713C14.9327 42.1736 11.9498 40.3213 9.58787 37.867C10.469 36.8227 11 35.4734 11 34.0001C11 30.6864 8.31371 28.0001 5 28.0001C4.79955 28.0001 4.60139 28.01 4.40599 28.0292C4.13979 26.7277 4 25.3803 4 24.0001C4 21.9095 4.32077 19.8938 4.91579 17.9995C4.94381 17.9999 4.97188 18.0001 5 18.0001C8.31371 18.0001 11 15.3138 11 12.0001C11 11.0488 10.7786 10.1493 10.3846 9.35011C12.6975 7.1995 15.5205 5.59002 18.6521 4.72314C19.6444 6.66819 21.6667 8.00013 24 8.00013C26.3333 8.00013 28.3556 6.66819 29.3479 4.72314C32.4795 5.59002 35.3025 7.1995 37.6154 9.35011C37.2214 10.1493 37 11.0488 37 12.0001C37 15.3138 39.6863 18.0001 43 18.0001C43.0281 18.0001 43.0562 17.9999 43.0842 17.9995C43.6792 19.8938 44 21.9095 44 24.0001C44 25.3803 43.8602 26.7277 43.594 28.0292C43.3986 28.01 43.2005 28.0001 43 28.0001C39.6863 28.0001 37 30.6864 37 34.0001C37 35.4734 37.531 36.8227 38.4121 37.867C36.0502 40.3213 33.0673 42.1736 29.7162 43.1713C28.9428 40.752 26.676 39.0001 24 39.0001C21.324 39.0001 19.0572 40.752 18.2838 43.1713Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M24 31C27.866 31 31 27.866 31 24C31 20.134 27.866 17 24 17C20.134 17 17 20.134 17 24C17 27.866 20.134 31 24 31Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></svg>`, title: "通用设置", hint: "管理窗口、音频和系统行为" },
+  api: { emoji: `<svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="vertical-align:-3px"><title>API 设置</title><g clip-path="url(#api-key-nav-clip)"><circle cx="15" cy="33" r="8" fill="none" stroke="currentColor" stroke-width="4"/><path d="M29 16L35.5 22" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 26L37 7" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M35 11L42 17.5" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></g><defs><clipPath id="api-key-nav-clip"><rect width="48" height="48" fill="none"/></clipPath></defs></svg>`, title: "API 设置", hint: "选择预设后只需要填写 API Key。" },
   "api-advanced": { emoji: "", title: "API 高级设置", hint: "配置 API 超时时间、调用模式．" },
   cyrene: { emoji: "🌸", title: "昔涟设置", hint: "管理 Agent 行为、记忆、RAG 与权限" },
   tts: { emoji: "🎙️", title: "TTS 设置", hint: "语音合成与朗读偏好" },
   asr: { emoji: "🎧", title: "ASR 设置", hint: "语音识别与通话配置" },
-  tokens: { emoji: "📊", title: "Token 用量", hint: "查看 API 调用统计与消耗" },
-  disclaimer: { emoji: "📜", title: "免责声明", hint: "使用条款与隐私说明" },
+	  tokens: { emoji: `<svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="vertical-align:-3px"><title>Token 用量</title><path d="M4 42H44" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><rect x="8" y="28" width="6" height="14" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><rect x="21" y="18" width="6" height="24" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><rect x="34" y="6" width="6" height="36" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></svg>`, title: "Token 用量", hint: "查看 API 调用统计与消耗" },
+	  disclaimer: { emoji: `<svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="vertical-align:-3px"><title>免责声明</title><rect x="13" y="10" width="28" height="34" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M35 10V4H8C7.44772 4 7 4.44772 7 5V38H13" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 22H33" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 30H33" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`, title: "免责声明", hint: "使用条款与隐私说明" },
 };
 
 minBtn.addEventListener("click", () => window.settings?.minimize());
@@ -872,7 +994,7 @@ function applyDefaultChatModeSelection(mode: DefaultChatMode): void {
 }
 
 function getDefaultChatModeValue(): DefaultChatMode {
-  return normalizeDefaultChatMode(getOptionGroupValue(defaultChatModeSelect, "collab"));
+  return normalizeDefaultChatMode(getOptionGroupValue(defaultChatModeSelect, "work"));
 }
 
 function applySegmentedOutputSelection(mode: SegmentedOutputMode): void {
@@ -905,6 +1027,134 @@ function applyProactiveDeliverySelection(target: ProactiveDeliveryTarget): void 
 
 function getProactiveDeliveryValue(): ProactiveDeliveryTarget {
   return normalizeProactiveDeliveryTarget(getOptionGroupValue(proactiveDeliverySelect, "local"));
+}
+
+let currentCustomStyleConfig: CustomStyleConfig = DEFAULT_CUSTOM_STYLE;
+let customStyleOverlay: HTMLElement | null = null;
+
+function diversityDriverOf(config: CustomStyleConfig): DiversityPreference["driver"] {
+  return config.diversity.driver;
+}
+
+function diversityValueOf(config: CustomStyleConfig): number {
+  return config.diversity.driver === "temperature" || config.diversity.driver === "top-p"
+    ? config.diversity.value
+    : 0.65;
+}
+
+function buildCustomStyleConfigFromModal(): CustomStyleConfig {
+  if (!customStyleOverlay) return currentCustomStyleConfig;
+  const diversityDriver = (
+    customStyleOverlay.querySelector<HTMLInputElement>('input[name="custom-diversity"]:checked')?.value
+    ?? "model-default"
+  ) as DiversityPreference["driver"];
+  const rawValue = Number((
+    customStyleOverlay.querySelector<HTMLInputElement>("#custom-diversity-value")?.value
+    ?? ""
+  ).trim());
+  const repetition = (
+    customStyleOverlay.querySelector<HTMLInputElement>('input[name="custom-repetition"]:checked')?.value
+    ?? "model-default"
+  ) as RepetitionLevel;
+  return normalizeCustomStyleConfig({
+    diversity: diversityDriver === "model-default"
+      ? { driver: "model-default" }
+      : { driver: diversityDriver, value: rawValue },
+    repetition,
+  });
+}
+
+function ensureCustomStyleModal(): HTMLElement {
+  if (customStyleOverlay) return customStyleOverlay;
+  customStyleOverlay = document.createElement("div");
+  customStyleOverlay.id = "custom-style-overlay";
+  customStyleOverlay.className = "cy-modal-overlay is-hidden custom-style-overlay";
+  customStyleOverlay.innerHTML = [
+    '<div class="cy-modal custom-style-modal" role="dialog" aria-modal="true">',
+    '  <div class="cy-modal__head"><span class="cy-modal__icon">🖊️</span><h3 class="cy-modal__title">自定义风格采样</h3></div>',
+    '  <hr class="cy-modal__divider">',
+    '  <div class="custom-style-modal__section">',
+    '    <div class="custom-style-modal__label">多样性控制</div>',
+    '    <label><input type="radio" name="custom-diversity" value="model-default"> 跟随模型</label>',
+    '    <label><input type="radio" name="custom-diversity" value="temperature"> Temperature</label>',
+    '    <label><input type="radio" name="custom-diversity" value="top-p"> Top-P</label>',
+    '    <div class="custom-style-modal__value" id="custom-diversity-row"><span id="custom-diversity-label">Temperature</span><input id="custom-diversity-value" type="number" min="0" max="2" step="0.01"></div>',
+    '  </div>',
+    '  <div class="custom-style-modal__section">',
+    '    <div class="custom-style-modal__label">重复控制</div>',
+    '    <label><input type="radio" name="custom-repetition" value="model-default"> 跟随模型</label>',
+    '    <label><input type="radio" name="custom-repetition" value="light"> 轻度抑制</label>',
+    '    <label><input type="radio" name="custom-repetition" value="medium"> 中度抑制</label>',
+    '    <label><input type="radio" name="custom-repetition" value="strong"> 重度抑制</label>',
+    '  </div>',
+    '  <div class="cy-modal__actions">',
+    '    <button type="button" class="ghost-btn" id="custom-style-reset">恢复默认</button>',
+    '    <button type="button" class="ghost-btn" id="custom-style-cancel">取消</button>',
+    '    <button type="button" class="btn-primary" id="custom-style-save">保存</button>',
+    '  </div>',
+    '</div>',
+  ].join("\n");
+  document.body.appendChild(customStyleOverlay);
+
+  const updateDiversityRow = () => {
+    const driver = customStyleOverlay!.querySelector<HTMLInputElement>(
+      'input[name="custom-diversity"]:checked',
+    )?.value ?? "model-default";
+    const row = customStyleOverlay!.querySelector<HTMLElement>("#custom-diversity-row");
+    const label = customStyleOverlay!.querySelector<HTMLElement>("#custom-diversity-label");
+    const value = customStyleOverlay!.querySelector<HTMLInputElement>("#custom-diversity-value");
+    if (!row || !label || !value) return;
+    row.hidden = driver === "model-default";
+    label.textContent = driver === "top-p" ? "Top-P" : "Temperature";
+    value.min = "0";
+    value.max = driver === "top-p" ? "1" : "2";
+  };
+  customStyleOverlay.querySelectorAll<HTMLInputElement>('input[name="custom-diversity"]').forEach((input) => {
+    input.addEventListener("change", updateDiversityRow);
+  });
+  customStyleOverlay.querySelector<HTMLButtonElement>("#custom-style-cancel")?.addEventListener("click", () => {
+    customStyleOverlay?.classList.add("is-hidden");
+  });
+  customStyleOverlay.querySelector<HTMLButtonElement>("#custom-style-reset")?.addEventListener("click", () => {
+    renderCustomStyleModal(DEFAULT_CUSTOM_STYLE);
+  });
+  customStyleOverlay.querySelector<HTMLButtonElement>("#custom-style-save")?.addEventListener("click", async () => {
+    try {
+      currentCustomStyleConfig = buildCustomStyleConfigFromModal();
+      await window.settings!.saveGeneral({ customStyle: currentCustomStyleConfig });
+      customStyleOverlay?.classList.add("is-hidden");
+      setPreferencesSaveStatus("自定义风格已保存", "is-ok");
+    } catch {
+      setPreferencesSaveStatus("自定义风格保存失败", "is-error");
+    }
+  });
+  return customStyleOverlay;
+}
+
+function renderCustomStyleModal(config: CustomStyleConfig): void {
+  const overlay = ensureCustomStyleModal();
+  const normalized = normalizeCustomStyleConfig(config);
+  const driver = diversityDriverOf(normalized);
+  const repetition = normalized.repetition;
+  const driverInput = overlay.querySelector<HTMLInputElement>(
+    `input[name="custom-diversity"][value="${driver}"]`,
+  );
+  const repetitionInput = overlay.querySelector<HTMLInputElement>(
+    `input[name="custom-repetition"][value="${repetition}"]`,
+  );
+  if (driverInput) driverInput.checked = true;
+  if (repetitionInput) repetitionInput.checked = true;
+  const valueInput = overlay.querySelector<HTMLInputElement>("#custom-diversity-value");
+  if (valueInput) valueInput.value = String(diversityValueOf(normalized));
+  overlay.querySelectorAll<HTMLInputElement>('input[name="custom-diversity"]').forEach((input) => {
+    input.dispatchEvent(new Event("change"));
+  });
+}
+
+function openCustomStyleModal(): void {
+  const overlay = ensureCustomStyleModal();
+  renderCustomStyleModal(currentCustomStyleConfig);
+  overlay.classList.remove("is-hidden");
 }
 
 function renderProactiveDeliveryVisibility(): void {
@@ -963,18 +1213,53 @@ function setTimeoutSaveStatus(text: string, cls?: string): void {
 }
 
 function fillPresetOptions(): void {
-  presetSelect.replaceChildren();
+  if (!presetCards) return;
+  presetCards.replaceChildren();
   for (const preset of MODEL_PRESETS) {
-    const option = document.createElement("option");
-    option.value = preset.providerName;
+    if (preset.hiddenInPresetList) continue;
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "preset-card";
+    card.dataset.provider = preset.providerName;
     if (preset.disabled) {
-      option.textContent = preset.providerName + "（暂未适配）";
-      option.disabled = true;
-    } else {
-      option.textContent = preset.providerName;
+      card.classList.add("is-disabled");
+      card.disabled = true;
     }
-    presetSelect.appendChild(option);
+
+    // logo：有本地 SVG 用 img，没有（如 DeepSeek）用首字母文字占位
+    const logoWrap = document.createElement("span");
+    logoWrap.className = "preset-card__logo";
+    if (preset.iconUrl) {
+      const img = document.createElement("img");
+      img.src = preset.iconUrl;
+      img.alt = "";
+      img.width = 24;
+      img.height = 24;
+      logoWrap.appendChild(img);
+    } else {
+      logoWrap.textContent = preset.shortName.charAt(0);
+    }
+    card.appendChild(logoWrap);
+
+    const label = document.createElement("span");
+    label.className = "preset-card__name";
+    label.textContent = preset.shortName;
+    if (preset.disabled) label.textContent += "（暂未适配）";
+    card.appendChild(label);
+
+    presetCards.appendChild(card);
   }
+}
+
+/** 标记当前选中的厂商卡片（替换原 presetSelect.value = ...） */
+function setActivePresetCard(providerName: string): void {
+  if (!presetCards) return;
+  const cardProvider = getCustomEndpointMode(providerName)
+    ? CUSTOM_ENDPOINT_PROVIDERS.cloud
+    : providerName;
+  presetCards.querySelectorAll(".preset-card").forEach((card) => {
+    card.classList.toggle("is-active", (card as HTMLElement).dataset.provider === cardProvider);
+  });
 }
 
 function findPreset(providerName: string): ModelPreset {
@@ -1026,35 +1311,10 @@ function getCurrentModelValue(): string {
   return modelInput.value;
 }
 
-/**
- * 视觉同步 UI（胶囊按钮组）—— 纯 UI 状态控制，不修改输入框值。
- *
- * 三种情况：
- * 1. independentVision=true（preset 强制独立配置）：
- *    用真实 disabled 属性禁用"与主聊天模型相同"按钮；视觉框不锁（独立 = 可编辑）。
- *    直接 return，不读分支前缓存的 synced，避免重新给视觉框加 is-locked。
- * 2. 普通 provider，synced=true：视觉框加 is-locked 样式（仅 UI，不动 input.value）
- * 3. 普通 provider，synced=false：视觉框解锁
- *
- * 输入框的初值由 applyPreset 在切厂商时一次性写入，本函数不再覆盖。
- */
-function applyVisionSyncUI(): void {
-  const preset = findPreset(activeProvider);
-
-  if (preset?.independentVision) {
-    visionSyncMainBtn.disabled = true;
-    setVisionSyncState(false);
-    visionFieldsWrap.classList.remove("is-locked");
-    return;
-  }
-
-  visionSyncMainBtn.disabled = false;
-  const synced = visionSyncMainBtn.classList.contains("is-active");
-  if (synced) {
-    visionFieldsWrap.classList.add("is-locked");
-  } else {
-    visionFieldsWrap.classList.remove("is-locked");
-  }
+/** 多模态开关 UI：ON 时隐藏视觉配置区，OFF 时显示。不清空输入框值。 */
+function applyMultimodalUI(): void {
+  const on = multimodalToggle.checked;
+  visionFieldsWrap.classList.toggle("is-hidden", on);
 }
 
 /** 填充视觉模型输入框的 datalist 候选。仅渲染候选，不修改 visionModelInput.value。 */
@@ -1069,12 +1329,64 @@ function fillVisionModelOptions(preset: ModelPreset): void {
   }
 }
 
-/** 切换视觉同步胶囊按钮的激活态。synced=true 激活"与主相同"，false 激活"独立配置"。 */
-function setVisionSyncState(synced: boolean): void {
-  visionSyncMainBtn.classList.toggle("is-active", synced);
-  visionSyncMainBtn.setAttribute("aria-pressed", String(synced));
-  visionSyncIndepBtn.classList.toggle("is-active", !synced);
-  visionSyncIndepBtn.setAttribute("aria-pressed", String(!synced));
+const LOCAL_ENDPOINT_AUTH_FALLBACK = "__CYRENE_LOCAL_NO_AUTH__";
+
+function getApiKeyForRequest(): string {
+  const value = apiKeyInput.value.trim();
+  return getCustomEndpointMode(activeProvider) === "local" && !value
+    ? LOCAL_ENDPOINT_AUTH_FALLBACK
+    : value;
+}
+
+function validateActiveCustomEndpoint(): string | null {
+  const mode = getCustomEndpointMode(activeProvider);
+  if (!mode) return null;
+  return validateCustomEndpointConfig(mode, {
+    baseUrl: baseUrlInput.value,
+    model: getCurrentModelValue(),
+    apiKey: apiKeyInput.value,
+  });
+}
+
+function applyCustomEndpointUI(preset: ModelPreset): void {
+  const mode = getCustomEndpointMode(preset.providerName);
+  customEndpointControls.hidden = mode === null;
+  transportSelect.disabled = mode !== null;
+
+  if (!mode) {
+    apiKeyLabel.textContent = "API Key";
+    apiKeyHint.textContent = "填写对应平台创建的 API Key";
+    apiKeyInput.placeholder = "sk-...";
+    baseUrlInput.placeholder = "https://api.deepseek.com";
+    modelInput.placeholder = "选厂商后自动填入，可手填覆盖";
+    transportHint.textContent = "默认按 Base URL 推断；如有歧义可手动指定";
+    baseUrlResetBtn.title = "重置为厂商默认 URL";
+    apiNoteText.textContent = "选择模型预设后会自动填入 Provider、Base URL 和模型名；你只需要填写对应平台的 API Key。配置只保存在本机 Electron 用户数据目录。";
+    return;
+  }
+
+  customEndpointMode = mode;
+  const presentation = getCustomEndpointPresentation(mode);
+  customEndpointControls.querySelectorAll<HTMLButtonElement>("[data-custom-endpoint-mode]").forEach((button) => {
+    const active = button.dataset.customEndpointMode === mode;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+
+  customEndpointSummary.textContent = mode === "local"
+    ? "填写本机 OpenAI 兼容服务地址；不扫描端口，也不探测模型能力。"
+    : "接入 OpenAI 兼容的云端服务或第三方代理，能力由服务提供方决定。";
+  apiKeyLabel.textContent = presentation.apiKeyOptional ? "API Key（可选）" : "API Key";
+  apiKeyHint.textContent = presentation.apiKeyOptional
+    ? "本地服务无需鉴权时可留空；如网关要求令牌，请在此填写"
+    : "填写自定义服务或第三方代理提供的 API Key";
+  apiKeyInput.placeholder = presentation.apiKeyOptional ? "无需鉴权时留空" : "sk-...";
+  baseUrlInput.placeholder = presentation.baseUrlPlaceholder;
+  modelInput.placeholder = "填写服务实际提供的模型 ID";
+  transportSelect.value = presentation.transport;
+  transportHint.textContent = "自定义端点仅提供 OpenAI 兼容协议；不会探测或自动升级能力档位";
+  baseUrlResetBtn.title = "清空自定义 Base URL";
+  apiNoteText.textContent = "自定义端点按保守兼容模式运行。保存后请先测试连接；连接成功不代表结构化输出、工具调用或思考模式一定可用。";
 }
 
 function applyPreset(
@@ -1084,14 +1396,15 @@ function applyPreset(
   preferredBaseUrl?: string,
   preferredDisplayName?: string,
   preferredExplicitTransport?: "openai" | "anthropic" | "auto",
-  preferredVision?: { baseUrl: string; apiKey: string; model: string; syncWithMain: boolean },
+  preferredVision?: { baseUrl: string; apiKey: string; model: string },
+  preferredMultimodal?: boolean,
 ): void {
   const preset = findPreset(providerName);
 
   // 模式按钮已删除——ChatGPT / Claude 这种没预设型号的厂商，input 框空着让用户手填，
   // datalist 没建议也不影响（用户知道自己型号）。
 
-  presetSelect.value = preset.providerName;
+  setActivePresetCard(preset.providerName);
 
   // 昵称：优先用传入的（用户自定义过）；否则用厂商 shortName 作默认。
   // 留空显示厂商短名——但这里主动填 shortName 让用户看到默认值，可改可清。
@@ -1104,34 +1417,31 @@ function applyPreset(
 
   // apiKey：优先用缓存；否则**显式清空**——避免上一家厂商的 key 残留在输入框里被用户误点保存。
   // 这是 v1 切厂商行为里的关键不变量：apiKey 永远只跟当前厂商绑定。
-  apiKeyInput.value = preferredApiKey ?? "";
+  const customMode = getCustomEndpointMode(preset.providerName);
+  apiKeyInput.value = customMode === "local" && preferredApiKey === LOCAL_ENDPOINT_AUTH_FALLBACK
+    ? ""
+    : (preferredApiKey ?? "");
 
   // explicitTransport：优先用缓存（用户自定义过），其次默认 "auto"
   // （切厂商时上一家的 explicitTransport 不应该延续，preset 自带 capabilities transport 兜底）
   transportSelect.value = preferredExplicitTransport ?? "auto";
+  applyCustomEndpointUI(preset);
 
-  // —— 视觉字段初始化（一次性写入，避免反复覆盖用户编辑）——
-  // 优先级：preferredVision（已保存） > preset 默认
-  // 关键：independentVision=true 时，即使旧配置保存了 syncWithMain=true，
-  // 也统一归一化为 false（与 applyVisionSyncUI 的"独立配置态"一致）。
+  if (preferredMultimodal !== undefined) {
+    multimodalToggle.checked = preset.independentVision === true ? false : preferredMultimodal;
+  } else {
+    multimodalToggle.checked = preset.supportsVision === true && preset.independentVision !== true;
+  }
+
+  // 视觉三框：始终写入值（从 preferredVision 或 preset 默认），不受开关影响
   if (preferredVision) {
-    const synced = preset.independentVision === true ? false : preferredVision.syncWithMain;
-    setVisionSyncState(synced);
     visionBaseUrlInput.value = preferredVision.baseUrl;
     visionApiKeyInput.value = preferredVision.apiKey;
     visionModelInput.value = preferredVision.model;
-  } else if (preset.independentVision === true) {
-    // 强制独立配置态
-    setVisionSyncState(false);
-    visionBaseUrlInput.value = preset.visionBaseUrl ?? preset.baseUrl;
-    visionApiKeyInput.value = apiKeyInput.value;
-    visionModelInput.value = preset.defaultVisionModel ?? "";
   } else {
-    // 默认同步主模型
-    setVisionSyncState(preset.supportsVision === true);
     visionBaseUrlInput.value = preset.visionBaseUrl ?? baseUrlInput.value;
     visionApiKeyInput.value = apiKeyInput.value;
-    visionModelInput.value = modelInput.value;
+    visionModelInput.value = preset.defaultVisionModel ?? modelInput.value;
   }
 
   fillVisionModelOptions(preset);
@@ -1146,7 +1456,7 @@ function applyPreset(
   }
 
   activeProvider = preset.providerName;
-  applyVisionSyncUI();
+  applyMultimodalUI();
 }
 
 async function loadConfig(): Promise<void> {
@@ -1184,9 +1494,9 @@ async function loadConfig(): Promise<void> {
             baseUrl: vision.baseUrl,
             apiKey: vision.apiKey,
             model: vision.model,
-            syncWithMain: vision.syncWithMain,
           }
         : undefined,
+      cfg.multimodal,
     );
     applyRuntimeSyncSelection(cfg.runtimeSync);
     stickerEnabledInput.checked = cfg.stickerEnabled !== false;
@@ -1212,6 +1522,14 @@ async function loadConfig(): Promise<void> {
 async function loadGeneralSettings(): Promise<void> {
   try {
     const cfg = await window.settings!.getGeneral();
+    const cita = getCitaUiState({ enabled: cfg.citaEnabled, semanticEngine: cfg.citaSemanticEngine });
+    citaEnabledInput.checked = cita.enabled;
+    chatSocialContextEnabledInput.checked = normalizeChatSocialContextEnabled(cfg.chatSocialContextEnabled);
+    citaEngineSelect.querySelectorAll<HTMLButtonElement>(".option-block").forEach((button) => {
+      const selected = button.dataset.value === cita.selectedEngine;
+      button.classList.toggle("is-active", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
     musicEnabledInput.checked = cfg.musicEnabled;
     musicVolumeInput.value = String(cfg.musicVolume);
     syncMusicPlayback();
@@ -1229,11 +1547,15 @@ async function loadGeneralSettings(): Promise<void> {
     renderUiFont(normalizeUiFont(cfg.uiFont));
     renderUiIcon(normalizeUiIcon(cfg.uiIcon));
     applyDefaultChatModeSelection(normalizeDefaultChatMode(cfg.defaultChatMode));
+    currentCustomStyleConfig = normalizeCustomStyleConfig(cfg.customStyle);
     applySegmentedOutputSelection(normalizeSegmentedOutputMode(cfg.segmentedOutputMode));
     applyMobileMessageSegmentationSelection(normalizeMobileMessageSegmentationMode(cfg.mobileMessageSegmentation));
     applyProactiveChatSelection(normalizeProactiveChatMode(cfg.proactiveChatMode));
     applyProactiveDeliverySelection(normalizeProactiveDeliveryTarget(cfg.proactiveDeliveryTarget));
     renderProactiveDeliveryVisibility();
+    if (screenshotHotkeyInput) {
+      screenshotHotkeyInput.value = cfg.screenshotHotkey ?? "Alt+Shift+S";
+    }
     void window.settings!.channelsGetStatus()
       .then((status: unknown) => renderProactiveDeliveryAvailability(status as Record<string, { phase?: string }>))
       .catch(() => renderProactiveDeliveryAvailability({}));
@@ -1504,16 +1826,88 @@ proactiveDeliverySelect.querySelectorAll<HTMLButtonElement>(".option-block").for
   });
 });
 
+citaEnabledInput.addEventListener("change", () => {
+  setPreferencesSaveStatus("有未保存的更改");
+});
+
+// ── 截图热键捕获 ──
+// 聚焦时临时挂起全局快捷键（防止录入时触发截图），失焦恢复。
+const MODIFIER_KEYS = new Set(["Control", "Alt", "Shift", "Meta"]);
+
+screenshotHotkeyInput?.addEventListener("focus", async () => {
+  await window.settings!.beginScreenshotHotkeyCapture();
+});
+
+screenshotHotkeyInput?.addEventListener("blur", async () => {
+  await window.settings!.endScreenshotHotkeyCapture();
+});
+
+screenshotHotkeyInput?.addEventListener("keydown", (e) => {
+  e.preventDefault();
+
+  if (e.key === "Escape") {
+    screenshotHotkeyInput!.blur();
+    return;
+  }
+  if (e.key === "Enter") {
+    screenshotHotkeyInput!.blur();
+    return;
+  }
+
+  const parts: string[] = [];
+  if (e.ctrlKey) parts.push("Ctrl");
+  if (e.altKey) parts.push("Alt");
+  if (e.shiftKey) parts.push("Shift");
+  if (e.metaKey) parts.push("Super");
+
+  // 纯修饰键不提交
+  if (MODIFIER_KEYS.has(e.key)) return;
+
+  const keyName = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+  parts.push(keyName);
+
+  // 至少需要一个修饰键
+  if (parts.length < 2) return;
+
+  screenshotHotkeyInput!.value = parts.join("+");
+  setPreferencesSaveStatus("有未保存的更改");
+});
+
+chatSocialContextEnabledInput.addEventListener("change", () => {
+  setPreferencesSaveStatus("有未保存的更改");
+});
+
+customStyleSamplingBtn?.addEventListener("click", () => {
+  openCustomStyleModal();
+});
+
+customStylePromptBtn?.addEventListener("click", async () => {
+  try {
+    const result = await window.settings?.openCustomStylePrompt?.();
+    if (!result?.ok) {
+      setPreferencesSaveStatus("打开 Prompt 文件失败", "is-error");
+      return;
+    }
+    setPreferencesSaveStatus("已打开 Prompt 文件位置", "is-ok");
+  } catch {
+    setPreferencesSaveStatus("打开 Prompt 文件失败", "is-error");
+  }
+});
+
 preferencesForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   setPreferencesSaveStatus("保存中…");
   try {
     await window.settings!.saveGeneral({
+      citaEnabled: citaEnabledInput.checked,
+      citaSemanticEngine: "remote",
+      chatSocialContextEnabled: chatSocialContextEnabledInput.checked,
       defaultChatMode: getDefaultChatModeValue(),
       segmentedOutputMode: getSegmentedOutputValue(),
       mobileMessageSegmentation: getMobileMessageSegmentationValue(),
       proactiveChatMode: getProactiveChatValue(),
       proactiveDeliveryTarget: getProactiveDeliveryValue(),
+      screenshotHotkey: screenshotHotkeyInput?.value || "Alt+Shift+S",
     });
     setPreferencesSaveStatus("已保存", "is-ok");
   } catch {
@@ -2137,14 +2531,22 @@ clearChatHistoryBtn.addEventListener("click", async () => {
   }
 });
 
-presetSelect.addEventListener("change", () => {
+presetCards?.addEventListener("click", (e) => {
+  const card = (e.target as HTMLElement).closest(".preset-card") as HTMLElement | null;
+  if (!card || card.classList.contains("is-disabled")) return;
+  const cardProviderName = card.dataset.provider;
+  if (!cardProviderName) return;
+
   // 切厂商前先把当前厂商的输入值快照进缓存，避免覆盖丢失
   captureActiveProviderProfile();
 
+  const providerName = getCustomEndpointMode(cardProviderName)
+    ? getCustomEndpointProvider(customEndpointMode)
+    : cardProviderName;
   // 从缓存里取目标厂商的旧配置；没有缓存就用 preset 默认值
-  const cached = providerProfileCache[presetSelect.value];
+  const cached = providerProfileCache[providerName];
   applyPreset(
-    presetSelect.value,
+    providerName,
     cached?.model,
     cached?.apiKey,
     cached?.baseUrl,
@@ -2154,13 +2556,160 @@ presetSelect.addEventListener("change", () => {
   setSaveStatus(cached ? "已切回上次配置" : "已应用预设，填写 API Key 后保存");
 });
 
+customEndpointControls?.addEventListener("click", (e) => {
+  const button = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-custom-endpoint-mode]");
+  const nextMode = button?.dataset.customEndpointMode as CustomEndpointMode | undefined;
+  if (!nextMode || nextMode === customEndpointMode) return;
+
+  captureActiveProviderProfile();
+  customEndpointMode = nextMode;
+  const providerName = getCustomEndpointProvider(nextMode);
+  const cached = providerProfileCache[providerName];
+  applyPreset(
+    providerName,
+    cached?.model,
+    cached?.apiKey,
+    cached?.baseUrl,
+    cached?.displayName,
+    cached?.explicitTransport,
+  );
+  setSaveStatus(cached ? "已切回上次配置" : nextMode === "local"
+    ? "请填写本地服务地址和模型 ID"
+    : "请填写云端服务地址、API Key 和模型 ID");
+});
+
+const CUSTOM_ENDPOINT_GUIDE_BODY = [
+  '<section class="custom-endpoint-guide-section">',
+  '  <h4>官方云端模型</h4>',
+  '  <p>从列表选择已适配厂商（OpenAI、Claude、Kimi、DeepSeek、MiniMax、智谱 GLM、通义千问、豆包、小米 MiMo），填写对应平台获取的 API Key 即可。Base URL 与推荐模型 ID 已预填。</p>',
+  '  <p class="custom-endpoint-guide-note">同一厂商的不同模型在结构化输出、工具调用和思考模式等能力上可能存在差异，请优先使用列表内的推荐型号。</p>',
+  '</section>',
+  '<section class="custom-endpoint-guide-section">',
+  '  <h4>自定义端点 <span>高级</span></h4>',
+  '  <p>可接入提供 OpenAI 兼容接口的云端服务、本地推理服务或第三方代理。请自行填写完整 Base URL 和服务实际提供的模型 ID。</p>',
+  '  <div class="custom-endpoint-guide-warning"><strong>本地模型与自定义端点不在官方技术支持范围内。</strong>实际能力取决于推理服务的具体实现，系统不会扫描端口、探测模型或自动升级能力档位。接入第三方代理前，请自行评估隐私和数据安全风险。</div>',
+  '  <p>建议保存后点击“<strong>测试连接</strong>”进行基础验证。连接成功仅表示服务能够响应，不代表结构化输出、工具调用和思考模式一定可用。</p>',
+  '  <p class="custom-endpoint-guide-security">🔒 你的 API Key 仅存储在本地设备，不会上传至昔涟的服务器。</p>',
+  '</section>',
+  '<section class="custom-endpoint-guide-section custom-endpoint-faq">',
+  '  <h4>常见问题</h4>',
+  '  <details>',
+  '    <summary>本地模型回复格式异常</summary>',
+  '    <p>许多本地推理服务缺少稳定的约束解码或完整协议实现，偶尔输出多余文本、Markdown 围栏或不完整 JSON 属于常见情况。系统会使用本地校验与自动修复兜底；如需更高稳定性，建议选择官方云端模型。</p>',
+  '  </details>',
+  '  <details>',
+  '    <summary>MiniMax 思考模式失效</summary>',
+  '    <p>MiniMax 在 JSON 模式下不建议同时启用思考。系统会依据已验证的配置自动处理这一冲突，以结构化结果的稳定性为优先。</p>',
+  '  </details>',
+  '  <details>',
+  '    <summary>Claude 配置项比其他厂商少</summary>',
+  '    <p>Claude 的接口规范与 OpenAI 兼容接口不同，部分参数和结构化输出档位并不适用，因此页面显示的配置项会更少。这属于正常差异，不影响已适配能力的使用。</p>',
+  '  </details>',
+  '</section>',
+].join("\n");
+
+customEndpointGuideBtn?.addEventListener("click", () => {
+  void showHtmlModal({
+    title: "模型服务接入说明",
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 10.5V17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.25" r="1.1" fill="currentColor"/></svg>',
+    htmlBody: CUSTOM_ENDPOINT_GUIDE_BODY,
+  });
+});
+
+// ── 模型厂商 Work 流程适配说明 ──────────────────────────────
+// 展示各厂商结构化输出档位与实测兼容性；「详细文档」在 app 内本地渲染完整实测报告。
+const WORK_FLOW_COMPAT_MD = `## 模型兼容性
+
+> Cyrene 会根据不同厂商自动选择对应的 Structured Output Profile。
+
+| 厂商 | 支持状态 | 档位 | 已实测模型 | 说明 |
+|------|:-------:|:---:|------------|------|
+| OpenAI | ⚠️ 文档适配 | A | - | 已完成官方协议适配，等待实测。 |
+| Claude | ⚠️ 文档适配 | A | - | 已完成官方协议适配，等待实测。 |
+| 豆包 | ✅ 已实测 | A | Seed 2.1 Turbo / Pro | 推荐使用，完整 Work 流程稳定。 |
+| Kimi | ✅ 已实测 | A | K2.6、K2.7 Code | 推荐普通 API，Coding 端点不建议用于 Work。 |
+| DeepSeek | ✅ 已实测 | B | V4 Flash、V4 Pro | 推荐，速度快、稳定。 |
+| Qwen | ✅ 已实测 | B | Qwen3.7 Max | 推荐，表现稳定。 |
+| GLM | ✅ 已实测 | B | GLM 5.1、5.2 | 推荐，4.7 不建议。 |
+| MiMo | ✅ 已实测 | B | MiMo 2.5、2.5 Pro | 推荐，表现稳定。 |
+| MiniMax | ✅ 已实测 | M | MiniMax M3 | 推荐，需使用 M 档适配。 |
+| 其他模型 | ⚠️ 文档适配 | D | - | 使用通用兼容模式，请自行验证。 |
+
+### 档位说明
+
+- **A**：原生 JSON Schema / Function Calling
+- **B**：JSON Object + 本地校验
+- **M**：MiniMax 专用适配
+- **D**：通用兼容模式（未知模型 / 自定义端点）
+`;
+
+function buildWorkFlowAdaptBody(): string {
+  const rendered = renderMarkdown(WORK_FLOW_COMPAT_MD);
+  const tableHtml = rendered.mode === "html" ? rendered.content : "";
+  return [
+    '<div class="custom-endpoint-guide-warning work-flow-adapt-meta">',
+    "  <strong>模型厂商 Work 流程适配</strong>",
+    '  <span class="work-flow-adapt-date">最新更新于 2026/7/24</span>',
+    '  <p class="work-flow-adapt-disclaimer">本项目为个人业余开发项目，以下兼容性结论基于有限实测，仅供参考；完整测试方法与判定规则见详细文档。</p>',
+    "</div>",
+    '<p class="work-flow-adapt-doc-line">',
+    '  完整实测链路与判定规则见',
+    '  <button type="button" class="work-flow-adapt-doc-link" id="work-flow-adapt-doc-link">详细文档 ↗</button>',
+    "</p>",
+    `<div class="work-flow-adapt-table">${tableHtml}</div>`,
+  ].join("\n");
+}
+
+workFlowAdaptBtn?.addEventListener("click", () => {
+  void showHtmlModal({
+    title: "模型厂商 Work 流程适配",
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 10.5V17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.25" r="1.1" fill="currentColor"/></svg>',
+    htmlBody: buildWorkFlowAdaptBody(),
+  });
+  // 「详细文档」在 app 内本地渲染完整实测报告（?raw 内联 md + renderMarkdown）
+  const docLink = document.querySelector(
+    "#cy-html-modal-body #work-flow-adapt-doc-link",
+  ) as HTMLButtonElement | null;
+  docLink?.addEventListener("click", () => {
+    const rendered = renderMarkdown(workFlowDocMd);
+    const docHtml = rendered.mode === "html" ? rendered.content : "";
+    void showHtmlModal({
+      title: "详细文档",
+      icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 3v4a1 1 0 0 0 1 1h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 3h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
+      htmlBody: `<div class="work-flow-doc">${docHtml}</div>`,
+    });
+    // 代码块复制按钮（设置窗未初始化 chat 的 code-block controller，这里就近绑定）
+    const copyBtns = document.querySelectorAll<HTMLButtonElement>(
+      "#cy-html-modal-body .code-block__copy",
+    );
+    copyBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const code =
+          btn.closest(".code-block")?.querySelector(".code-block__code")?.textContent ?? "";
+        void navigator.clipboard.writeText(code).then(() => {
+          const orig = btn.textContent;
+          btn.textContent = "已复制";
+          window.setTimeout(() => {
+            btn.textContent = orig;
+          }, 1200);
+        });
+      });
+    });
+  });
+});
+
 // 测试连接按钮：调用厂商 adapter 的真实连接测试
 if (testConnectionBtn) {
   testConnectionBtn.addEventListener("click", async () => {
     const provider = activeProvider;
     const baseUrl = baseUrlInput.value;
     const model = getCurrentModelValue().trim();
-    const apiKey = apiKeyInput.value;
+    const customValidationError = validateActiveCustomEndpoint();
+    if (customValidationError) {
+      setSaveStatus(customValidationError, "is-error");
+      return;
+    }
+    const apiKey = getApiKeyForRequest();
     if (!baseUrl) { setSaveStatus("请先填写 API URL 再测试", "is-error"); return; }
     if (!model) { setSaveStatus("请先选择/填写模型再测试", "is-error"); return; }
     if (!await saveTimeoutSettings(true)) {
@@ -2169,7 +2718,14 @@ if (testConnectionBtn) {
     setSaveStatus("测试连接中…");
     testConnectionBtn.disabled = true;
     try {
-      const result = await window.settings!.testConnection({ provider, baseUrl, model, apiKey });
+      const result = await window.settings!.testConnection({
+        provider,
+        baseUrl,
+        model,
+        apiKey,
+        explicitTransport: transportSelect.value as ProviderProfile["explicitTransport"],
+        reasoning: providerProfileCache[activeProvider]?.reasoning,
+      });
       if (result.ok) setSaveStatus("连接成功 " + result.latency + "ms · " + (result.sample ?? ""), "is-ok");
       else setSaveStatus("连接失败：" + (result.error ?? "未知错误"), "is-error");
     } catch (e) {
@@ -2181,44 +2737,22 @@ if (testConnectionBtn) {
 }
 
 // ── 视觉模型配置事件 ──────────────────────────────────────
-// 胶囊按钮组：[与主聊天模型相同] / [独立配置]
-function isVisionSynced(): boolean {
-  return visionSyncMainBtn.classList.contains("is-active");
-}
-
-visionSyncMainBtn.addEventListener("click", () => {
-  setVisionSyncState(true);
-  applyVisionSyncUI();
+// 多模态开关：ON 隐藏视觉配置区，OFF 显示
+multimodalToggle.addEventListener("change", () => {
+  applyMultimodalUI();
   setSaveStatus("有未保存的更改");
-});
-visionSyncIndepBtn.addEventListener("click", () => {
-  setVisionSyncState(false);
-  applyVisionSyncUI();
-  setSaveStatus("有未保存的更改");
-});
-
-// 主配置变化时，若处于"与主相同"，联动更新视觉三框。
-// baseUrl 用 visionBaseUrl（若有），其他直接复制。
-baseUrlInput.addEventListener("input", () => {
-  if (!isVisionSynced()) return;
-  const preset = findPreset(presetSelect.value);
-  visionBaseUrlInput.value = preset?.visionBaseUrl || baseUrlInput.value;
-});
-apiKeyInput.addEventListener("input", () => { if (isVisionSynced()) visionApiKeyInput.value = apiKeyInput.value; });
-modelInput.addEventListener("input", () => {
-  if (isVisionSynced()) visionModelInput.value = modelInput.value;
 });
 
 // Base URL 重置按钮：一键复原厂商默认 baseUrl
 baseUrlResetBtn.addEventListener("click", () => {
-  const preset = findPreset(presetSelect.value);
+  const preset = findPreset(activeProvider);
   if (preset) {
     baseUrlInput.value = preset.baseUrl;
     setSaveStatus("已重置为厂商默认 URL");
   }
 });
 
-// 测试视觉模型按钮
+// 测试视觉模型按钮（仅在多模态开关 OFF 时可见）
 testVisionBtn.addEventListener("click", async () => {
   const synced = isVisionSynced();
   const baseUrl = synced ? baseUrlInput.value : visionBaseUrlInput.value;
@@ -2302,7 +2836,7 @@ async function renderSchedulerList(): Promise<void> {
     card.className = "scheduler-card";
     card.innerHTML = `
       <div class="scheduler-card__head">
-        <div class="scheduler-card__title"><span>⏰</span><strong></strong><span class="scheduler-badge"></span></div>
+        <div class="scheduler-card__title"><span><svg width="16" height="16" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M23.9998 44.3332C34.1251 44.3332 42.3332 36.1251 42.3332 25.9999C42.3332 15.8747 34.1251 7.66656 23.9998 7.66656C13.8746 7.66656 5.6665 15.8747 5.6665 25.9999C5.6665 36.1251 13.8746 44.3332 23.9998 44.3332Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M23.7594 15.3536L23.7582 26.3624L31.5305 34.1347" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9.00001L11 4.00001" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M44 9.00001L37 4.00001" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></span><strong></strong><span class="scheduler-badge"></span></div>
       </div>
       <div class="scheduler-card__meta"></div>
       <div class="scheduler-card__actions"></div>
@@ -2407,6 +2941,11 @@ cyrenePanel.addEventListener("submit", async (e) => {
 
 apiForm.addEventListener("submit", async (e) => {
   e.preventDefault();
+  const customValidationError = validateActiveCustomEndpoint();
+  if (customValidationError) {
+    setSaveStatus(customValidationError, "is-error");
+    return;
+  }
   setSaveStatus("保存中…");
   try {
     if (!await saveTimeoutSettings(true)) {
@@ -2423,15 +2962,16 @@ apiForm.addEventListener("submit", async (e) => {
       displayName: displayNameInput.value.trim(),
       baseUrl: baseUrlInput.value.trim(),
       model: getCurrentModelValue().trim(),
-      apiKey: apiKeyInput.value.trim(),
+      apiKey: getApiKeyForRequest(),
       explicitTransport: transportSelect.value as "openai" | "anthropic" | "auto",
       reasoning: providerProfileCache[activeProvider]?.reasoning,
+      perProvider: { ...providerProfileCache },
+      multimodal: multimodalToggle.checked,
+      // 视觉配置始终传三框值，不论开关状态（开关 ON 时保留但不使用）
       vision: {
-        syncWithMain: isVisionSynced(),
-        // syncWithMain=true 时三字段传空（main 进程不落盘，运行时从主配置读）
-        baseUrl: isVisionSynced() ? "" : visionBaseUrlInput.value.trim(),
-        apiKey: isVisionSynced() ? "" : visionApiKeyInput.value.trim(),
-        model: isVisionSynced() ? "" : visionModelInput.value.trim(),
+        baseUrl: visionBaseUrlInput.value.trim(),
+        apiKey: visionApiKeyInput.value.trim(),
+        model: visionModelInput.value.trim(),
       },
     });
     setSaveStatus("已保存", "is-ok");
@@ -2572,7 +3112,7 @@ async function fireSchedulerTask(id: string): Promise<void> {
 }
 
 async function deleteSchedulerTask(id: string): Promise<void> {
-  const ok = await showModal({ title: "删除定时任务", message: "确定删除这个定时任务吗？", icon: "🗑️", confirmText: "删除" });
+  const ok = await showModal({ title: "删除定时任务", message: "确定删除这个定时任务吗？", icon: '<svg width="18" height="18" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="vertical-align:-2px"><path fill-rule="evenodd" clip-rule="evenodd" d="M8 15H40L37 44H11L8 15Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M20.002 25.0024V35.0026" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M28.0024 24.9995V34.9972" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M12 14.9999L28.3242 3L36 15" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>', confirmText: "删除" });
   if (!ok) return;
   const result = await window.cyreneScheduler!.delete(id);
   if (!result.ok) window.alert(result.error ?? "删除失败");
@@ -2617,7 +3157,6 @@ function switchSection(section: string): void {
   const isUser = section === "user";
   const isChat = section === "chat";
   const isTasks = section === "tasks";
-  const isIdentity = section === "identity";
   const isPlugins = section === "plugins";
   const isSkills = section === "skills";
   const isTokens = section === "tokens";
@@ -2644,8 +3183,6 @@ function switchSection(section: string): void {
   const tasksPanel = document.getElementById("tasks-panel");
   if (tasksPanel) tasksPanel.classList.toggle("is-hidden", !isTasks);
   if (isTasks) void loadSchedulerPanel();
-  const identityPanel = document.getElementById("identity-panel");
-  if (identityPanel) identityPanel.classList.toggle("is-hidden", !isIdentity);
   pluginsPanel.classList.toggle("is-hidden", !isPlugins);
   const skillsPanel = document.getElementById("skills-panel");
   if (skillsPanel) skillsPanel.classList.toggle("is-hidden", !isSkills);
@@ -2665,7 +3202,7 @@ function switchSection(section: string): void {
   else disposeMusicPanel();
   placeholderPanel.classList.toggle(
     "is-hidden",
-    isApi || isApiAdvanced || isAppearance || isGeneral || isPreferences || isCyrene || isDisclaimer || isMemory || isUser || isChat || isTasks || isIdentity || isPlugins || isSkills || isTokens || isChannels || isTts || isAsr || isMusic,
+    isApi || isAppearance || isGeneral || isPreferences || isCyrene || isDisclaimer || isMemory || isUser || isChat || isTasks || isPlugins || isSkills || isTokens || isChannels || isTts || isAsr || isMusic,
   );
 
   if (
@@ -2678,10 +3215,9 @@ function switchSection(section: string): void {
     !isDisclaimer &&
     !isMemory &&
     !isUser &&
-    !isChat &&
-    !isTasks &&
-    !isIdentity &&
-    !isPlugins &&
+	    !isChat &&
+	    !isTasks &&
+	    !isPlugins &&
     !isSkills &&
     !isTokens &&
     !isChannels &&
@@ -2689,7 +3225,7 @@ function switchSection(section: string): void {
     !isAsr &&
     !isMusic
   ) {
-    placeholderIcon.textContent = label.emoji;
+	    placeholderIcon.innerHTML = label.emoji;
     placeholderTitle.textContent = label.title;
     placeholderCopy.textContent = "这个模块先占位，等核心聊天与 API 接通后再继续扩展。";
   }
@@ -2829,6 +3365,7 @@ const channelsRateChannelEl = document.getElementById("channels-rate-channel") a
 const channelsTtsEl = document.getElementById("channels-tts-enabled") as HTMLInputElement | null;
 const channelsStickerEl = document.getElementById("channels-sticker-enabled") as HTMLInputElement | null;
 const channelsMirrorEl = document.getElementById("channels-mirror-desktop") as HTMLInputElement | null;
+const channelsToolSandboxOffEl = document.getElementById("channels-tool-sandbox-off") as HTMLInputElement | null;
 const channelsToolSandboxAllEl = document.getElementById("channels-tool-sandbox-all") as HTMLInputElement | null;
 const channelsToolSandboxSafeEl = document.getElementById("channels-tool-sandbox-safe") as HTMLInputElement | null;
 // 飞书配置输入框（Phase 2 长连接版：只需 App ID + App Secret）
@@ -2872,6 +3409,7 @@ async function loadChannelsPanel(): Promise<void> {
     if (channelsTtsEl) channelsTtsEl.checked = cfg.ttsEnabled !== false;
     if (channelsStickerEl) channelsStickerEl.checked = cfg.stickerEnabled !== false;
     if (channelsMirrorEl) channelsMirrorEl.checked = cfg.mirrorToDesktop !== false;
+    if (channelsToolSandboxOffEl) channelsToolSandboxOffEl.checked = cfg.toolSandbox === "off";
     if (channelsToolSandboxAllEl) channelsToolSandboxAllEl.checked = cfg.toolSandbox === "all";
     if (channelsToolSandboxSafeEl) channelsToolSandboxSafeEl.checked = cfg.toolSandbox === "safe-only";
 
@@ -2907,7 +3445,11 @@ async function loadChannelsPanel(): Promise<void> {
         ttsEnabled: channelsTtsEl?.checked ?? true,
         stickerEnabled: channelsStickerEl?.checked ?? true,
         mirrorToDesktop: channelsMirrorEl?.checked ?? true,
-        toolSandbox: channelsToolSandboxSafeEl?.checked ? "safe-only" : "all",
+        toolSandbox: channelsToolSandboxOffEl?.checked
+          ? "off"
+          : channelsToolSandboxSafeEl?.checked
+            ? "safe-only"
+            : "all",
       });
     }, 200);
   };
@@ -2919,6 +3461,7 @@ async function loadChannelsPanel(): Promise<void> {
     channelsTtsEl,
     channelsStickerEl,
     channelsMirrorEl,
+    channelsToolSandboxOffEl,
     channelsToolSandboxAllEl,
     channelsToolSandboxSafeEl,
   ]) {
@@ -3160,7 +3703,7 @@ interface MusicApi {
   cancelLogin: () => Promise<MusicIpcResult<unknown>>;
   logout: () => Promise<MusicIpcResult<unknown>>;
   search: (keyword: string, limit?: number) => Promise<MusicIpcResult<MusicSelectionResult>>;
-  playTrack: (trackId: string) => Promise<MusicIpcResult<{ state: "dispatched" | "client_unavailable" | "launch_failed" }>>;
+  playTrack: (trackId: string) => Promise<MusicIpcResult<{ state: "dispatched" | "web_fallback" | "client_unavailable" | "launch_failed" }>>;
   onStateChanged: (h: (s: MusicStatusSnapshot) => void) => (() => void) | void;
 }
 
@@ -3183,15 +3726,8 @@ const musicDisconnectBtn = document.createElement("button");
 const musicQrImg = document.getElementById("music-qr-img") as HTMLImageElement | null;
 const musicQrTip = document.getElementById("music-qr-tip");
 const musicQrBox = document.getElementById("music-qr") as HTMLElement | null;
-const musicProfileBox = document.getElementById("music-profile");
-const musicProfileName = document.getElementById("music-profile-name");
 const musicFeedbackEl = document.getElementById("music-feedback");
 const musicAccountStatusText = document.getElementById("music-account-status-text");
-const musicStateRowEls = {
-  backend: document.querySelector('.music-state-row[data-row="backend"]'),
-  account: document.querySelector('.music-state-row[data-row="account"]'),
-  player: document.querySelector('.music-state-row[data-row="player"]'),
-};
 const musicSearchInput = document.getElementById("music-search-input") as HTMLInputElement | null;
 const musicSearchBtn = document.getElementById("music-search-btn") as HTMLButtonElement | null;
 const musicSearchResults = document.getElementById("music-search-results");
@@ -3210,47 +3746,16 @@ function setMusicFeedback(kind: "info" | "ok" | "err", msg: string): void {
   else musicFeedbackEl.classList.add("music-feedback--info");
 }
 
-function dotColorFor(state: string, axis: "backend" | "account" | "player"): "green" | "yellow" | "red" | "gray" {
-  if (state === "unknown") return "gray";
-  if (axis === "backend") {
-    if (state === "ready") return "green";
-    if (state === "degraded") return "yellow";
-    if (state === "failed" || state === "incompatible") return "red";
-    return "yellow"; // starting / stopped
-  }
-  if (axis === "account") {
-    if (state === "signed_in") return "green";
-    if (state === "validating") return "yellow";
-    if (state === "signed_out" || state === "expired") return "yellow";
-    if (state === "temporarily_unavailable") return "red";
-    return "gray";
-  }
-  // player
-  if (state === "available") return "green";
-  if (state === "unavailable") return "red";
-  return "gray";
-}
-
-function renderMusicStateRow(axis: "backend" | "account" | "player", value: string): void {
-  const row = musicStateRowEls[axis];
-  if (!row) return;
-  const dot = row.querySelector(".music-state-row__dot") as HTMLElement | null;
-  const val = row.querySelector(".music-state-row__value") as HTMLElement | null;
-  if (dot) dot.setAttribute("data-color", dotColorFor(value, axis));
-  if (val) val.textContent = value;
-}
-
 function renderMusicStatus(snapshot: MusicStatusSnapshot): void {
   const state = deriveNeteaseViewState(snapshot);
-  renderMusicStateRow("backend", snapshot.backend);
-  renderMusicStateRow("account", snapshot.account);
-  renderMusicStateRow("player", snapshot.player);
   const labels: Record<NeteaseViewState, string> = {
     backend_starting: "音乐服务暂不可用", backend_error: "音乐服务暂不可用", signed_out: "尚未连接",
     creating_qr: "正在等待扫码", waiting_scan: "正在等待扫码", waiting_confirm: "已扫码，请在手机确认",
     login_expired: "二维码已过期", login_failed: "登录失败", connected: "网易云音乐已连接", connected_without_client: "已登录，但未检测到桌面客户端",
   };
   if (musicAccountStatusText) musicAccountStatusText.textContent = labels[state];
+  const musicStatusDot = document.getElementById("music-status-dot");
+  if (musicStatusDot) musicStatusDot.classList.toggle("is-connected", state === "connected" || state === "connected_without_client");
   const actionHost = document.getElementById("music-actions");
   if (actionHost) {
     actionHost.innerHTML = "";
@@ -3261,19 +3766,26 @@ function renderMusicStatus(snapshot: MusicStatusSnapshot): void {
     if (actions[state]) { button.textContent = actions[state]!; button.addEventListener("click", () => void handleMusicAction(state)); actionHost.appendChild(button); }
   }
   const loggedIn = state === "connected" || state === "connected_without_client";
-  musicProfileBox?.classList.toggle("is-hidden", !loggedIn);
   musicSearchForm?.classList.toggle("is-hidden", !loggedIn);
   if (musicSearchHint) musicSearchHint.textContent = loggedIn ? "搜索网易云曲库。" : "连接网易云后即可搜索歌曲和获取每日推荐。";
-  if (snapshot.profile?.nickname && musicProfileName) musicProfileName.textContent = snapshot.profile.nickname;
-  if (snapshot.profile?.avatarUrl && musicProfileAvatar) musicProfileAvatar.src = snapshot.profile.avatarUrl;
   musicQrBox?.classList.toggle("is-hidden", !(state === "creating_qr" || state === "waiting_scan" || state === "waiting_confirm" || state === "login_expired"));
-  if (musicQrStatus) musicQrStatus.textContent = state === "waiting_confirm" ? "当前状态：等待手机确认" : state === "login_expired" ? "当前状态：二维码过期" : "当前状态：等待扫码";
+  if (musicQrStatus) musicQrStatus.textContent = state === "connected" || state === "connected_without_client" ? "当前状态：网易云音乐已连接" : state === "waiting_confirm" ? "当前状态：等待手机确认" : state === "login_expired" ? "当前状态：二维码过期" : "当前状态：等待扫码";
 }
 
 async function handleMusicAction(state: NeteaseViewState): Promise<void> {
-  const api = getMusicApi(); if (!api) return;
+  const api = getMusicApi(); if (!api) { setMusicFeedback("err", "音乐 API 未就绪"); return; }
   if (state === "signed_out" || state === "login_expired" || state === "login_failed") return void startMusicLogin();
-  if (state === "connected" || state === "connected_without_client") { await api.logout(); return; }
+  if (state === "connected" || state === "connected_without_client") {
+    setMusicFeedback("info", "正在断开连接…");
+    try {
+      const r = await api.logout();
+    if (r.ok) setMusicFeedback("ok", "已断开连接");
+    else setMusicFeedback("err", "断开失败：" + r.errorCode);
+    } catch (err) {
+      setMusicFeedback("err", "断开异常：" + (err instanceof Error ? err.message : String(err)));
+    }
+    return;
+  }
   if (state === "creating_qr" || state === "waiting_scan" || state === "waiting_confirm") { await api.cancelLogin?.(); clearMusicQr(); }
 }
 
@@ -3289,18 +3801,17 @@ function updateMusicActionsForAccount(account: string): void {
   if (musicLoginBtn) musicLoginBtn.classList.toggle("is-hidden", qrVisible || account === "signed_in");
   if (musicCancelBtn) musicCancelBtn.classList.toggle("is-hidden", !qrVisible);
   if (musicDisconnectBtn) musicDisconnectBtn.classList.toggle("is-hidden", account !== "signed_in");
-  if (musicProfileBox) musicProfileBox.classList.toggle("is-hidden", account !== "signed_in");
 }
 
 function clearMusicQr(): void {
-  if (musicQrImg) musicQrImg.src = "";
+  if (musicQrImg) { musicQrImg.style.display = "none"; musicQrImg.src = ""; }
   if (musicQrBox) musicQrBox.classList.add("is-hidden");
   if (musicQrTip) musicQrTip.textContent = "请用网易云音乐 App 扫描二维码完成登录";
   musicLastQrDataUrl = null;
 }
 
 function showMusicQr(dataUrl: string, tip: string): void {
-  if (musicQrImg) musicQrImg.src = dataUrl;
+  if (musicQrImg) { musicQrImg.src = dataUrl; musicQrImg.style.display = "block"; }
   if (musicQrTip) musicQrTip.textContent = tip;
   if (musicQrBox) musicQrBox.classList.remove("is-hidden");
   musicLastQrDataUrl = dataUrl;
@@ -3537,6 +4048,36 @@ async function loadMusicPanel(): Promise<void> {
   }
 }
 
+// ── 网易云折叠卡片用的全局 status 订阅（不依赖切到 music 面板） ────────
+// 让 MCP 面板里的「网易云音乐 / 尚未连接」永远跟主进程状态同步。
+// 用一个独立的 unsub 句柄，跟 music 面板自己的订阅解耦。
+(() => {
+  const api = getMusicApi();
+  if (!api || typeof api.onStateChanged !== "function") return;
+  try {
+    api.onStateChanged((s) => {
+      // 只更新折叠卡片的状态文案，避免与 music 面板里的 renderMusicStatus 重复副作用
+      const el = document.getElementById("music-platform-status");
+      if (!el) return;
+      const state = deriveNeteaseViewState(s);
+      const connected = state === "connected" || state === "connected_without_client";
+      el.textContent = connected ? "已连接" : "尚未连接";
+      el.classList.toggle("is-connected", connected);
+    });
+    api.getStatus().then((r) => {
+      if (!r.ok) return;
+      const el = document.getElementById("music-platform-status");
+      if (!el) return;
+      const state = deriveNeteaseViewState(r.data);
+      const connected = state === "connected" || state === "connected_without_client";
+      el.textContent = connected ? "已连接" : "尚未连接";
+      el.classList.toggle("is-connected", connected);
+    }).catch(() => { /* ignore */ });
+  } catch {
+    /* window.music 还没准备好，忽略 */
+  }
+})();
+
 function disposeMusicPanel(): void {
   // 离开面板时：停止轮询、取消订阅、清掉 QR dataURL 释放内存
   stopMusicLoginPolling();
@@ -3711,7 +4252,7 @@ window.settings?.onSwitchSection?.((section) => {
     var msgEl = ov.querySelector("#cy-modal-message") as HTMLElement;
     var cancelBtn = ov.querySelector("#cy-modal-cancel") as HTMLButtonElement;
     var confirmBtn = ov.querySelector("#cy-modal-confirm") as HTMLButtonElement;
-    iconEl.textContent = opts.icon || "📌";
+    iconEl.innerHTML = opts.icon || "📌";
     titleEl.textContent = opts.title;
     msgEl.textContent = opts.message;
     cancelBtn.textContent = opts.cancelText || "取消";
@@ -3794,6 +4335,8 @@ const userDefaultCityInput = document.getElementById("user-default-city") as HTM
 const userNicknameInput = document.getElementById("user-nickname") as HTMLInputElement | null;
 const userCallPrefInput = document.getElementById("user-call-pref") as HTMLInputElement | null;
 const userBirthdayInput = document.getElementById("user-birthday") as HTMLInputElement | null;
+const userTimezoneSelect = document.getElementById("user-timezone") as HTMLSelectElement | null;
+const userGenderGroup = document.getElementById("user-gender") as HTMLElement | null;
 const memoryL0NameInput = document.getElementById("memory-l0-name") as HTMLInputElement | null;
 const memoryL0OccupationInput = document.getElementById("memory-l0-occupation") as HTMLInputElement | null;
 const memoryL0InterestsInput = document.getElementById("memory-l0-interests") as HTMLInputElement | null;
@@ -3956,13 +4499,22 @@ async function loadUserProfile(): Promise<void> {
     const avatarDataUrl = await window.user?.getAvatar();
     if (avatarDataUrl) showAvatar(avatarDataUrl);
     if (uploadAvatarBtn) uploadAvatarBtn.disabled = false;
-    // 加载用户字段（昵称/称呼偏好/生日/默认城市）
+    // 加载用户字段（昵称/称呼偏好/生日/默认城市/时区）
     const profile = await window.user?.getProfile();
     if (profile) {
       if (userNicknameInput) userNicknameInput.value = String(profile.nickname ?? "");
       if (userCallPrefInput) userCallPrefInput.value = String(profile.callPreference ?? "");
       if (userBirthdayInput) userBirthdayInput.value = String(profile.birthday ?? "");
       if (userDefaultCityInput) userDefaultCityInput.value = String(profile.defaultCity ?? "");
+      // 时区：白名单校验，空/非法/不在白名单都回退 FALLBACK_TIMEZONE，不直接用 ?? 兜底
+      if (userTimezoneSelect) userTimezoneSelect.value = normalizeTimezoneOptionValue(profile.timezone);
+      // 性别：标记当前选中的按钮
+      const gender = String(profile.gender ?? "secret");
+      if (userGenderGroup) {
+        userGenderGroup.querySelectorAll(".gender-select__btn").forEach((btn) => {
+          btn.classList.toggle("is-active", (btn as HTMLElement).dataset.gender === gender);
+        });
+      }
     }
   } catch {
     console.warn("[settings] load user profile failed");
@@ -3987,6 +4539,39 @@ if (userDefaultCityInput) {
   };
   userDefaultCityInput.addEventListener("change", saveCity);
   userDefaultCityInput.addEventListener("blur", saveCity);
+}
+
+// 时区：白名单填充 options；保存只接受白名单 value（select 只能选白名单项，天然受限）
+if (userTimezoneSelect) {
+  for (const opt of TIMEZONE_OPTIONS) {
+    const o = document.createElement("option");
+    o.value = opt.value;
+    o.textContent = opt.label;
+    userTimezoneSelect.appendChild(o);
+  }
+  userTimezoneSelect.addEventListener("change", () => {
+    const raw = userTimezoneSelect.value;
+    // 防御性二次校验：即便有人手动改 DOM，保存路径也只放行白名单 value
+    const safe = normalizeTimezoneOptionValue(raw);
+    if (safe !== raw) {
+      userTimezoneSelect.value = safe;
+      return; // 不发保存请求，等用户重新选
+    }
+    void window.user?.saveProfile({ timezone: safe });
+  });
+}
+
+// 性别：三档按钮，点击切换并原子保存
+if (userGenderGroup) {
+  userGenderGroup.querySelectorAll(".gender-select__btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const value = (btn as HTMLElement).dataset.gender;
+      if (!value) return;
+      userGenderGroup.querySelectorAll(".gender-select__btn").forEach((b) => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      void window.user?.saveProfile({ gender: value });
+    });
+  });
 }
 
 if (uploadAvatarBtn) {
@@ -4050,7 +4635,7 @@ function enterL0EditMode(): void {
   l0Editing = true;
   l0Snapshot = takeL0Snapshot();
   setL0FieldsDisabled(false);
-  if (memoryL0EditBtn) memoryL0EditBtn.textContent = "💾 保存";
+  if (memoryL0EditBtn) memoryL0EditBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="display:inline;vertical-align:-2px"><path d="M6 9C6 7.34315 7.34315 6 9 6H30.3363C31.132 6 31.895 6.31607 32.4576 6.87868L36.3158 10.7368L41.1213 15.5424C41.6839 16.105 42 16.868 42 17.6637V39C42 40.6569 40.6569 42 39 42H9C7.34315 42 6 40.6569 6 39V9Z" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M31 26H17C15.3431 26 14 27.3431 14 29V42H34V29C34 27.3431 32.6569 26 31 26Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M29 16H17C15.3431 16 14 14.6569 14 13V6" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg> 保存`;
   if (memoryL0CancelBtn) memoryL0CancelBtn.classList.remove("is-hidden");
 }
 
@@ -4058,7 +4643,7 @@ function exitL0EditMode(): void {
   l0Editing = false;
   l0Snapshot = null;
   setL0FieldsDisabled(true);
-  if (memoryL0EditBtn) memoryL0EditBtn.textContent = "✏️ 编辑";
+  if (memoryL0EditBtn) memoryL0EditBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="display:inline;vertical-align:-2px"><path d="M5.32497 43.4996L13.81 43.4998L44.9227 12.3871L36.4374 3.90186L5.32471 35.0146L5.32497 43.4996Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M27.9521 12.3872L36.4374 20.8725" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg> 编辑`;
   if (memoryL0CancelBtn) memoryL0CancelBtn.classList.add("is-hidden");
 }
 
@@ -4074,7 +4659,7 @@ async function saveL0(): Promise<void> {
     exitL0EditMode();
     if (memoryL0EditBtn) {
       memoryL0EditBtn.textContent = "✅ 已保存";
-      setTimeout(() => { if (memoryL0EditBtn && !l0Editing) memoryL0EditBtn.textContent = "✏️ 编辑"; }, 2000);
+      setTimeout(() => { if (memoryL0EditBtn && !l0Editing) memoryL0EditBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="display:inline;vertical-align:-2px"><path d="M5.32497 43.4996L13.81 43.4998L44.9227 12.3871L36.4374 3.90186L5.32471 35.0146L5.32497 43.4996Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M27.9521 12.3872L36.4374 20.8725" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg> 编辑`; }, 2000);
     }
   } catch (err) {
     console.error("[settings] save L0 failed", err);
@@ -4098,7 +4683,7 @@ function enterL1EditMode(): void {
   l1Editing = true;
   l1Snapshot = takeL1Snapshot();
   setL1FieldsDisabled(false);
-  if (memoryL1EditBtn) memoryL1EditBtn.textContent = "💾 保存";
+  if (memoryL1EditBtn) memoryL1EditBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="display:inline;vertical-align:-2px"><path d="M6 9C6 7.34315 7.34315 6 9 6H30.3363C31.132 6 31.895 6.31607 32.4576 6.87868L36.3158 10.7368L41.1213 15.5424C41.6839 16.105 42 16.868 42 17.6637V39C42 40.6569 40.6569 42 39 42H9C7.34315 42 6 40.6569 6 39V9Z" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M31 26H17C15.3431 26 14 27.3431 14 29V42H34V29C34 27.3431 32.6569 26 31 26Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M29 16H17C15.3431 16 14 14.6569 14 13V6" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg> 保存`;
   if (memoryL1CancelBtn) memoryL1CancelBtn.classList.remove("is-hidden");
 }
 
@@ -4106,7 +4691,7 @@ function exitL1EditMode(): void {
   l1Editing = false;
   l1Snapshot = null;
   setL1FieldsDisabled(true);
-  if (memoryL1EditBtn) memoryL1EditBtn.textContent = "✏️ 编辑";
+  if (memoryL1EditBtn) memoryL1EditBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="display:inline;vertical-align:-2px"><path d="M5.32497 43.4996L13.81 43.4998L44.9227 12.3871L36.4374 3.90186L5.32471 35.0146L5.32497 43.4996Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M27.9521 12.3872L36.4374 20.8725" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg> 编辑`;
   if (memoryL1CancelBtn) memoryL1CancelBtn.classList.add("is-hidden");
 }
 
@@ -4173,7 +4758,7 @@ function renderImportedDocs(): void {
         '    <p class="memory-record__body">' + escapeHtml(chunkInfo) + '</p>',
         '    <p class="memory-record__meta">' + escapeHtml(timeInfo) + '</p>',
         '  </div>',
-        '  <button type="button" class="memory-record__delete" data-import-id="' + escapeHtml(importId) + '" data-file-name="' + fileName + '" title="删除此导入文档">🗑️</button>',
+        '  <button type="button" class="memory-record__delete" data-import-id="' + escapeHtml(importId) + '" data-file-name="' + fileName + '" title="删除此导入文档"><svg width="16" height="16" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="vertical-align:-2px"><path fill-rule="evenodd" clip-rule="evenodd" d="M8 15H40L37 44H11L8 15Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M20.002 25.0024V35.0026" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M28.0024 24.9995V34.9972" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M12 14.9999L28.3242 3L36 15" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>',
         '</article>',
       ].join("\n");
     })
@@ -4343,19 +4928,26 @@ lifeToggle?.addEventListener("click", () => {
   lifeBody?.classList.toggle("is-collapsed", expanded);
 });
 
+// ── 音乐工具手风琴（跟生活工具一样的折叠逻辑）────────────────
+const musicToggle = document.getElementById("plugin-music-toggle") as HTMLButtonElement | null;
+const musicAccordionCard = document.getElementById("plugin-music-card");
+const musicAccordionBody = document.getElementById("plugin-music-body");
+musicToggle?.addEventListener("click", () => {
+  const expanded = musicToggle.getAttribute("aria-expanded") === "true";
+  musicToggle.setAttribute("aria-expanded", String(!expanded));
+  musicAccordionCard?.classList.toggle("is-expanded", !expanded);
+  musicAccordionBody?.classList.toggle("is-collapsed", expanded);
+});
+
 // ── 音乐工具路由 ──────────────────────────────────────────────
-const musicToggle = null;
-const musicAccordionCard = null;
-const musicAccordionBody = null;
 document.getElementById("music-platform-netease")?.addEventListener("click", () => {
   switchSection("music");
   musicHomeView?.classList.add("is-hidden");
   neteaseDetailView?.classList.remove("is-hidden");
 });
 musicReturnBtn?.addEventListener("click", () => {
-  neteaseDetailView?.classList.add("is-hidden");
-  musicHomeView?.classList.remove("is-hidden");
-});
+	  switchSection("plugins");
+	});
 
 
 // ── Skill 面板：列 skill 开关 ──────────────────────────────
@@ -4543,14 +5135,8 @@ function buildChatSessionItem(session: ChatSessionMetaUI): HTMLLIElement {
   timeEl.className = "chat-sessions__time";
   timeEl.textContent = formatChatRelativeTime(session.updatedAt);
 
-  const identityEl = document.createElement("span");
-  identityEl.className = "chat-sessions__identity";
-  // 职位面板未做，所有 identityId == null 的会话先 fallback 到"聊天陪伴"
-  // 后续职位面板做好后这里改成用 identity 注册表查实际名称
-  identityEl.textContent = "💼 " + (session.identityId ? session.identityId : CHAT_DEFAULT_IDENTITY_LABEL);
 
   metaEl.appendChild(timeEl);
-  metaEl.appendChild(identityEl);
 
   // 左侧主区：标题 + meta
   const mainEl = document.createElement("div");
@@ -4563,14 +5149,14 @@ function buildChatSessionItem(session: ChatSessionMetaUI): HTMLLIElement {
   deleteBtn.className = "chat-sessions__delete";
   deleteBtn.title = "删除会话";
   deleteBtn.setAttribute("aria-label", "删除会话");
-  deleteBtn.textContent = "🗑️";
+  deleteBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="display:inline;vertical-align:-2px"><path fill-rule="evenodd" clip-rule="evenodd" d="M8 15H40L37 44H11L8 15Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M20.002 25.0024V35.0026" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M28.0024 24.9995V34.9972" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M12 14.9999L28.3242 3L36 15" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
   const renameBtn = document.createElement("button");
   renameBtn.type = "button";
   renameBtn.className = "chat-sessions__rename";
   renameBtn.title = "重命名";
   renameBtn.setAttribute("aria-label", "重命名会话");
-  renameBtn.textContent = "✏️";
+  renameBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="display:inline;vertical-align:-2px"><path d="M5.32497 43.4996L13.81 43.4998L44.9227 12.3871L36.4374 3.90186L5.32471 35.0146L5.32497 43.4996Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M27.9521 12.3872L36.4374 20.8725" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
   // 编辑态确认/取消按钮（默认隐藏，进入编辑态时显示，替换 ✏️/🗑️ 的位置）
   const confirmRenameBtn = document.createElement("button");
@@ -5119,6 +5705,24 @@ interface TtsApi {
     apiKey: string; voiceAudioPath?: string; text: string; stylePrompt?: string;
     expectedCacheKey?: string;
   }) => Promise<{ base64: string; cacheKey: string; cached: boolean; format: "wav" }>;
+  // Mossland（api.mosi.cn）
+  synthesizeMossland: (payload: {
+    apiKey: string; voiceId: string; text: string;
+    speed?: number; volume?: number; model?: string;
+    format?: "mp3" | "wav" | "pcm";
+  }) => Promise<{ base64: string; cacheKey: string; cached: boolean; format: "mp3" | "wav" | "pcm" }>;
+  synthesizeCachedMossland: (payload: {
+    apiKey: string; voiceId: string; text: string;
+    speed?: number; volume?: number; model?: string;
+    format?: "mp3" | "wav" | "pcm";
+    expectedCacheKey?: string;
+  }) => Promise<{ base64: string; cacheKey: string; cached: boolean; format: "mp3" | "wav" | "pcm" }>;
+  cloneMossland: (payload: {
+    apiKey: string; filePath: string; name?: string; description?: string;
+  }) => Promise<{ voiceId: string; name?: string; createdAt?: number }>;
+  listMosslandVoices: (payload: {
+    apiKey: string; limit?: number;
+  }) => Promise<{ voices: Array<{ id: string; name: string; createdAt: number }> }>;
   pickAudioFile: () => Promise<string | null>;
   saveSettings: (tts: Record<string, unknown>) => Promise<unknown>;
   loadSettings: () => Promise<Record<string, unknown>>;
@@ -5196,13 +5800,20 @@ async function loadTtsConfig(): Promise<void> {
   ttsEl("tts-mimo-voice-audio").value = String(ttsConfig.ttsMimoVoiceAudioPath ?? "");
   ttsEl("tts-mimo-style").value = String(ttsConfig.ttsMimoStylePrompt ?? "温柔、自然、略带亲近感，像在轻声陪用户聊天。");
 
-  // Opener 主动开口档位
-  const openerMode = String(ttsConfig.openerMode ?? "off");
-  document.querySelectorAll<HTMLButtonElement>(".opener-mode").forEach((btn) => {
-    const isActive = btn.dataset.mode === openerMode;
-    btn.classList.toggle("is-active", isActive);
-    btn.setAttribute("aria-checked", isActive ? "true" : "false");
-  });
+  // Mossland（UI 骨架已就位，IPC 第二步接通；字段值已写入 ttsConfig 以便保存）
+  ttsEl("tts-mossland-key").value = String(ttsConfig.ttsMosslandKey ?? "");
+  ttsEl("tts-mossland-voice").value = String(ttsConfig.ttsMosslandVoiceId ?? "");
+  (ttsEl("tts-mossland-model") as HTMLSelectElement).value = "moss-tts";
+  ttsEl("tts-mossland-text").value = String(ttsConfig.ttsMosslandTestText ?? TTS_TEST_TEXT);
+  (ttsEl("tts-mossland-format") as HTMLSelectElement).value =
+    ttsConfig.ttsMosslandFormat === "wav" ? "wav"
+    : ttsConfig.ttsMosslandFormat === "pcm" ? "pcm"
+    : "mp3";
+  ttsConfig.ttsMosslandKey       = String(ttsEl("tts-mossland-key").value);
+  ttsConfig.ttsMosslandVoiceId   = String(ttsEl("tts-mossland-voice").value);
+  ttsConfig.ttsMosslandModel     = (ttsEl("tts-mossland-model") as HTMLSelectElement).value;
+  ttsConfig.ttsMosslandTestText  = String(ttsEl("tts-mossland-text").value);
+  ttsConfig.ttsMosslandFormat    = (ttsEl("tts-mossland-format") as HTMLSelectElement).value;
 
   // 加载完成后清掉所有 Provider 的脏态（按钮隐藏，status 清空）
   for (const provider of Object.keys(TTS_PROVIDER_FIELDS)) {
@@ -5268,71 +5879,6 @@ document.querySelectorAll<HTMLButtonElement>("[data-engine]").forEach((btn) => {
   });
 });
 
-// Opener 主动开口档位切换
-document.querySelectorAll<HTMLButtonElement>(".opener-mode").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const mode = btn.dataset.mode || "off";
-    document.querySelectorAll<HTMLButtonElement>(".opener-mode").forEach((b) => {
-      b.classList.remove("is-active");
-      b.setAttribute("aria-checked", "false");
-    });
-    btn.classList.add("is-active");
-    btn.setAttribute("aria-checked", "true");
-    void saveTtsField("openerMode", mode);
-  });
-});
-
-interface OpenerPackStatus {
-  manifestInstalled: boolean;
-  packDir: string;
-  manifestPath: string;
-}
-
-interface OpenerBridgeApi {
-  testFire?: () => Promise<void>;
-  getStatus?: () => Promise<OpenerPackStatus>;
-  openPackDir?: () => Promise<{ ok: boolean; error?: string }>;
-  openInstallDocs?: () => Promise<{ ok: boolean; error?: string }>;
-}
-
-function getOpenerBridge(): OpenerBridgeApi | undefined {
-  return (window as unknown as { openerBridge?: OpenerBridgeApi }).openerBridge;
-}
-
-let latestOpenerPackStatus: OpenerPackStatus | null = null;
-
-async function refreshOpenerPackStatus(): Promise<void> {
-  const warning = document.getElementById("opener-pack-warning");
-  const pathEl = document.getElementById("opener-pack-path");
-  const status = await getOpenerBridge()?.getStatus?.();
-  if (!warning || !status) return;
-  latestOpenerPackStatus = status;
-  if (pathEl) pathEl.textContent = status.packDir;
-  warning.toggleAttribute("hidden", status.manifestInstalled);
-}
-
-document.getElementById("opener-open-pack-dir")?.addEventListener("click", async () => {
-  const result = await getOpenerBridge()?.openPackDir?.();
-  if (result && !result.ok) {
-    window.alert("打开语音包目录失败：" + (result.error || "未知错误"));
-  }
-  await refreshOpenerPackStatus();
-});
-
-document.getElementById("opener-show-install-help")?.addEventListener("click", async () => {
-  const result = await getOpenerBridge()?.openInstallDocs?.();
-  if (result && !result.ok) {
-    window.alert("打开安装说明失败：" + (result.error || "未知错误"));
-  }
-});
-
-// Opener 测试气泡（手动触发一次，看样式）
-document.getElementById("opener-test-fire")?.addEventListener("click", () => {
-  void getOpenerBridge()?.testFire?.();
-});
-
-void refreshOpenerPackStatus();
-
 // 自动朗读开关
 ttsEl("tts-auto-read").addEventListener("change", () => {
   void saveTtsField("ttsAutoRead", ttsEl("tts-auto-read").checked);
@@ -5363,6 +5909,11 @@ const TTS_FIELD_MAP: Record<string, string> = {
   "tts-mimo-key":             "ttsMimoKey",
   "tts-mimo-voice-audio":     "ttsMimoVoiceAudioPath",
   "tts-mimo-style":           "ttsMimoStylePrompt",
+  "tts-mossland-key":         "ttsMosslandKey",
+  "tts-mossland-voice":       "ttsMosslandVoiceId",
+  "tts-mossland-model":       "ttsMosslandModel",
+  "tts-mossland-text":        "ttsMosslandTestText",
+  "tts-mossland-format":      "ttsMosslandFormat",
 };
 
 // 每个 Provider 自己负责的文本输入框列表（不含 switch/slider/select，复刻子区块也不在此）
@@ -5371,6 +5922,7 @@ const TTS_PROVIDER_FIELDS: Record<string, string[]> = {
   gptsovits:      ["tts-gptsovits-url", "tts-gptsovits-ref-audio", "tts-gptsovits-prompt-text"],
   "custom-cloud": ["tts-custom-cloud-url", "tts-custom-cloud-key", "tts-custom-cloud-voice", "tts-custom-cloud-timeout"],
   mimo:           ["tts-mimo-key", "tts-mimo-voice-audio", "tts-mimo-style"],
+  mossland:       ["tts-mossland-key", "tts-mossland-voice", "tts-mossland-model", "tts-mossland-text", "tts-mossland-format"],
 };
 
 // Provider ID → { 保存按钮, 状态 div }
@@ -5390,6 +5942,9 @@ const ttsProviderUi: Record<string, { btn: HTMLButtonElement; status: HTMLElemen
                     : null,
   mimo:           ttsEl("tts-mimo-save-btn") && safeGet("tts-mimo-save-status")
                     ? { btn: ttsEl("tts-mimo-save-btn"), status: safeGet("tts-mimo-save-status") as HTMLElement }
+                    : null,
+  mossland:       ttsEl("tts-mossland-save-btn") && safeGet("tts-mossland-save-status")
+                    ? { btn: ttsEl("tts-mossland-save-btn"), status: safeGet("tts-mossland-save-status") as HTMLElement }
                     : null,
 };
 
@@ -5573,6 +6128,183 @@ document.getElementById("tts-mimo-test")?.addEventListener("click", async () => 
   }
 });
 
+// ── Mossland ──
+// 当前为 UI 骨架：所有按钮触发"功能开发中"占位 modal，
+// ── Mossland ──
+// 第二步已接通：所有按钮走真实 IPC 调用，错误抛到 status / alert。
+function setMosslandStatus(text: string, type: "ok" | "error" | "loading"): void {
+  const el = document.getElementById("tts-mossland-clone-status");
+  if (!el) return;
+  el.textContent = text;
+  el.className = "tts-clone-status" + (type ? " is-" + type : "");
+}
+
+function setMosslandListStatus(text: string, type: "ok" | "error" | "loading"): void {
+  const el = document.getElementById("tts-mossland-list-voices-status");
+  if (!el) return;
+  el.textContent = text;
+  el.className = "tts-clone-status" + (type ? " is-" + type : "");
+}
+
+/** 把拉到的 voices 列表渲染成 `<ul>`；每行有一个"使用此 voice"按钮，点击回填到 #tts-mossland-voice */
+function renderMosslandVoiceList(voices: Array<{ id: string; name: string }>): void {
+  const ul = document.getElementById("tts-mossland-voice-list");
+  if (!ul) return;
+  ul.replaceChildren();
+  for (const v of voices) {
+    const li = document.createElement("li");
+    const idSpan = document.createElement("span");
+    idSpan.className = "voice-id";
+    idSpan.textContent = v.id;
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "voice-name";
+    nameSpan.textContent = v.name;
+    const useBtn = document.createElement("button");
+    useBtn.type = "button";
+    useBtn.className = "voice-use";
+    useBtn.textContent = "使用";
+    useBtn.addEventListener("click", () => {
+      ttsEl("tts-mossland-voice").value = v.id;
+    });
+    li.append(idSpan, nameSpan, useBtn);
+    ul.appendChild(li);
+  }
+}
+
+// 测试发音：走 window.tts.synthesizeMossland
+document.getElementById("tts-mossland-test")?.addEventListener("click", async () => {
+  if (!window.tts) return;
+  const apiKey = ttsEl("tts-mossland-key").value.trim();
+  const voiceId = ttsEl("tts-mossland-voice").value.trim();
+  const text = ttsEl("tts-mossland-text").value.trim();
+  const model = (ttsEl("tts-mossland-model") as HTMLSelectElement).value;
+  const format = (ttsEl("tts-mossland-format") as HTMLSelectElement).value as "mp3" | "wav" | "pcm";
+  if (!apiKey) { window.alert("请先填写 Mossland API Key"); return; }
+  if (!voiceId) { window.alert("请先填写音色 ID（可从下方拉取列表）"); return; }
+  if (!text) { window.alert("请先填写试听文本"); return; }
+
+  const btn = document.getElementById("tts-mossland-test") as HTMLButtonElement;
+  btn.disabled = true;
+  btn.textContent = "合成中…";
+  const statusEl = document.getElementById("tts-mossland-test-status");
+  if (statusEl) { statusEl.textContent = "合成中…"; statusEl.className = "tts-clone-status is-loading"; }
+  try {
+    const result = await window.tts.synthesizeMossland({
+      apiKey, voiceId, text, model, format,
+      speed: Number(ttsEl("tts-speed").value),
+      volume: Number(ttsEl("tts-volume").value),
+    });
+    playTtsAudio(result.base64, result.format);
+    if (statusEl) {
+      statusEl.textContent = "✅ 合成成功";
+      statusEl.className = "tts-clone-status is-ok";
+      setTimeout(() => { statusEl.textContent = ""; }, 2000);
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.textContent = "❌ " + (err instanceof Error ? err.message : String(err));
+      statusEl.className = "tts-clone-status is-error";
+    } else {
+      window.alert("合成失败: " + (err instanceof Error ? err.message : String(err)));
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "测试发音";
+  }
+});
+
+
+// 克隆子区块：选择文件（用现有 pickAudio）
+document.getElementById("tts-mossland-clone-pick")?.addEventListener("click", async () => {
+  if (!window.tts) return;
+  const filePath = await window.tts.pickAudio();
+  if (filePath) ttsEl("tts-mossland-clone-file").value = filePath;
+});
+
+// 克隆子区块：开始上传（multipart）
+document.getElementById("tts-mossland-clone-start")?.addEventListener("click", async () => {
+  if (!window.tts) return;
+  const apiKey = ttsEl("tts-mossland-key").value.trim();
+  const filePath = ttsEl("tts-mossland-clone-file").value.trim();
+  const name = ttsEl("tts-mossland-clone-name").value.trim();
+  const description = ttsEl("tts-mossland-clone-desc").value.trim();
+  if (!apiKey) { window.alert("请先填写 Mossland API Key"); return; }
+  if (!filePath) { window.alert("请先选择参考音频"); return; }
+
+  setMosslandStatus("正在上传并创建音色…", "loading");
+  try {
+    const result = await window.tts.cloneMossland({
+      apiKey, filePath,
+      name: name || undefined,
+      description: description || undefined,
+    });
+    // 自动填到上方「音色 ID」+ 同步写到 ttsConfig（让保存按钮 / chat 调度都能用）
+    ttsEl("tts-mossland-voice").value = result.voiceId;
+    void saveTtsField("ttsMosslandVoiceId", result.voiceId);
+    setMosslandStatus(`✅ 克隆成功！voice_id「${result.voiceId}」已自动填入音色 ID 框。`, "ok");
+  } catch (err) {
+    setMosslandStatus("❌ " + (err instanceof Error ? err.message : String(err)), "error");
+  }
+});
+
+// 拉取音色列表：调 listMosslandVoices + 渲染
+document.getElementById("tts-mossland-list-voices")?.addEventListener("click", async () => {
+  if (!window.tts) return;
+  const apiKey = ttsEl("tts-mossland-key").value.trim();
+  if (!apiKey) { window.alert("请先填写 Mossland API Key"); return; }
+
+  setMosslandListStatus("正在拉取音色列表…", "loading");
+  try {
+    const result = await window.tts.listMosslandVoices({ apiKey, limit: 50 });
+    if (result.voices.length === 0) {
+      setMosslandListStatus("账号下还没有已克隆的音色，请先到上方「音色克隆」创建一个。", "error");
+    } else {
+      renderMosslandVoiceList(result.voices);
+      setMosslandListStatus(`✅ 拉到 ${result.voices.length} 个音色。点击右侧「使用」可填入音色 ID 框。`, "ok");
+    }
+  } catch (err) {
+    setMosslandListStatus("❌ " + (err instanceof Error ? err.message : String(err)), "error");
+  }
+});
+
+// 克隆须知 modal（富文本，复用 showHtmlModal 复用 MiniMax 那套样式）
+document.getElementById("tts-mossland-clone-info-btn")?.addEventListener("click", () => {
+  void showHtmlModal({
+    title: "Mossland 音色克隆 · 完整规格",
+    icon: "ⓘ",
+    htmlBody: [
+      '<div class="tts-clone-spec-block">',
+      '  <h4><svg class="tts-clone-spec-icon" width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M24 44C35.0457 44 44 35.0457 44 24C44 12.9543 35.0457 4 24 4C12.9543 4 4 12.9543 4 24C4 35.0457 12.9543 44 24 44Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M18 22H30" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 28H30" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24.0083 22V34" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M30 15L24 21L18 15" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg> 费用</h4>',
+      '  <p>请参阅 Mossland 平台定价页（文档未提供具体单价）。每次成功创建 voice_id 都会计费。',
+      '     与 MiniMax 不同：<strong>Mossland 没有「7 天过期」</strong>，voice_id 永久有效。</p>',
+      '</div>',
+      '<div class="tts-clone-spec-block">',
+      '  <h4><svg class="tts-clone-spec-icon" width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 4H41" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 44H41" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 44C13.6667 30.6611 18 23.9944 24 24C30 24.0056 34.3333 30.6722 37 44H11Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M37 4C34.3333 17.3389 30 24.0056 24 24C18 23.9944 13.6667 17.3278 11 4H37Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M21 15H27" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 38H29" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg> 持久化规则</h4>',
+      '  <p>创建的 voice_id <strong>永久有效</strong>，无过期、无冷却。直接复制到「音色 ID」即可永久复用。</p>',
+      '</div>',
+      '<div class="tts-clone-spec-block">',
+      '  <h4><svg class="tts-clone-spec-icon" width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8 44V4H31L40 14.5V44H8Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 14L26 16.9688V31.5" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20.5" cy="31.5" r="5.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg> 参考音频 <code>audio_sample</code></h4>',
+      '  <ul>',
+      '    <li>请求格式：<strong>multipart/form-data</strong>（不支持 JSON / URL / base64）</li>',
+      '    <li>字段名：<code>audio_sample</code>（必填）</li>',
+      '    <li>字段名：<code>name</code>（可选，给音色起名）</li>',
+      '    <li>字段名：<code>description</code>（可选，描述音色）</li>',
+      '    <li>时长限制：≤ 60 秒（实测，官方文档未标注）</li>',
+      '    <li>格式：文档示例为 wav</li>',
+      '  </ul>',
+      '</div>',
+      '<div class="tts-clone-spec-block">',
+      '  <h4><svg class="tts-clone-spec-icon" width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="24" cy="24" r="18" fill="none" stroke="currentColor" stroke-width="4"/><path d="M24 14V16" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="32" r="2.5" fill="currentColor"/></svg> 后续合成</h4>',
+      '  <ul>',
+      '    <li>拿到 voice_id 后，调用 <code>POST /v1/audio/speech</code>，body 形如 <code>{ model: "moss-tts", input: "...", voice_id: "..." }</code></li>',
+      '    <li>可选 <code>delivery_method: "audio" \| "url"</code>（默认 audio，二进制流；url 返回 JSON 含 URL）</li>',
+      '    <li><code>version</code> 字段为预留能力，当前请不传，服务端使用默认版本</li>',
+      '  </ul>',
+      '</div>',
+    ].join("\n"),
+  });
+});
+
 // MiniMax 测试发音
 document.getElementById("tts-minimax-test")?.addEventListener("click", async () => {
   if (!window.tts) return;
@@ -5682,6 +6414,117 @@ document.getElementById("tts-clone-start")?.addEventListener("click", async () =
     btn.disabled = false;
   }
 });
+
+// ── 音色快速复刻：规格说明模态框 ──
+// 摘要见 C:\Users\13575\Desktop\minimax-tts文档摘要.md（音色快速复刻 / Voice Clone）
+// 字段顺序：file_id → voice_id → clone_prompt(prompt_audio / prompt_text) → text(试听)
+const CLONE_SPEC_BODY = [
+  '<div class="tts-clone-spec-block">',
+  '  <h4>',
+  '    <svg class="tts-clone-spec-icon" width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">',
+  '      <path d="M24 44C35.0457 44 44 35.0457 44 24C44 12.9543 35.0457 4 24 4C12.9543 4 4 12.9543 4 24C4 35.0457 12.9543 44 24 44Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>',
+  '      <path d="M18 22H30" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '      <path d="M18 28H30" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '      <path d="M24.0083 22V34" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '      <path d="M30 15L24 21L18 15" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '    </svg>',
+  '    费用',
+  '  </h4>',
+  '  <p>每次成功发起复刻将收取 <span class="tts-clone-fee">¥9.9</span>。',
+  '     试听（<code>text</code> + <code>model</code>）按字符数另计 T2A 费用，与平台其他 T2A 接口同价。</p>',
+  '</div>',
+  '<div class="tts-clone-spec-block">',
+  '  <h4>',
+  '    <svg class="tts-clone-spec-icon" width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">',
+  '      <path d="M7 4H41" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '      <path d="M7 44H41" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '      <path d="M11 44C13.6667 30.6611 18 23.9944 24 24C30 24.0056 34.3333 30.6722 37 44H11Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>',
+  '      <path d="M37 4C34.3333 17.3389 30 24.0056 24 24C18 23.9944 13.6667 17.3278 11 4H37Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>',
+  '      <path d="M21 15H27" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '      <path d="M19 38H29" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '    </svg>',
+  '    过期规则',
+  '  </h4>',
+  '  <p>复刻得到的音色若 <strong>7 天内</strong>无任何调用，将被系统自动删除。如需长期保留音色，平时不定期点一下「🔊 测试发音」即可续命。</p>',
+  '</div>',
+  '<div class="tts-clone-spec-block">',
+  '  <h4>',
+  '    <svg class="tts-clone-spec-icon" width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">',
+  '      <path d="M8 44V4H31L40 14.5V44H8Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '      <path d="M32 14L26 16.9688V31.5" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '      <circle cx="20.5" cy="31.5" r="5.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '    </svg>',
+  '    配音文件 <code>file_id</code>（必填）',
+  '  </h4>',
+  '  <ul>',
+  '    <li>格式：mp3 / m4a / wav</li>',
+  '    <li>时长：10 秒 ~ 5 分钟</li>',
+  '    <li>大小：≤ 20 MB</li>',
+  '  </ul>',
+  '</div>',
+  '<div class="tts-clone-spec-block">',
+  '  <h4>',
+  '    <svg class="tts-clone-spec-icon" width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">',
+  '      <path d="M10 10H32H38V44H10V10Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '      <path d="M10 10L32 4V10" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '      <circle cx="24" cy="24" r="4" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '      <path d="M20 34H28" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '    </svg>',
+  '    自定义 voice_id（必填）',
+  '  </h4>',
+  '  <ul>',
+  '    <li>长度范围：8 ~ 256 个字符</li>',
+  '    <li>首字符必须为英文字母</li>',
+  '    <li>允许：数字、字母、<code>-</code>、<code>_</code></li>',
+  '    <li>末位字符不可为 <code>-</code> 或 <code>_</code></li>',
+  '    <li>不得与已有 voice_id 重复</li>',
+  '  </ul>',
+  '</div>',
+  '<div class="tts-clone-spec-block">',
+  '  <h4>',
+  '    <svg class="tts-clone-spec-icon" width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">',
+  '      <path d="M24 44C35.0457 44 44 35.0457 44 24C44 12.9543 35.0457 4 24 4C12.9543 4 4 12.9543 4 24C4 35.0457 12.9543 44 24 44Z" fill="none" stroke="currentColor" stroke-width="4"/>',
+  '      <path d="M30 18V30" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>',
+  '      <path d="M36 22V26" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>',
+  '      <path d="M18 18V30" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>',
+  '      <path d="M12 22V26" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>',
+  '      <path d="M24 14V34" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>',
+  '    </svg>',
+  '    示例音频 clone_prompt（可选，强烈推荐）',
+  '  </h4>',
+  '  <p>提供一段示例音频可显著增强合成音色的相似度与稳定性。</p>',
+  '  <ul>',
+  '    <li>格式：mp3 / m4a / wav</li>',
+  '    <li>时长：&lt; 8 秒</li>',
+  '    <li>大小：≤ 20 MB</li>',
+  '    <li>须填写对应的示例文本 <code>prompt_text</code>，句末需有标点</li>',
+  '  </ul>',
+  '</div>',
+  '<div class="tts-clone-spec-block">',
+  '  <h4>',
+  '    <svg class="tts-clone-spec-icon" width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">',
+  '      <path d="M40 33V42C40 43.1046 39.1046 44 38 44H31.5" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '      <path d="M40 16V6C40 4.89543 39.1046 4 38 4H10C8.89543 4 8 4.89543 8 6V42C8 43.1046 8.89543 44 10 44H16" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+  '      <path d="M16 16H30" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>',
+  '      <path d="M23 44L40 23" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>',
+  '      <path d="M16 24H24" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>',
+  '    </svg>',
+  '    复刻文本 <code>text</code>（试听用，建议 ≤1000 字符）',
+  '  </h4>',
+  '  <p>模型会用克隆后的音色朗读这段文本并返回试听音频链接，便于人工核对相似度。</p>',
+  '</div>',
+].join("\n");
+
+function showCloneSpecModal(): void {
+  void showHtmlModal({
+    title: "🎙️ 音色快速复刻 · 完整规格",
+    icon: "ⓘ",
+    htmlBody: CLONE_SPEC_BODY,
+  });
+}
+
+document.getElementById("tts-clone-info-btn")?.addEventListener("click", showCloneSpecModal);
+document.getElementById("tts-clone-info-link")?.addEventListener("click", showCloneSpecModal);
 
 // 初始加载配置
 void loadTtsConfig();

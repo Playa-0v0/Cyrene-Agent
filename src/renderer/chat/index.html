@@ -46,17 +46,29 @@
               </div>
             </button>
             <span class="chat__title-meta">
+              <img class="chat__name-avatar" src="../icons/cyrene-avatar-line-white.png" alt="" aria-hidden="true" width="20" height="20" />
               <span class="chat__name">昔涟</span>
               <span class="chat__name-sep" aria-hidden="true">·</span>
               <span class="chat__hint" id="chat-hint">模型未连接</span>
             </span>
+            <div class="mode-switch" role="group" aria-label="运行模式">
+              <button type="button" class="mode-switch__option is-active" data-mode-value="work" aria-pressed="true">
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <rect x="3" y="3.5" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M7 16.5H13M10 13.5V16.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <span>Work</span>
+              </button>
+              <button type="button" class="mode-switch__option" data-mode-value="chat" aria-pressed="false">
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M16.5 9.25C16.5 12.43 13.59 15 10 15C9.22 15 8.47 14.88 7.78 14.65L4.5 16L5.35 13.17C4.2 12.16 3.5 10.78 3.5 9.25C3.5 6.07 6.41 3.5 10 3.5C13.59 3.5 16.5 6.07 16.5 9.25Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                  <path d="M7.5 9.25H7.51M10 9.25H10.01M12.5 9.25H12.51" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                </svg>
+                <span>Chat</span>
+              </button>
+            </div>
           </div>
           <div class="chat__titlebar-actions">
-            <div class="dropdown-trigger" data-dropdown="mode-dropdown">
-              <span class="dt-label">模式</span>
-              <span class="dt-value" id="mode-val">协作</span>
-              <span class="dt-arrow"></span>
-            </div>
             <div class="dropdown-trigger" data-dropdown="style-dropdown">
               <span class="dt-label">风格</span>
               <span class="dt-value" id="style-val">温柔 · 和善</span>
@@ -67,7 +79,9 @@
               <span class="dt-value" id="reasoning-val">Auto · 自动</span>
               <span class="dt-arrow"></span>
             </div>
-            <button type="button" class="chat__icon-btn" id="clear" aria-label="清空对话" title="清空对话">⌫</button>
+            <button type="button" class="chat__icon-btn" id="clear" aria-label="清空对话" title="清空对话">
+              <svg width="14" height="14" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M18.4237 10.5379C18.794 10.1922 19.2817 10 19.7883 10H42C43.1046 10 44 10.8954 44 12V36C44 37.1046 43.1046 38 42 38H19.7883C19.2817 38 18.794 37.8078 18.4237 37.4621L4 24L18.4237 10.5379Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 19L26 29" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M26 19L36 29" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
             <button type="button" class="chat__winbtn" id="min-btn" aria-label="最小化" title="最小化">
               <svg width="10" height="2" viewBox="0 0 10 2" aria-hidden="true"><rect width="10" height="2" rx="1" fill="currentColor"/></svg>
             </button>
@@ -84,7 +98,7 @@
         </header>
         <main class="chat__messages" id="messages" aria-live="polite"></main>
         <div class="chat__empty-state" id="chat-empty" hidden>
-          <div class="chat__empty-icon">💬</div>
+          <div class="chat__empty-icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M33 38H22V30H36V22H44V38H39L36 41L33 38Z" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 6H36V30H17L13 34L9 30H4V6Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 18H20" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M26 18H27" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M12 18H13" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg></div>
           <p class="chat__empty-text">昔涟期待与你聊天哦 ✨</p>
           <div class="chat__quick-presets" id="quick-presets"></div>
         </div>
@@ -92,9 +106,16 @@
     </div>
     <div class="chat__file-tags" id="file-tags"></div>
     <form class="chat__input" id="composer">
-      <input type="file" id="file-input" accept=".txt,.md,.json,.csv,.log" multiple style="display:none" />
-      <button type="button" class="chat__attach" id="attach-btn" aria-label="上传文件" title="上传文件">📎</button>
-      <button type="button" class="chat__sticker-btn" id="sticker-picker-btn" aria-label="表情包" title="表情包">😀</button>
+      <input type="file" id="file-input" accept=".txt,.md,.json,.csv,.log,.png,.jpg,.jpeg,.webp,.gif,.bmp" multiple style="display:none" />
+      <button type="button" class="chat__attach" id="attach-btn" aria-label="上传文件" title="上传文件">
+        <svg width="20" height="20" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M16 6H8C6.89543 6 6 6.89543 6 8V16" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 42H8C6.89543 42 6 41.1046 6 40V32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 42H40C41.1046 42 42 41.1046 42 40V32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 6H40C41.1046 6 42 6.89543 42 8V16" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 24L16 24" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 32L24 16" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button type="button" class="chat__attach" id="screenshot-btn" aria-label="截图" title="截图 (Alt+Shift+S)">
+        <svg width="20" height="20" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M10 42C13.3137 42 16 39.3137 16 36C16 32.6863 13.3137 30 10 30C6.68629 30 4 32.6863 4 36C4 39.3137 6.68629 42 10 42Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M40.0615 8C24 28.4331 15.8047 38.6805 14.2426 40.2426C11.8995 42.5858 8.10047 42.5858 5.75732 40.2426" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M38 42C41.3137 42 44 39.3137 44 36C44 32.6863 41.3137 30 38 30C34.6863 30 32 32.6863 32 36C32 39.3137 34.6863 42 38 42Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M42.2424 40.2426C39.8993 42.5858 36.1003 42.5858 33.7571 40.2426C32.195 38.6805 23.9998 28.446 8.00049 8" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button type="button" class="chat__sticker-btn" id="sticker-picker-btn" aria-label="表情包" title="表情包">
+        <img class="chat__sticker-btn-icon" src="../icons/sticker-picker.png" alt="" aria-hidden="true" />
+      </button>
       <textarea
         id="input"
         rows="1"
@@ -102,24 +123,21 @@
         autocomplete="off"
         spellcheck="false"
       ></textarea>
-      <button type="submit" class="chat__send" id="send" aria-label="发送">↵</button>
+      <button type="submit" class="chat__send" id="send" aria-label="发送"><svg width="20" height="20" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M42 6L4 20.1383L24 24.0083L29.0052 44L42 6Z" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M24.0083 24.0084L29.6651 18.3516" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </form>
     <div class="sticker-picker" id="sticker-picker" hidden>
       <div class="sticker-picker__grid" id="sticker-picker-grid"></div>
     </div>
   </div>
   <script type="module" src="./main.ts"></script>
-  <div class="dropdown-menu" id="mode-dropdown">
-    <div class="dm-opt is-active" data-value="collab">🛠️ 协作</div>
-    <div class="dm-opt" data-value="talk">💬 日常聊天</div>
-  </div>
   <div class="dropdown-menu" id="style-dropdown">
     <div class="dm-title">聊天风格</div>
-    <div class="dm-opt is-active" data-value="01_default.md">🌸 温柔 · 和善</div>
-    <div class="dm-opt" data-value="02_lively.md">✨ 元气 · 活泼</div>
-    <div class="dm-opt" data-value="03_healing.md">🌿 治愈 · 安心</div>
-    <div class="dm-opt" data-value="04_focused.md">📖 知性 · 认真</div>
-    <div class="dm-opt" data-value="05_sweet.md">💕 撒娇 · 黏人</div>
+    <div class="dm-opt is-active" data-value="default">🌸 温柔 · 和善</div>
+    <div class="dm-opt" data-value="lively">✨ 元气 · 活泼</div>
+    <div class="dm-opt" data-value="healing">🌿 治愈 · 安心</div>
+    <div class="dm-opt" data-value="focused">📖 知性 · 认真</div>
+    <div class="dm-opt" data-value="sweet">💕 撒娇 · 黏人</div>
+    <div class="dm-opt" data-value="custom">🖊️ 自定义</div>
   </div>
   <div class="dropdown-menu" id="reasoning-dropdown">
     <div class="dm-title">推理强度</div>

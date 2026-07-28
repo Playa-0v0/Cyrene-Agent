@@ -121,6 +121,21 @@
   --rb-scroll-thumb:   rgba(255, 255, 255, 0.20);
   --rb-scroll-thumb-hover: rgba(255, 255, 255, 0.32);
 
+  /* ===== Markdown render variables (dark theme defaults) ===== */
+  --md-code-bg:           rgba(255, 255, 255, 0.04);
+  --md-code-border:       rgba(255, 182, 220, 0.18);
+  --md-inline-code-bg:    rgba(255, 255, 255, 0.08);
+  --md-inline-code-text:  #fef7ff;
+  --md-quote-border:      var(--rb-pink-400);
+  --md-quote-bg:          rgba(236, 72, 153, 0.06);
+  --md-table-border:      rgba(255, 182, 220, 0.18);
+  --md-link-color:        var(--rb-pink-400);
+  --md-link-hover:        var(--rb-pink-300);
+  --md-copy-text:         var(--rb-text-muted);
+  --md-copy-bg:           rgba(255, 255, 255, 0.06);
+  --md-copy-border:       var(--rb-border-soft);
+  --md-katex-text:        var(--rb-text-default);
+
   /* ===== Weather card (light pink surface on top of dark UI) ===== */
   --rb-weather-bg:        #F9CBDF;
   --rb-weather-bg-2:      #f0b5d0;

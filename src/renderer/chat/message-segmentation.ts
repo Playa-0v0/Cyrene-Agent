@@ -24,7 +24,7 @@ export function shouldSegmentAssistantReply(
   preference: SegmentedOutputMode,
 ): boolean {
   const mode = normalizeSegmentedOutputMode(preference);
-  return mode === "all" || (mode === "chat" && chatMode === "talk");
+  return mode === "all" || (mode === "chat" && chatMode === "chat");
 }
 
 export function shouldBreakStreamingBubbleAfterChar(char: string): boolean {

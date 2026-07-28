@@ -72,6 +72,21 @@ body {
   white-space: nowrap;
 }
 
+/* 标题栏头像：默认主题白线条 PNG，白调主题切黑色线条 SVG。 */
+.sidebar__name-avatar {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  border-radius: var(--rb-radius-full);
+  object-fit: cover;
+}
+
+[data-ui-theme="pearl-white"] .sidebar__name-avatar {
+  content: url("/icons/cyrene-avatar-line.svg");
+  display: block;
+}
+
 .sidebar__hint {
   font: var(--rb-text-micro);
   color: rgba(235, 229, 245, 0.62);
@@ -106,7 +121,8 @@ body {
   transition: background 120ms ease, color 120ms ease, transform 120ms ease, border-color 120ms ease, box-shadow 200ms ease;
 }
 
-.sidebar__winbtn svg { display: block; }
+.sidebar__winbtn svg,
+.sidebar__icon-btn svg { display: block; }
 
 .sidebar__icon-btn:hover,
 .sidebar__winbtn:hover {
@@ -261,6 +277,15 @@ body {
   border: 1px solid var(--rb-border-soft);
   filter: drop-shadow(var(--rb-glow-pink));
   user-select: none;
+  overflow: hidden;
+}
+
+.indicator__emoji img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
 }
 
 .indicator__text {
@@ -343,6 +368,8 @@ body {
   background: linear-gradient(135deg, rgba(236, 72, 153, 0.20), rgba(168, 85, 247, 0.18));
 }
 
+.model-switch-btn svg { display: block; filter: drop-shadow(0 0 5px rgba(236, 72, 153, 0.4)); }
+
 .model-switch-btn:hover,
 .settings-btn:hover {
   background: rgba(236, 72, 153, 0.20);
@@ -360,9 +387,9 @@ body {
 }
 
 .settings-btn__icon {
-  font-size: 15px;
+  display: block;
   width: 18px;
-  text-align: center;
+  height: 18px;
   filter: drop-shadow(0 0 5px rgba(236, 72, 153, 0.45));
 }
 

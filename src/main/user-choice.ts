@@ -12,6 +12,11 @@
 
 import { ipcMain } from "electron";
 import { IPC } from "../shared/ipc-channels";
+import type {
+  AskClarificationCard,
+  AskUserAnswer,
+} from "../shared/ask-clarification";
+import { validateAskUserAnswer } from "./orchestrator/ask-card";
 import { getTimeoutSettings } from "./timeout-manager";
 
 const LOG_PREFIX = "[UserChoice]";
@@ -25,15 +30,21 @@ export interface ChoiceOption {
 }
 
 /** 发给渲染端的卡片数据。 */
-export interface ChoiceCardData {
+export interface LegacyChoiceCardData {
   id: string;
   question: string;
   options: ChoiceOption[];
   default?: string;
 }
 
+export interface AskChoiceCardData extends AskClarificationCard {
+  id: string;
+}
+
+export type ChoiceCardData = LegacyChoiceCardData | AskChoiceCardData;
+
 interface PendingChoice {
-  resolve: (value: string) => void;
+  resolve: (value: unknown) => boolean;
   timer: NodeJS.Timeout;
 }
 
@@ -67,7 +78,13 @@ export function requestUserChoice(
       resolve(defaultValue ?? "");
     }, choiceTimeout);
 
-    pendingChoices.set(id, { resolve, timer });
+    pendingChoices.set(id, {
+      resolve: (value) => {
+        resolve(typeof value === "string" ? value : defaultValue ?? "");
+        return true;
+      },
+      timer,
+    });
 
     const payload: ChoiceCardData = { id, question, options, default: defaultValue };
     console.log(LOG_PREFIX, "发送选择请求:", id, question);
@@ -84,18 +101,61 @@ export function requestUserChoice(
   });
 }
 
+export function requestUserClarification(
+  card: AskClarificationCard,
+): Promise<AskUserAnswer> {
+  return new Promise<AskUserAnswer>((resolve) => {
+    const id = "choice-" + (++choiceCounter) + "-" + Date.now();
+    const emptyAnswer: AskUserAnswer = { requestId: id, answers: [] };
+    const timer = setTimeout(() => {
+      pendingChoices.delete(id);
+      console.warn(LOG_PREFIX, "澄清超时（" + CHOICE_TIMEOUT_MS + "ms）");
+      resolve(emptyAnswer);
+    }, CHOICE_TIMEOUT_MS);
+    pendingChoices.set(id, {
+      resolve: (value) => {
+        try {
+          resolve(validateAskUserAnswer(card, id, value as AskUserAnswer));
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      timer,
+    });
+    const payload: AskChoiceCardData = { id, ...card };
+    console.log(LOG_PREFIX, "发送结构化澄清:", id);
+    if (choiceCardSender) {
+      choiceCardSender(payload);
+    } else {
+      clearTimeout(timer);
+      pendingChoices.delete(id);
+      console.warn(LOG_PREFIX, "未注入卡片回调，返回空澄清");
+      resolve(emptyAnswer);
+    }
+  });
+}
+
 /** 注册 CHOICE_RESOLVE handler（main 启动时调一次）。 */
 export function registerChoiceIpc(): void {
-  ipcMain.handle(IPC.CHOICE_RESOLVE, (_event, payload: { id: string; value: string }) => {
+  ipcMain.handle(IPC.CHOICE_RESOLVE, (
+    _event,
+    payload: { id: string; value?: string; answer?: AskUserAnswer },
+  ) => {
     const pending = pendingChoices.get(payload?.id);
     if (!pending) {
       console.warn(LOG_PREFIX, "选择回传未匹配到 pending:", payload?.id);
       return { ok: false };
     }
+    const resolved = payload.answer ?? payload.value ?? "";
+    const accepted = pending.resolve(resolved);
+    if (!accepted) {
+      console.warn(LOG_PREFIX, "用户选择校验失败:", payload.id);
+      return { ok: false };
+    }
     clearTimeout(pending.timer);
     pendingChoices.delete(payload.id);
-    console.log(LOG_PREFIX, "用户选择:", payload.id, "→", payload.value);
-    pending.resolve(payload.value);
+    console.log(LOG_PREFIX, "用户选择:", payload.id);
     return { ok: true };
   });
 }

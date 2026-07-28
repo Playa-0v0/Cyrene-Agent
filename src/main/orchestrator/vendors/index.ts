@@ -7,13 +7,13 @@ import { resolveTransport } from "./transport-detector";
 import type {
   ChatMessage, ChatRequest, ChatResponse, ChatVendorAdapter, HttpRequest,
   ProviderCapability, StreamChunk, StreamEvent, TestConnectionResult, ToolCall, ToolExecutionResult,
-  ToolSpec, Transport, VendorConfig,
+  StructuredOutputRequest, ToolSpec, Transport, VendorConfig,
 } from "./types";
 
 export type {
   ChatMessage, ChatRequest, ChatResponse, ChatVendorAdapter, HttpRequest,
   ProviderCapability, StreamChunk, StreamEvent, TestConnectionResult, ToolCall, ToolExecutionResult,
-  ToolSpec, Transport, VendorConfig,
+  StructuredOutputRequest, ToolSpec, Transport, VendorConfig,
 };
 export { getCapability, getCapabilityOrOpenAI, PROVIDER_CAPABILITIES };
 export { detectTransport, resolveTransport } from "./transport-detector";

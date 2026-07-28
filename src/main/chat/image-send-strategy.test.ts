@@ -2,39 +2,31 @@ import { describe, expect, test } from "vitest";
 import { decideImageSendStrategy } from "./image-send-strategy";
 
 describe("decideImageSendStrategy", () => {
-  test("uses direct image sending when the main provider supports vision over OpenAI transport", () => {
+  test("uses direct image sending when multimodal is enabled", () => {
     const strategy = decideImageSendStrategy({
-      provider: "Kimi（月之暗面）",
-      baseUrl: "https://api.moonshot.cn/v1",
-      model: "kimi-k2.7-code",
-      apiKey: "key-main",
+      multimodal: true,
     });
 
     expect(strategy).toEqual({ mode: "direct" });
   });
 
-  test("uses direct image sending when main and vision configs are exactly the same OpenAI-compatible config", () => {
+  test("uses caption when multimodal is disabled", () => {
     const strategy = decideImageSendStrategy({
-      provider: "ChatGPT（OpenAI）",
-      baseUrl: "https://api.openai.com/v1/",
-      model: "gpt-4o-mini",
-      apiKey: "same-key",
+      multimodal: false,
       vision: {
         baseUrl: "https://api.openai.com/v1",
-        model: "gpt-4o-mini",
-        apiKey: "same-key",
+        model: "gpt-4o",
+        apiKey: "key",
       },
     });
 
-    expect(strategy).toEqual({ mode: "direct" });
+    expect(strategy).toEqual({ mode: "caption" });
   });
 
-  test("falls back to captioning for vision-capable providers that are not using OpenAI-compatible transport", () => {
+  test("uses caption when multimodal is disabled and no vision configured", () => {
     const strategy = decideImageSendStrategy({
-      provider: "MiniMax（稀宇科技）",
-      baseUrl: "https://api.minimaxi.com/anthropic",
-      model: "MiniMax-M3",
-      apiKey: "key-main",
+      multimodal: false,
+      vision: null,
     });
 
     expect(strategy).toEqual({ mode: "caption" });

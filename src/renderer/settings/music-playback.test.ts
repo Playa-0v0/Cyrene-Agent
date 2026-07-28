@@ -25,4 +25,15 @@ describe("requestTrackPlayback", () => {
     expect(result.kind).toBe("err");
     expect(result.message).toContain("需要安装网易云音乐桌面客户端");
   });
+
+  it("reports the MCP browser fallback without claiming desktop dispatch", async () => {
+    const playTrack = vi.fn().mockResolvedValue({
+      ok: true,
+      data: { state: "web_fallback", resourceType: "song", resourceId: "123" },
+    });
+
+    const result = await requestTrackPlayback({ playTrack }, { id: "123", name: "Song" });
+
+    expect(result).toEqual({ kind: "ok", message: "网易云桌面客户端不可用，已在浏览器中打开：Song" });
+  });
 });

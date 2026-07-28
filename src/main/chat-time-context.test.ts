@@ -40,6 +40,13 @@ describe("chat time context", () => {
     expect(resolveChatContextTimezone("", "America/New_York")).toBe("America/New_York");
   });
 
+  it("defaults to Asia/Shanghai when profile timezone missing/invalid and no fallback given", () => {
+    // 需求：用户时区 → Asia/Shanghai，全链路不再回退到系统时区。
+    expect(resolveChatContextTimezone()).toBe("Asia/Shanghai");
+    expect(resolveChatContextTimezone("")).toBe("Asia/Shanghai");
+    expect(resolveChatContextTimezone("bad/timezone")).toBe("Asia/Shanghai");
+  });
+
   it("prefixes each timestamped message with concise local time", () => {
     const result = buildConversationTimeContext([
       { role: "user", content: "今天有点累", at: Date.UTC(2026, 6, 12, 12, 0) },

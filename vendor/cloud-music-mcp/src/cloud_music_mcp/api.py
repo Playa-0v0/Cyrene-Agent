@@ -1,10 +1,10 @@
 from pyncm import apis
-from auth import load_session
+from cloud_music_mcp.auth import ensure_runtime_session
 
 def get_daily_recommendations():
     """获取每日推荐歌曲"""
     # 确保已登录
-    if not load_session()[0]:
+    if not ensure_runtime_session():
         return {"success": False, "error": "未登录，请先调用 login 工具"}
     
     try:
@@ -33,7 +33,7 @@ def get_daily_recommendations():
 
 def get_user_playlists():
     """获取用户的歌单"""
-    if not load_session()[0]:
+    if not ensure_runtime_session():
         return {"success": False, "error": "未登录"}
     
     try:
@@ -61,7 +61,7 @@ def get_user_playlists():
 def search(keyword, category="song", limit=5):
     """搜索歌曲/专辑/歌手/歌单"""
     # 搜索不需要登录，但登录后结果更准
-    load_session()
+    ensure_runtime_session()
     try:
         # category 到搜索类型(stype)数字的映射
         stype_map = {
@@ -116,7 +116,7 @@ def search(keyword, category="song", limit=5):
 
 def get_playlist_detail(playlist_id):
     """获取歌单详情（含完整歌曲列表）"""
-    if not load_session()[0]:
+    if not ensure_runtime_session():
         return {"success": False, "error": "未登录，请先调用 login 工具"}
     try:
         result = apis.playlist.GetPlaylistInfo(playlist_id)
@@ -142,7 +142,7 @@ def get_playlist_detail(playlist_id):
 
 def create_playlist(name, privacy=False):
     """创建新歌单"""
-    if not load_session()[0]:
+    if not ensure_runtime_session():
         return {"success": False, "error": "未登录，请先调用 login 工具"}
     try:
         result = apis.playlist.SetCreatePlaylist(name, privacy)
@@ -158,7 +158,7 @@ def create_playlist(name, privacy=False):
 
 def add_to_playlist(playlist_id, track_ids):
     """添加歌曲到歌单"""
-    if not load_session()[0]:
+    if not ensure_runtime_session():
         return {"success": False, "error": "未登录，请先调用 login 工具"}
     try:
         # 确保 track_ids 为列表类型
@@ -176,7 +176,7 @@ def add_to_playlist(playlist_id, track_ids):
 
 def get_album_info(album_id):
     """获取专辑详情（含歌曲列表）"""
-    if not load_session()[0]:
+    if not ensure_runtime_session():
         return {"success": False, "error": "未登录，请先调用 login 工具"}
     try:
         result = apis.album.GetAlbumInfo(album_id)
@@ -212,7 +212,7 @@ def get_album_info(album_id):
 
 def get_artist_info(artist_id):
     """获取歌手详情和热门歌曲"""
-    if not load_session()[0]:
+    if not ensure_runtime_session():
         return {"success": False, "error": "未登录，请先调用 login 工具"}
     try:
         # 获取歌手基本信息
@@ -245,7 +245,7 @@ def get_artist_info(artist_id):
 
 def get_my_subscriptions(category="artists"):
     """获取我收藏的歌手或专辑"""
-    if not load_session()[0]:
+    if not ensure_runtime_session():
         return {"success": False, "error": "未登录，请先调用 login 工具"}
     try:
         if category == "albums":

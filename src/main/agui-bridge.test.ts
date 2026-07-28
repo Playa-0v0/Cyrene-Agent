@@ -80,4 +80,38 @@ describe("agui-bridge sticker event ordering", () => {
     const eventTypes = sent.map((event) => (event as { type?: string; name?: string }).name ?? (event as { type?: string }).type);
     expect(eventTypes).toEqual(["RUN_STARTED", "cyrene.sticker", "RUN_FINISHED"]);
   });
+
+  it("passes renderer styleId through to build options", async () => {
+    vi.resetModules();
+    mocks.handlers.clear();
+    const { registerAgUiIpc } = await import("./agui-bridge");
+    const buildOptions = vi.fn(async () => ({
+      options: {
+        settings: { provider: "test", baseUrl: "", model: "", apiKey: "" },
+        messages: [],
+        timeoutMs: 1000,
+        toolSystemContent: "TOOL",
+        soulSystemBaseContent: "SOUL",
+      },
+      latestUserText: "hi",
+    }));
+    const sender = {
+      isDestroyed: () => false,
+      send: () => {},
+    };
+
+    registerAgUiIpc(buildOptions, async () => {}, () => null);
+
+    const handler = mocks.handlers.get(IPC.AGUI_RUN);
+    if (!handler) throw new Error("AGUI_RUN handler was not registered");
+    await handler(
+      { sender },
+      { messages: [{ role: "user", content: "hi" }], styleId: "lively", executionMode: "chat" },
+    );
+
+    expect(buildOptions).toHaveBeenCalledWith(expect.objectContaining({
+      styleId: "lively",
+      executionMode: "chat",
+    }));
+  });
 });

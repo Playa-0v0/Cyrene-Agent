@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 const handlerMap: Record<string, (e: unknown, payload: unknown) => Promise<unknown>> = {};
 const removed: string[] = [];
+// Collect state-change listeners so tests can trigger them
+const stateListeners: Array<(s: unknown) => void> = [];
 
 vi.mock("electron", () => ({
   ipcMain: {
@@ -17,52 +19,61 @@ vi.mock("electron", () => ({
 import { registerMusicIpcHandlers } from "./ipc-handlers";
 import { MusicInputError } from "./types";
 
-function mockService(overrides: Record<string, unknown> = {}): any {
-  // Real service methods are async; mirrors must return a Promise so the
-  // wrap helper can `.then()` on the result. The default mocks reject with
-  // the same MusicInputError codes the real service throws, so input-validation
-  // tests can assert the IPC envelope without spinning up a full MusicService.
-  function asyncThat(impl?: (...args: any[]) => any): any {
-    const fn = vi.fn(async (...args: unknown[]) => {
-      if (impl) return impl(...args);
+  function mockService(overrides: Record<string, unknown> = {}): any {
+    // Real service methods are async; mirrors must return a Promise so the
+    // wrap helper can `.then()` on the result. The default mocks reject with
+    // the same MusicInputError codes the real service throws, so input-validation
+    // tests can assert the IPC envelope without spinning up a full MusicService.
+    function asyncThat(impl?: (...args: any[]) => any): any {
+      const fn = vi.fn(async (...args: unknown[]) => {
+        if (impl) return impl(...args);
+        return undefined;
+      });
+      return fn;
+    }
+    function searchImpl(keyword: unknown): unknown {
+      const trimmed = (typeof keyword === "string" ? keyword : "").trim();
+      if (trimmed.length === 0) throw new MusicInputError("E_INVALID_KEYWORD_EMPTY");
+      if (trimmed.length > 100) throw new MusicInputError("E_INVALID_KEYWORD_TOO_LONG");
       return undefined;
-    });
-    return fn;
+    }
+    function playTrackImpl(trackId: unknown): unknown {
+      if (typeof trackId !== "string" || !/^\d+$/.test(trackId)) throw new MusicInputError("E_INVALID_ID_FORMAT");
+      return undefined;
+    }
+    function onStateChangeImpl(listener: (s: unknown) => void): () => void {
+      stateListeners.push(listener);
+      return () => {
+        const i = stateListeners.indexOf(listener);
+        if (i >= 0) stateListeners.splice(i, 1);
+      };
+    }
+    const base: any = {
+      getBackendState: vi.fn(() => "ready"),
+      getAccountState: vi.fn(() => "signed_in"),
+      getPlayerState: vi.fn(() => "available"),
+      getLoginFlowState: vi.fn(() => "idle"),
+      getRootPid: vi.fn(() => undefined),
+      onStateChange: vi.fn(onStateChangeImpl),
+      pollOnce: asyncThat(),
+      beginLogin: asyncThat(),
+      cancelLogin: asyncThat(),
+      logout: asyncThat(),
+      getDailyRecommendations: asyncThat(),
+      searchTracks: asyncThat(searchImpl),
+      presentTracks: asyncThat(),
+      playTrackFromUi: asyncThat(playTrackImpl),
+      playPlaylist: asyncThat(playTrackImpl),
+    };
+    for (const [k, v] of Object.entries(overrides)) base[k] = v;
+    return base;
   }
-  function searchImpl(keyword: unknown): unknown {
-    const trimmed = (typeof keyword === "string" ? keyword : "").trim();
-    if (trimmed.length === 0) throw new MusicInputError("E_INVALID_KEYWORD_EMPTY");
-    if (trimmed.length > 100) throw new MusicInputError("E_INVALID_KEYWORD_TOO_LONG");
-    return undefined;
-  }
-  function playTrackImpl(trackId: unknown): unknown {
-    if (typeof trackId !== "string" || !/^\d+$/.test(trackId)) throw new MusicInputError("E_INVALID_ID_FORMAT");
-    return undefined;
-  }
-  const base: any = {
-    getBackendState: vi.fn(() => "ready"),
-    getAccountState: vi.fn(() => "signed_in"),
-    getPlayerState: vi.fn(() => "available"),
-    getLoginFlowState: vi.fn(() => "idle"),
-    getRootPid: vi.fn(() => undefined),
-    pollOnce: asyncThat(),
-    beginLogin: asyncThat(),
-    cancelLogin: asyncThat(),
-    logout: asyncThat(),
-    getDailyRecommendations: asyncThat(),
-    searchTracks: asyncThat(searchImpl),
-    presentTracks: asyncThat(),
-    playTrack: asyncThat(playTrackImpl),
-    playPlaylist: asyncThat(playTrackImpl),
-  };
-  for (const [k, v] of Object.entries(overrides)) base[k] = v;
-  return base;
-}
 
-beforeEach(() => {
-  for (const k of Object.keys(handlerMap)) delete handlerMap[k];
-  removed.length = 0;
-});
+  beforeEach(() => {
+    for (const k of Object.keys(handlerMap)) delete handlerMap[k];
+    removed.length = 0;
+    stateListeners.length = 0;
+  });
 
 describe("registerMusicIpcHandlers", () => {
   it("registers all 10 invoke channels", () => {

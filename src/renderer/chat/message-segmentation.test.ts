@@ -77,14 +77,14 @@ describe("message segmentation", () => {
   });
 
   it("applies preference by current chat mode", () => {
-    expect(shouldSegmentAssistantReply("talk", "chat")).toBe(true);
-    expect(shouldSegmentAssistantReply("collab", "chat")).toBe(false);
-    expect(shouldSegmentAssistantReply("collab", "all")).toBe(true);
-    expect(shouldSegmentAssistantReply("talk", "off")).toBe(false);
+    expect(shouldSegmentAssistantReply("chat", "chat")).toBe(true);
+    expect(shouldSegmentAssistantReply("work", "chat")).toBe(false);
+    expect(shouldSegmentAssistantReply("work", "all")).toBe(true);
+    expect(shouldSegmentAssistantReply("chat", "off")).toBe(false);
   });
 
   it("keeps one empty assistant bubble only while streaming", () => {
-    expect(getAssistantReplyBubbleTexts("", "talk", "all")).toEqual([]);
-    expect(getAssistantReplyBubbleTexts("", "talk", "all", { preserveEmpty: true })).toEqual([""]);
+    expect(getAssistantReplyBubbleTexts("", "chat", "all")).toEqual([]);
+    expect(getAssistantReplyBubbleTexts("", "chat", "all", { preserveEmpty: true })).toEqual([""]);
   });
 });

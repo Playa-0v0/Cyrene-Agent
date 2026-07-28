@@ -2,9 +2,19 @@ import { describe, expect, it } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { validateCaptionImagePath, IMAGE_CAPTION_MAX_BYTES } from "./image-caption";
+import {
+  buildImageCaptionPrompt,
+  validateCaptionImagePath,
+  IMAGE_CAPTION_MAX_BYTES,
+  IMAGE_CAPTION_PROMPT,
+} from "./image-caption";
 
 describe("validateCaptionImagePath", () => {
+  it("只在用户做过标注时增强视觉提示", () => {
+    expect(buildImageCaptionPrompt(false)).toBe(IMAGE_CAPTION_PROMPT);
+    expect(buildImageCaptionPrompt(true)).toContain("用户主动添加");
+  });
+
   it("拒绝非字符串 filePath", () => {
     expect(validateCaptionImagePath(123)).toEqual({ ok: false, error: "filePath 必须是 string" });
   });

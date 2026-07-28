@@ -41,6 +41,10 @@ describe("MusicMcpClient", () => {
     listTools.mockResolvedValue({ tools: [
       tool("cloud_music_get_daily_recommend", {}),
       tool("cloud_music_search", { keyword: { type: "string" } }),
+      tool("cloud_music_play", {
+        id: { type: "string", required: true },
+        type: { type: "string" },
+      }),
     ]});
     connect.mockResolvedValue(undefined);
     const c = new MusicMcpClient(VENDOR, RUNTIME);
@@ -58,14 +62,48 @@ describe("MusicMcpClient", () => {
     listTools.mockResolvedValue({ tools: [
       tool("cloud_music_get_daily_recommend", {}),
       tool("cloud_music_search", { keyword: { type: "string" } }),
+      tool("cloud_music_play", {
+        id: { type: "string", required: true },
+        type: { type: "string" },
+      }),
       tool("cyrene_music_login_begin", {}),
       tool("cyrene_music_login_check", { session_id: { type: "string" } }),
       tool("cyrene_music_login_cancel", { session_id: { type: "string" } }),
+      tool("cyrene_music_validate_session", {}),
     ]});
     connect.mockResolvedValue(undefined);
     const c = new MusicMcpClient(VENDOR, RUNTIME);
     await c.connect();
     expect((await c.verifyContractOnConnect()).ok).toBe(true);
+  });
+
+  it("calls cloud_music_play through the data MCP boundary", async () => {
+    listTools.mockResolvedValue({ tools: [] });
+    connect.mockResolvedValue(undefined);
+    callTool.mockResolvedValue({ content: [{ type: "text", text: "已发送播放指令: song 123" }] });
+    const c = new MusicMcpClient(VENDOR, RUNTIME);
+    await c.connect();
+
+    await expect(c.callDataTool("cloud_music_play", { id: "123", type: "song" }))
+      .resolves.toBe("已发送播放指令: song 123");
+    expect(callTool).toHaveBeenCalledWith({
+      name: "cloud_music_play",
+      arguments: { id: "123", type: "song" },
+    });
+  });
+
+  it("throws when MCP reports isError instead of treating its text as data", async () => {
+    listTools.mockResolvedValue({ tools: [] });
+    connect.mockResolvedValue(undefined);
+    callTool.mockResolvedValue({
+      isError: true,
+      content: [{ type: "text", text: "playback tool crashed" }],
+    });
+    const c = new MusicMcpClient(VENDOR, RUNTIME);
+    await c.connect();
+
+    await expect(c.callDataTool("cloud_music_play", { id: "123", type: "song" }))
+      .rejects.toThrow("E_MCP_TOOL_FAILED");
   });
 
   it("callDataTool rejects tool not in DATA allowlist", async () => {
@@ -82,6 +120,17 @@ describe("MusicMcpClient", () => {
     const c = new MusicMcpClient(VENDOR, RUNTIME);
     await c.connect();
     await expect(c.callAuthTool("cloud_music_search", {})).rejects.toThrow(/E_TOOL_NOT_ALLOWED/);
+  });
+
+  it("calls the dedicated startup session validator", async () => {
+    listTools.mockResolvedValue({ tools: [] });
+    connect.mockResolvedValue(undefined);
+    callTool.mockResolvedValue({ content: [{ type: "text", text: JSON.stringify({ state: "valid" }) }] });
+    const c = new MusicMcpClient(VENDOR, RUNTIME);
+    await c.connect();
+
+    await expect(c.callAuthTool("cyrene_music_validate_session", {})).resolves.toEqual({ state: "valid" });
+    expect(callTool).toHaveBeenCalledWith({ name: "cyrene_music_validate_session", arguments: {} });
   });
 
   it("forwards env from buildChildEnv", async () => {

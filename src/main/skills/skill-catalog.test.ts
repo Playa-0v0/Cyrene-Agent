@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildAutoInjectedSkillContext, buildSkillCatalog } from "./skill-catalog";
+import { buildAutoInjectedSkillContext, buildAutoInjectedSoulContext, buildSkillCatalog } from "./skill-catalog";
 import type { SkillEntry } from "./types";
 
 function e(id: string, desc: string, tools?: string[], enabled = true): SkillEntry {
@@ -44,6 +44,23 @@ describe("buildSkillCatalog", () => {
     expect(out).toContain("- a: x");
     expect(out).not.toContain("- b:");
   });
+
+  it("distinguishes auto-injected skills from skills that require invoke_skill", () => {
+    const music = e("cyrene-music-companion", "音乐陪伴");
+    music.manifest = {
+      id: music.id,
+      version: "1.0.0",
+      defaultEnabled: true,
+      entry: "index.ts",
+      dependencies: [],
+      autoInject: true,
+    };
+
+    const out = buildSkillCatalog([music]);
+
+    expect(out).toContain("自动注入");
+    expect(out).toContain("无需再次调用 invoke_skill");
+  });
 });
 
 describe("buildAutoInjectedSkillContext", () => {
@@ -80,5 +97,50 @@ describe("buildAutoInjectedSkillContext", () => {
     };
 
     expect(buildAutoInjectedSkillContext([music], () => "正文")).toBe("");
+  });
+});
+
+describe("buildAutoInjectedSoulContext", () => {
+  it("injects only the Soul reply section and excludes tool instructions", () => {
+    const music = e("cyrene-music-companion", "音乐陪伴");
+    music.manifest = {
+      id: music.id,
+      version: "1.0.0",
+      defaultEnabled: true,
+      entry: "index.ts",
+      dependencies: [],
+      autoInject: true,
+    };
+    const body = [
+      "# 音乐陪伴",
+      "## Soul 回复策略",
+      "用户无聊时可以自然提议听歌。",
+      "## 工具调用策略",
+      "调用 music_get_daily_recommendations。",
+    ].join("\n");
+
+    const out = buildAutoInjectedSoulContext([music], () => body);
+
+    expect(out).toContain("用户无聊时可以自然提议听歌")
+    expect(out).not.toContain("music_get_daily_recommendations")
+  });
+
+  it("reads a Soul reply section that ends at end-of-file", () => {
+    const music = e("cyrene-music-companion", "音乐陪伴");
+    music.manifest = {
+      id: music.id,
+      version: "1.0.0",
+      defaultEnabled: true,
+      entry: "index.ts",
+      dependencies: [],
+      autoInject: true,
+    };
+
+    const out = buildAutoInjectedSoulContext(
+      [music],
+      () => "# 音乐陪伴\n## Soul 回复策略\n用户无聊时可以提议听歌。",
+    );
+
+    expect(out).toContain("用户无聊时可以提议听歌")
   });
 });

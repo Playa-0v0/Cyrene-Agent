@@ -378,13 +378,13 @@ export function registerDocumentTools(): void {
       "- 轻量笔记（用 write_markdown）\n" +
       "- 需要复杂排版（页眉页脚/目录/图片/表格）→ 才考虑 invoke_skill(docx)\n\n" +
       "style 可选值（见 skills/docx/styles/catalog.md）：default(商务) / academic(学术) / clean(极简) / elegant(优雅) / formal(公文)。\n" +
-      "参数：filename（.docx 结尾，可含子目录），title（标题），paragraphs（段落数组），style（可选预设风格）。",
+      "参数：filename（只传文件名，如 AI新闻汇总.docx，不要传绝对路径；输出目录由系统固定为桌面），title（标题），paragraphs（段落数组），style（可选预设风格）。",
     enabled: true,
     risk: "fs-write",
     inputSchema: {
       type: "object",
       properties: {
-        filename:   { type: "string", description: "文件名，可含子目录如 'test/report.docx'（.docx 结尾）" },
+        filename:   { type: "string", description: "文件名，必须以 .docx 结尾，例如 'AI新闻汇总.docx'。只传文件名，不要传绝对路径或目录。文件默认写入系统指定的桌面目录。" },
         title:      { type: "string", description: "文档标题" },
         paragraphs: { type: "array", description: "段落字符串数组", items: { type: "string" } },
         style:      { type: "string", description: "预设风格：default(商务) / academic(学术) / clean(极简) / elegant(优雅) / formal(公文)" },

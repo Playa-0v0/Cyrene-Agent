@@ -162,10 +162,15 @@ def test_validate_session_three_state_reads_runtime_dir(monkeypatch, tmp_storage
     with open(cookies_file, "w", encoding="utf-8") as f:
         json.dump({"MUSIC_U": "x", "__csrf": "y"}, f)
 
-    monkeypatch.setattr(auth.apis.login, "GetCurrentLoginStatus", lambda: {
-        "code": 200,
-        "profile": {"nickname": "alice", "userId": 42},
-    })
+    def current_login_status():
+        assert auth.GetCurrentSession().cookies.get("MUSIC_U") == "x"
+        assert auth.GetCurrentSession().cookies.get("__csrf") == "y"
+        return {
+            "code": 200,
+            "profile": {"nickname": "alice", "userId": 42},
+        }
+
+    monkeypatch.setattr(auth.apis.login, "GetCurrentLoginStatus", current_login_status)
     out = auth.validate_session_three_state()
     assert out["state"] == "valid"
     assert out["profile"]["nickname"] == "alice"
@@ -198,6 +203,25 @@ def test_validate_session_three_state_does_not_leak_exception_text(
     assert "leaked-bearer-token-in-trace" not in str(out)
     assert "MUSIC_U=leaked" not in str(out)
     assert out["reason"] in {"api_unreachable", "storage_read_failed"}
+
+
+def test_validate_session_three_state_preserves_cookie_on_upstream_5xx(
+    monkeypatch, tmp_storage
+):
+    cookies_file = _cookies_file(tmp_storage)
+    with open(cookies_file, "w", encoding="utf-8") as f:
+        json.dump({"MUSIC_U": "x"}, f)
+
+    monkeypatch.setattr(
+        auth.apis.login,
+        "GetCurrentLoginStatus",
+        lambda: {"code": 503, "message": "service unavailable"},
+    )
+
+    assert auth.validate_session_three_state() == {
+        "state": "temporarily_unavailable",
+        "reason": "api_unreachable",
+    }
 
 
 def test_check_login_atomicity_cancel_after_803_cannot_run(monkeypatch, tmp_storage):
@@ -242,5 +266,82 @@ def test_main_module_exposes_cyrene_login_tools():
     assert "cyrene_music_login_begin" in tool_names
     assert "cyrene_music_login_check" in tool_names
     assert "cyrene_music_login_cancel" in tool_names
+    assert "cyrene_music_validate_session" in tool_names
     # Legacy tool must still be present
     assert "cloud_music_login" in tool_names
+
+
+def test_daily_recommend_tool_returns_structured_success(monkeypatch):
+    import importlib
+
+    main_module = importlib.import_module("cloud_music_mcp.main")
+    payload = {
+        "success": True,
+        "songs": [{"id": 1, "name": "Song", "artist": "Artist"}],
+    }
+    monkeypatch.setattr(main_module, "get_daily_recommendations", lambda: payload)
+
+    assert main_module.cloud_music_get_daily_recommend.fn() == payload
+
+
+def test_daily_recommend_tool_returns_structured_error(monkeypatch):
+    import importlib
+
+    main_module = importlib.import_module("cloud_music_mcp.main")
+    monkeypatch.setattr(
+        main_module,
+        "get_daily_recommendations",
+        lambda: {"success": False, "error": "upstream unavailable"},
+    )
+
+    assert main_module.cloud_music_get_daily_recommend.fn() == {
+        "success": False,
+        "songs": [],
+        "error": {
+            "code": "E_DAILY_RECOMMEND_FAILED",
+            "message": "upstream unavailable",
+        },
+    }
+
+
+def test_daily_recommend_uses_the_cyrene_runtime_cookie(monkeypatch, tmp_storage):
+    """All NetEase APIs must use the same runtime Cookie/Session as
+    Cyrene startup validation, even when the legacy package cookie file
+    does not exist."""
+    from cloud_music_mcp import api
+
+    with open(_cookies_file(tmp_storage), "w", encoding="utf-8") as f:
+        json.dump({"MUSIC_U": "shared-runtime-cookie", "__csrf": "csrf"}, f)
+    auth.GetCurrentSession().cookies.clear()
+
+    monkeypatch.setattr(
+        api.apis,
+        "WeapiCryptoRequest",
+        lambda _fn: lambda: {"code": 200, "recommend": []},
+    )
+
+    assert api.get_daily_recommendations() == {"success": True, "songs": []}
+    assert auth.GetCurrentSession().cookies.get("MUSIC_U") == "shared-runtime-cookie"
+
+
+def test_anonymous_search_does_not_depend_on_legacy_cookie_loader(monkeypatch):
+    from cloud_music_mcp import api
+
+    monkeypatch.setattr(
+        api.apis.cloudsearch,
+        "GetSearchResult",
+        lambda keyword, stype, limit: {
+            "code": 200,
+            "result": {
+                "songs": [
+                    {"id": 1, "name": "左转灯", "ar": [{"name": "派伟俊"}]}
+                ]
+            },
+        },
+    )
+
+    assert api.search("左转灯", category="song") == {
+        "success": True,
+        "category": "song",
+        "items": [{"id": 1, "name": "左转灯", "artist": "派伟俊"}],
+    }

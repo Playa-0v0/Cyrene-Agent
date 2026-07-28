@@ -12,6 +12,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { app } from "electron";
 import { toolRegistry } from "./tool-registry";
+import { currentUserTimezone } from "./built-in-tools";
 
 const LOG_PREFIX = "[LifeTools]";
 
@@ -125,7 +126,7 @@ function registerExpenseTools(): void {
         return `[query_expense] 最近 ${days} 天共 ${records.length} 笔，合计 ${total.toFixed(2)} 元\n分类：${JSON.stringify(byCat)}`;
       }
       const lines = records.map(r => {
-        const d = new Date(r.ts).toLocaleDateString("zh-CN");
+        const d = new Date(r.ts).toLocaleDateString("zh-CN", { timeZone: currentUserTimezone() });
         return `${d} ${r.amount}元 ${r.category} ${r.note}`;
       });
       return `[query_expense] 最近 ${days} 天 ${records.length} 笔：\n${lines.join("\n")}`;
@@ -180,7 +181,7 @@ function registerExchangeRateTool(): void {
         return `[exchange_rate] 查不到 ${from} → ${to}，可能是不支持的币种`;
       }
       const result = (amount * rate).toFixed(2);
-      return `[exchange_rate] ${amount} ${from} = ${result} ${to}（汇率 ${rate}，更新于 ${new Date().toLocaleDateString("zh-CN")}）`;
+      return `[exchange_rate] ${amount} ${from} = ${result} ${to}（汇率 ${rate}，更新于 ${new Date().toLocaleDateString("zh-CN", { timeZone: currentUserTimezone() })}）`;
     },
   });
 }

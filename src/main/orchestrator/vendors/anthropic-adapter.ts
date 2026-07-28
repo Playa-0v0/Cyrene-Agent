@@ -13,6 +13,7 @@ import { authHeaderFor } from "./auth";
 import { resolveReasoningCapability } from "../../../shared/reasoning";
 import { applyReasoningPreference } from "./reasoning";
 import { getTimeoutSettings } from "../../timeout-manager";
+import { resolveAutomaticToolChoicePolicy, resolveToolChoicePolicy } from "./tool-choice-policy";
 
 const ANTHROPIC_VERSION = "2023-06-01";
 const DEFAULT_MAX_TOKENS = 4096;
@@ -102,6 +103,7 @@ export class AnthropicAdapter implements ChatVendorAdapter {
     };
     // temperature 只在调用方显式传时才塞进 body，让厂商用默认值避免型号约束冲突
     if (req.temperature !== undefined) body.temperature = req.temperature;
+    if (req.topP !== undefined) body.top_p = req.topP;
     // system + 主动缓存（MiniMax/Claude：cache_control: ephemeral 打在 system block 上）
     if (system) {
       if (this.capability.cacheStrategy === "cache_control") {
@@ -116,11 +118,63 @@ export class AnthropicAdapter implements ChatVendorAdapter {
         description: t.description,
         input_schema: t.parameters,
       }));
-      body.tool_choice = req.toolChoice
-        ? { type: "tool", name: req.toolChoice.name }
-        : { type: "auto" };
+      if (req.toolChoiceOverride) {
+        // Action Gate 专用：直接指定 tool_choice wire 值，绕过 resolveToolChoicePolicy
+        switch (req.toolChoiceOverride.kind) {
+          case "named":
+            body.tool_choice = { type: "tool", name: req.toolChoiceOverride.toolName };
+            break;
+          case "required":
+            body.tool_choice = { type: "any" };
+            break;
+          case "auto":
+            body.tool_choice = { type: "auto" };
+            break;
+          case "none":
+            body.tool_choice = { type: "none" };
+            break;
+          case "omit":
+            // 不发 tool_choice 字段
+            break;
+        }
+      } else if (req.toolChoiceIntent) {
+        const policy = resolveToolChoicePolicy({
+          providerId: this.capability.id,
+          model: cfg.model,
+          transport: this.transport,
+          reasoning: cfg.reasoning ?? { mode: "auto" },
+          requestedToolName: req.toolChoiceIntent.toolName,
+          supportedModes: this.capability.toolChoiceModes,
+        });
+        if (policy.kind === "named") body.tool_choice = { type: "tool", name: policy.name };
+        else if (policy.kind === "required") body.tool_choice = { type: "any" };
+        else if (policy.kind === "auto") body.tool_choice = { type: "auto" };
+      } else if (resolveAutomaticToolChoicePolicy({
+        providerId: this.capability.id,
+        model: cfg.model,
+        transport: this.transport,
+        reasoning: cfg.reasoning ?? { mode: "auto" },
+        supportedModes: this.capability.toolChoiceModes,
+      }) === "auto") {
+        body.tool_choice = { type: "auto" };
+      }
     }
     if (req.extraBody) Object.assign(body, req.extraBody);
+    if (req.structuredOutput?.mode === "json_schema") {
+      body.output_config = {
+        ...(
+          body.output_config
+          && typeof body.output_config === "object"
+          && !Array.isArray(body.output_config)
+            ? body.output_config as Record<string, unknown>
+            : {}
+        ),
+        format: {
+          type: "json_schema",
+          schema: req.structuredOutput.schema,
+        },
+      };
+    }
     // 推理控制：按 (providerId, model) 解析 capability，调用 applyReasoningPreference 转换 body。
     const reasoningCap = resolveReasoningCapability(this.capability.id, cfg.model);
     const finalBody = applyReasoningPreference(

@@ -1,7 +1,9 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { IPC } from "../shared/ipc-channels";
+import type { ScreenshotInsertPayload } from "../shared/ipc-channels";
 import type { UiTheme } from "../shared/ui-theme";
 import type { UiFont } from "../shared/ui-font";
+import type { ReasoningPreference } from "../shared/reasoning";
 import type { DocumentIndexProgress } from "../main/rag/document-index-queue";
 import { getLive2DIpcListenerCounts } from "./live2d-listener-diagnostics";
 import { exposeMusicApi } from "./music";
@@ -37,7 +39,6 @@ const chatApi = {
   close: () => ipcRenderer.send(IPC.CHAT_CLOSE),
   toggleMaximize: () => ipcRenderer.send(IPC.CHAT_TOGGLE_MAXIMIZE),
   isMaximized: () => ipcRenderer.invoke(IPC.CHAT_IS_MAXIMIZED),
-  sendMessage: (messages: unknown[], style: string) => ipcRenderer.invoke(IPC.CHAT_SEND_MESSAGE, messages, style),
   getEnabledStickers: () => ipcRenderer.invoke(IPC.STICKERS_GET_ENABLED),
   /** 从 dataTransfer.files 或 fileInput.files 提取路径后批量摄入。
    *  路径提取在 preload（webUtils.getPathForFile），避免 Electron 33 中 File.path 不可用的问题。 */
@@ -61,14 +62,26 @@ const chatApi = {
   },
   cancelDocumentIndex: (jobId: string) =>
     ipcRenderer.invoke(IPC.CHAT_CANCEL_DOCUMENT_INDEX, { jobId }) as Promise<boolean>,
-  captionImage: (filePath: string) => ipcRenderer.invoke(IPC.CHAT_CAPTION_IMAGE, { filePath }),
+  captionImage: (filePath: string, hasAnnotations = false) =>
+    ipcRenderer.invoke(IPC.CHAT_CAPTION_IMAGE, { filePath, hasAnnotations }),
   getImageSendStrategy: () => ipcRenderer.invoke(IPC.CHAT_GET_IMAGE_SEND_STRATEGY),
   getGeneralSettings: () => ipcRenderer.invoke(IPC.SETTINGS_GET_GENERAL),
-  onStreamChunk: (cb: (chunk: string) => void) => { ipcRenderer.on(IPC.CHAT_STREAM_CHUNK, (_e: unknown, chunk: string) => cb(chunk)); },
-  onStreamDone: (cb: (payload: unknown) => void) => { ipcRenderer.on(IPC.CHAT_STREAM_DONE, (_e: unknown, payload: unknown) => cb(payload)); },
-  removeStreamListeners: () => { ipcRenderer.removeAllListeners(IPC.CHAT_STREAM_CHUNK); ipcRenderer.removeAllListeners(IPC.CHAT_STREAM_DONE); },
   getReasoningState: () => ipcRenderer.invoke(IPC.CHAT_GET_REASONING_STATE),
   setReasoning: (payload: { providerKey: string; preference: unknown }) => ipcRenderer.invoke(IPC.CHAT_SET_REASONING, payload),
+  // 截图
+  startScreenshot: () => ipcRenderer.invoke(IPC.SCREENSHOT_START),
+  onScreenshotInsert: (
+    callback: (data: ScreenshotInsertPayload) => void,
+  ) => {
+    const listener = (
+      _e: unknown,
+      data: ScreenshotInsertPayload,
+    ) => callback(data);
+    ipcRenderer.on(IPC.SCREENSHOT_INSERT, listener);
+    return () => ipcRenderer.removeListener(IPC.SCREENSHOT_INSERT, listener);
+  },
+  saveScreenshotTemp: (base64: string, mime: string) =>
+    ipcRenderer.invoke(IPC.SCREENSHOT_SAVE_TEMP, base64, mime) as Promise<{ filePath: string }>,
 };
 
 contextBridge.exposeInMainWorld("cyrene", cyreneApi);
@@ -79,7 +92,11 @@ contextBridge.exposeInMainWorld("chat", chatApi);
 const aguiApi = {
   run: (input: {
     messages: unknown[];
-    style: string;
+    userTurnId?: string;
+    assistantTurnId?: string;
+    style?: string;
+    styleId?: string;
+    executionMode?: "work" | "chat";
     sessionId?: string;
     attachments?: { name: string; text: string }[];
     imageAttachments?: { name: string; filePath: string; mime?: string }[];
@@ -127,8 +144,11 @@ contextBridge.exposeInMainWorld("schedulerEvents", schedulerEventsApi);
 // 用户选择卡片（歧义消解器）：渲染端回传用户选择给主进程
 // 卡片展示走 AGUI_EVENT 的 CUSTOM 事件（与天气卡片同通道），resolve 走独立 IPC
 const choiceApi = {
-  resolve: (id: string, value: string) =>
-    ipcRenderer.invoke(IPC.CHOICE_RESOLVE, { id, value }),
+  resolve: (id: string, value: unknown) =>
+    ipcRenderer.invoke(
+      IPC.CHOICE_RESOLVE,
+      typeof value === "string" ? { id, value } : { id, answer: value },
+    ),
 };
 contextBridge.exposeInMainWorld("choice", choiceApi);
 
@@ -211,7 +231,7 @@ const settingsApi = {
   close: () => ipcRenderer.send(IPC.SETTINGS_CLOSE),
   getConfig: () => ipcRenderer.invoke(IPC.SETTINGS_GET_CONFIG),
   saveConfig: (config: unknown) => ipcRenderer.invoke(IPC.SETTINGS_SAVE_CONFIG, config),
-  testConnection: (config: { provider: string; baseUrl: string; model: string; apiKey: string }) => ipcRenderer.invoke(IPC.SETTINGS_TEST_CONNECTION, config),
+  testConnection: (config: { provider: string; baseUrl: string; model: string; apiKey: string; explicitTransport?: "openai" | "anthropic" | "auto"; reasoning?: ReasoningPreference }) => ipcRenderer.invoke(IPC.SETTINGS_TEST_CONNECTION, config),
   testVision: (config: { baseUrl: string; apiKey: string; model: string }) => ipcRenderer.invoke(IPC.SETTINGS_TEST_VISION, config),
   // main → settings：要求切到指定标签（窗口已打开时由 main 发这个事件）
   onSwitchSection: (callback: (section: string) => void) => {
@@ -236,6 +256,7 @@ const settingsApi = {
   setPetZoom: (value: number) => ipcRenderer.send(IPC.SETTINGS_SET_PET_ZOOM, value),
   previewRuntimeSync: (value: "off" | "local" | "llm") => ipcRenderer.send(IPC.SETTINGS_PREVIEW_RUNTIME_SYNC, value),
   openStickerManager: () => ipcRenderer.invoke(IPC.SETTINGS_OPEN_STICKER_MANAGER),
+  openCustomStylePrompt: () => ipcRenderer.invoke(IPC.SETTINGS_OPEN_CUSTOM_STYLE_PROMPT),
   stickerPickFile: () => ipcRenderer.invoke(IPC.STICKERS_PICK_FILE),
   stickerAdd: (payload: { sourcePath: string; id: string; description: string; phrases: string[] }) => ipcRenderer.invoke(IPC.STICKERS_ADD, payload),
   getEmbeddingStatus: () => ipcRenderer.invoke(IPC.EMBEDDING_GET_STATUS),
@@ -307,6 +328,9 @@ const settingsApi = {
   },
   resolvePermissionApproval: (id: string, allowed: boolean): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IPC.PERMISSION_APPROVAL_RESOLVE, { id, allowed }),
+  // 截图热键捕获（设置页临时挂起全局快捷键）
+  beginScreenshotHotkeyCapture: () => ipcRenderer.invoke(IPC.SCREENSHOT_HOTKEY_CAPTURE_START),
+  endScreenshotHotkeyCapture: () => ipcRenderer.invoke(IPC.SCREENSHOT_HOTKEY_CAPTURE_END),
 };
 
 contextBridge.exposeInMainWorld("settings", settingsApi);
@@ -362,6 +386,11 @@ const userApi = {
   saveProfile: (profile: unknown) => ipcRenderer.invoke(IPC.USER_SAVE_PROFILE, profile),
   uploadAvatar: () => ipcRenderer.invoke(IPC.USER_UPLOAD_AVATAR),
   getAvatar: () => ipcRenderer.invoke(IPC.USER_GET_AVATAR),
+  onAvatarChanged: (callback: () => void) => {
+    const listener = (_event: Electron.IpcRendererEvent) => callback();
+    ipcRenderer.on(IPC.USER_AVATAR_CHANGED, listener);
+    return () => ipcRenderer.off(IPC.USER_AVATAR_CHANGED, listener);
+  },
 };
 
 const memoryPanelApi = {
@@ -394,11 +423,6 @@ const live2dSpeechApi = {
     ipcRenderer.on(IPC.LIVE2D_MOUTH_STOP, listener);
     return () => ipcRenderer.removeListener(IPC.LIVE2D_MOUTH_STOP, listener);
   },
-  onShowBubble: (callback: (payload: import("../main/opener/opener-types").ShowBubblePayload) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, payload: import("../main/opener/opener-types").ShowBubblePayload) => callback(payload);
-    ipcRenderer.on(IPC.LIVE2D_SHOW_BUBBLE, listener);
-    return () => ipcRenderer.removeListener(IPC.LIVE2D_SHOW_BUBBLE, listener);
-  },
 };
 contextBridge.exposeInMainWorld("live2dSpeech", live2dSpeechApi);
 
@@ -416,18 +440,6 @@ const live2dDiagnosticsApi = {
   getIpcListenerCounts: () => getLive2DIpcListenerCounts(ipcRenderer),
 };
 contextBridge.exposeInMainWorld("live2dDiagnostics", live2dDiagnosticsApi);
-
-// Opener 主动开口反馈（渲染端 → 主进程）
-const openerApi = {
-  feedback: (payload: { type: "clicked"; sceneId: string; itemId: string }) =>
-    ipcRenderer.send(IPC.OPENER_FEEDBACK, payload),
-  testFire: () => ipcRenderer.invoke(IPC.OPENER_TEST_FIRE),
-  getStatus: () => ipcRenderer.invoke(IPC.OPENER_GET_STATUS),
-  openPackDir: () => ipcRenderer.invoke(IPC.OPENER_OPEN_PACK_DIR),
-  openInstallDocs: () => ipcRenderer.invoke(IPC.OPENER_OPEN_INSTALL_DOCS),
-  openSession: (sessionId: string) => ipcRenderer.invoke(IPC.CHATS_OPEN_IN_CHAT_WINDOW, sessionId),
-};
-contextBridge.exposeInMainWorld("openerBridge", openerApi);
 
 // 聊天会话存储（多对话历史）
 const chatStoreApi = {
@@ -531,6 +543,26 @@ const ttsApi = {
     apiKey: string; voiceAudioPath?: string; text: string; stylePrompt?: string;
     expectedCacheKey?: string;
   }) => ipcRenderer.invoke(IPC.TTS_SYNTHESIZE_CACHED_MIMO, payload),
+  // Mossland TTS（api.mosi.cn，POST /v1/audio/speech）
+  synthesizeMossland: (payload: {
+    apiKey: string; voiceId: string; text: string;
+    speed?: number; volume?: number; model?: string;
+    format?: "mp3" | "wav" | "pcm";
+  }) => ipcRenderer.invoke(IPC.TTS_SYNTHESIZE_MOSSLAND, payload),
+  synthesizeCachedMossland: (payload: {
+    apiKey: string; voiceId: string; text: string;
+    speed?: number; volume?: number; model?: string;
+    format?: "mp3" | "wav" | "pcm";
+    expectedCacheKey?: string;
+  }) => ipcRenderer.invoke(IPC.TTS_SYNTHESIZE_CACHED_MOSSLAND, payload),
+  // Mossland 音色克隆（POST /v1/audio/voices，multipart 上传本地文件）
+  cloneMossland: (payload: {
+    apiKey: string; filePath: string; name?: string; description?: string;
+  }) => ipcRenderer.invoke(IPC.TTS_CLONE_MOSSLAND, payload),
+  // Mossland 拉取账号下音色列表（GET /v1/audio/voices）
+  listMosslandVoices: (payload: {
+    apiKey: string; limit?: number;
+  }) => ipcRenderer.invoke(IPC.TTS_LIST_MOSSLAND_VOICES, payload),
   // 选择音频文件（复用 TTS_PICK_AUDIO，gptsovits 选 ref audio 也用这个）
   pickAudioFile: () => ipcRenderer.invoke(IPC.TTS_PICK_AUDIO),
   // 流式语音合成（边合成边播）

@@ -67,17 +67,54 @@ export interface ToolSpec {
   parameters: object; // JSON Schema
 }
 
+export type StructuredOutputRequest =
+  | {
+      mode: "json_schema";
+      name: string;
+      schema: object;
+      strict: boolean;
+    }
+  | {
+      mode: "json_object";
+    }
+  | {
+      mode: "prompt_json";
+      sendJsonObjectHint: boolean;
+    };
+
+/**
+ * Action Gate 专用：直接指定 tool_choice wire 值，绕过 resolveToolChoicePolicy。
+ * Native FC 不设此字段，仍走 toolChoiceIntent + resolveToolChoicePolicy。
+ *
+ * `none` 和 `omit` 的区别：
+ * - `none`：明确发送"禁止调用工具"（wire: tool_choice: "none"）
+ * - `omit`：请求里完全不出现 tool_choice 字段
+ */
+export type ToolChoiceOverride =
+  | { kind: "named"; toolName: string }
+  | { kind: "required" }
+  | { kind: "auto" }
+  | { kind: "none" }
+  | { kind: "omit" };
+
 export interface ChatRequest {
   model: string;
   messages: ChatMessage[];
   tools?: ToolSpec[];
-  /** 明确意图的单轮强制工具选择；未传时由厂商使用 auto。 */
-  toolChoice?: { name: string };
+  /** Runtime semantic intent; the active Adapter maps it to named/required/any/auto/omitted wire syntax. */
+  toolChoiceIntent?: { mode: "must_call"; toolName: string };
+  /** Action Gate 专用：直接指定 tool_choice wire 值，绕过 resolveToolChoicePolicy。 */
+  toolChoiceOverride?: ToolChoiceOverride;
   temperature?: number;
+  topP?: number;
+  frequencyPenalty?: number;
+  repetitionPenalty?: number;
   stream?: boolean;
+  /** CITA/Action Gate only. Native FC keeps using real tools instead. */
+  structuredOutput?: StructuredOutputRequest;
   /**
    * 非流式调用时的 max_tokens 上限（OpenAI wire: `max_tokens`；Anthropic wire 覆盖默认 4096）。
-   * 流式时由 adapter 决定是否使用（通常不用——流式靠 finish_reason 判断）。
+   * 流式时由 adapter 决定是否使用（通常不用--流式靠 finish_reason 判断）。
    */
   maxTokens?: number;
   /** 透传到请求体顶层的厂商扩展字段（如 Kimi 的 prompt_cache_key）。 */
@@ -120,6 +157,8 @@ export interface ChatResponse {
   assistantMessage: ChatMessage;
   text: string;
   thinking?: string;
+  /** Provider-declared refusal; it may coexist with a normal-looking finish reason. */
+  refusal?: string;
   toolCalls: ToolCall[];
   finishReason: string;
   raw: unknown;
@@ -165,6 +204,8 @@ export interface ProviderCapability {
   testStrategy: TestStrategy;
   /** 是否支持视觉（图片）输入。非多模态模型禁止走 read_image。 */
   supportsVision: boolean;
+  /** Supported must-call wire policies; Adapter maps required to OpenAI required / Anthropic any. */
+  toolChoiceModes?: ReadonlyArray<"named" | "required" | "auto" | "omit">;
   /**
    * 视觉模型的 OpenAI 兼容 baseUrl。仅当主聊天走 Anthropic 入口、视觉需走 OpenAI 入口时才需要标
    * （如 MiniMax 主配 /anthropic，视觉要走 /v1）。不标 = 视觉用主配置 baseUrl。

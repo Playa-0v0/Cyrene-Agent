@@ -5,6 +5,11 @@ export interface ChatContextMessage {
 }
 
 export interface ConversationTimeContext {
+  /** 不带时间戳前缀的干净消息（给 Action Gate 等决策层用）*/
+  cleanMessages: ChatContextMessage[];
+  /** 带时间戳前缀的消息（给 Soul / Legacy 用，当前行为）*/
+  timestampedMessages: ChatContextMessage[];
+  /** @deprecated 使用 timestampedMessages */
   messages: ChatContextMessage[];
   timeContext: string;
 }
@@ -33,16 +38,21 @@ function isValidTimezone(timezone: string): boolean {
   }
 }
 
-function systemTimezone(): string {
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return timezone && isValidTimezone(timezone) ? timezone : "UTC";
-}
+/**
+ * 默认时区：用户资料缺失或非法时使用。需求：用户时区 → Asia/Shanghai。
+ * 注意：所有"模型可见时间"的格式化位置都必须先调 `resolveChatContextTimezone`，
+ * 禁止直接把未校验的 profile.timezone 喂 Intl，避免非法 IANA 值触发 RangeError。
+ */
+export const DEFAULT_CHAT_CONTEXT_TIMEZONE = "Asia/Shanghai";
 
-export function resolveChatContextTimezone(profileTimezone?: string, fallbackTimezone = systemTimezone()): string {
+export function resolveChatContextTimezone(
+  profileTimezone?: string,
+  fallbackTimezone = DEFAULT_CHAT_CONTEXT_TIMEZONE,
+): string {
   const profile = profileTimezone?.trim();
   if (profile && isValidTimezone(profile)) return profile;
   const fallback = fallbackTimezone.trim();
-  return fallback && isValidTimezone(fallback) ? fallback : "UTC";
+  return fallback && isValidTimezone(fallback) ? fallback : DEFAULT_CHAT_CONTEXT_TIMEZONE;
 }
 
 export function normalizeChatMessagesWithTime(input: unknown): ChatContextMessage[] {
@@ -151,8 +161,11 @@ export function buildConversationTimeContext(messages: ChatContextMessage[], tim
   const resolvedTimezone = resolveChatContextTimezone(timezone);
   const timestampUseRule = buildTimestampUseRule(messages);
   const gapNotice = buildGapNotice(messages, resolvedTimezone);
+  const timestampedMessages = messages.map((message) => withTimePrefix(message, resolvedTimezone));
   return {
-    messages: messages.map((message) => withTimePrefix(message, resolvedTimezone)),
+    cleanMessages: messages.map((message) => ({ ...message })),
+    timestampedMessages,
+    messages: timestampedMessages,
     timeContext: [timestampUseRule, gapNotice].filter(Boolean).join("\n\n"),
   };
 }

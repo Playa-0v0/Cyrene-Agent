@@ -82,5 +82,5 @@ export function listSkillsForUi() {
 }
 
 export { skillRegistry } from "./skill-registry";
-export { buildAutoInjectedSkillContext, buildSkillCatalog } from "./skill-catalog";
+export { buildAutoInjectedSkillContext, buildAutoInjectedSoulContext, buildSkillCatalog } from "./skill-catalog";
 export { parseSlashCommand } from "./skill-commands";

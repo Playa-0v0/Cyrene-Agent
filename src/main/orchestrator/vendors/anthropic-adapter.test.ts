@@ -18,16 +18,84 @@ const anthropicCap: ProviderCapability = {
 };
 
 describe("AnthropicAdapter", () => {
-  test("maps an explicit required tool to Anthropic tool_choice", () => {
+  test("maps structured json_schema requests to output_config.format without OpenAI name", () => {
+    const adapter = new AnthropicAdapter("test-anthropic", anthropicCap);
+    const schema = {
+      type: "object",
+      properties: { decision: { type: "string", enum: ["respond"] } },
+      required: ["decision"],
+      additionalProperties: false,
+    };
+    const req = adapter.buildRequest({
+      model: "m",
+      maxTokens: 200,
+      messages: [{ role: "user", content: "hi" }],
+      structuredOutput: { mode: "json_schema", name: "ignored_by_anthropic", schema, strict: true },
+    }, { provider: "p", baseUrl: "https://e.test/v1", model: "m", apiKey: "k" });
+
+    expect(JSON.parse(req.body).output_config).toEqual({
+      format: { type: "json_schema", schema },
+    });
+  });
+
+  test("does not invent structured output fields for prompt_json", () => {
+    const adapter = new AnthropicAdapter("test-anthropic", anthropicCap);
+    const req = adapter.buildRequest({
+      model: "m",
+      maxTokens: 200,
+      messages: [{ role: "user", content: "hi" }],
+      structuredOutput: { mode: "prompt_json", sendJsonObjectHint: false },
+    }, { provider: "p", baseUrl: "https://e.test/v1", model: "m", apiKey: "k" });
+
+    expect(JSON.parse(req.body).output_config).toBeUndefined();
+  });
+
+  test("keeps ordinary native Function Calling on auto", () => {
+    const adapter = new AnthropicAdapter("test-anthropic", anthropicCap);
+    const req = adapter.buildRequest({
+      model: "m", messages: [{ role: "user", content: "搜歌" }],
+      tools: [{ name: "music_search", description: "搜索", parameters: { type: "object" } }],
+    }, { provider: "p", baseUrl: "https://e.test/v1", model: "m", apiKey: "k" });
+    expect(JSON.parse(req.body).tool_choice).toEqual({ type: "auto" });
+  });
+
+  test("maps a must-call intent to named Anthropic tool_choice when supported", () => {
     const adapter = new AnthropicAdapter("test-anthropic", anthropicCap);
     const req = adapter.buildRequest({
       model: "m",
       messages: [{ role: "user", content: "搜歌" }],
       tools: [{ name: "music_search", description: "搜索", parameters: { type: "object" } }],
-      toolChoice: { name: "music_search" },
+      toolChoiceIntent: { mode: "must_call", toolName: "music_search" },
     }, { provider: "p", baseUrl: "https://e.test/v1", model: "m", apiKey: "sk-test" });
 
     expect(JSON.parse(req.body).tool_choice).toEqual({ type: "tool", name: "music_search" });
+  });
+
+  test("uses auto for must-call intent while extended thinking is enabled", () => {
+    const adapter = new AnthropicAdapter("claude", { ...anthropicCap, id: "claude" });
+    const req = adapter.buildRequest({
+      model: "claude-sonnet-4-6", messages: [{ role: "user", content: "搜歌" }],
+      tools: [{ name: "music_search", description: "搜索", parameters: { type: "object" } }],
+      toolChoiceIntent: { mode: "must_call", toolName: "music_search" },
+    }, {
+      provider: "Claude（Anthropic）", baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-4-6",
+      apiKey: "k", reasoning: { mode: "on", effort: "high" },
+    });
+    expect(JSON.parse(req.body).tool_choice).toEqual({ type: "auto" });
+  });
+
+  test("maps a required-only provider policy to Anthropic any", () => {
+    const adapter = new AnthropicAdapter("required-only", {
+      ...anthropicCap,
+      id: "required-only",
+      toolChoiceModes: ["required"],
+    });
+    const req = adapter.buildRequest({
+      model: "m", messages: [{ role: "user", content: "搜歌" }],
+      tools: [{ name: "music_search", description: "搜索", parameters: { type: "object" } }],
+      toolChoiceIntent: { mode: "must_call", toolName: "music_search" },
+    }, { provider: "p", baseUrl: "https://e.test/v1", model: "m", apiKey: "k", reasoning: { mode: "off" } });
+    expect(JSON.parse(req.body).tool_choice).toEqual({ type: "any" });
   });
 
   test("buildRequest uses x-api-key when authStyle=x-api-key (default Anthropic)", () => {

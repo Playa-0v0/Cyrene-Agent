@@ -5,6 +5,13 @@ export interface TurnModelContextInput {
   directImageLines?: string[];
 }
 
+export const USER_ANNOTATION_NOTICE =
+  "这张图片包含用户主动添加的视觉标注。标注区域代表用户希望你重点关注的内容，但不表示该区域一定存在错误。请识别这些标注，并结合整张图片和用户文字回答。";
+
+export function userAnnotationNotice(hasAnnotations: boolean): string | undefined {
+  return hasAnnotations ? USER_ANNOTATION_NOTICE : undefined;
+}
+
 export function buildTurnModelContext(input: TurnModelContextInput): string | undefined {
   const contextParts: string[] = [];
 

@@ -8,231 +8,288 @@
 
 </div>
 
-**Cyrene-Agent is a Windows desktop Live2D AI companion with chat, memory, voice, tool calling, and multi-platform integration.**
+**Cyrene-Agent is a Windows Live2D AI desktop companion centered around Cyrene from _Honkai: Star Rail_.**
 
-> A desktop Live2D conversational agent built with Electron + TypeScript,
-> featuring the Cyrene character from *Honkai: Star Rail*. Supports daily
-> chat, emotional interaction, and a personalized memory engine.
-
----
-
-## ⚠️ Disclaimer
-
-This is an **unofficial fan-made project**. It is **NOT** affiliated with,
-endorsed by, or sponsored by HoYoverse / miHoYo in any way.
-
-"Honkai: Star Rail", "Cyrene" (昔涟), and all related character designs,
-artwork, story content, and trademarks are the intellectual property of
-**HoYoverse / miHoYo**.
-
-**On the scope of licensing**:
-
-- **Source code** is released under [MIT License](./LICENSE), which covers
-  this repository's source code only.
-- **Character IP, Live2D model, and art assets** are NOT covered by the
-  MIT License; they are subject to [MODEL_LICENSE.md](./MODEL_LICENSE.md)
-  and miHoYo's fan-content policy respectively.
-- Because the underlying character IP is governed by miHoYo's fan policy,
-  **this project and any derivatives are strictly prohibited from any
-  commercial use** (selling, paid communities, ad-monetization, packaged
-  resale, etc.).
+> A desktop Live2D conversational Agent built with Electron and TypeScript.  
+> Centered around Cyrene's character design and powered by the self-developed DMAE memory engine,  
+> it brings character-driven conversation, personalized memory, voice interaction, tool use, and multi-platform access into a single desktop Agent,  
+> while supporting both casual conversation (Chat) and assisted work (Work).
 
 ---
 
-## 📊 Project Status
+## ✨ At a Glance
 
-| Module | Status |
-| --- | --- |
-| 🪟 Live2D pet / multi-window / expression interaction | ✅ Stable |
-| 💬 Daily chat / voice call / multi-chat history / stickers | ✅ Stable |
-| 🧠 Memory system (L0/L1/L2 + custom DMAE Worldbook engine) | ✅ Stable |
-| 🔊 TTS / ASR / document generation / web search / file ops | ✅ Stable (some need config) |
-| 💼 Lark / Feishu long-connection | 🧪 Experimental |
-| 💬 WeChat iLink Bot | 🧪 Experimental |
-| 🤖 Game Bot automation | 🧪 Experimental |
-| 🔌 MCP (Model Context Protocol) ecosystem | 🧪 Experimental |
-| ✨ Skill system | ✅ Stable |
-| 📚 RAG document knowledge base (hybrid retrieval / reranker) | 🧪 Experimental |
-| 🌙 Proactive chat (routed delivery + safety guards) | ✅ Stable |
-
-> ✅ Stable = usable for daily use; 🧪 Experimental = implemented but edge cases / compatibility / UX still being polished.
+- 🌸 **Playful Desktop Companion** — A persistent Live2D character with expressions, actions, status, mood, speech bubbles, and intelligent stickers
+- 💬 **Casual Conversation (Chat)** — Focused on character-driven interaction, with responses shaped by conversation history, user style, and long-term memory
+- 🛠️ **Assisted Work (Work)** — Understands requests, invokes tools through a complete Agent workflow, and replies from verified execution results
+- 🧠 **Personalized Memory** — L0 / L1 / L2 layered memory combined with the self-developed DMAE Worldbook for long-term interaction continuity
+- 🔊 **Voice Interaction** — Integrated TTS, ASR, and voice calls so Cyrene can listen and respond
+- 🧰 **Rich Tool Ecosystem** — Web search, file processing, document generation, everyday services, music, and MCP extensions
+- 🔌 **Multi-Provider Model Support** — Tiered Structured Output and Function Calling compatibility profiles for different model providers
+- 🎨 **Customizable Appearance** — Multiple interface styles, themes, and chat font options
+- 📱 **Multi-Platform Access** — Desktop, Feishu/Lark, and WeChat iLink with shared character capabilities and conversation experience
+- 🌙 **Proactive Chat** — Starts conversations according to time, status, and user preferences, with targeted multi-channel delivery
 
 ---
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- This project is **only tested and supported on Windows 10/11 + Node.js 24 LTS**.
-  Node.js 18/20/22, Node.js 26 Current, and other non-LTS / non-24 versions
-  are **not** official support targets.
-- npm 10+ (recommended 11)
-- Windows 10/11 (Feishu / WeChat / nut-js key-mouse automation depend on
-  Win32 APIs)
-- macOS / Linux may run, but desktop integration is only fully tested on
-  Windows
 
-### 1. Clone the repository
+- **Windows 10 / 11 64-bit**
+- **Node.js 24 LTS**
+- **npm 10+** (npm 11 recommended)
+- **[Rust stable](https://www.rust-lang.org/tools/install)** (required for building the screenshot helper from source)
+- **[Visual Studio 2022 Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)**
+
+When installing Visual Studio Build Tools, select:
+
+- **Desktop development with C++**
+- **MSVC v143**
+- **Windows 10 / 11 SDK**
+
+After installing Rust, it is recommended to confirm the MSVC toolchain:
+
+```powershell
+rustup default stable-x86_64-pc-windows-msvc
+```
+
+> Feishu, WeChat iLink, `nut-js` keyboard/mouse automation, and the native screenshot feature depend on the Windows environment.
+>
+> If you install a packaged release directly, you do not need to install Rust or Visual Studio Build Tools.
+
+### 1. Clone the Project
 
 ```bash
 git clone https://github.com/Playa-0v0/Cyrene-Agent.git
 cd Cyrene-Agent
 ```
 
-### 2. Install dependencies
+### 2. Install Dependencies
 
 ```bash
 npm install
 ```
 
-The first install downloads the Electron binary (~100 MB) along with
-Pixi.js / Live2D and other rendering deps; takes 3–10 minutes depending
-on network.
+The first installation downloads Electron, Pixi.js, Live2D, and related dependencies. The time required depends on your network connection.
 
-### 3. Build and start
+### 3. Install BGE-M3 (Recommended)
+
+Cyrene can chat normally without running a local large language model. However, installing the **BGE-M3 Embedding model** is recommended for the complete semantic-enhancement experience:
+
+- Semantic sticker matching
+- Scene tone enhancement
+- Worldbook semantic retrieval
+- RAG retrieval
+
+[Download BGE-M3 from Releases](https://github.com/Playa-0v0/Cyrene-Agent/releases)
+
+> [!IMPORTANT]
+>
+> Not installing BGE-M3 does not affect basic chat. Features that depend on Embedding will be disabled or degraded automatically.
+
+### 4. Music Feature (Optional)
+
+The music tool is integrated via [Code-MonkeyZhang/cloud-music-mcp](https://github.com/Code-MonkeyZhang/cloud-music-mcp). To use the NetEase Cloud Music feature, install the following additional dependencies:
+
+- **[uv](https://docs.astral.sh/uv/getting-started/installation/)** — A Python package manager that will automatically download Python and install all dependencies when the music tool is first used
+- **[NetEase Cloud Music Desktop Client](https://music.163.com/)** — Required for music playback; the `orpheus://` protocol must be registered
+
+> [!NOTE]
+>
+> The music feature is optional and does not affect chat or other core features. If `uv` is not installed, the music tool will be skipped automatically with a UI prompt.
+
+### 5. Build and Start
+
+When running from source for the first time, you need to build the Rust native screenshot helper:
 
 ```bash
+npm run build:screenshot-helper
 npm run build
 npm start
 ```
 
-Or jump straight to dev mode:
+> [!IMPORTANT]
+>
+> The native screenshot helper is not committed to the Git repository as an `.exe` file. You must run `npm run build:screenshot-helper` once after cloning.
+
+Development mode:
 
 ```bash
+npm run build:screenshot-helper
 npm run dev
 ```
 
-Runs `tsc` (main / preload) + `vite` + Electron concurrently. Main-process
-changes auto-restart Electron; renderer changes are picked up via
-Vite HMR.
+After modifying the Rust screenshot helper code, re-run:
+
+```bash
+npm run build:screenshot-helper
+```
+
+Development mode starts the Electron main process, Preload compilation, the Vite renderer, and the Electron application together.
+
+Changes to the main process automatically restart Electron, while renderer changes are applied through Vite HMR.
+
+Building a distributable Windows version:
+
+```bash
+npm run package:win:dir
+```
+
+The packaging command automatically builds both the Electron application and the Rust screenshot helper.
 
 ---
 
-## 🔑 Configure API Key
+## 🔑 Configure API Keys
 
-After launch, **click the system tray icon → Open Settings** and complete
-the basics:
+After starting the application, **click the system tray icon → Open Settings**, then complete the basic configuration:
 
-1. **🔑 API Settings**: Pick an LLM vendor preset (OpenAI / Anthropic /
-   MiniMax / ...) and fill in your API Key (**required** — the agent won't
-   work without it).
-2. **🎙️ TTS Settings**: Pick a TTS engine (default MiniMax, or switch to
-   GPT-SoVITS / Custom Cloud / MiMo).
-3. **🎧 ASR Settings**: If you need voice calls, fill in Aliyun realtime
-   ASR AppKey / AccessKey.
-4. **📱 Phone connection** (optional): For Lark / WeChat iLink integration.
+1. **🔑 Model Settings**: Select an LLM provider preset and enter the API Key, Base URL, and model name.  
+   This configuration is required for Cyrene to chat and run the Agent.
 
-Settings are saved to `<userData>/settings.json` — no restart needed.
+2. **🎙️ TTS Settings** (optional): Select Mossland, MiniMax, MiMo, GPT-SoVITS, or a custom cloud-based speech synthesis service.
+
+3. **🎧 ASR Settings** (optional): To use voice calls, configure the AppKey and AccessKey for Alibaba Cloud real-time ASR.
+
+4. **📱 External Channels** (optional): Connect Feishu or WeChat iLink to chat with Cyrene from a mobile device.
+
+Configuration is stored in the application's `<userData>/` directory. Most changes do not require a restart.
+
+---
+
+## 📊 Current Status
+
+| Module | Status | Description |
+| --- | :---: | --- |
+| 🌸 Live2D Desktop Companion | ✅ Available | Always-on-top companion, multiple windows, expressions, actions, mood and status, speech bubbles, and intelligent stickers |
+| 💬 Casual Conversation (Chat) | ✅ Available | Independent character-chat flow that neither exposes nor executes tools, using recent messages, social context, and user style |
+| 🛠️ Assisted Work (Work) | ✅ Available | Complete Agent workflow: CITA → Action Gate → Native FC → Execution Policy → Tool Runtime → Soul |
+| 🧠 Personalized Memory | ✅ Available | L0 / L1 / L2 layered memory, self-developed DMAE Worldbook, relationship profile, and long-term interaction continuity |
+| 🔊 Voice Interaction | ✅ Available | Multiple TTS engines, real-time ASR, voice calls, and VAD silence detection; some features require additional configuration |
+| 🧰 Built-in Tools | ✅ Available | Web search, webpage reading, file operations, document generation, everyday services, music, and more |
+| 🔌 Multi-Provider Model Support | ✅ Available | A / B / M / D tiered Structured Output and Function Calling profiles based on provider capabilities |
+| ✨ Skill System | ✅ Available | Built-in Skills, user-defined Skills, slash commands, and reference reading |
+| 📚 RAG Document Knowledge Base | 🧪 Experimental | Multi-format document import, vector + BM25 hybrid retrieval, Reranker, and source traceability |
+| 🔌 MCP Extension Ecosystem | 🧪 Experimental | Supports stdio, SSE, and HTTP transports; actual compatibility depends on the third-party MCP Server |
+| 📱 Feishu / Lark | ✅ Available | Long-connection message access and multiple media types |
+| 📱 WeChat iLink | 🧪 Experimental | Long-poll message exchange, media handling, and mobile chat |
+| 🌙 Proactive Chat | 🧪 Experimental | Status evaluation, do-not-disturb policies, and delivery through desktop, Feishu, and WeChat |
+
+> ✅ **Available**: The core workflow is implemented and suitable for everyday use.  
+> 🧪 **Experimental**: The feature is integrated, but compatibility, edge cases, or user experience are still being refined.
 
 ---
 
 ## ❓ FAQ
 
-### First-launch issues (black screen, no pet, won't start)
+### Local AI Models
 
-The pet window **strongly depends** on the bundled Live2D model files.
-If any of `Cyrene.model3.json` / `model.moc3` / `texture_0.png` under
-`dist/renderer/public/models/cyrene/` is missing, the pet window will
-show as a transparent blank window (the "black screen").
+### Does Cyrene Support Local LLMs and Other Third-Party Model Platforms?
 
-Troubleshooting:
-1. **Check DevTools errors** — dev mode (`npm run dev`) opens DevTools
-   automatically; in production press `Ctrl+Shift+I` (Win/Linux) or
-   `Cmd+Option+I` (macOS).
-2. **Look for the failure log** — `[Cyrene] Failed to load model: ...`
-   means `/models/cyrene/Cyrene.model3.json` wasn't bundled.
-3. **Rebuild** — `npm run clean && npm run build && npm start` to regenerate
-   `dist/`.
-4. **Verify Vite copied assets** — file sizes under `dist/renderer/public/models/cyrene/`
-   should match `src/renderer/public/models/cyrene/`.
+Cyrene only provides basic generic compatibility and fault-tolerance handling for local models, custom endpoints, and third-party model platforms that are not listed in the compatibility matrix.
 
-### Can I use voice call without ASR?
+Because these endpoints have not been tested through the complete Work workflow:
 
-**No.** The voice call hard-depends on Aliyun ASR (no mic permission =
-can't enter LISTENING; ASR not configured = goes straight to ERROR).
+- Stable operation is not guaranteed
+- Structured Output and Function Calling support is not guaranteed
+- Completion of the full Agent toolchain is not guaranteed
+- Configuration guidance, compatibility troubleshooting, and error diagnosis are currently not provided
 
-The call window has **no text input** or PTT button. All conversation
-goes through mic → ASR → LLM → TTS. If you want pure text chat,
-**use the chat window** (no ASR needed).
+Unknown models, local models, and custom endpoints use the generic **Tier D** profile by default. Users must verify actual compatibility themselves.
 
-### Will it run on macOS / Linux?
+> [!NOTE]
+>
+> Cyrene is currently developed independently by a single developer. Time, hardware, and API testing budgets are limited. At this stage, compatibility maintenance and technical support are only provided for the major model providers that have been explicitly adapted and verified. The testing scope may expand as the project develops.
 
-**Theoretically yes, but not fully verified.** Known platform assumptions:
+The primary model providers currently covered include:
 
-| Platform | Status | Notes |
-|---|---|---|
-| Windows 10/11 | ✅ Fully tested | Primary target |
-| macOS | 🧡 Theoretically works | Electron is cross-platform; pet transparency + click-through has known Z-order quirks on macOS |
-| Linux | 🧡 Theoretically works | `safeStorage` unavailable in headless; falls back to XOR obfuscation |
+- Doubao Seed
+- Kimi
+- DeepSeek
+- Qwen
+- GLM
+- MiMo
+- MiniMax
+- OpenAI
+- Anthropic Claude
 
-`game-bot`'s `nut.js` ships prebuilt binaries for all three platforms
-(darwin/linux/win32 sub-packages in `package-lock.json`), but **end-to-end
-testing has only happened on Windows**.
+Verification status varies by provider and model. Refer to the project's compatibility matrix and benchmark report for authoritative details.
 
-If you hit platform-specific issues on macOS/Linux, please open an issue.
+> BGE-M3, `ms-marco-MiniLM-L-6-v2`, and `bge-reranker-base` are local Embedding / Reranker enhancement models used by the project. They are not local large language models for chat.
 
-### Is my API key safe?
+### Are API Keys Secure?
 
-**⚠️ Short answer: do not run on shared or untrusted machines.**
+> [!WARNING]
+>
+> The current version is not recommended for use on shared computers or in other untrusted environments.
 
-**Chat / Vision API keys, Aliyun ASR credentials, TTS engine keys are all
-stored in plain-text JSON** under `<userData>/`:
+Credentials for the LLM, separate vision model, ASR, TTS, and other third-party services are stored in the application's `<userData>/` directory:
 
-- `<userData>/model-settings.json` — LLM / Vision API key
-- `<userData>/app-settings.json` — ASR / TTS / Amap / search / email passwords
-- `<userData>/weixin/credentials.json` — WeChat iLink Bot credentials
+- `<userData>/model-settings.json`: LLM and vision model configuration (plaintext)
+- `<userData>/app-settings.json`: ASR, TTS, maps, search, email, and other configuration (plaintext)
+- `<userData>/weixin/credentials.json`: WeChat iLink Bot credentials (plaintext)
+- `<userData>/mcp-servers.json`: MCP Server configuration, including `env` environment variables (plaintext)
+- `<userData>/channels-settings.json`: Feishu `appSecret` / `verificationToken` / `encryptKey` (`safeStorage` encrypted)
+- `<userData>/music/netease/account.enc`: NetEase Cloud Music login cookie (`safeStorage` encrypted)
 
-**The only encrypted field**: Lark / Feishu `appSecret` (via `safeStorage` =
-Windows DPAPI / macOS Keychain / Linux libsecret; falls back to XOR
-obfuscation when no keyring).
+Most credentials are currently stored as plaintext local files and are primarily protected by operating-system permissions on the user data directory.
 
-**Protection relies on**: OS file permissions (`<userData>` is
-current-user-only by default).
+Feishu channel credentials and the NetEase Cloud Music login cookie are encrypted with Electron `safeStorage`:
 
-**⚠️ Don't zip / sync / share your settings directory** — your keys will
-leak. To reset, delete `<userData>/model-settings.json` and
-`<userData>/app-settings.json` then restart.
+- Windows: DPAPI
+- macOS: Keychain
+- Linux: libsecret
+- If the system keyring is unavailable, the application falls back to a weaker local obfuscation method
 
-### OOM / memory leak troubleshooting
+Do not share or upload `<userData>/`, settings files, or log files. Do not synchronize them to a public cloud drive or commit them to a Git repository.
 
-**No built-in memory monitoring / heap dump tools.** Common mitigations:
+To clear credentials and application configuration, delete the following files and restart the application:
 
-1. **Switch to smaller embedding model** — Settings → 🧠 Memory →
-   Embedding model from `bgem3` (~570 MB) to `minilm` (~23 MB),
-   saves ~550 MB.
-2. **Disable reranker** — Settings → 🧠 Memory → Reranker mode = `none`,
-   saves 23–279 MB.
-3. **Disable MCP tools** — Settings → 🔌 Plugins, turn off
-   `Playwright MCP` to avoid Chromium child
-   processes eating hundreds of MB.
-4. **Clean up RAG documents** — Settings → 🧠 Memory → Imported docs,
-   delete large files (embeddings stay in LanceDB index).
-5. **Restart the app periodically** — L2 long-term memory, relationship
-   log, and conflict log are push arrays with no cap; long-running
-   sessions **must be restarted**.
+```text
+<userData>/model-settings.json
+<userData>/app-settings.json
+<userData>/weixin/credentials.json
+<userData>/mcp-servers.json
+<userData>/channels-settings.json
+<userData>/music/netease/account.enc
+```
 
-**Known improvements**: embedding indexing has moved to a background
-worker queue with result caching; warm-up is deferred at startup;
-batch writing and streaming now replace the previous one-shot large
-array writes — **peak resident memory per document indexing job has
-dropped noticeably**. Persistent OOM is most likely tied to L2 long-term
-memory growth or third-party MCP processes (e.g. Playwright / browser
-automation).
+### Can It Run on macOS or Linux?
 
-For deep diagnostics, use Chrome DevTools Memory profiler (DevTools
-opens automatically in dev mode) to grab a heap snapshot, then file
-an issue with the snapshot attached.
+Cyrene currently targets and is primarily tested on **Windows 10 / 11**.
 
-### Reranker model shows "not downloaded" — what to do?
+| Platform | Status | Description |
+|---|:---:|---|
+| Windows 10 / 11 | ✅ Tested | Primary supported platform |
+| macOS | ⚠️ Not fully verified | The Electron application may run, but transparent windows, mouse passthrough, and window layering may have compatibility issues |
+| Linux | ⚠️ Not fully verified | Differences in desktop environments and system keyrings may affect some features |
 
-The lightweight reranker model (ms-marco-MiniLM-L6-v2, ~23MB) and the
-standard reranker model (bge-reranker-base, ~279MB) are **not bundled
-with the repository** (onnx files are gitignored due to size).
+The `game-bot` module uses the native `nut.js` dependency and has only been tested end to end on Windows.
 
-When the model is missing, reranker is automatically disabled — basic
-chat and basic RAG retrieval are not affected.
+When reporting a macOS or Linux compatibility problem, include the runtime environment, error logs, and reproduction steps in the GitHub Issue.
 
-A "Download Model" button with configurable mirror source will be
-provided in a future release. For now, the "Off" mode works fine.
+### What Should I Do About OOM or Excessive Memory Usage?
+
+Try the following steps in order:
+
+1. **Disable the Reranker**  
+   Settings → Cyrene Settings → RAG / Document Import → set Reranker mode to `none`.
+
+2. **Disable MCP Services You Are Not Using**  
+   Browser automation services such as Playwright may start additional Chromium processes.
+
+3. **Reduce Large RAG Documents**  
+   Remove knowledge-base files that are not currently needed to reduce indexing and retrieval overhead.
+
+4. **Close Unused Windows and Background Tasks**  
+   Long-running tool tasks, voice services, and multiple conversations may continue consuming resources.
+
+5. **Restart the Application**  
+   This releases memory occupied by models, indexes, browser subprocesses, and long-running tasks.
+
+The Embedding index uses a background Worker, batching, and caching to reduce peak memory usage during document import.
+
+If OOM errors continue, use the Chrome DevTools Memory Profiler in development mode to capture a Heap Snapshot, then include the reproduction steps and relevant logs in the Issue.
 
 ---
 
@@ -240,252 +297,281 @@ provided in a future release. For now, the "Off" mode works fine.
 
 ### Core Features
 
-#### 🪟 Desktop Companion
-- **Live2D pet** — Always-on-top desktop pet powered by `pixi-live2d-display`
-  + Cubism, with expression switching, mouth sync, click interaction, and
-  natural idle animations.
-- **Multi-window architecture** — 7 independent BrowserWindows: chat,
-  sidebar, tasks, settings, sticker manager, voice call, and the pet itself.
-- **AG-UI expression broadcast** — Agent uses the `play_live2d_action` tool
-  to push (expression + motion + bubble) events to the pet window so the
-  pet performs along with the conversation mood.
+#### 🌸 Desktop Companion
 
-#### 💬 Conversation
-- **Daily chat + voice calls** — Three switchable personality styles
-  (desktop / phone / call); state machine `IDLE → LISTENING → THINKING →
-  SPEAKING → ENDED`; 24-turn sliding window context.
-- **Multi-chat history** — Each chat persisted as its own JSON, with
-  auto-derived titles, `updatedAt` sorting, double-click rename.
-- **AG-UI event stream** — Standardized events (RUN_STARTED / TEXT_MESSAGE
-  / TOOL_CALL / RUN_FINISHED), per-token delta rendering.
-- **Drag-and-drop file ingestion** — Drop PDF/MD/DOCX/XLSX... into the chat
-  window; chunks are auto-extracted into the RAG knowledge base.
-- **Sticker panel** — Built-in sticker picker; AI auto-matches the best
-  sticker by reply similarity.
-- **Streaming reply segmentation** — Chat preferences let you pick
-  `all / chat-only / off`; when enabled, long replies are split into
-  sentence-level bubbles instead of dumping all at once.
+- **Live2D Desktop Character** — Rendered with `pixi-live2d-display` and Cubism Core, with always-on-top display, mouse interaction, natural idle animations, and lip sync.
+- **Expression and Action Linking** — Conversation content can trigger expressions, actions, status, mood, and desktop speech bubbles, extending feedback beyond text.
+- **Intelligent Stickers** — Includes a built-in sticker panel and semantic matching that can automatically select stickers appropriate to the current context.
+- **Multi-Window Interaction** — The companion, chat, settings, tasks, call, and sticker-management windows are independent while sharing unified runtime state.
+- **Customizable Appearance** — Supports interface themes, chat styles, and font selection.
 
-#### 🧠 Memory System
-- **L0 core profile / L1 recent state / L2 long-term memory** — Full
-  evidence chain; automatic weight decay (thresholds 60/30/10 →
-  active/aging/archived).
-- **Conflict detection & resolution** — Lexical candidates → RAG recall →
-  scoring → resolver; resolution types cover unrelated / context_difference
-  / preference_evolution / direct_conflict.
-- **🧬 Custom DMAE Worldbook engine** — Markdown entry format (trigger
-  words / pinned / priority / intrinsic value / linked triggers);
-  activation formula `Ru = Bu × (1 + γ·ln(1+U_old))`; Active / Dormant /
-  Archived state machine; one-shot cascade trigger.
+#### 💬 Casual Conversation (Chat)
 
-#### 🔊 Voice
-- **Multi TTS engines** — MiniMax / GPT-SoVITS / Custom Cloud / MiMo / off.
-- **Multi ASR engines** — Aliyun realtime ASR, auto token acquisition +
-  JSON protocol + raw PCM.
-- **VAD silence detection** — Detects user pause during voice calls and
-  auto-triggers reply.
+- **Independent Character-Chat Flow** — Chat mode focuses on character-driven interaction and does not expose, invoke, or execute tools.
+- **Character-Aware Responses** — Combines Cyrene's character design, recent conversation, social context, user style, and personalized memory.
+- **Multiple Conversation Histories** — Conversations are stored independently and support automatic titles, sorting, and renaming.
+- **Channel-Specific Chat Style** — Desktop chat, mobile channels, and voice calls can use different expression styles.
+- **Segmented Replies** — Choose between “segment all / segment Chat only / disabled,” allowing long replies to be split into semantic chat bubbles.
 
-#### 🛠 Tool Calling
-- **Document generation** — Excel (`exceljs`), Word (`docx`), PDF
-  (`pdfkit`), Markdown.
-- **Web search / fetch** — `web_search` + `fetch_url` (turndown
-  HTML→Markdown).
-- **File ops** — `read_file` / `list_dir` / `write_file` / `read_image`.
-- **Life utilities** — Expense ledger, exchange rate, translate, trip
-  planning, unified diff apply.
-- **Task delegation** — `delegate_task` (sub-agent), `todo_write`
-  checklist, `ask_user_choice` user choice cards.
+#### 🛠️ Assisted Work (Work)
+
+- **Complete Agent Workflow** — Tool tasks are processed through the following trusted execution chain:
+
+```text
+User Request
+  ↓
+CITA Context Understanding
+  ↓
+Action Gate Decision
+  ↓
+Native Function Calling Argument Generation
+  ↓
+Execution Policy Permission and Risk Checks
+  ↓
+Tool Runtime Execution
+  ↓
+RouteAfterTool ──┬── Failure / Replanning Required → Return to Action Gate
+                  └── Success → Continue
+  ↓
+Soul Responds from Verified Results
+```
+
+- **Local Trust Validation** — Model output must pass format, Schema, and business-level trust validation. The model itself is not the final trust boundary.
+- **Fail-Safe Degradation** — If Action Gate, Native FC, or the execution policy becomes untrusted at any stage, tool execution is prohibited and Soul responds honestly from locally generated failure facts.
+- **Multi-Provider Model Profiles** — Automatically selects an A / B / M / D Structured Output Profile based on provider capabilities and applies unified reasoning separation, JSON extraction, Repair, and failure routing.
+- **AG-UI Event Stream** — Delivers text, tool calls, execution state, and final results through a unified event stream with token-by-token rendering and tool cards.
+
+#### 📝 Rich Text and Code Rendering
+
+- **Markdown Rendering** — Supports headings, lists, blockquotes, tables, links, code blocks, and other common Markdown elements.
+- **Syntax Highlighting** — Supports syntax highlighting and copy actions for multiple common programming languages.
+- **Mathematical Formulas** — Supports inline and block-level formula rendering.
+- **Streaming Compatibility** — Keeps output stable during generation and renders complete rich text after a message finishes.
+
+#### 🧠 Personalized Memory
+
+- **L0 / L1 / L2 Layered Memory** — Separately manages core user profiles, recent state, and long-term experiences.
+- **Memory Evidence Chain** — Memory entries retain their source and context to reduce unsupported profile inference.
+- **Conflict Detection and Resolution** — Retrieves, scores, and semantically evaluates old and new memories to distinguish contextual differences, preference evolution, and direct conflict.
+- **Self-Developed DMAE Worldbook** — Manages character knowledge and long-term interaction content through triggers, priority, intrinsic value, linked activation, and Active / Dormant / Archived states.
+- **Relationship and Style Continuity** — Gradually develops user preferences, communication habits, and relationship context through long-term interaction.
+
+#### 🔊 Voice Interaction
+
+- **Multiple TTS Engines** — Supports Mossland, MiniMax, MiMo, GPT-SoVITS, and custom cloud-based speech services.
+- **Real-Time ASR** — Uses Alibaba Cloud real-time speech recognition to convert microphone audio into conversation input.
+- **Complete Voice Calls** — Continuous voice interaction through the `LISTENING → THINKING → SPEAKING` state flow.
+- **VAD Silence Detection** — Automatically detects when the user has stopped speaking and triggers a response.
+
+#### 🧰 Tool Ecosystem
+
+Cyrene includes many built-in and extensible tools, primarily covering the following categories:
+
+- **Documents and Office Work** — Generate Word, Excel, PDF, and Markdown documents.
+- **Web Capabilities** — Web search, webpage reading, content extraction, and information organization.
+- **File Processing** — Read, write, and browse local files, as well as interpret images.
+- **Everyday Services** — Weather, maps, translation, currency conversion, bookkeeping, trip planning, and more.
+- **Music** — Search for songs, retrieve recommendations, and invoke a local music client for playback.
+- **Task Collaboration** — Task lists, user-choice cards, task delegation, and subtask handling.
+- **MCP Extensions** — Connect additional external tools and services through the Model Context Protocol.
 
 <details>
 <summary><b>🧩 Advanced Features</b> (click to expand)</summary>
 
 #### 📚 RAG Document Knowledge Base
-- Supports txt/md/pdf/docx/xlsx/pptx/csv/json; `source: imported_doc`
-  traceable.
-- Hybrid retrieval: vector + BM25 + reranker (three modes: light /
-  standard / none).
-- Dual embedding backend: local `@xenova/transformers` + cloud
-  OpenAI-compatible.
-- Entity relationship graph; jieba dictionary injection prevents
-  "Cyrene / 小鹿" from being split wrong.
+
+- Supports importing `txt`, `md`, `pdf`, `docx`, `xlsx`, `pptx`, `csv`, and `json`.
+- Supports hybrid retrieval with vector search, BM25, and a Reranker.
+- Supports both local Embedding and OpenAI-compatible cloud Embedding.
+- Retrieval results retain source information for traceability.
+- Supports entity relationship information and custom tokenization dictionaries.
 
 #### 🔌 MCP (Model Context Protocol)
-- stdio / SSE / HTTP transports.
-- Builtin servers auto-synced; `install_mcp_server` tool lets the agent
-  auto-install new servers.
-- Includes Playwright MCP configuration.
 
-#### 💬 External Channels
-- **Lark / Feishu long-connection** — Official SDK + WebSocket (no public
-  domain / intranet penetration needed); p2p chat, multi-modal text /
-  image / audio / video / file / sticker.
-- **WeChat iLink Bot** — Plain-text chat uses iLink HTTP / long-poll 35 s
-  `getUpdates`. Outbound supports image / sticker / file / video via the
-  ilink media upload path, plus silk voice encoding. Inbound media is
-  auto-classified: images / files are downloaded to a desktop inbox,
-  voice is transcribed by ASR, and unsupported types are intercepted.
+- Supports `stdio`, SSE, and HTTP transports.
+- Supports managing and enabling/disabling MCP Servers from Settings.
+- MCP tools are integrated into Cyrene's tool registry, Action Gate, and Execution Policy.
+- Actual stability of third-party MCP Servers depends on their own implementations.
 
-#### 🤖 Game Bot Automation
-- `engine.ts` step interpreter supports `launch / wait / key / click /
-  vlm_click / vlm_select / vlm_check / branch` instructions.
-- VLM visual localization + nut-js key-mouse input, exposed as the
-  `game_bot_start` tool.
+#### 📱 External Channels
+
+- **Feishu / Lark** — Connects through the official SDK and WebSocket long connection without requiring a public server or tunneling.
+- **WeChat iLink** — Supports long-poll message receiving, text sending, and partial media processing.
+- **Unified Character Across Channels** — Desktop, Feishu, and WeChat share the same character design, memory, and conversation capabilities.
+- **Channel-Specific Style** — Mobile and desktop chat can use different expression styles.
 
 #### ✨ Skill System
-- Dual-source scan: `prompts/skills/` builtin + `<userData>/skills/`
-  user override (directory-level override).
-- Meta tools `invoke_skill` / `read_skill_reference` with path traversal
-  guard + read replay interceptor + large-text truncation.
-- Supports `/skill_id ...` slash commands.
+
+- Supports built-in Skills and user-defined Skills.
+- A user Skill with the same name can fully override the built-in version.
+- Supports `invoke_skill`, reference reading, and Slash Commands.
+- Includes path protection, repeated-read restrictions, and large-text truncation.
 
 #### 🌙 Proactive Chat
-- **Routed delivery** — Preferences let you pick `Local / WeChat / Feishu`
-  as the proactive destination; if the phone channel is unavailable, the
-  message is cancelled instead of silently falling back to local.
-- **Runtime guards** — Hard safety policy, guarded prompt, tool-free
-  model runner, and a proactive session singleton provide layered
-  protection.
-- **Quiet hours** — Won't fire while you idle late at night, while a
-  normal chat is in progress, or after two unanswered replies in a row.
 
-</details>
-
-<details>
-<summary><b>🔧 Developer Features</b> (click to expand)</summary>
-
-#### 🧪 Unit Tests
-- Vitest 4 covers asr / tts / channels / chats / game-bot / memory /
-  opener / orchestrator / rag / scheduler / skills core modules.
-- `npm test` for one-shot / `npm run test:watch` for watch mode.
-
-#### 🎬 Scenario Simulation
-- `npm run sim` default / `sim:coffee` / `sim:mix` / `sim:rescue` for
-  single-scenario debug.
-- `npm run sim:sweep --rewardGain=3,5,7,10` for Worldbook scoring
-  parameter sweep.
-- Output to `sim-result/`.
-
-#### 🔧 Developer Experience
-- Unified IPC bus: `shared/ipc-channels.ts` defines 90+ channel constants.
-- Runtime state preview: settings panel previews emotion / status copy in
-  real time.
-- Embedding model hot-swap: auto-detects dimension mismatch and clears
-  old stores.
-- File watching / hot-reload: `watchWorldbookFile` and similar runtime
-  hot-loaders.
+- **Status Awareness** — Evaluates time, user activity, conversation state, and character mood before initiating a conversation.
+- **Do-Not-Disturb Policy** — Reduces or stops proactive messages late at night, while the user is already chatting, or after repeated unanswered messages.
+- **Multi-Channel Delivery** — Desktop, WeChat, or Feishu can be selected as the destination.
+- **Channel Failure Protection** — If the selected mobile channel is unavailable, delivery is canceled rather than silently redirected to desktop.
 
 </details>
 
 ---
 
-## 🧱 Tech Stack
+<details>
+<summary><b>🔧 Development Features</b> (click to expand)</summary>
 
-| Layer | Tech |
+#### 🧪 Unit Tests
+
+- Vitest 4 covers core modules including ASR, TTS, channels, chats, game-bot, memory, opener, orchestrator, RAG, scheduler, and Skills.
+- Use `npm test` for a one-time run or `npm run test:watch` for watch mode.
+
+#### 🎬 Scenario Simulation
+
+- Use `npm run sim` for the default scenario, or `sim:coffee`, `sim:mix`, and `sim:rescue` for individual scenario debugging.
+- Run `npm run sim:sweep --rewardGain=3,5,7,10` to sweep Worldbook scoring parameters.
+- Output is written to `sim-result/`.
+
+#### 🔧 Developer Experience
+
+- Unified IPC bus: `shared/ipc-channels.ts` defines more than 90 channel constants.
+- Runtime-state preview: Settings displays live previews of mood, status, and related text.
+- Embedding hot switching: Automatically detects incompatible dimensions and clears outdated indexes.
+- File watching and hot reload: Runtime reloading for Worldbook and other watched files through mechanisms such as `watchWorldbookFile`.
+
+</details>
+
+---
+
+## 🧱 Technology Stack
+
+| Layer | Technologies |
 |---|---|
-| Shell | Electron 43 |
-| Renderer | Vite 5 + TypeScript 5 + Pixi.js 7 |
+| Runtime | Node.js 24 LTS + Electron 43 |
+| Language | TypeScript 5 |
+| Build Tool | Vite 5 |
+| UI Rendering | HTML / CSS + Pixi.js 7 + Chart.js |
 | Live2D | `pixi-live2d-display` 0.5.0-beta + Cubism Core |
-| AI / MCP | `@modelcontextprotocol/sdk`, `@ag-ui/core`, `@ag-ui/client` |
-| Integrations | Lark OpenAPI, WeChat iLink, Nodemailer, PDFKit, docx |
+| Agent Workflow | LangGraph + Structured Output + Native Function Calling |
+| Agent Event Protocol | `@ag-ui/core`, `@ag-ui/client` |
+| Tool Extensions | `@modelcontextprotocol/sdk` |
+| Memory and Retrieval | Embedding (`@xenova/transformers`) + BM25 + self-developed Cross-Encoder Reranker + self-developed indexing pipeline |
+| Chinese Retrieval | `@node-rs/jieba` |
+| Browser and Desktop Automation | Playwright + `@nut-tree-fork/nut-js` |
+| Voice and Media | TTS / ASR + `silk-wasm` |
+| Native Screenshot Helper | Rust + DXGI Desktop Duplication / Direct2D / GDI + WIC PNG + NDJSON IPC |
+| Self-Developed Core | CITA, Action Gate, DMAE Worldbook, unified Structured Output Pipeline |
+| External Channels | Feishu OpenAPI, WeChat iLink |
+| Documents and Email | ExcelJS, docx, PDFKit, Nodemailer |
 | Testing | Vitest 4 |
 
 ---
 
 ## 📦 Project Structure
 
-```
-models/                # Local AI models (user-provided, see docs/local-models.md)
+```text
+models/                # Local AI models placed by the user; see MODEL_LICENSE.md
 ├── Xenova/
-│   ├── bge-m3/       # Embedding model (sticker matching + scene detection, ~570MB)
-│   │   ├── tokenizer.json
-│   │   ├── config.json
-│   │   └── onnx/model_quantized.onnx
-│   └── all-MiniLM-L6-v2/  # Lightweight embedding (~23MB, optional)
-├── bge-reranker-base/  # Standard reranker (~279MB, optional)
-└── ms-marco-MiniLM-L-6-v2/  # Lightweight reranker (~23MB, optional)
+│   └── bge-m3/       # Embedding model for sticker semantics and scene detection (~570 MB)
+│       ├── tokenizer.json
+│       ├── config.json
+│       └── onnx/model_quantized.onnx
+├── bge-reranker-base/       # Standard reranking model (~279 MB, optional)
+└── ms-marco-MiniLM-L-6-v2/  # Lightweight reranking model (~23 MB, optional)
 
 src/
 ├── main/             # Electron main process
-│   ├── asr/          # Automatic speech recognition (Aliyun realtime ASR)
-│   ├── call/         # Voice call core logic
-│   ├── channels/     # External channel adapters (Lark / WeChat iLink / ...)
-│   ├── chats/        # Multi-chat history and persistence
-│   ├── embedding-manager.ts  # Local embedding model lifecycle
-│   ├── game-bot/     # Game automation (driven by game-recipes)
-│   ├── memory/       # L0/L1/L2 memory engine
-│   ├── opener/       # Launcher / tray / single-instance
-│   ├── orchestrator/ # Agent main loop + tool dispatch
-│   ├── rag/          # Retrieval-augmented generation + worldbook injection
+│   ├── asr/          # Speech recognition (Alibaba Cloud real-time ASR)
+│   ├── call/         # Voice-call core (ASR -> Agent -> TTS turns)
+│   ├── channels/     # External channel adapters (Feishu / WeChat iLink / ...)
+│   ├── chat/         # Chat support (image handling / think filtering / sending policy)
+│   ├── chats/        # Multi-conversation history and persistence
+│   ├── cita/         # CITA context-understanding and recommendation engine
+│   ├── game-bot/     # Game automation driven by game recipes
+│   ├── memory/       # L0/L1/L2 memory engine and entity relationship graph
+│   ├── music/        # Music companion features (playback / recommendations / sessions)
+│   ├── orchestrator/ # Agent loop, tool scheduling, and Action Gate
+│   ├── proactive/    # Proactive chat: model / policy / routing / service
+│   ├── rag/          # Retrieval-augmented generation and Worldbook injection
 │   ├── relationship/ # User relationship profile
-│   ├── scheduler/    # Scheduled tasks (reminders / agenda)
-│   ├── sim/          # Scenario simulation harness
-│   ├── skills/       # Agent skill system
-│   ├── sticker-*.ts  # Sticker semantic matching (protocol / storage / desc / embedder)
-│   └── tts/          # Text-to-speech (multi-engine)
-├── preload/          # Electron preload bridges (IPC exposure)
+│   ├── scheduler/    # Scheduled tasks (reminders / calendar)
+│   ├── sim/          # Scenario simulation tools
+│   ├── skills/       # Agent Skill system
+│   ├── social-context/  # Social-context extraction and injection
+│   ├── sticker-*.ts  # Semantic sticker matching (protocol / storage / description / embedder)
+│   ├── sync-mcp-builtin.ts  # Built-in MCP synchronization (Playwright / Feishu, etc.)
+│   └── tts/          # Speech synthesis (multiple engines)
+├── preload/          # Electron Preload bridge
 ├── renderer/         # Vite renderer
-│   ├── call/         # Voice call window
-│   ├── chat/         # Main chat UI
-│   ├── live2d/       # Live2D model rendering logic
-│   ├── public/       # Static assets (audio / avatars / Cubism Core / stickers)
+│   ├── call/         # Voice-call window
+│   ├── chat/         # Main chat interface
+│   ├── live2d/       # Live2D model rendering
+│   ├── public/       # Tracked static source assets (audio / avatars / Cubism Core / stickers)
 │   ├── settings/     # Settings center
 │   ├── sidebar/      # Sidebar
-│   ├── sticker-manager/ # Sticker manager
+│   ├── sticker-manager/  # Sticker management
 │   ├── tasks/        # Task panel
 │   ├── types/        # Shared type definitions
-│   └── ui/           # Common UI components
-└── shared/           # Code shared between main and renderer
+│   └── ui/           # Shared UI components (modal / theme / chart, etc.)
+└── shared/           # Code shared between the main and renderer processes
 
-dist/renderer/        # Vite build outputs (not tracked in git)
-├── assets/           # Bundled JS/CSS (hashed filenames)
-├── audio/            # Sound assets (BGM, SFX)
-├── avatars/          # Avatar images
-├── call/ chat/ settings/ sidebar/ sticker-manager/ tasks/  # HTML entries
-├── models/cyrene/    # Live2D model — see MODEL_LICENSE.md
-└── stickers/         # Sticker image assets
+dist/renderer/        # Vite output (generated files ignored; product assets tracked)
+├── assets/           # Bundled JS/CSS (generated, ignored)
+├── audio/            # Audio assets (tracked)
+├── avatars/          # Avatar images (tracked)
+├── call/ chat/ settings/ sidebar/ sticker-manager/ tasks/  # HTML entry points (generated, ignored)
+├── icons/            # Icons (tracked)
+├── models/cyrene/    # Live2D model; see MODEL_LICENSE.md (tracked)
+└── stickers/         # Sticker images (tracked)
 ```
 
-> **Note**: `dist/renderer/assets/`, `dist/renderer/*/index.html` and
-> other Vite build outputs are **not** tracked in git (see
-> `.gitignore`). Run `npm run build:renderer` to regenerate.
+> `dist/renderer/assets/`, `dist/renderer/*/index.html`, and `dist/renderer/live2dcubismcore.min.js` are generated Vite build outputs and are not tracked by Git.  
+> `audio/`, `avatars/`, `icons/`, `models/`, and `stickers/` are product assets and are tracked.  
+> Static source assets are located in `src/renderer/public/`. Run `npm run build:renderer` to regenerate the build output.
 
 ---
 
-## 📄 Licensing
+## ⚠️ Disclaimer
 
-This repository's **source code** is released under [MIT License](./LICENSE),
-Copyright (c) 2026 Playa. The MIT License covers the source code of this
-repository only and does not apply to the character, Live2D model, or
-art assets.
+This project is an **unofficial fan-made work** and has **no affiliation with, endorsement by, or sponsorship from HoYoverse / miHoYo**.
 
-The character IP (*Honkai: Star Rail* "Cyrene" etc.), the Live2D model
-(`models/cyrene/`), and art assets are governed by their respective
-licenses:
+_Honkai: Star Rail_, Cyrene, and all related artwork, lore, trademarks, and intellectual property belong to **HoYoverse / miHoYo**.
 
-- **Live2D model** — See [MODEL_LICENSE.md](./MODEL_LICENSE.md); used /
-  modified / redistributed with permission from
-  [@是依七哒](https://space.bilibili.com/457683484).
-- **Character IP / art** — © **HoYoverse / miHoYo**.
+**License scope:**
 
-Because the underlying character IP is governed by miHoYo's fan policy,
-**this project and any derivatives are strictly prohibited from any
-commercial use**.
+- The **source code** is licensed under the [MIT License](./LICENSE), which applies only to the source code in this repository.
+- **Character IP, the Live2D model, and artwork assets** are not covered by the MIT License. They are governed separately by [MODEL_LICENSE.md](./MODEL_LICENSE.md) and HoYoverse's fan-creation guidelines.
+- Derivative works that include Cyrene IP, the Live2D model, or related artwork from this project **must not be used commercially**, including sale, paid communities, advertising monetization, or bundled resale.
 
 ---
 
-## 🙏 Credits
+## 📄 License
 
-- **Cyrene character**: © HoYoverse / miHoYo
-- **Live2D model**: Created by [@是依七哒](https://space.bilibili.com/457683484)
-  — see [MODEL_LICENSE.md](./MODEL_LICENSE.md)
+The **source code** in this repository is licensed under the [MIT License](./LICENSE), Copyright (c) 2026 Playa.
+
+The MIT License applies only to the source code in this repository. It does not apply to the character, Live2D model, or artwork assets.
+
+Character IP, the Cyrene Live2D model (`models/cyrene/`), and artwork assets are governed by their respective permissions:
+
+- **Live2D Model** — See [MODEL_LICENSE.md](./MODEL_LICENSE.md). The model creator, [@是依七哒](https://space.bilibili.com/457683484), has authorized its use, modification, and redistribution.
+- **Character IP / Artwork** — Belongs to **HoYoverse / miHoYo**.
+
+---
+
+## 🙏 Acknowledgements
+
+- **Cyrene Character**: © HoYoverse / miHoYo
+- **Live2D Model**: Created by [@是依七哒](https://space.bilibili.com/457683484) — see [MODEL_LICENSE.md](./MODEL_LICENSE.md)
 - **Live2D Cubism SDK**: © Live2D Cubism
 
-Special thanks to the original model creator for generously granting
-permission to use, modify, and redistribute their work in this project.
+Special thanks to the original model creator for generously authorizing this project to use, modify, and redistribute the work.
 
 ---
 
 ## 💌 Contact
 
-Issues and PRs welcome via GitHub. Please keep all discussions respectful
-and on-topic.
+GitHub Issues and pull requests are welcome. Please keep discussions respectful and relevant to the project.
+
+---
+
+⭐ If you like this project, consider giving it a Star. It helps more Cyrene fans discover it.

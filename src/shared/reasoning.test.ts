@@ -191,9 +191,11 @@ describe("MODEL_REASONING_RULES — 9 家全部存在性", () => {
     expect(cap.requestStyle).toBe("thinking-type");
   });
 
-  test("volcengine ark-code-latest → dynamic", () => {
-    const cap = resolveReasoningCapability("volcengine", "ark-code-latest");
-    expect(cap.control).toBe("dynamic");
+  test("doubao seed 2.1 → toggle + thinking-type", () => {
+    const cap = resolveReasoningCapability("doubao", "doubao-seed-2-1-pro-260628");
+    expect(cap.control).toBe("toggle");
+    expect(cap.requestStyle).toBe("thinking-type");
+    expect(cap.supportsDisable).toBe(true);
   });
 
   test("未知 provider + 任意 model → none", () => {
@@ -393,7 +395,7 @@ describe("MODEL_REASONING_RULES — 数据完整性", () => {
   test("所有 providerId 与 capabilities.ts 的 id 一致", () => {
     const known = new Set([
       "chatgpt", "claude", "deepseek", "glm", "kimi",
-      "qwen", "minimax", "mimo", "volcengine",
+      "qwen", "minimax", "mimo", "doubao",
     ]);
     const providerIds = new Set(MODEL_REASONING_RULES.map(r => r.providerId));
     for (const id of providerIds) {

@@ -5,23 +5,27 @@ import { buildChildEnv } from "./child-env";
 const DATA_TOOL_ALLOWLIST = new Set([
   "cloud_music_get_daily_recommend",
   "cloud_music_search",
+  "cloud_music_play",
 ]);
 
 const AUTH_TOOL_ALLOWLIST = new Set([
   "cyrene_music_login_begin",
   "cyrene_music_login_check",
   "cyrene_music_login_cancel",
+  "cyrene_music_validate_session",
 ]);
 
 const DATA_TOOL_CONTRACT = [
   { name: "cloud_music_get_daily_recommend", required: [] as string[] },
   { name: "cloud_music_search", required: ["keyword"] },
+  { name: "cloud_music_play", required: ["id"] },
 ];
 
 const AUTH_TOOL_CONTRACT = [
   { name: "cyrene_music_login_begin", required: [] as string[] },
   { name: "cyrene_music_login_check", required: ["session_id"] },
   { name: "cyrene_music_login_cancel", required: ["session_id"] },
+  { name: "cyrene_music_validate_session", required: [] as string[] },
 ];
 
 export interface ContractResult {
@@ -97,6 +101,15 @@ export class MusicMcpClient {
   private unwrapMcpResult(result: unknown): unknown {
     if (result && typeof result === "object") {
       const r = result as Record<string, unknown>;
+      if (r.isError === true) {
+        const text = Array.isArray(r.content)
+          ? (r.content as Array<Record<string, unknown>>)
+            .filter((block) => block?.type === "text" && typeof block.text === "string")
+            .map((block) => String(block.text))
+            .join("\n")
+          : "";
+        throw new Error(`E_MCP_TOOL_FAILED${text ? `: ${text}` : ""}`);
+      }
       if (Array.isArray(r.content)) {
         const first = (r.content as Array<Record<string, unknown>>)[0];
         if (first && first.type === "text" && typeof first.text === "string") {

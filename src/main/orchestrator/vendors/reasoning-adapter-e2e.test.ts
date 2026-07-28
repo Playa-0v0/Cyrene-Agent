@@ -225,14 +225,14 @@ describe("§7.4 MiMo 端到端", () => {
   });
 });
 
-// ── 火山 ──────────────────────────────────────────────
-describe("§7.4 火山 端到端", () => {
-  const cap = makeCap({ id: "volcengine", transport: "openai" });
+// ── 豆包 ──────────────────────────────────────────────
+describe("§7.4 豆包 端到端", () => {
+  const cap = makeCap({ id: "doubao", transport: "openai" });
 
-  test("#22 ark-code-latest + on → body 中无 reasoning 相关字段（dynamic）", () => {
-    const body = buildOpenAI(cap, "ark-code-latest", { mode: "on" });
+  test("#22 doubao-seed-2-1 + on → thinking.type=enabled", () => {
+    const body = buildOpenAI(cap, "doubao-seed-2-1-pro-260628", { mode: "on" });
     expect("reasoning_effort" in body).toBe(false);
-    expect("thinking" in body).toBe(false);
+    expect(body.thinking).toEqual({ type: "enabled" });
     expect("enable_thinking" in body).toBe(false);
   });
 });

@@ -119,10 +119,6 @@
 [data-ui-theme="pearl-white"] .tasks__hint,
 [data-ui-theme="pearl-white"] .chat__rail-meta,
 [data-ui-theme="pearl-white"] .chat__rail-time,
-[data-ui-theme="pearl-white"] .chat__rail-identity,
-[data-ui-theme="pearl-white"] .sidebar__version {
-  color: var(--rb-text-muted);
-}
 
 [data-ui-theme="pearl-white"] .settings-nav__brand,
 [data-ui-theme="pearl-white"] .settings-titlebar__title,
@@ -185,6 +181,8 @@
 [data-ui-theme="pearl-white"] .plugin-config .user-field-hint,
 [data-ui-theme="pearl-white"] .user-field-hint,
 [data-ui-theme="pearl-white"] .settings-nav__footer,
+[data-ui-theme="pearl-white"] .sidebar__version,
+[data-ui-theme="pearl-white"] .schedule-footer__version,
 [data-ui-theme="pearl-white"] .model-params-hint,
 [data-ui-theme="pearl-white"] .model-params-section .field small,
 [data-ui-theme="pearl-white"] .agent-setting-card p,
@@ -639,24 +637,6 @@
   border-color: var(--rb-border-soft);
 }
 
-[data-ui-theme="pearl-white"] .opener-pack-warning {
-  color: var(--rb-text-default);
-  background: #fff8e6;
-  border-color: rgba(180, 117, 0, 0.28);
-}
-
-[data-ui-theme="pearl-white"] .opener-pack-warning__body {
-  color: var(--rb-text-muted);
-}
-
-[data-ui-theme="pearl-white"] .opener-pack-warning__body strong {
-  color: #6f4600;
-}
-
-[data-ui-theme="pearl-white"] .opener-pack-warning__body code {
-  color: var(--rb-text-strong);
-}
-
 [data-ui-theme="pearl-white"] .plugin-config,
 [data-ui-theme="pearl-white"] .plugin-accordion-body,
 [data-ui-theme="pearl-white"] .vision-config-section,
@@ -682,9 +662,7 @@
 /* 通用 select option：在 pearl-white 下默认底是白(--rb-bg-2/#fafafc)，
    base CSS 里 .field select option 的色是 var(--rb-text-on-pink)
    (即 white) — 与白底融为一体导致选项看不见。这里统一强制为深色。 */
-[data-ui-theme="pearl-white"] .field select option,
-[data-ui-theme="pearl-white"] #preset-select option,
-[data-ui-theme="pearl-white"] .preset-select-row select option {
+[data-ui-theme="pearl-white"] .field select option {
   color: var(--rb-input-text);
   background: var(--rb-card-bg);
 }
@@ -709,6 +687,13 @@
 [data-ui-theme="pearl-white"] .skill-group__title,
 [data-ui-theme="pearl-white"] .scheduler-toolbar__copy strong {
   color: var(--rb-text-strong);
+}
+
+/* Mossland / 未来新增的「敬请期待」卡（占位）—— pearl-white 下保持可读 */
+[data-ui-theme="pearl-white"] .tts-engine__soon {
+  color: #7a3d0a;
+  background: #fff0d6;
+  border-color: #f5d4a8;
 }
 
 [data-ui-theme="pearl-white"] .save-status.is-ok,
@@ -774,8 +759,21 @@
 [data-ui-theme="pearl-white"] .todo-panel__title,
 [data-ui-theme="pearl-white"] .todo-item__text,
 [data-ui-theme="pearl-white"] .choice-card__title,
+[data-ui-theme="pearl-white"] .choice-card__question-title,
 [data-ui-theme="pearl-white"] .choice-card__option-label {
   color: var(--rb-text-strong);
+}
+
+[data-ui-theme="pearl-white"] .choice-card__question {
+  border-color: var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] .choice-card__question--invalid {
+  border-color: #e11d48;
+}
+
+[data-ui-theme="pearl-white"] .choice-card__question--invalid .choice-card__question-title {
+  color: #be123c;
 }
 
 [data-ui-theme="pearl-white"] .sticker-field input,
@@ -1027,21 +1025,12 @@
 }
 
 [data-ui-theme="pearl-white"] .chat-sessions__new,
-[data-ui-theme="pearl-white"] .chat-sessions__identity,
-[data-ui-theme="pearl-white"] .chat-sessions__item.is-active {
-  color: var(--rb-pink-600);
-  background: var(--rb-pink-50);
-  border-color: var(--rb-pink-500);
-}
 
 [data-ui-theme="pearl-white"] .chat-sessions__new:hover {
   background: var(--rb-pink-100);
   border-color: var(--rb-pink-600);
 }
 
-[data-ui-theme="pearl-white"] .chat-sessions__identity {
-  border: 1px solid var(--rb-pink-200);
-}
 
 [data-ui-theme="pearl-white"] .chat-sessions__footer {
   border-top-color: var(--rb-border-strong);
@@ -1213,4 +1202,21 @@
 [data-ui-theme="pearl-white"] #cy-input-field:focus {
   border-color: var(--rb-pink-500) !important;
   box-shadow: 0 0 0 3px var(--rb-pink-100) !important;
+}
+
+/* ===== Markdown render variables (light theme overrides) ===== */
+[data-ui-theme="pearl-white"] {
+  --md-code-bg:           rgba(0, 0, 0, 0.03);
+  --md-code-border:       var(--rb-pink-200);
+  --md-inline-code-bg:    rgba(236, 72, 153, 0.08);
+  --md-inline-code-text:  #1d1d1f;
+  --md-quote-border:      var(--rb-pink-400);
+  --md-quote-bg:          rgba(236, 72, 153, 0.04);
+  --md-table-border:      var(--rb-pink-200);
+  --md-link-color:        var(--rb-pink-600);
+  --md-link-hover:        var(--rb-pink-700);
+  --md-copy-text:         var(--rb-text-muted);
+  --md-copy-bg:           rgba(0, 0, 0, 0.03);
+  --md-copy-border:       var(--rb-border-soft);
+  --md-katex-text:        var(--rb-text-default);
 }

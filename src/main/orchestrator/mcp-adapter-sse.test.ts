@@ -103,4 +103,38 @@ describe("mcp-adapter transport split", () => {
 			})
 		).rejects.toThrow(/sse transport requires url/);
 	});
+
+	it("propagates MCP isError as a failed tool execution", async () => {
+		const callTool = vi.fn().mockResolvedValue({
+			isError: true,
+			content: [{ type: "text", text: "remote tool failed" }],
+		});
+		const Client = (await import("@modelcontextprotocol/sdk/client/index.js")).Client as any;
+		Client.mockImplementation(function (this: unknown) {
+			return {
+				connect: vi.fn().mockResolvedValue(undefined),
+				listTools: vi.fn().mockResolvedValue({
+					tools: [{
+						name: "explode",
+						description: "always fails",
+						inputSchema: { type: "object", properties: { value: { type: "string" } } },
+					}],
+				}),
+				callTool,
+				close: vi.fn().mockResolvedValue(undefined),
+			};
+		});
+
+		await connectMcpServer({
+			id: "test-error",
+			name: "Test Error",
+			transport: "stdio",
+			command: "node",
+			args: ["server.js"],
+		});
+		const tool = toolRegistry.getById("test-error-explode");
+
+		await expect(tool?.execute({ value: "x" })).rejects.toThrow("E_MCP_TOOL_FAILED");
+		expect(callTool).toHaveBeenCalledWith({ name: "explode", arguments: { value: "x" } });
+	});
 });

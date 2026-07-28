@@ -293,14 +293,14 @@ describe("G5 5+ 关键 capability 形态端到端", () => {
     expect("thinking" in body).toBe(false);
   });
 
-  test("火山 ark-code-latest + {mode:'on'} → body 中无任何 reasoning 字段（dynamic）", () => {
-    const volcCap: ProviderCapability = {
-      id: "volcengine",
-      displayName: "火山 AgentPlan（火山引擎）",
+  test("豆包 seed 2.1 + {mode:'on'} → body.thinking.type=enabled", () => {
+    const doubaoCap: ProviderCapability = {
+      id: "doubao",
+      displayName: "豆包（火山方舟）",
       transport: "openai",
-      baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3",
+      baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
       authStyle: "bearer",
-      defaultModel: "ark-code-latest",
+      defaultModel: "doubao-seed-2-1-pro-260628",
       supportsTools: true,
       supportsThinking: true,
       thinkingField: "reasoning_content",
@@ -308,14 +308,14 @@ describe("G5 5+ 关键 capability 形态端到端", () => {
       testStrategy: "text",
       supportsVision: true,
     };
-    const adapter = new OpenAICompatAdapter("volcengine", volcCap);
+    const adapter = new OpenAICompatAdapter("doubao", doubaoCap);
     const http = adapter.buildRequest(
-      { model: "ark-code-latest", messages: [{ role: "user", content: "hi" }] },
-      cfgOf(volcCap, { model: "ark-code-latest", reasoning: { mode: "on" } }),
+      { model: "doubao-seed-2-1-pro-260628", messages: [{ role: "user", content: "hi" }] },
+      cfgOf(doubaoCap, { model: "doubao-seed-2-1-pro-260628", reasoning: { mode: "on" } }),
     );
     const body = JSON.parse(http.body) as Record<string, unknown>;
     expect("reasoning_effort" in body).toBe(false);
-    expect("thinking" in body).toBe(false);
+    expect(body.thinking).toEqual({ type: "enabled" });
     expect("enable_thinking" in body).toBe(false);
   });
 });

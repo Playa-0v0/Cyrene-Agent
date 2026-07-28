@@ -1,5 +1,6 @@
 import type { WebContents } from "electron";
 import { IPC } from "../../shared/ipc-channels";
+import { AgentRuntimeError } from "../orchestrator/agent-runtime-error";
 import { CyreneAgent, type CyreneRunOptions } from "../orchestrator/cyrene-agent";
 import { toolRegistry } from "../orchestrator/tool-registry";
 import { filterToolsForTask } from "./tool-filter";
@@ -124,7 +125,7 @@ export function createSchedulerRunner(deps: RunnerDeps) {
         errorMessage: message,
         effectiveToolIds,
       });
-      send({ type: "RUN_ERROR", error: message, threadId: `scheduler-${task.id}`, runId: historyId, schedulerRunId: historyId, schedulerTaskId: task.id });
+      send({ type: "RUN_ERROR", message, code: err instanceof AgentRuntimeError ? err.code : undefined, threadId: `scheduler-${task.id}`, runId: historyId, schedulerRunId: historyId, schedulerTaskId: task.id });
       return { ok: false, historyId, error: message, effectiveToolIds };
     }
   }

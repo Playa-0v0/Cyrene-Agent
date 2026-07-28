@@ -5,6 +5,7 @@ import { synthesize as minimaxSynthesize } from "./minimax-engine";
 import { synthesize as gptsovitsSynthesize } from "./gptsovits-engine";
 import { synthesize as customCloudSynthesize } from "./custom-cloud-engine";
 import { synthesize as mimoSynthesize } from "./mimo-engine";
+import { synthesize as mosslandSynthesize } from "./mossland-engine";
 import type { TtsEngine } from "../../shared/tts-types";
 
 export interface SynthesizeByEnginePayload {
@@ -26,11 +27,13 @@ export interface SynthesizeByEnginePayload {
   // mimo 专用
   voiceAudioPath?: string;
   stylePrompt?: string;
+  // mossland 专用（与 minimax 字段重叠：apiKey/voiceId/model/format，新增 format 选项 pcm）
+  mosslandFormat?: "mp3" | "wav" | "pcm";
 }
 
 export interface SynthesizeByEngineResult {
   audio: Buffer;
-  format: "wav" | "mp3";
+  format: "wav" | "mp3" | "pcm";
 }
 
 /**
@@ -100,6 +103,23 @@ export async function synthesizeByEngine(
       text: payload.text,
       stylePrompt: payload.stylePrompt ?? payload.promptText,
       model: "mimo-v2.5-tts-voiceclone",
+    });
+    return { audio: result.audio, format: result.format };
+  }
+
+  if (engine === "mossland") {
+    if (!payload.apiKey || !payload.voiceId) {
+      throw new Error("Mossland TTS 未配置 apiKey/voiceId");
+    }
+    const format = payload.mosslandFormat ?? "mp3";
+    const result = await mosslandSynthesize({
+      apiKey: payload.apiKey,
+      voiceId: payload.voiceId,
+      text: payload.text,
+      speed: payload.speed,
+      volume: payload.volume,
+      model: payload.model ?? "moss-tts",
+      format,
     });
     return { audio: result.audio, format: result.format };
   }

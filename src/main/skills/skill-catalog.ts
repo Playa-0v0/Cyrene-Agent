@@ -48,11 +48,14 @@ export function buildSkillCatalog(skills: SkillEntry[]): string {
   if (enabled.length === 0) return "";
   const lines = enabled.map(s => {
     const toolsTag = s.tools && s.tools.length > 0 ? ` [tools: ${s.tools.join(", ")}]` : "";
-    return `- ${s.id}: ${s.description}${toolsTag}`;
+    const activationTag = s.manifest?.autoInject === true
+      ? " [自动注入：无需再次调用 invoke_skill]"
+      : "";
+    return `- ${s.id}: ${s.description}${toolsTag}${activationTag}`;
   });
   return [
     "## 可用 Skill",
-    "当某 skill 适用于当前任务时，先调用 invoke_skill(skill_id) 取详细指令，再按指令用工具执行。",
+    "当未自动注入的 skill 适用于当前任务时，先调用 invoke_skill(skill_id) 取详细指令；标记为自动注入的 skill 已在后文提供完整规则，无需再次调用 invoke_skill。",
     "",
     ...lines,
   ].join("\n") + AMBIGUITY_POLICY;
@@ -77,6 +80,32 @@ export function buildAutoInjectedSkillContext(
   return [
     "## 自动激活 Skill 指令",
     "以下 Skill 已通过能力门控，当前对话必须直接遵循其完整规则，无需再次调用 invoke_skill。",
+    "",
+    ...blocks,
+  ].join("\n");
+}
+
+/**
+ * Soul 阶段没有工具能力，只注入 Skill 明确声明的回复策略小节。
+ * 其余工具流程仍只属于 TOOL_PHASE，避免模型把工具协议输出成聊天文本。
+ */
+export function buildAutoInjectedSoulContext(
+  skills: SkillEntry[],
+  getBody: (id: string) => string | null,
+): string {
+  const blocks = skills
+    .filter((skill) => skill.enabled && skill.manifest?.autoInject === true)
+    .map((skill) => {
+      const body = getBody(skill.id) ?? "";
+      const match = body.match(/^## Soul 回复策略\s*\r?\n([\s\S]*?)(?=^##\s|(?![\s\S]))/m);
+      const section = match?.[1]?.trim();
+      return section ? `### ${skill.id}\n${section}` : "";
+    })
+    .filter(Boolean);
+  if (blocks.length === 0) return "";
+  return [
+    "## 自动激活 Skill 回复策略",
+    "以下内容只约束自然语言回复；当前阶段没有工具能力，不得输出工具名、调用标记或工具协议。",
     "",
     ...blocks,
   ].join("\n");

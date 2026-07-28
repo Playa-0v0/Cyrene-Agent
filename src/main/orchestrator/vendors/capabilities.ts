@@ -7,10 +7,10 @@ export const PROVIDER_CAPABILITIES = [
   {
     id: "minimax",
     displayName: "MiniMax（稀宇科技）",
-    // 主推 Anthropic 兼容入口；多轮 tool_calls 必须完整回传 thinking/reasoning_details
-    transport: "anthropic",
-    baseUrl: "https://api.minimaxi.com/anthropic",
-    authStyle: "x-api-key",
+    // 默认走 OpenAI 兼容入口；Anthropic 入口仍可由用户显式选择。
+    transport: "openai",
+    baseUrl: "https://api.minimaxi.com/v1",
+    authStyle: "bearer",
     defaultModel: "MiniMax-M3",
     supportsTools: true,
     supportsThinking: true,
@@ -19,8 +19,7 @@ export const PROVIDER_CAPABILITIES = [
     testStrategy: "text",
     // M3 原生多模态（image_url / video_url）
     supportsVision: true,
-    // 主配走 /anthropic（Anthropic 入口），但视觉要走 OpenAI 入口 /v1。
-    // 同步主模型时用这个 baseUrl，避免用户手动改。
+    // 视觉同样走 OpenAI 兼容入口。
     visionBaseUrl: "https://api.minimaxi.com/v1",
   },
   {
@@ -39,19 +38,17 @@ export const PROVIDER_CAPABILITIES = [
     supportsVision: false,
   },
   {
-    id: "volcengine",
-    displayName: "火山 AgentPlan（火山引擎）",
-    // OpenAI 兼容 + 专属 baseUrl + 可选 reasoning_content；不为它单独写 transport
+    id: "doubao",
+    displayName: "豆包（火山方舟）",
     transport: "openai",
-    baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3",
+    baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
     authStyle: "bearer",
-    defaultModel: "ark-code-latest",
+    defaultModel: "doubao-seed-2-1-pro-260628",
     supportsTools: true,
     supportsThinking: true,
     thinkingField: "reasoning_content",
     cacheStrategy: "none",
     testStrategy: "text",
-    // 火山方舟是聚合平台，可路由到 doubao-seed 等多模态子模型；支持视觉
     supportsVision: true,
   },
   {

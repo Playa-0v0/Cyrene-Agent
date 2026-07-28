@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildTurnModelContext } from "../shared/chat-context";
+import {
+  USER_ANNOTATION_NOTICE,
+  buildTurnModelContext,
+  userAnnotationNotice,
+} from "../shared/chat-context";
 
 describe("buildTurnModelContext", () => {
   it("合并文档和图片上下文，不让后处理结果覆盖前处理结果", () => {
@@ -20,5 +24,12 @@ describe("buildTurnModelContext", () => {
 
   it("没有任何上下文时返回 undefined", () => {
     expect(buildTurnModelContext({})).toBeUndefined();
+  });
+
+  it("只为带标注截图返回明确但不猜位置的提醒", () => {
+    expect(userAnnotationNotice(false)).toBeUndefined();
+    expect(userAnnotationNotice(true)).toBe(USER_ANNOTATION_NOTICE);
+    expect(USER_ANNOTATION_NOTICE).toContain("用户主动添加");
+    expect(USER_ANNOTATION_NOTICE).not.toContain("右上");
   });
 });

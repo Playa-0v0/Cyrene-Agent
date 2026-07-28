@@ -1,9 +1,15 @@
 import * as fs from "fs";
 import * as path from "path";
 import { getMimeFromExt, isImageExt } from "../rag/file-ingest";
+import { userAnnotationNotice } from "../../shared/chat-context";
 
 export const IMAGE_CAPTION_MAX_BYTES = 20 * 1024 * 1024;
 export const IMAGE_CAPTION_PROMPT = "请简洁描述这张图片的主要内容，重点提取用户可能想让你看的信息。";
+
+export function buildImageCaptionPrompt(hasAnnotations: boolean): string {
+  const notice = userAnnotationNotice(hasAnnotations);
+  return notice ? `${IMAGE_CAPTION_PROMPT}\n\n${notice}` : IMAGE_CAPTION_PROMPT;
+}
 
 export type ValidCaptionImage =
   | { ok: true; filePath: string; buffer: Buffer; mime: string }

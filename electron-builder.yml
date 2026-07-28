@@ -1,0 +1,21 @@
+appId: com.cyrene.live2d
+productName: Cyrene
+directories:
+  output: release
+asar: true
+electronDist: node_modules/electron/dist
+files:
+  - dist/**/*
+  - package.json
+  - prompts/**/*
+  - assets/**/*
+  - skills/**/*
+  - game-recipes/**/*
+  - vendor/**/*
+  - models/**/*
+extraResources:
+  - from: resources/bin/cyrene-screenshot.exe
+    to: bin/cyrene-screenshot.exe
+win:
+  target:
+    - dir

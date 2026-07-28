@@ -24,6 +24,8 @@ export interface SkillManifest {
   dependencies: string[];
   autoInject?: boolean;
   autoPlayPolicy?: string;
+  /** Task Router 快捷路径命中时使用的默认执行模式 */
+  defaultExecutionMode?: "direct" | "plan";
 }
 
 /** frontmatter 解析结果。 */

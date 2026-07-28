@@ -4,12 +4,38 @@
 import { searchMemory } from "../rag/index";
 import type { ToolRiskLevel } from "../permission";
 import type { ToolContext } from "./tool-context";
+import type { SoulProjectionConfig, SoulClaimKind } from "./soul-execution-context";
+
+/** 工具完成证据元数据：供 Planner 生成 completionCriteria 和 planVerify 校验 */
+export interface CapabilityCompletionEvidence {
+  kind: "tool_succeeded" | "projection_claim";
+  claimKind?: SoulClaimKind;
+}
 
 /** JSON Schema 片段：参数可以是简单类型，也可以是 array/object（含 items/properties）。 */
 export type JsonSchemaProp =
   | { type: string; description?: string; enum?: string[] }
   | { type: "array"; description?: string; items: JsonSchemaProp }
   | { type: "object"; description?: string; properties: Record<string, JsonSchemaProp>; required?: string[] };
+
+/** 控制输入策略：简单字符串或带 kind 的对象形式 */
+export type ControlledInputPolicy =
+  | "context_ref"
+  | "context_ref_array"
+  | "tool_result"
+  | { type: "context_ref"; kind: string }
+  | { type: "context_ref_array"; kind: string }
+  | { type: "tool_result" };
+
+/** 从 ControlledInputPolicy 提取底层策略类型字符串 */
+export function controlledInputType(policy: ControlledInputPolicy): string {
+  return typeof policy === "string" ? policy : policy.type;
+}
+
+/** 从 ControlledInputPolicy 提取 expectedKind（如有） */
+export function controlledInputKind(policy: ControlledInputPolicy): string | undefined {
+  return typeof policy === "object" && "kind" in policy ? policy.kind : undefined;
+}
 
 export interface ToolDefinition {
   id: string;           // 工具唯一标识，如 "imported_docs"
@@ -20,6 +46,10 @@ export interface ToolDefinition {
   catalogHint?: string;
   /** 可选分类标签，第一期暂不强制使用。 */
   category?: string;
+  /** Action Gate 使用的稳定能力标识；未填时回落到工具 id。 */
+  capability?: string;
+  /** Runtime 校验受控参数来源；这些值不能由模型自由编造。支持带 kind 的对象形式用于类型化引用验证。 */
+  controlledInput?: Record<string, ControlledInputPolicy>;
   enabled: boolean;     // 用户是否启用（对应设置面板的开关）
   // 危险等级：决定该工具在哪些权限档位下可调用；不填默认 "safe"
   risk?: ToolRiskLevel;
@@ -31,6 +61,16 @@ export interface ToolDefinition {
   };
   /** 工具若声明 needsContext，调度层执行时会传入 ToolContext。默认不声明=不传。 */
   needsContext?: boolean;
+  /** Soul 上下文中替代 toolId 的安全语义名称 */
+  soulActionLabel?: string;
+  /** 声明式 Soul 投影配置 */
+  soulProjection?: SoulProjectionConfig;
+  /** 工具专用错误码 -> 用户安全消息 */
+  soulErrorMessages?: Record<string, string>;
+  /** 完成证据元数据：供 Planner 和 planVerify 使用。未配置的工具不能进入 Plan 步骤。 */
+  completionEvidence?: CapabilityCompletionEvidence[];
+  /** Plan 模式下不暴露给 Action Gate 和 Native FC（防止 Plan 步骤降级到旧 Loop）。 */
+  hideInPlanMode?: boolean;
   // 执行器：内置工具指向本地函数，外部 MCP 工具指向 transport 调用
   execute: (args: Record<string, unknown>, ctx?: ToolContext) => Promise<string>;
 }

@@ -1,11 +1,18 @@
-export type DefaultChatMode = "collab" | "talk";
+export type DefaultChatMode = "work" | "chat";
 export type SegmentedOutputMode = "all" | "chat" | "off";
 export type MobileMessageSegmentationMode = "on" | "off";
 export type ProactiveChatMode = "on" | "off";
 export type ProactiveDeliveryTarget = "local" | "wechat" | "feishu";
 
+export type { CustomStyleConfig, StyleId } from "./style-sampling";
+
+export function normalizeChatSocialContextEnabled(value: unknown): boolean {
+  return value === true;
+}
+
 export function normalizeDefaultChatMode(value: unknown): DefaultChatMode {
-  return value === "talk" ? "talk" : "collab";
+  // 兼容旧版磁盘值：talk -> chat，collab -> work。
+  return value === "chat" || value === "talk" ? "chat" : "work";
 }
 
 export function normalizeSegmentedOutputMode(value: unknown): SegmentedOutputMode {

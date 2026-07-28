@@ -1,4 +1,13 @@
 // IPC channel names shared between main and renderer
+export interface ScreenshotInsertPayload {
+  mime: "image/png";
+  width: number;
+  height: number;
+  filePath: string;
+  previewUrl: string;
+  hasAnnotations: boolean;
+}
+
 export const IPC = {
   // pet window
   WINDOW_MINIMIZE: "window:minimize",
@@ -18,20 +27,17 @@ export const IPC = {
   CHAT_CLOSE: "chat:close",
   CHAT_TOGGLE_MAXIMIZE: "chat:toggle-maximize",
   CHAT_IS_MAXIMIZED: "chat:is-maximized",
-  CHAT_SEND_MESSAGE: "chat:send-message",
   CHAT_INGEST_FILES: "chat:ingest-files",
   CHAT_PROCESS_DOCUMENTS: "chat:process-documents",
   CHAT_DOCUMENT_INDEX_PROGRESS: "chat:document-index-progress",
   CHAT_CANCEL_DOCUMENT_INDEX: "chat:cancel-document-index",
   CHAT_CAPTION_IMAGE: "chat:caption-image",
   CHAT_GET_IMAGE_SEND_STRATEGY: "chat:get-image-send-strategy",
-  CHAT_STREAM_CHUNK: "chat:stream-chunk",
-  CHAT_STREAM_DONE: "chat:stream-done",
   // 推理下拉（chat 窗口：原子读 + providerKey 写）
   CHAT_GET_REASONING_STATE: "chat:get-reasoning-state",
   CHAT_SET_REASONING: "chat:set-reasoning",
 
-  // AG-UI 事件流（替换上面的 chat:stream-* 的新通道）
+  // AG-UI 事件流
   AGUI_RUN: "agui:run",
   AGUI_EVENT: "agui:event",
   AGUI_CANCEL: "agui:cancel",
@@ -82,6 +88,7 @@ export const IPC = {
   PET_ZOOM: "pet:zoom",
   SETTINGS_PREVIEW_RUNTIME_SYNC: "settings:preview-runtime-sync",
   SETTINGS_OPEN_STICKER_MANAGER: "settings:open-sticker-manager",
+  SETTINGS_OPEN_CUSTOM_STYLE_PROMPT: "settings:open-custom-style-prompt",
 
   // chat sessions (multi-conversation history, persisted to userData/cyrene-chats/)
   CHATS_LIST: "chats:list",
@@ -130,15 +137,8 @@ export const IPC = {
   LIVE2D_SPEECH_PREPARE: "live2d:speech-prepare",
   LIVE2D_MOUTH_START: "live2d:mouth-start",
   LIVE2D_MOUTH_STOP: "live2d:mouth-stop",
-  // Opener 主动开口
-  LIVE2D_SHOW_BUBBLE: "live2d:show-bubble",       // 主进程 → 桌宠窗口：显示气泡+播 wav
   LIVE2D_PLAY_ACTION: "live2d:play-action",        // 主进程 → 桌宠窗口：执行动作（motion 或 expression）
   LIVE2D_GET_MAIN_DIAGNOSTICS: "live2d:get-main-diagnostics",
-  OPENER_FEEDBACK: "opener:feedback",             // 渲染端 → 主进程：点气泡反馈
-  OPENER_TEST_FIRE: "opener:test-fire",           // 渲染端 → 主进程：手动测试气泡
-  OPENER_GET_STATUS: "opener:get-status",         // 渲染端 → 主进程：查询主动开口语音包状态
-  OPENER_OPEN_PACK_DIR: "opener:open-pack-dir",   // 渲染端 → 主进程：打开当前实际读取的语音包目录
-  OPENER_OPEN_INSTALL_DOCS: "opener:open-install-docs", // 渲染端 → 主进程：打开本地语音包安装说明
   // embedding model status
   EMBEDDING_GET_STATUS: "embedding:get-status",
   EMBEDDING_DOWNLOAD: "embedding:download",
@@ -156,6 +156,7 @@ export const IPC = {
   USER_SAVE_PROFILE: "user:save-profile",
   USER_UPLOAD_AVATAR: "user:upload-avatar",
   USER_GET_AVATAR: "user:get-avatar",
+  USER_AVATAR_CHANGED: "user:avatar-changed",
 
   // memory panel
   MEMORY_PANEL_GET_DATA: "memory-panel:get-data",
@@ -219,6 +220,10 @@ export const IPC = {
   TTS_SYNTHESIZE_CACHED_CUSTOM_CLOUD: "tts:synthesize-cached-custom-cloud", // 自定义云端 TTS 合成 + 本地缓存
   TTS_SYNTHESIZE_MIMO: "tts:synthesize-mimo",             // 小米 MiMo TTS 合成 → base64
   TTS_SYNTHESIZE_CACHED_MIMO: "tts:synthesize-cached-mimo", // 小米 MiMo TTS 合成 + 本地缓存
+  TTS_SYNTHESIZE_MOSSLAND: "tts:synthesize-mossland",       // Mossland (api.mosi.cn) 合成 → base64
+  TTS_SYNTHESIZE_CACHED_MOSSLAND: "tts:synthesize-cached-mossland", // Mossland 合成 + 本地缓存
+  TTS_CLONE_MOSSLAND: "tts:clone-mossland",           // Mossland 克隆音色（multipart 上传）
+  TTS_LIST_MOSSLAND_VOICES: "tts:list-mossland-voices", // Mossland 拉取账号下音色列表
 
   // agent permission level (file/shell access)
   PERMISSION_GET_LEVEL: "permission:get-level",
@@ -286,5 +291,12 @@ export const IPC = {
   MUSIC_DETECT_PLAYER: "music:detect-player",
   MUSIC_STATE_CHANGED: "music:state-changed",
   MUSIC_CARD: "music:card",
+
+  // screenshot
+  SCREENSHOT_START: "screenshot:start",
+  SCREENSHOT_SAVE_TEMP: "screenshot:save-temp",
+  SCREENSHOT_INSERT: "screenshot:insert",
+  SCREENSHOT_HOTKEY_CAPTURE_START: "screenshot:hotkey-capture-start",
+  SCREENSHOT_HOTKEY_CAPTURE_END: "screenshot:hotkey-capture-end",
 } as const;
 

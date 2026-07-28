@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, shell, dialog, protocol, net, powerMonitor } from "electron";
+import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, screen, shell, dialog, protocol, net, powerMonitor, globalShortcut } from "electron";
+import { spawn } from "node:child_process";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
@@ -11,6 +12,7 @@ import { normalizeUiIcon, UI_ICON_PRESETS, type UiIcon } from "../shared/ui-icon
 import { foldReasoning, normalizeReasoningPreference, type ReasoningPreference } from "../shared/reasoning";
 import { getUiFontResponseHeaders, isSafeUiFontRequest } from "./ui-font-protocol";
 import {
+  normalizeChatSocialContextEnabled,
   normalizeDefaultChatMode,
   normalizeMobileMessageSegmentationMode,
   normalizeProactiveChatMode,
@@ -22,6 +24,15 @@ import {
   type ProactiveDeliveryTarget,
   type SegmentedOutputMode,
 } from "../shared/preferences";
+import {
+  DEFAULT_CUSTOM_STYLE,
+  STYLE_FILE_BY_ID,
+  normalizeCustomStyleConfig,
+  normalizeStyleId,
+  resolveStylePreference,
+  type CustomStyleConfig,
+  type StyleId,
+} from "../shared/style-sampling";
 import { STATUS_KEYWORDS } from "./status-keywords";
 import {
   addL2MemoryVector,
@@ -39,15 +50,28 @@ import { describePendingAttachment } from "./rag/file-ingest";
 import { cancelDocumentIndexJob, configureDocumentIndexQueue, enqueueDocumentIndexJob } from "./rag/document-index-queue";
 import { retrieveQueuedDocumentChunks, runDocumentIndexJob } from "./rag/document-index-worker";
 import { processDocumentIndexRequest } from "./rag/document-index-ipc";
-import { IMAGE_CAPTION_PROMPT, validateCaptionImagePath } from "./chat/image-caption";
+import {
+  IMAGE_CAPTION_PROMPT,
+  buildImageCaptionPrompt,
+  validateCaptionImagePath,
+} from "./chat/image-caption";
 import { decideImageSendStrategy } from "./chat/image-send-strategy";
-import { buildAlwaysOnContext, buildMemoryInjection, runFunctionCallingLoop, scheduleMemoryWrite } from "./orchestrator";
+import { buildAlwaysOnContext, buildMemoryInjection, scheduleMemoryWrite } from "./orchestrator";
 import { CyreneAgent } from "./orchestrator/cyrene-agent";
+import { validateSearchApiKey } from "./orchestrator/search-backend-filter";
 import { indexConversationTurn } from "./orchestrator/history-tools";
 import { buildToneInjection } from "./orchestrator/tone-injector";
 import { getAdapter, buildVendorUrl, getAdapterForConfig, createSseReader } from "./orchestrator/vendors";
-import type { VendorConfig } from "./orchestrator/vendors";
+import type { StructuredOutputRequest, VendorConfig } from "./orchestrator/vendors";
+import {
+  classifyStructuredOutputEndpoint,
+  resolveStructuredOutputProfile,
+} from "./orchestrator/structured-output/profiles";
+import { normalizeFinishReason } from "./orchestrator/structured-output/finish-reason";
+import { testVendorConnection } from "./orchestrator/vendors/test-connection";
+import { migrateLegacyMinimaxDefaults } from "./orchestrator/vendors/minimax-defaults";
 import { getCapability, getCapabilityOrOpenAI } from "./orchestrator/vendors/capabilities";
+import { resolveApprovedStyleSampling } from "./orchestrator/vendors/style-sampling";
 import type { VisionConfig } from "./orchestrator/vision-captioner";
 import { toolRegistry, type ToolDefinition } from "./orchestrator/tool-registry";
 import { buildToolCatalog } from "./orchestrator/tool-catalog";
@@ -64,7 +88,22 @@ import { syncPlaywrightMcp, PLAYWRIGHT_MCP_ID, REMOVED_BUILTIN_MCP_IDS } from ".
 import { buildEnvironmentContext } from "./orchestrator/environment";
 import { initPermissionFromDisk, registerPermissionIpc, getCurrentLevel } from "./permission";
 import { registerChoiceIpc, setChoiceCardSender } from "./user-choice";
+import { ElectronScreenshotHelperClient } from "./screenshot/helper-client";
+import { resolveScreenshotHelperPath } from "./screenshot/helper-path";
+import {
+  createScreenshotService,
+  validateScreenshotInsert,
+  type ScreenshotService,
+} from "./screenshot/screenshot-service";
 import { enqueueLLMTask } from "./llm-queue";
+import { compileSocialContextBlock } from "./social-context/context";
+import {
+  buildSocialExtractionPrompt,
+  SOCIAL_EXTRACTION_SCHEMA,
+} from "./social-context/extractor";
+import { rankSocialAtoms } from "./social-context/retrieval";
+import { createSocialContextScheduler } from "./social-context/scheduler";
+import { createSocialAtomStore } from "./social-context/store";
 import { getEmbeddingStatus, downloadEmbeddingModel, deleteEmbeddingModel } from "./embedding-manager";
 import { BUILT_IN_STICKER_DESCRIPTIONS } from "./sticker-descriptions";
 import { buildCachedStickerEmbeddingIndex } from "./sticker-embedding-cache";
@@ -88,14 +127,10 @@ import { uploadFile as ttsUploadFile, cloneVoice as ttsCloneVoice, synthesize as
 import { synthesize as gptsovitsSynthesize } from "./tts/gptsovits-engine";
 import { synthesize as customCloudSynthesize } from "./tts/custom-cloud-engine";
 import { synthesize as mimoSynthesize } from "./tts/mimo-engine";
+import { synthesize as mosslandSynthesize, cloneVoice as mosslandCloneVoice, listVoices as mosslandListVoices } from "./tts/mossland-engine";
 import { synthesizeByEngine } from "./tts/tts-dispatcher";
-import { startOpener, stopOpener, setLive2dWindow, reloadManifest, handleBubbleClick, handleChatWindowOpened, testFire, setProactiveCandidateHandler, getPresetFallback } from "./opener/opener-runner";
-import { loadState as loadOpenerState, saveState as saveOpenerState } from "./opener/desire-engine";
-import type { ShowBubblePayload } from "./opener/opener-types";
-import { SCENE_CONFIGS } from "./opener/scenes-config";
-import { getManifestPath, getOpenerPackDir } from "./opener/opener-pack-store";
 import { registerAgUiIpc, type AguiRunInput } from "./agui-bridge";
-import { setWeatherConfig, setSearchConfig, loadTodos, onTodosChange, setDelegateSettings } from "./orchestrator/built-in-tools";
+import { setWeatherConfig, setSearchConfig, loadTodos, onTodosChange, setDelegateSettings, setUserTimezoneConfig } from "./orchestrator/built-in-tools";
 import { registerRecallHistoryTool } from "./orchestrator/history-tools";
 import { registerDocumentTools } from "./orchestrator/document-tools";
 import { registerLifeTools, setTranslateConfig } from "./orchestrator/life-tools";
@@ -112,12 +147,10 @@ import {
 } from "./chat-time-context";
 import { setAsrConfig } from "./asr/volcano-asr-engine";
 import { setCallWindow, registerCallIpc, setCallSettings, stopCall } from "./call/call-manager";
-import { initSkills, skillRegistry, buildAutoInjectedSkillContext, buildSkillCatalog, parseSlashCommand, setSkillEnabled, listSkillsForUi } from "./skills";
+import { initSkills, skillRegistry, buildAutoInjectedSkillContext, buildAutoInjectedSoulContext, buildSkillCatalog, parseSlashCommand, setSkillEnabled, listSkillsForUi } from "./skills";
 import {
-  buildMusicCompanionContext,
   isMusicCompanionAvailable,
   loadMusicCompanionHost,
-  recordMusicCompanionPresentation,
 } from "./skills/music-companion-host";
 import { initGameBot } from "./game-bot";
 import { initChannels, shutdownChannels, setChannelsConversationLifecycle } from "./channels/init";
@@ -145,9 +178,17 @@ import {
 } from "./proactive/proactive-service";
 import { routeProactiveDelivery } from "./proactive/proactive-delivery-routing";
 import { buildProactiveMessages, type ProactiveHistoryTurn } from "./proactive/proactive-prompt";
+import {
+  createProactiveTrigger,
+  type ProactiveTriggerController,
+} from "./proactive/proactive-trigger";
 import { runProactiveModel } from "./proactive/proactive-model";
 import type { ProactiveCandidate, ProactiveRuntimeSnapshot } from "./proactive/proactive-types";
 import { canCommitProactiveMessage } from "./proactive/proactive-policy";
+import { loadProactiveState, saveProactiveState } from "./proactive/proactive-state-store";
+import { normalizeCitaSettings } from "./cita/settings";
+import { CitaService, ContextStore, RemoteSemanticEngine } from "./cita";
+import { contextRefRegistry } from "./orchestrator/tool-context";
 import { getTimeoutSettings, saveTimeoutSettings } from "./timeout-manager";
 import { TimeoutSettings } from "../shared/timeout-types";
 
@@ -180,18 +221,96 @@ let settingsWindow: BrowserWindow | null = null;
 let stickerManagerWindow: BrowserWindow | null = null;
 let callWindow: BrowserWindow | null = null;
 let schedulerEngine: SchedulerEngine | null = null;
+let screenshotService: ScreenshotService | null = null;
 let proactiveChatService: ProactiveChatService | null = null;
 let normalConversationBusyCount = 0;
 let proactiveScreenLocked = false;
+const live2dWindowLifecycle = createWindowLifecycleTracker<BrowserWindow>("live2d-main", {
+  onClosed: () => { /* no-op：原 setLive2dWindow 已随 opener 子系统一起移除 */ },
+});
 const petWindowMoveController = new PetWindowMoveController(
   () => mainWindow,
   ({ x, y }) => {
     saveGeneralSettings({ petWindowX: x, petWindowY: y });
   },
 );
-const live2dWindowLifecycle = createWindowLifecycleTracker<BrowserWindow>("live2d-main", {
-  onClosed: () => setLive2dWindow(null),
-});
+
+const MAX_SCREENSHOT_BYTES = 20 * 1024 * 1024;
+
+function getScreenshotDirectory(): string {
+  return path.join(app.getPath("userData"), "screenshots");
+}
+
+async function saveScreenshotPasteTemp(
+  base64: string,
+  _mime: string,
+): Promise<{ filePath: string }> {
+  const raw = Buffer.from(base64, "base64");
+  if (raw.byteLength > MAX_SCREENSHOT_BYTES) {
+    throw new Error("SCREENSHOT_TOO_LARGE");
+  }
+  const image = nativeImage.createFromBuffer(raw);
+  if (image.isEmpty()) {
+    throw new Error("INVALID_SCREENSHOT_IMAGE");
+  }
+  const screenshotDirectory = getScreenshotDirectory();
+  await fs.promises.mkdir(screenshotDirectory, { recursive: true });
+  const filePath = path.join(screenshotDirectory, `${randomUUID()}.png`);
+  await fs.promises.writeFile(filePath, image.toPNG());
+  return { filePath };
+}
+
+function initializeScreenshotService(initialHotkey: string): ScreenshotService {
+  const screenshotDirectory = getScreenshotDirectory();
+  const client = new ElectronScreenshotHelperClient({
+    spawnImpl: (command, args) => spawn(command, args, {
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    }),
+    resolveHelperPath: () => resolveScreenshotHelperPath({
+      isPackaged: app.isPackaged,
+      appPath: app.getAppPath(),
+      resourcesPath: process.resourcesPath,
+      envOverride: process.env.CYRENE_SCREENSHOT_HELPER_PATH,
+    }),
+    screenshotDirectory,
+    logger: console,
+  });
+  const service = createScreenshotService({
+    client,
+    registerShortcut: (accelerator, callback) =>
+      globalShortcut.register(accelerator, callback),
+    unregisterShortcut: (accelerator) => globalShortcut.unregister(accelerator),
+    sendInsert: (data) => {
+      const validated = validateScreenshotInsert(
+        data,
+        screenshotDirectory,
+        (filePath) => nativeImage.createFromPath(filePath),
+      );
+      if (!validated) {
+        throw new Error(`INVALID_SCREENSHOT_RESULT:${data.filePath}`);
+      }
+      if (chatWindow && !chatWindow.isDestroyed()) {
+        chatWindow.webContents.send(IPC.SCREENSHOT_INSERT, validated);
+      }
+    },
+  });
+
+  ipcMain.handle(IPC.SCREENSHOT_START, () => service.startFromChatButton());
+  ipcMain.handle(IPC.SCREENSHOT_SAVE_TEMP, (_event, base64: string, mime: string) =>
+    saveScreenshotPasteTemp(base64, mime));
+  ipcMain.handle(IPC.SCREENSHOT_HOTKEY_CAPTURE_START, () => {
+    service.suspendHotkey();
+    return true;
+  });
+  ipcMain.handle(IPC.SCREENSHOT_HOTKEY_CAPTURE_END, () => {
+    service.resumeHotkey();
+    return true;
+  });
+
+  service.init(initialHotkey);
+  return service;
+}
 // 聊天窗口当前活跃的会话 id（通过 IPC 由聊天窗口上报）；
 // 设置面板"删除当前会话"差异化提示用。聊天窗口关闭时由 closed 事件置 null。
 let activeChatSessionId: string | null = null;
@@ -204,9 +323,6 @@ function appendMinimaxTtsLog(entry: Record<string, unknown>): void {
     fs.mkdirSync(logDir, { recursive: true });
     const logFile = path.join(logDir, "minimax-tts.log");
     fs.appendFileSync(logFile, JSON.stringify(entry, null, 2) + "\n", "utf8");
-    if (entry.phase === "request.begin") {
-      console.log("[TTS MiniMax] 诊断日志:", logFile);
-    }
   } catch (err) {
     console.warn("[TTS MiniMax] 写诊断日志失败:", err);
   }
@@ -218,9 +334,6 @@ function appendGptsovitsTtsLog(entry: Record<string, unknown>): void {
     fs.mkdirSync(logDir, { recursive: true });
     const logFile = path.join(logDir, "gptsovits-tts.log");
     fs.appendFileSync(logFile, JSON.stringify(entry, null, 2) + "\n", "utf8");
-    if (entry.phase === "request.begin") {
-      console.log("[TTS GPT-SoVITS] 诊断日志:", logFile);
-    }
   } catch (err) {
     console.warn("[TTS GPT-SoVITS] 写诊断日志失败:", err);
   }
@@ -232,9 +345,6 @@ function appendCustomCloudTtsLog(entry: Record<string, unknown>): void {
     fs.mkdirSync(logDir, { recursive: true });
     const logFile = path.join(logDir, "custom-cloud-tts.log");
     fs.appendFileSync(logFile, JSON.stringify(entry, null, 2) + "\n", "utf8");
-    if (entry.phase === "request.begin") {
-      console.log("[TTS CustomCloud] 诊断日志:", logFile);
-    }
   } catch (err) {
     console.warn("[TTS CustomCloud] 写诊断日志失败:", err);
   }
@@ -246,9 +356,6 @@ function appendMimoTtsLog(entry: Record<string, unknown>): void {
     fs.mkdirSync(logDir, { recursive: true });
     const logFile = path.join(logDir, "mimo-tts.log");
     fs.appendFileSync(logFile, JSON.stringify(entry, null, 2) + "\n", "utf8");
-    if (entry.phase === "request.begin") {
-      console.log("[TTS MiMo] 诊断日志:", logFile);
-    }
   } catch (err) {
     console.warn("[TTS MiMo] 写诊断日志失败:", err);
   }
@@ -347,6 +454,25 @@ function buildMimoCacheKey(payload: {
   return "mimo-" + createHash("sha256").update(source, "utf8").digest("hex");
 }
 
+/** Mossland cache key：voice_id + model + format + text 哈希。
+ *  因为 Mossland 没有"参考音频路径"作为天然 key 源，用 voice_id + model 区分。 */
+function buildMosslandCacheKey(payload: {
+  voiceId?: string;
+  text: string;
+  model?: string;
+  format?: "mp3" | "wav" | "pcm";
+}): string {
+  const source = JSON.stringify({
+    version: 1,
+    engine: "mossland",
+    model: payload.model ?? "moss-tts",
+    voiceId: payload.voiceId ?? "",
+    format: payload.format ?? "mp3",
+    text: payload.text,
+  });
+  return "mossland-" + createHash("sha256").update(source, "utf8").digest("hex");
+}
+
 function getTtsCachePath(cacheKey: string, format: "mp3" | "wav" | "pcm" = "mp3"): string {
   const safeKey = assertTtsCacheKey(cacheKey);
   const ext = format === "wav" ? "wav" : format === "pcm" ? "pcm" : "mp3";
@@ -388,7 +514,6 @@ const PROVIDER_RENAMES: Record<string, string> = {
   "DeepSeek": "DeepSeek（深度求索）",
   "智谱 GLM": "GLM（智谱）",
   "通义千问（DashScope）": "Qwen（通义千问）",
-  "火山 Agent-Plan": "火山 AgentPlan（火山引擎）",
 };
 
 /**
@@ -449,12 +574,13 @@ interface ModelSettings {
   embeddingModel: "minilm" | "bgem3";
   // 视觉模型配置（可选）。undefined 或未启用 = 不支持看图，read_image 诚实拒绝。
   vision?: VisionModelConfig;
+  /** 主模型是否多模态。true 时图片直发主模型（direct），vision 配置保留但忽略。 */
+  multimodal: boolean;
   optimizeFirstRound?: boolean;
 }
 
-/** 视觉模型配置。syncWithMain=true 时三字段不落盘，运行时强制从主配置读。 */
+/** 视觉模型配置（独立视觉模型，非多模态直发场景）。全空 = 未启用。 */
 interface VisionModelConfig {
-  syncWithMain: boolean;
   baseUrl: string;
   apiKey: string;
   model: string;
@@ -469,9 +595,15 @@ interface UserProfile {
   avatarPath: string;
   /** 默认城市（用于天气等需要地理定位的工具，没填则模型会问用户） */
   defaultCity: string;
+  /** 性别：secret(保密) | male(男) | female(女) */
+  gender: string;
 }
 
 interface GeneralSettings {
+  citaEnabled: boolean;
+  citaSemanticEngine: "remote";
+  /** Chat 模式的轻量社交上下文；默认关闭，开启后每轮最多多一次异步抽取调用。 */
+  chatSocialContextEnabled: boolean;
   musicEnabled: boolean;
   musicVolume: number;
   soundEnabled: boolean;
@@ -494,6 +626,10 @@ interface GeneralSettings {
   uiIcon: UiIcon;
   /** 聊天窗口打开时默认选中的模式。 */
   defaultChatMode: DefaultChatMode;
+  /** 聊天窗口当前风格，启动时恢复；本轮请求仍以 renderer 显式 styleId 为准。 */
+  currentStyleId: StyleId;
+  /** 全局自定义风格采样配置。 */
+  customStyle: CustomStyleConfig;
   /** 聊天气泡分段输出偏好。 */
   segmentedOutputMode: SegmentedOutputMode;
   /** 手机渠道文本消息分段发送偏好。 */
@@ -575,8 +711,8 @@ interface GeneralSettings {
   asrVadThreshold: number;
   /** 通话中显示文字转写 */
   asrShowTranscript: boolean;
-  /** Opener 主动开口档位 */
-  openerMode: "off" | "quiet" | "normal" | "lively";
+  /** 截图全局热键（Electron Accelerator 格式，如 "Alt+Shift+S"） */
+  screenshotHotkey: string;
 }
 
 
@@ -603,11 +739,6 @@ interface RuntimeState {
   feeling: RuntimeFeeling;
   expression: number;
   updatedAt: number;
-}
-
-interface ChatReplyPayload {
-  reply: string;
-  sticker: string | null;
 }
 
 const RUNTIME_STATUSES: RuntimeStatus[] = ["陪伴中", "思考中", "工作中", "聆听中", "提醒中", "离线"];
@@ -698,7 +829,7 @@ const DEFAULT_MODEL_SETTINGS: ModelSettings = {
   mode: "auto",
   // 默认厂商改为 MiniMax（v1 vendor adapter 第一个落地的），DeepSeek 已从 v1 清单移除。
   provider: "MiniMax（稀宇科技）",
-  baseUrl: "https://api.minimaxi.com/anthropic",
+  baseUrl: "https://api.minimaxi.com/v1",
   model: "MiniMax-M3",
   apiKey: "",
   perProvider: {},
@@ -708,9 +839,13 @@ const DEFAULT_MODEL_SETTINGS: ModelSettings = {
   stickerSimilarityThreshold: 0.55,
   rerankerMode: "light",
   embeddingModel: "minilm",
+  multimodal: false,
 };
 
 const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
+  citaEnabled: false,
+  citaSemanticEngine: "remote",
+  chatSocialContextEnabled: false,
   musicEnabled: false,
   musicVolume: 60,
   soundEnabled: true,
@@ -725,7 +860,9 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   uiTheme: "classic",
   uiFont: DEFAULT_UI_FONT,
   uiIcon: "cyrene-sun",
-  defaultChatMode: "collab",
+  defaultChatMode: "work",
+  currentStyleId: "default",
+  customStyle: DEFAULT_CUSTOM_STYLE,
   segmentedOutputMode: "off",
   mobileMessageSegmentation: "off",
   proactiveChatMode: "off",
@@ -775,7 +912,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   asrVadSilenceMs: 1000,
   asrVadThreshold: 0.01,
   asrShowTranscript: false,
-  openerMode: "off",
+  screenshotHotkey: "Alt+Shift+S",
 };
 
 function getSettingsPath(): string {
@@ -806,6 +943,7 @@ const DEFAULT_USER_PROFILE: UserProfile = {
   timezone: "Asia/Shanghai",
   avatarPath: "",
   defaultCity: "",
+  gender: "secret",
 };
 
 function loadUserProfile(): UserProfile {
@@ -923,20 +1061,15 @@ function normalizeProviderProfile(input: Partial<ProviderProfile> | null | undef
   };
 }
 
-/** 清洗视觉模型配置。syncWithMain=true 时三字段不保留（运行时从主配置读）。 */
+/** 清洗视觉模型配置。三字段全空 = 未启用，返回 undefined。 */
 function normalizeVisionConfig(input: Partial<VisionModelConfig> | undefined): VisionModelConfig | undefined {
   if (!input || typeof input !== "object") return undefined;
-  const syncWithMain = input.syncWithMain === true;
-  if (syncWithMain) {
-    // syncWithMain=true：强制忽略三字段（即便手动编辑配置文件写了也忽略），运行时从主配置读
-    return { syncWithMain: true, baseUrl: "", apiKey: "", model: "" };
-  }
   const baseUrl = typeof input.baseUrl === "string" ? input.baseUrl.trim() : "";
   const apiKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";
   const model = typeof input.model === "string" ? input.model.trim() : "";
   // 三项全空 = 未启用
   if (!baseUrl && !apiKey && !model) return undefined;
-  return { syncWithMain: false, baseUrl, apiKey, model };
+  return { baseUrl, apiKey, model };
 }
 
 function normalizeModelSettings(input: Partial<ModelSettings> | null | undefined): ModelSettings {
@@ -958,6 +1091,9 @@ function normalizeModelSettings(input: Partial<ModelSettings> | null | undefined
   // 厂商重命名迁移：把旧 provider 名在字典里和当前 provider 字段一并改成新名。
   // 必须在"旧 schema 兼容回填"之前做，否则会用旧名先创建一份僵尸数据。
   ({ provider, perProvider } = migrateProviderRenames(provider, perProvider));
+  for (const [providerName, profile] of Object.entries(perProvider)) {
+    perProvider[providerName] = migrateLegacyMinimaxDefaults(providerName, profile);
+  }
 
   // 旧 schema 兼容：v1 之前的 model-config.json 没有 perProvider 字段，
   // 但有顶层 baseUrl/model/apiKey 三件套。首次升级时把它们当作 currentProvider 那一份回填。
@@ -974,6 +1110,13 @@ function normalizeModelSettings(input: Partial<ModelSettings> | null | undefined
 
   // 顶层镜像：用 perProvider[provider] 展开
   const profile = perProvider[provider];
+
+  // 迁移旧配置：vision.syncWithMain === true -> multimodal: true
+  let multimodal = input?.multimodal === true;
+  const rawVision = input?.vision as Partial<VisionModelConfig> & { syncWithMain?: boolean } | undefined;
+  if (rawVision && rawVision.syncWithMain === true) {
+    multimodal = true;
+  }
 
   return {
     mode,
@@ -993,7 +1136,8 @@ function normalizeModelSettings(input: Partial<ModelSettings> | null | undefined
       : 0.55,
     rerankerMode: input?.rerankerMode === "standard" || input?.rerankerMode === "none" ? input.rerankerMode : "light",
     embeddingModel: input?.embeddingModel === "bgem3" ? "bgem3" : "minilm",
-    vision: normalizeVisionConfig(input?.vision),
+    vision: normalizeVisionConfig(rawVision),
+    multimodal,
     optimizeFirstRound: input?.optimizeFirstRound,
   };
 }
@@ -1024,26 +1168,21 @@ function loadModelSettings(): ModelSettings {
  * syncWithMain=true 时：从主配置读 baseUrl/key/model，并检查主模型 supportsVision——
  * 若主模型非视觉，返回 null（避免把非视觉模型当视觉模型硬调导致运行时错误让用户困惑）。
  */
+/**
+ * 运行时解析视觉配置。
+ * multimodal=true：主模型本身支持视觉，返回主模型配置（让 read_image 等工具可用）。
+ * multimodal=false：返回独立视觉模型配置（三字段齐全才有效），否则 null。
+ */
 export function loadVisionConfig(): VisionConfig | null {
   const settings = loadModelSettings();
-  const v = settings.vision;
-  if (!v) return null;
 
-  if (v.syncWithMain) {
-    // 从主配置读
-    const cap = getCapability(settings.provider);
-    if (!cap?.supportsVision) {
-      console.warn("[Vision] syncWithMain=true 但主模型不支持视觉，视为未启用");
-      return null;
-    }
+  if (settings.multimodal) {
     if (!settings.apiKey || !settings.model) return null;
-    // 视觉 baseUrl：优先用 visionBaseUrl（主配走 Anthropic 入口时视觉需走 OpenAI 入口），
-    // 没标就用主配置 baseUrl。这样用户勾"同步"就能用，不用手动改 URL。
-    const visionBaseUrl = cap.visionBaseUrl || settings.baseUrl;
-    return { baseUrl: visionBaseUrl, apiKey: settings.apiKey, model: settings.model };
+    return { baseUrl: settings.baseUrl, apiKey: settings.apiKey, model: settings.model };
   }
 
-  // 独立配置
+  const v = settings.vision;
+  if (!v) return null;
   if (!v.baseUrl || !v.apiKey || !v.model) return null;
   return { baseUrl: v.baseUrl, apiKey: v.apiKey, model: v.model };
 }
@@ -1122,6 +1261,10 @@ function saveModelSettings(settings: Partial<ModelSettings>): ModelSettings {
 
 function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undefined): GeneralSettings {
   const windowVisibility = normalizeWindowVisibilitySettings(input);
+  const cita = normalizeCitaSettings({
+    enabled: input?.citaEnabled,
+    semanticEngine: input?.citaSemanticEngine,
+  });
   const clamp = (value: unknown, fallback: number) => {
     const num = typeof value === "number" ? value : Number(value);
     return Number.isFinite(num) ? Math.max(0, Math.min(100, Math.round(num))) : fallback;
@@ -1135,6 +1278,9 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
     return Number.isFinite(num) ? Math.max(1000, Math.min(120000, Math.round(num))) : fallback;
   };
   return {
+    citaEnabled: cita.enabled,
+    citaSemanticEngine: cita.semanticEngine,
+    chatSocialContextEnabled: normalizeChatSocialContextEnabled(input?.chatSocialContextEnabled),
     musicEnabled: Boolean(input?.musicEnabled),
     musicVolume: clamp(input?.musicVolume, DEFAULT_GENERAL_SETTINGS.musicVolume),
     soundEnabled: input?.soundEnabled === undefined ? DEFAULT_GENERAL_SETTINGS.soundEnabled : Boolean(input.soundEnabled),
@@ -1155,6 +1301,8 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
     uiFont: normalizeUiFont(input?.uiFont),
     uiIcon: normalizeUiIcon(input?.uiIcon),
     defaultChatMode: normalizeDefaultChatMode(input?.defaultChatMode),
+    currentStyleId: normalizeStyleId(input?.currentStyleId),
+    customStyle: normalizeCustomStyleConfig(input?.customStyle),
     segmentedOutputMode: normalizeSegmentedOutputMode(input?.segmentedOutputMode),
     mobileMessageSegmentation: normalizeMobileMessageSegmentationMode(input?.mobileMessageSegmentation),
     proactiveChatMode: normalizeProactiveChatMode(input?.proactiveChatMode),
@@ -1209,9 +1357,8 @@ function normalizeGeneralSettings(input: Partial<GeneralSettings> | null | undef
       ? Math.max(0.001, Math.min(0.5, Number(input.asrVadThreshold)))
       : DEFAULT_GENERAL_SETTINGS.asrVadThreshold,
     asrShowTranscript: Boolean(input?.asrShowTranscript),
-    openerMode: ["off", "quiet", "normal", "lively"].includes(String(input?.openerMode))
-      ? (input!.openerMode as "off" | "quiet" | "normal" | "lively")
-      : "off",
+    screenshotHotkey: typeof input?.screenshotHotkey === "string" && input.screenshotHotkey.trim()
+      ? input.screenshotHotkey.trim() : DEFAULT_GENERAL_SETTINGS.screenshotHotkey,
     ttsGptsovitsBaseUrl: typeof input?.ttsGptsovitsBaseUrl === "string" ? input.ttsGptsovitsBaseUrl : DEFAULT_GENERAL_SETTINGS.ttsGptsovitsBaseUrl,
     ttsGptsovitsRefAudioPath: typeof input?.ttsGptsovitsRefAudioPath === "string" ? input.ttsGptsovitsRefAudioPath : "",
     ttsGptsovitsPromptText: typeof input?.ttsGptsovitsPromptText === "string" ? input.ttsGptsovitsPromptText : "",
@@ -1282,6 +1429,12 @@ function saveGeneralSettings(settings: Partial<GeneralSettings>): GeneralSetting
   if (before.uiIcon !== normalized.uiIcon) {
     applyUiIcon(normalized.uiIcon);
   }
+  if (before.screenshotHotkey !== normalized.screenshotHotkey) {
+    const result = screenshotService?.replaceHotkey(normalized.screenshotHotkey);
+    if (result && !result.ok) {
+      console.warn("[Cyrene] 截图热键注册失败，可能被其他应用占用:", normalized.screenshotHotkey);
+    }
+  }
   Object.assign(before, normalized);
   return normalized;
 }
@@ -1298,10 +1451,24 @@ const MINIMAX_SEARCH_MCP_ID = "minimax-web-search";
  * 同步搜索 MCP Server：选 MiniMax+有key→注册连接，否则→移除断开。
  * 在 TTS_SAVE_SETTINGS 检测到搜索配置变化时调用。
  */
-async function syncVolcanoSearchMcp(settings: GeneralSettings): Promise<void> {
+async function syncVolcanoSearchMcp(settings: GeneralSettings): Promise<{ mcpSyncResult: string }> {
   // ── MiniMax（PyPI包，不依赖GitHub，推荐）──
-  const minimaxEnable = settings.searchEngine === "minimax" && settings.searchMinimaxKey.trim().length > 0;
+  const minimaxEnable = settings.searchEngine === "minimax";
   const minimaxExists = listMcpServers().some(s => s.id === MINIMAX_SEARCH_MCP_ID);
+
+  // Key 校验（不泄漏原始 Key）
+  if (minimaxEnable) {
+    const keyValidation = validateSearchApiKey(settings.searchMinimaxKey, "MiniMax API Key");
+    console.log(`[Cyrene] MiniMax Key 校验: length=${keyValidation.diagnostics.length} trimmed=${keyValidation.diagnostics.trimmed} nonAscii=${keyValidation.diagnostics.hasNonAscii} controlChars=${keyValidation.diagnostics.hasControlChars}`);
+    if (!keyValidation.valid) {
+      console.error(`[Cyrene] MiniMax Key 校验失败: ${keyValidation.error}`);
+      // Key 不合法时，如果 MCP 存在则清理
+      if (minimaxExists) {
+        try { await removeMcpServer(MINIMAX_SEARCH_MCP_ID); } catch (err) { console.error("[Cyrene] MiniMax 搜索 MCP 移除异常:", err); }
+      }
+      return { mcpSyncResult: `key_invalid: ${keyValidation.error}` };
+    }
+  }
 
   if (minimaxEnable && !minimaxExists) {
     console.log("[Cyrene] 注册 MiniMax 搜索 MCP Server...");
@@ -1319,15 +1486,18 @@ async function syncVolcanoSearchMcp(settings: GeneralSettings): Promise<void> {
       });
       if (result.ok) {
         console.log("[Cyrene] MiniMax 搜索 MCP 注册成功，工具:", result.toolIds?.join(", "));
+        return { mcpSyncResult: `registered: ${result.toolIds?.join(", ") ?? "none"}` };
       } else {
         console.error("[Cyrene] MiniMax 搜索 MCP 注册失败:", result.error);
+        return { mcpSyncResult: `register_failed: ${result.error}` };
       }
     } catch (err) {
       console.error("[Cyrene] MiniMax 搜索 MCP 注册异常:", err);
+      return { mcpSyncResult: `register_exception: ${err}` };
     }
   } else if (!minimaxEnable && minimaxExists) {
     console.log("[Cyrene] 移除 MiniMax 搜索 MCP Server...");
-    try { await removeMcpServer(MINIMAX_SEARCH_MCP_ID); } catch (err) { console.error("[Cyrene] MiniMax 搜索 MCP 移除异常:", err); }
+    try { await removeMcpServer(MINIMAX_SEARCH_MCP_ID); return { mcpSyncResult: "removed" }; } catch (err) { console.error("[Cyrene] MiniMax 搜索 MCP 移除异常:", err); return { mcpSyncResult: `remove_exception: ${err}` }; }
   } else if (minimaxEnable && minimaxExists) {
     console.log("[Cyrene] MiniMax 搜索 key 变化，重新注册 MCP Server...");
     try {
@@ -1338,8 +1508,10 @@ async function syncVolcanoSearchMcp(settings: GeneralSettings): Promise<void> {
         args: ["minimax-coding-plan-mcp", "-y"],
         env: { MINIMAX_API_KEY: settings.searchMinimaxKey.trim(), MINIMAX_API_HOST: "https://api.minimaxi.com" },
       });
-    } catch (err) { console.error("[Cyrene] MiniMax 搜索 MCP 重新注册异常:", err); }
+      return { mcpSyncResult: "reregistered" };
+    } catch (err) { console.error("[Cyrene] MiniMax 搜索 MCP 重新注册异常:", err); return { mcpSyncResult: `reregister_exception: ${err}` }; }
   }
+  return { mcpSyncResult: "no_change" };
 }
 
 let stickerSettingsCache: Record<string, boolean> | null = null;
@@ -1695,11 +1867,12 @@ async function callChatCompletionsStream(
   timeoutMs: number,
   label: string,
   onChunk: (text: string) => void,
+  logTiming = true,
 ): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const _startTime = Date.now();
-  console.log(`[TIMING] ${label} START timeout=${timeoutMs}ms msgLen=${messages.length} sysLen=${messages[0]?.content?.length ?? 0}`);
+  if (logTiming) console.log(`[TIMING] ${label} START timeout=${timeoutMs}ms msgLen=${messages.length} sysLen=${messages[0]?.content?.length ?? 0}`);
 
   // 拼 VendorConfig（settings 顶层三件套 + 镜像字段都参与）
   const cfg: VendorConfig = {
@@ -1765,15 +1938,15 @@ async function callChatCompletionsStream(
     }
 
     const result = stripThinkBlocks(fullText);
-    console.log(`[TIMING] ${label} OK in ${Date.now() - _startTime}ms resultLen=${result.length}`);
+    if (logTiming) console.log(`[TIMING] ${label} OK in ${Date.now() - _startTime}ms resultLen=${result.length}`);
     appendApiLog(label, messages, fullText, result);
     return result;
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
-      console.log(`[TIMING] ${label} TIMEOUT at ${Date.now() - _startTime}ms`);
+      if (logTiming) console.log(`[TIMING] ${label} TIMEOUT at ${Date.now() - _startTime}ms`);
       throw new Error("模型请求超时，请稍后重试。");
     }
-    console.log(`[TIMING] ${label} ERROR at ${Date.now() - _startTime}ms: ${err instanceof Error ? err.message : err}`);
+    if (logTiming) console.log(`[TIMING] ${label} ERROR at ${Date.now() - _startTime}ms: ${err instanceof Error ? err.message : err}`);
     throw err;
   } finally {
     clearTimeout(timer);
@@ -1788,9 +1961,152 @@ async function callChatCompletions(
   temperature: number | undefined,
   timeoutMs: number,
   label: string,
+  logTiming = true,
 ): Promise<string> {
-  return callChatCompletionsStream(settings, messages, temperature, timeoutMs, label, () => {});
+  return callChatCompletionsStream(settings, messages, temperature, timeoutMs, label, () => {}, logTiming);
 }
+
+/**
+ * 非流式 chat completions 调用（CITA 专用）。
+ * CITA 不需要流式输出（它只要完整 JSON），非流式比流式快 ~2 倍。
+ * 支持 reasoningOverride 强制关闭 reasoning（CITA 不需要深度推理）。
+ */
+async function callChatCompletionsNonStream(
+  settings: ModelSettings,
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+  temperature: number | undefined,
+  timeoutMs: number,
+  label: string,
+  reasoningOverride?: ModelSettings["reasoning"],
+  options?: {
+    structuredOutput?: StructuredOutputRequest;
+    maxTokens?: number;
+    extraBody?: Record<string, unknown>;
+  },
+  signal?: AbortSignal,
+): Promise<{
+  text: string;
+  thinking?: string;
+  finishReason: string;
+  refusal?: string;
+}> {
+  const cfg: VendorConfig = {
+    provider: settings.provider,
+    baseUrl: settings.baseUrl,
+    model: settings.model,
+    apiKey: settings.apiKey,
+    explicitTransport: settings.explicitTransport,
+    reasoning: reasoningOverride ?? settings.reasoning,
+  };
+  const adapter = getAdapterForConfig(cfg);
+  const http = adapter.buildRequest({
+    model: cfg.model,
+    messages,
+    ...(temperature !== undefined ? { temperature } : {}),
+    stream: false,
+    ...(options?.structuredOutput ? { structuredOutput: options.structuredOutput } : {}),
+    ...(options?.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
+    ...(options?.extraBody ? { extraBody: options.extraBody } : {}),
+  }, cfg);
+
+  const controller = new AbortController();
+  const abort = (): void => controller.abort(signal?.reason);
+  signal?.addEventListener("abort", abort, { once: true });
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const startTime = Date.now();
+  console.log(`[TIMING] ${label} START (non-stream) timeout=${timeoutMs}ms msgLen=${messages.length} sysLen=${messages[0]?.content?.length ?? 0}`);
+
+  try {
+    const response = await fetch(http.url, {
+      method: "POST",
+      headers: http.headers,
+      body: http.body,
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({})) as Record<string, unknown>;
+      const errMsg = (errorData as { error?: { message?: string } }).error?.message;
+      throw new Error(errMsg || `模型请求失败：HTTP ${response.status}`);
+    }
+    const json = await response.json();
+    const parsed = adapter.parseResponse(json);
+    if (parsed.usage) {
+      recordUsage(parsed.usage.input, parsed.usage.output, 1);
+    }
+    const totalTime = Date.now() - startTime;
+    console.log(`[TIMING] ${label} OK in ${totalTime}ms resultLen=${parsed.text.length}`);
+    return {
+      text: parsed.text,
+      thinking: parsed.thinking,
+      finishReason: parsed.finishReason,
+      refusal: parsed.refusal,
+    };
+  } catch (error) {
+    const totalTime = Date.now() - startTime;
+    if (error instanceof Error && error.name === "AbortError") {
+      console.log(`[TIMING] ${label} TIMEOUT at ${totalTime}ms`);
+    } else {
+      console.log(`[TIMING] ${label} ERROR at ${totalTime}ms: ${error}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", abort);
+  }
+}
+
+const citaService = new CitaService({
+  store: new ContextStore(),
+  engine: new RemoteSemanticEngine(
+    async (request, signal) => callChatCompletionsNonStream(
+      loadModelSettings(),
+      [
+        { role: "system", content: request.systemPrompt },
+        { role: "user", content: request.userPrompt },
+      ],
+      0,
+      6_000,
+      "CITA understandTurn",
+      { mode: "off" as const },
+      {
+        structuredOutput: request.structuredOutput,
+        maxTokens: request.maxTokens,
+        extraBody: request.extraBody,
+      },
+      signal,
+    ),
+    {
+      timeoutMs: 8_000,
+      systemPrompt: loadPromptFile("cita_system.md"),
+      getProfile: () => {
+        const settings = loadModelSettings();
+        const cfg: VendorConfig = {
+          provider: settings.provider,
+          baseUrl: settings.baseUrl,
+          model: settings.model,
+          apiKey: settings.apiKey,
+          explicitTransport: settings.explicitTransport,
+          reasoning: { mode: "off" },
+        };
+        const adapter = getAdapterForConfig(cfg);
+        return resolveStructuredOutputProfile({
+          provider: adapter.id,
+          model: cfg.model,
+          transport: adapter.transport,
+          endpointKind: classifyStructuredOutputEndpoint({
+            providerId: adapter.id,
+            configuredBaseUrl: cfg.baseUrl,
+            officialBaseUrl: adapter.capability.baseUrl,
+          }),
+        });
+      },
+    },
+  ),
+  getSettings: () => normalizeCitaSettings({
+    enabled: loadGeneralSettings().citaEnabled,
+    semanticEngine: loadGeneralSettings().citaSemanticEngine,
+  }),
+});
 
 function loadPromptFile(filename: string): string {
   try {
@@ -1800,6 +2116,46 @@ function loadPromptFile(filename: string): string {
   } catch {
     return "";
   }
+}
+
+function getCustomStylePromptPath(): string {
+  return path.join(app.getPath("userData"), "styles", "custom", "custom.md");
+}
+
+function ensureCustomStylePrompt(): string {
+  const targetPath = getCustomStylePromptPath();
+  if (fs.existsSync(targetPath)) return targetPath;
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  const templatePath = path.join(app.getAppPath(), "prompts", "styles", "custom", "custom.md");
+  if (fs.existsSync(templatePath)) {
+    fs.copyFileSync(templatePath, targetPath);
+  } else {
+    fs.writeFileSync(targetPath, "", "utf8");
+  }
+  return targetPath;
+}
+
+function readStylePrompt(styleId: StyleId): string {
+  if (styleId === "custom") {
+    const filePath = ensureCustomStylePrompt();
+    return fs.readFileSync(filePath, "utf8").trim();
+  }
+  return loadPromptFile("styles/" + STYLE_FILE_BY_ID[styleId]);
+}
+
+function resolveSoulSamplingForStyle(input: {
+  styleId: StyleId;
+  settings: { provider: string; model: string; reasoning?: ReasoningPreference };
+  customStyle: CustomStyleConfig;
+}) {
+  const capability = getCapabilityOrOpenAI(input.settings.provider);
+  const preference = resolveStylePreference(input.styleId, input.customStyle);
+  return resolveApprovedStyleSampling({
+    providerId: capability.id,
+    model: input.settings.model,
+    reasoning: input.settings.reasoning ?? { mode: "auto" },
+    preference,
+  });
 }
 
 /**
@@ -1826,15 +2182,15 @@ function logWorldbookInjection(alwaysOnContext: string, systemContent: string): 
   }
 }
 
-function buildSystemPrompt(styleFile: string): string {
+function buildSystemPrompt(styleFile: string, includeStyle = true): string {
   const parts: string[] = [];
 
-  // styleFile 以 "talk" 开头时走纯聊天模式：用 talk_system.md 替换 system.md（不调工具）
-  const isTalkMode = styleFile.startsWith("talk");
-  const system = loadPromptFile(isTalkMode ? "talk_system.md" : "system.md");
+  // Chat 模式使用独立基础规则；仍兼容旧调用方传入的 "talk"。
+  const isChatMode = styleFile.startsWith("chat") || styleFile.startsWith("talk");
+  const system = loadPromptFile(isChatMode ? "chat_system.md" : "work_system.md");
   if (system) parts.push(system);
 
-  const identity = loadPromptFile("identity.md");
+  const identity = loadPromptFile(isChatMode ? "chat_identity.md" : "work_identity.md");
   if (identity) parts.push(identity);
 
   const soul = loadPromptFile("soul.md");
@@ -1843,8 +2199,8 @@ function buildSystemPrompt(styleFile: string): string {
   const canon = loadPromptFile("canon_quotes.md");
   if (canon) parts.push(canon);
 
-  // 纯聊天模式不加载 style 文件（talk_system.md 已包含完整规则）
-  if (!isTalkMode) {
+  // 新链路由 build-options 独立注入 style Prompt；旧调用方仍可选择在这里附加 style 文件。
+  if (includeStyle && !isChatMode) {
     const style = loadPromptFile("styles/" + styleFile);
     if (style) parts.push(style);
   }
@@ -1854,8 +2210,8 @@ function buildSystemPrompt(styleFile: string): string {
 
 function buildProactivePersonaPrompt(): string {
   const parts: string[] = [];
-  const talkSystem = loadPromptFile("talk_system.md");
-  if (talkSystem) parts.push(talkSystem);
+  const chatSystem = loadPromptFile("chat_system.md");
+  if (chatSystem) parts.push(chatSystem);
   const soul = loadPromptFile("soul.md");
   if (soul) {
     // 主动轮完全不携带工具说明；Soul 尾部的 Live2D/联网章节由正常聊天使用。
@@ -1908,8 +2264,11 @@ async function buildProactiveAgentMessages(candidate: ProactiveCandidate) {
     buildAlwaysOnContext(retrievalQuery, histories.ordinary.map((turn) => ({ role: turn.role, content: turn.content }))).catch(() => ""),
     buildMemoryInjection(retrievalQuery).catch(() => ""),
   ]);
-  const state = loadOpenerState();
+  const state = loadProactiveState();
   const snapshot = getProactiveRuntimeSnapshot();
+  // 用户有效时区：resolver 校验后传给 prompt，禁止未校验的 profile.timezone。
+  const profile = loadUserProfile();
+  const timezone = resolveChatContextTimezone(profile.timezone);
   return buildProactiveMessages({
     basePersona: buildProactivePersonaPrompt(),
     userProfile: profileContext,
@@ -1920,38 +2279,8 @@ async function buildProactiveAgentMessages(candidate: ProactiveCandidate) {
     localNow: new Date(snapshot.now),
     idleSec: snapshot.idleSec,
     unansweredCount: state.unansweredCount,
+    timezone,
   });
-}
-
-async function synthesizeProactiveSpeech(text: string): Promise<{ audioBase64: string; format: "wav" | "mp3"; durationMs: number } | null> {
-  const cfg = loadGeneralSettings();
-  if (!cfg.ttsAutoRead || cfg.ttsEngine === "off") return null;
-  try {
-    const result = await synthesizeByEngine(cfg.ttsEngine, {
-      text,
-      speed: cfg.ttsSpeed,
-      volume: cfg.ttsVolume,
-      apiKey: cfg.ttsEngine === "mimo" ? cfg.ttsMimoKey : (cfg.ttsEngine === "custom-cloud" ? cfg.ttsCustomCloudApiKey : cfg.ttsMinimaxKey),
-      voiceId: cfg.ttsEngine === "custom-cloud" ? cfg.ttsCustomCloudVoiceId : cfg.ttsMinimaxVoiceId,
-      model: cfg.ttsMinimaxModel,
-      baseUrl: cfg.ttsGptsovitsBaseUrl,
-      refAudioPath: cfg.ttsGptsovitsRefAudioPath,
-      promptText: cfg.ttsGptsovitsPromptText,
-      endpointUrl: cfg.ttsCustomCloudEndpointUrl,
-      timeoutMs: cfg.ttsCustomCloudTimeoutMs,
-      voiceAudioPath: cfg.ttsMimoVoiceAudioPath,
-      stylePrompt: cfg.ttsMimoStylePrompt,
-      format: cfg.ttsEngine === "gptsovits" ? cfg.ttsGptsovitsFormat : (cfg.ttsEngine === "custom-cloud" ? cfg.ttsCustomCloudFormat : "mp3"),
-    });
-    return {
-      audioBase64: result.audio.toString("base64"),
-      format: result.format,
-      durationMs: Math.max(1_500, Math.min(30_000, text.length * 180)),
-    };
-  } catch (error) {
-    console.warn("[Proactive] TTS 合成失败，保留文本消息:", error instanceof Error ? error.message : error);
-    return null;
-  }
 }
 
 function updateNormalConversationBusy(delta: 1 | -1): void {
@@ -1973,24 +2302,16 @@ const proactiveConversationLifecycle = {
 function getProactiveCommitDecision(candidate: ProactiveCandidate, generationEpoch: number) {
   return canCommitProactiveMessage(
     getProactiveRuntimeSnapshot(),
-    loadOpenerState(),
+    loadProactiveState(),
     candidate,
     generationEpoch,
   );
 }
 
 function recordProactiveDeliveryMetadata(input: ProactiveCommitInput): void {
-  const openerState = loadOpenerState();
-  const sceneConfig = SCENE_CONFIGS.find((config) => config.id === input.candidate.sceneId);
-  if (sceneConfig?.todayFiredFlag) openerState.todayFired[sceneConfig.todayFiredFlag] = true;
-  if (input.source === "fallback" && input.fallbackPayload) {
-    const itemId = (input.fallbackPayload as ShowBubblePayload).itemId;
-    if (itemId) {
-      const recent = openerState.recentItems[input.candidate.sceneId] ?? [];
-      openerState.recentItems[input.candidate.sceneId] = [itemId, ...recent.filter((id) => id !== itemId)].slice(0, 4);
-    }
-  }
-  saveOpenerState(openerState);
+  // Opener 的 todayFired/recentItems 字段已整体废弃（依赖的 SCENE_CONFIGS 与 ShowBubblePayload 来自旧 opener 子系统）。
+  // ProactiveChat 这边只需持久化 committed 副作用；当前 implementation 已无副作用，留空占位即可。
+  void input;
 }
 
 async function commitLocalProactiveMessage(input: ProactiveCommitInput): Promise<ProactiveCommitResult> {
@@ -2011,25 +2332,9 @@ async function commitLocalProactiveMessage(input: ProactiveCommitInput): Promise
   if (!appended) throw new Error("主动聊天会话写入失败");
   broadcastChatsChanged();
 
-  let payload: ShowBubblePayload = input.source === "fallback" && input.fallbackPayload
-    ? { ...(input.fallbackPayload as ShowBubblePayload), text: input.text, sessionId: session.id }
-    : {
-        text: input.text,
-        sceneId: input.candidate.sceneId,
-        itemId: `proactive-${at}`,
-        sessionId: session.id,
-      };
-
-  if (input.source === "model") {
-    const speech = await synthesizeProactiveSpeech(input.text);
-    if (speech) payload = { ...payload, ...speech };
-  }
-
-  // 文本已落库；气泡/TTS 前再次执行完整检查，失败时只取消展示和语音。
-  const displayDecision = getProactiveCommitDecision(input.candidate, input.generationEpoch);
-  if (displayDecision.allowed && mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send(IPC.LIVE2D_SHOW_BUBBLE, payload);
-  }
+  // 文本已落库；上次落库后没有 panel/show 步骤要做（opener 气泡已被移除，fallback 路径没有了）。
+  void input;
+  void at;
   return { kind: "committed" };
 }
 
@@ -2061,11 +2366,9 @@ async function commitSelectedProactiveMessage(input: ProactiveCommitInput): Prom
 
 function initializeProactiveChatService(): void {
   proactiveChatService = createProactiveChatService({
-    loadState: loadOpenerState,
+    loadState: loadProactiveState,
     saveState: (state) => {
-      const openerState = loadOpenerState();
-      Object.assign(openerState, state);
-      saveOpenerState(openerState);
+      saveProactiveState(state);
     },
     getSnapshot: getProactiveRuntimeSnapshot,
     buildMessages: async (candidate) => buildProactiveAgentMessages(candidate),
@@ -2085,17 +2388,14 @@ function initializeProactiveChatService(): void {
         timeoutMs: 45_000,
       });
     },
-    getFallback: async (candidate) => getPresetFallback(candidate.sceneId, new Date().getHours()),
+    // Opener 的 preset fallback 已移除：model 失败时由 proactive-service 自身走 cancel 路径。
+    getFallback: async () => null,
     canStartDelivery: () => {
       const target = loadGeneralSettings().proactiveDeliveryTarget;
       return target === "local" || canStartProactiveChannelDelivery(target, channelManager);
     },
     commitMessage: commitSelectedProactiveMessage,
     log: (event, detail) => console.log(`[Proactive] ${event}`, detail ?? ""),
-  });
-
-  setProactiveCandidateHandler(async (candidate) => {
-    await proactiveChatService?.evaluateCandidate(candidate);
   });
 
   setChannelsConversationLifecycle(proactiveConversationLifecycle);
@@ -2110,6 +2410,38 @@ function initializeProactiveChatService(): void {
     proactiveChatService?.invalidate();
   });
   powerMonitor.on("resume", () => { proactiveScreenLocked = false; });
+}
+
+// ── 主动聊天触发器（60s 周期扫描 → evaluateCandidate） ─────────────
+// 闭包持有的 evaluation backoff Map（仅内存，重启后由 policy 持久化冷却接续）
+let proactiveTrigger: ProactiveTriggerController | null = null;
+const proactiveBackoffMap = new Map<string, number>();
+
+function initializeProactiveTrigger(): void {
+  if (proactiveTrigger) return; // 幂等
+  if (!proactiveChatService) {
+    console.warn("[Proactive] trigger skipped: service not initialized");
+    return;
+  }
+  const service = proactiveChatService;
+  proactiveTrigger = createProactiveTrigger({
+    evaluateCandidate: (c) => service.evaluateCandidate(c),
+    getRuntimeSnapshot: getProactiveRuntimeSnapshot,
+    getProactiveState: loadProactiveState,
+    getTimezone: () => resolveChatContextTimezone(loadUserProfile().timezone),
+    // getWeatherContext 第一版不传：未来天气缓存接入后填，函数体无需改
+    getLastEvaluatedAtByScene: () => new Map(proactiveBackoffMap),
+    setLastEvaluatedAtByScene: (next) => {
+      proactiveBackoffMap.clear();
+      for (const [k, v] of next) proactiveBackoffMap.set(k, v);
+    },
+  });
+  proactiveTrigger.start();
+}
+
+function stopProactiveTrigger(): void {
+  proactiveTrigger?.stop();
+  proactiveTrigger = null;
 }
 
 /**
@@ -2129,14 +2461,14 @@ function buildToolSystemPrompt(enabledTools: ReadonlyArray<ToolDefinition>, isOp
 
 /**
  * Soul 阶段使用的基础 system prompt。
- * 包含：人设（system.md + identity.md + soul.md + canon + style）+ 后续可追加的环境/记忆等。
+ * 包含：人设（work_system.md/chat_system.md + work_identity.md/chat_identity.md + soul.md + canon + style）+ 后续可追加的环境/记忆等。
  * 注意：工具结果（`role: "tool"` 消息）在 conversation 中已携带，本函数不重复注入。
  * 第一期：build-options 会把 environmentContext / skillCatalog / toneInjection /
  * alwaysOnContext / relationshipContext / attachmentContext 等都拼到 baseContent 末尾，
  * 后续第二期再拆分为 toolEnvironmentContext / soulEnvironmentContext。
  */
 function buildSoulSystemBasePrompt(styleFile: string): string {
-  return buildSystemPrompt(styleFile);
+  return buildSystemPrompt(styleFile, false);
 }
 
 /**
@@ -2195,8 +2527,6 @@ async function observeRuntimeState(
   // 入 LLM 后台队列：和 MemoryJudge 串行执行，避免并发触发限流；
   // 限流自动退避 5s 重试 1 次。.catch 吞错误，不影响主流程。
   enqueueLLMTask("心情观察器", async () => {
-    const _obsStart = Date.now();
-    console.log(`[TIMING] 心情观察器 SENDING request`);
     const observerContent = await callChatCompletions(settings, [
       {
         role: "system",
@@ -2209,8 +2539,7 @@ async function observeRuntimeState(
           recentDialogue,
         }),
       },
-    ], undefined, 30000, "心情观察器");
-    console.log(`[TIMING] 心情观察器 OK in ${Date.now() - _obsStart}ms raw=${observerContent?.slice(0, 100)}`);
+    ], undefined, 30000, "心情观察器", false);
     const feeling = parseObserverFeeling(observerContent);
     if (feeling) {
       const smoothed = smoothFeeling(feelingScores, feeling);
@@ -2220,158 +2549,11 @@ async function observeRuntimeState(
       runtimeState.updatedAt = Date.now();
       broadcastRuntimeStateChanged();
     }
-  }).catch((err) => {
+  }, { log: false }).catch((err) => {
     console.warn("[Cyrene] observe runtime failed; keeping current feeling:", err);
   });
   // 标注未使用的参数，避免 lint 警告
   void latestUserText;
-}
-
-async function requestModelReply(inputMessages: unknown, styleFile = "01_default.md"): Promise<ChatReplyPayload> {
-  const settings = loadModelSettings();
-  if (!settings.baseUrl) {
-    throw new Error("还没有填写 API URL，请先在设置里保存 API 配置。");
-  }
-
-  const messages = normalizeChatMessages(inputMessages);
-  if (messages.length === 0) {
-    throw new Error("没有可发送的聊天内容。");
-  }
-  const profile = loadUserProfile();
-  const chatContextTimezone = resolveChatContextTimezone(profile.timezone);
-  const skillActivation = resolveSlashActivation(messages);
-  const { messages: llmMessages, timeContext: conversationTimeContext } = buildConversationTimeContext(messages, chatContextTimezone);
-  const latestUserText = messages.filter((message) => message.role === "user").at(-1)?.content ?? "";
-
-  // 1. 构建 always-on 上下文（世界书 + L0/L1 画像）
-  let alwaysOnContext = "";
-  try {
-    alwaysOnContext = await buildAlwaysOnContext(latestUserText, messages);
-  } catch (err) {
-    console.warn("[Cyrene] always-on context build failed:", err);
-  }
-
-  // 1.1 自动注入相关记忆（L2 + 导入文档），让模型无需调 tool 也能感知
-  let memoryInjection = "";
-  try {
-    memoryInjection = await buildMemoryInjection(latestUserText);
-  } catch (err) {
-    console.warn("[Cyrene] memory injection failed:", err);
-  }
-
-  // 1.5 环境上下文（Step 1）：当前日期 / OS / 桌面真实路径 / 权限档位 / 工具可用情况 / 模型视觉能力
-  // 放在 always-on 之后、system prompt 末尾，让模型最近读到的就是机器事实，
-  // 降低"桌面在哪"这类低级幻觉。失败不影响主流程。
-  let environmentContext = "";
-  try {
-    environmentContext = buildEnvironmentContext(
-      { provider: settings.provider, model: settings.model },
-      { nickname: profile.nickname, callPreference: profile.callPreference, birthday: profile.birthday, defaultCity: profile.defaultCity, timezone: profile.timezone },
-    );
-  } catch (err) {
-    console.warn("[Cyrene] environment context build failed:", err);
-  }
-
-  // system prompt 拼装顺序：事实层在前，人格层在后，skill 清单 + /命令激活放最后。
-  // /命令拦截：命中 /skill-id 则当轮 system 注入 skill 正文（user message 原样，不污染 memory）
-  const skillCatalog = buildSkillCatalog(skillRegistry.getEnabled());
-  // 语气硬注入：embedding 匹配场景，强制注入语气规则 + 场景参考样本（必须遵守，优先级最高）
-  let toneInjection = "";
-  const sceneProvider = getSceneEmbeddingProvider();
-  if (sceneProvider && sceneEmbeddingIndex) {
-    try {
-      toneInjection = await buildToneInjection(latestUserText, llmMessages, sceneProvider, sceneEmbeddingIndex);
-    } catch (err) {
-      console.error("[Cyrene] tone injection failed:", err);
-    }
-  }
-  // 注入顺序：环境 → 人格设定 → skill → 记忆 → ★已激活世界知识（放最后、最靠近 user message）
-  // 世界知识放最后：LLM 对靠近 user 的信息权重更高；且避免被 system.md 的"不知道不要编"规则覆盖
-  const systemContent =
-    (environmentContext ? environmentContext + "\n\n" : "") +
-    (conversationTimeContext ? conversationTimeContext + "\n\n---\n\n" : "") +
-    buildSystemPrompt(styleFile) +
-    (skillCatalog ? "\n\n---\n\n" + skillCatalog : "") +
-    skillActivation +
-    (memoryInjection ? memoryInjection + "\n\n" : "") +
-    (alwaysOnContext ? alwaysOnContext + "\n\n" : "") +
-    toneInjection;
-
-  // ── 诊断：WorldBook 注入验证 ──
-  logWorldbookInjection(alwaysOnContext, systemContent);
-
-  // 2. Function Calling 循环：模型自己决定调不调工具、调哪个
-  const fcMessages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }> = [
-    { role: "system", content: systemContent },
-    ...llmMessages,
-  ];
-
-  let chatContent = "";
-
-  try {
-    const fcResult = await runFunctionCallingLoop(
-      settings,
-      fcMessages,
-      getTimeoutSettings().chatRequestTimeout,
-    );
-    chatContent = fcResult.reply;
-
-    // 工具执行日志
-    if (fcResult.toolResults.length > 0) {
-      console.log("[Cyrene] Function Calling 使用了 " + fcResult.toolResults.length + " 个工具:",
-        fcResult.toolResults.map(tr => tr.toolId).join(", "));
-    }
-  } catch (err) {
-    console.error("[Cyrene] Function Calling 失败，降级为普通对话", err);
-    // 降级：不带 tools 的普通 LLM 调用
-    chatContent = await callChatCompletions(
-      settings,
-      fcMessages as Array<{ role: "system" | "user" | "assistant"; content: string }>,
-      undefined,
-      getTimeoutSettings().chatRequestTimeout,
-      "主聊天（降级）",
-    );
-  }
-
-  if (!chatContent) {
-    throw new Error("模型没有返回有效回复。");
-  }
-
-  // 发送流式事件（非流式模式下一次性发送）
-  if (chatWindow && !chatWindow.isDestroyed()) {
-    chatWindow.webContents.send("chat:stream-chunk", chatContent);
-  }
-
-
-  scheduleMemoryWrite(latestUserText, chatContent);
-
-  const inferredStatus = inferRuntimeState(latestUserText, chatContent, false);
-  runtimeState.status = inferredStatus.status;
-  runtimeState.expression = feelingToExpression[runtimeState.feeling] ?? 0;
-  runtimeState.updatedAt = Date.now();
-
-  let sticker: string | null = null;
-  if (settings.stickerEnabled && stickerEmbeddingIndex) {
-    const provider = getEmbeddingProvider();
-    if (provider) {
-      const stickerQuery = (chatContent + "\n" + latestUserText).slice(0, 1000);
-      const matchResult = await matchSticker(stickerQuery, provider, stickerEmbeddingIndex, settings.stickerSimilarityThreshold);
-      sticker = matchResult?.id ?? null;
-    }
-  }
-
-  if (settings.runtimeSync === "local") {
-    broadcastRuntimeStateChanged();
-  } else if (settings.runtimeSync === "llm") {
-    broadcastRuntimeStateChanged();
-    void observeRuntimeState(settings, llmMessages, latestUserText, chatContent);
-  }
-
-
-  if (chatWindow && !chatWindow.isDestroyed()) {
-    chatWindow.webContents.send("chat:stream-done", { reply: chatContent, sticker });
-  }
-  return { reply: chatContent, sticker };
 }
 
 // 厂商短名映射（与 settings.ts 的 MODEL_PRESETS.shortName 镜像，需手动同步）。
@@ -2379,7 +2561,7 @@ async function requestModelReply(inputMessages: unknown, styleFile = "01_default
 const PROVIDER_SHORT_NAMES: Record<string, string> = {
   "MiniMax（稀宇科技）": "MiniMax",
   "DeepSeek（深度求索）": "DeepSeek",
-  "火山 AgentPlan（火山引擎）": "火山",
+  "豆包（火山方舟）": "豆包",
   "GLM（智谱）": "GLM",
   "Kimi（月之暗面）": "Kimi",
   "Qwen（通义千问）": "Qwen",
@@ -2430,7 +2612,6 @@ function broadcastModelConfigChanged(settings = loadModelSettings()): void {
 }
 
 function broadcastRuntimeStateChanged(): void {
-  console.log("[Cyrene] broadcasting runtime state:", JSON.stringify(runtimeState));
   broadcastToAuxWindows(IPC.RUNTIME_STATE_CHANGED, runtimeState);
 }
 
@@ -2534,18 +2715,6 @@ function createWindow(): void {
 
   applyGeneralSettings(loadGeneralSettings());
 
-  // Opener 主动开口：注入桌宠窗口 + 启动 tick
-  setLive2dWindow(mainWindow);
-  reloadManifest();
-  const initOpener = () => {
-    const s = loadGeneralSettings();
-    stopOpener();
-    if (s.proactiveChatMode === "on") {
-      startOpener(s.openerMode === "off" ? "normal" : s.openerMode);
-    }
-  };
-  initOpener();
-
   // 注入天气工具配置获取器：每次工具执行时实时读 key/默认城市
   // （用户改了设置不用重启就能生效）
   setWeatherConfig(
@@ -2564,6 +2733,9 @@ function createWindow(): void {
     },
     () => loadGeneralSettings().weatherEnabled,
   );
+
+  // 注入用户时区 getter：工具侧通过 currentUserTimezone() 统一拿用户时区（缺/非法回退 Asia/Shanghai）
+  setUserTimezoneConfig(() => loadUserProfile().timezone);
 
   // 注入用户选择卡片回调：工具调 ask_user_choice 时发 Custom 事件给聊天窗口
   setChoiceCardSender((cardData) => {
@@ -2636,9 +2808,10 @@ function createWindow(): void {
     async (userText: string) => {
       const messages = [{ role: "user" as const, content: userText }];
 
-      // ① 时间日期
+      // ① 时间日期（用用户时区，禁止直接喂未校验的 profile.timezone 给 Intl）
       const now = new Date();
-      const timeStr = `当前时间：${now.toLocaleDateString("zh-CN")} ${now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`;
+      const userTz = resolveChatContextTimezone(loadUserProfile().timezone);
+      const timeStr = `当前时间：${now.toLocaleDateString("zh-CN", { timeZone: userTz })} ${now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", timeZone: userTz })}`;
 
       // ② 常驻上下文（世界书 + L0/L1 画像）
       let alwaysOnContext = "";
@@ -2716,7 +2889,6 @@ function createChatWindow(sessionId?: string): void {
   if (chatWindow && !chatWindow.isDestroyed()) {
     chatWindow.show();
     chatWindow.focus();
-    handleChatWindowOpened();  // Opener 响应窗口内打开 chat = 接话
     // 窗口已存在：通过事件让渲染进程切到目标会话（不重 load）
     if (sessionId) {
       chatWindow.webContents.send(IPC.CHATS_SWITCH_SESSION, sessionId);
@@ -2762,7 +2934,6 @@ function createChatWindow(sessionId?: string): void {
 
   chatWindow.once("ready-to-show", () => {
     chatWindow?.show();
-    handleChatWindowOpened();  // Opener 响应窗口内打开 chat = 接话
   });
 
   chatWindow.on("closed", () => {
@@ -3247,16 +3418,6 @@ ipcMain.handle(IPC.CHAT_SET_REASONING, (_event, payload: unknown) => {
   if (!normalized) return;
   saveModelSettings({ reasoning: normalized });
 });
-ipcMain.handle(IPC.CHAT_SEND_MESSAGE, async (_event, messages: unknown) => {
-  proactiveConversationLifecycle.onUserMessage();
-  proactiveConversationLifecycle.onConversationStarted();
-  try {
-    return await requestModelReply(messages);
-  } finally {
-    proactiveConversationLifecycle.onConversationEnded();
-  }
-});
-
 ipcMain.handle(IPC.CHAT_INGEST_FILES, async (_event, paths: unknown) => {
   const list = Array.isArray(paths) ? paths.filter((p): p is string => typeof p === "string") : [];
   if (list.length === 0) return [];
@@ -3294,6 +3455,9 @@ ipcMain.handle(IPC.CHAT_CAPTION_IMAGE, async (_event, payload: unknown) => {
   const filePath = payload && typeof payload === "object"
     ? (payload as { filePath?: unknown }).filePath
     : undefined;
+  const hasAnnotations = payload && typeof payload === "object"
+    ? (payload as { hasAnnotations?: unknown }).hasAnnotations === true
+    : false;
   const validated = validateCaptionImagePath(filePath);
   if (!validated.ok) return { ok: false, error: validated.error };
 
@@ -3306,7 +3470,7 @@ ipcMain.handle(IPC.CHAT_CAPTION_IMAGE, async (_event, payload: unknown) => {
     const { captionImage } = await import("./orchestrator/vision-captioner");
     const caption = await captionImage(
       { base64: validated.buffer.toString("base64"), mime: validated.mime },
-      IMAGE_CAPTION_PROMPT,
+      buildImageCaptionPrompt(hasAnnotations),
       visionCfg,
     );
     if (caption.startsWith("[错误")) {
@@ -3321,11 +3485,7 @@ ipcMain.handle(IPC.CHAT_CAPTION_IMAGE, async (_event, payload: unknown) => {
 ipcMain.handle(IPC.CHAT_GET_IMAGE_SEND_STRATEGY, () => {
   const settings = loadModelSettings();
   return decideImageSendStrategy({
-    provider: settings.provider,
-    baseUrl: settings.baseUrl,
-    model: settings.model,
-    apiKey: settings.apiKey,
-    explicitTransport: settings.explicitTransport,
+    multimodal: settings.multimodal,
     vision: loadVisionConfig(),
   });
 });
@@ -3446,14 +3606,16 @@ ipcMain.handle(IPC.SETTINGS_RESET_UI_FONT, () => {
 
 ipcMain.handle(IPC.SETTINGS_SAVE_GENERAL, (_event, settings: Partial<GeneralSettings>) => {
   const saved = saveGeneralSettings(settings);
-  if ("proactiveChatMode" in settings || "proactiveDeliveryTarget" in settings || "openerMode" in settings) {
-    stopOpener();
+  if ("proactiveChatMode" in settings || "proactiveDeliveryTarget" in settings) {
     proactiveChatService?.invalidate();
-    if (saved.proactiveChatMode === "on") {
-      startOpener(saved.openerMode === "off" ? "normal" : saved.openerMode);
-    }
   }
   return saved;
+});
+
+ipcMain.handle(IPC.SETTINGS_OPEN_CUSTOM_STYLE_PROMPT, async () => {
+  const filePath = ensureCustomStylePrompt();
+  await shell.showItemInFolder(filePath);
+  return { ok: true, filePath };
 });
 
 ipcMain.on(IPC.SETTINGS_OPEN_SIDEBAR, () => {
@@ -3500,13 +3662,7 @@ ipcMain.handle(IPC.SETTINGS_SAVE_CONFIG, (_event, settings: Partial<ModelSetting
   return saved;
 });
 
-ipcMain.handle(IPC.SETTINGS_TEST_CONNECTION, async (_event, cfg: { provider: string; baseUrl: string; model: string; apiKey: string }) => {
-  const adapter = getAdapter(cfg.provider);
-  console.log("[Cyrene] test connection: provider=" + cfg.provider + " transport=" + adapter.transport + " model=" + cfg.model);
-  const result = await adapter.testConnection(cfg);
-  console.log("[Cyrene] test connection result:", JSON.stringify(result));
-  return result;
-});
+ipcMain.handle(IPC.SETTINGS_TEST_CONNECTION, async (_event, cfg: VendorConfig) => testVendorConnection(cfg));
 
 /**
  * 测试视觉模型连通性。
@@ -3752,6 +3908,7 @@ ipcMain.handle(IPC.USER_UPLOAD_AVATAR, async () => {
   fs.mkdirSync(path.dirname(avatarPath), { recursive: true });
   fs.copyFileSync(srcPath, avatarPath);
   const profile = saveUserProfile({ avatarPath });
+  broadcastToAuxWindows(IPC.USER_AVATAR_CHANGED, null);
   return { avatarPath, profile };
 });
 
@@ -3891,13 +4048,9 @@ app.whenReady().then(async () => {
       await syncPlaywrightMcp(saved);
     }
 
-    // 主动聊天总开关或频率变化时重启。
-    if ("openerMode" in tts || "proactiveChatMode" in tts) {
-      stopOpener();
+    // 主动聊天总开关变化时使现有评估失效（频率档位由 ProactiveChat 内部判定，无需重启）。
+    if ("proactiveChatMode" in tts) {
       proactiveChatService?.invalidate();
-      if (saved.proactiveChatMode === "on") {
-        startOpener(saved.openerMode === "off" ? "normal" : saved.openerMode);
-      }
     }
 
     // 返回不含密钥明文的副本（前端展示用）
@@ -3905,48 +4058,6 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle(IPC.TTS_LOAD_SETTINGS, () => {
     return loadGeneralSettings();
-  });
-
-  // Opener 反馈：点气泡接话
-  ipcMain.on(IPC.OPENER_FEEDBACK, (_event, payload: { type: "clicked"; sceneId: string; itemId: string }) => {
-    if (payload?.type === "clicked") {
-      handleBubbleClick(payload.sceneId, payload.itemId);
-    }
-  });
-
-  // Opener 手动测试气泡
-  ipcMain.handle(IPC.OPENER_TEST_FIRE, async () => { await testFire(); });
-
-  ipcMain.handle(IPC.OPENER_GET_STATUS, () => {
-    const packDir = getOpenerPackDir();
-    const manifestPath = getManifestPath();
-    return {
-      manifestInstalled: fs.existsSync(manifestPath),
-      packDir,
-      manifestPath,
-    };
-  });
-
-  ipcMain.handle(IPC.OPENER_OPEN_PACK_DIR, async () => {
-    const packDir = getOpenerPackDir();
-    try {
-      fs.mkdirSync(packDir, { recursive: true });
-      const error = await shell.openPath(packDir);
-      return error ? { ok: false, error } : { ok: true };
-    } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
-    }
-  });
-
-  ipcMain.handle(IPC.OPENER_OPEN_INSTALL_DOCS, async () => {
-    const docPath = path.join(app.getAppPath(), "docs", "opener-pack.md");
-    try {
-      if (!fs.existsSync(docPath)) return { ok: false, error: "安装说明文档不存在：" + docPath };
-      const error = await shell.openPath(docPath);
-      return error ? { ok: false, error } : { ok: true };
-    } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
-    }
   });
 
   // 上传音频文件 → file_id
@@ -4401,9 +4512,121 @@ app.whenReady().then(async () => {
     };
   });
 
+  // ── Mossland (api.mosi.cn) ──────────────────────────────────────
+
+  // Mossland 合成（Settings「测试发音」用，无缓存）
+  ipcMain.handle(IPC.TTS_SYNTHESIZE_MOSSLAND, async (_event, payload: {
+    apiKey: string; voiceId: string; text: string;
+    speed?: number; volume?: number; model?: string;
+    format?: "mp3" | "wav" | "pcm";
+  }) => {
+    if (!payload?.apiKey || !payload?.voiceId || !payload?.text) {
+      throw new Error("缺少必要参数（apiKey/voiceId/text）");
+    }
+    const result = await mosslandSynthesize({
+      apiKey: payload.apiKey,
+      voiceId: payload.voiceId,
+      text: payload.text,
+      speed: payload.speed,
+      volume: payload.volume,
+      model: payload.model,
+      format: payload.format,
+    });
+    const cacheKey = buildMosslandCacheKey(payload);
+    return {
+      base64: result.audio.toString("base64"),
+      cacheKey,
+      cached: false,
+      format: result.format,
+    };
+  });
+
+  // Mossland 合成 + 本地缓存（聊天自动朗读用；cache-only 兜底由 chat 侧传 "cache-only"）
+  ipcMain.handle(IPC.TTS_SYNTHESIZE_CACHED_MOSSLAND, async (_event, payload: {
+    apiKey: string; voiceId: string; text: string;
+    speed?: number; volume?: number; model?: string;
+    format?: "mp3" | "wav" | "pcm";
+    expectedCacheKey?: string;
+  }) => {
+    const format: "mp3" | "wav" | "pcm" = payload.format ?? "mp3";
+
+    // 缓存命中
+    let expectedPath: string | null = null;
+    if (payload.expectedCacheKey) {
+      try {
+        expectedPath = getTtsCachePath(payload.expectedCacheKey, format);
+      } catch { /* expectedCacheKey 非法，忽略 */ }
+    }
+    if (expectedPath && fs.existsSync(expectedPath)) {
+      const cachedBuffer = fs.readFileSync(expectedPath);
+      return {
+        base64: cachedBuffer.toString("base64"),
+        cacheKey: payload.expectedCacheKey,
+        cached: true,
+        format,
+      };
+    }
+
+    // 缓存未命中 + 缺关键参数（或 chat 端 cache-only 占位）→ 抛错
+    if (!payload?.apiKey || !payload?.voiceId || !payload?.text
+        || payload.apiKey === "cache-only" || payload.voiceId === "cache-only") {
+      throw new Error("缓存未命中且缺少必要参数（apiKey/voiceId/text）");
+    }
+
+    const cacheKey = buildMosslandCacheKey(payload);
+    const audioPath = getTtsCachePath(cacheKey, format);
+    fs.mkdirSync(path.dirname(audioPath), { recursive: true });
+
+    const result = await mosslandSynthesize({
+      apiKey: payload.apiKey,
+      voiceId: payload.voiceId,
+      text: payload.text,
+      speed: payload.speed,
+      volume: payload.volume,
+      model: payload.model,
+      format,
+    });
+    fs.writeFileSync(audioPath, result.audio);
+    return {
+      base64: result.audio.toString("base64"),
+      cacheKey,
+      cached: false,
+      format: result.format,
+    };
+  });
+
+  // Mossland 音色克隆（multipart 上传）
+  ipcMain.handle(IPC.TTS_CLONE_MOSSLAND, async (_event, payload: {
+    apiKey: string; filePath: string; name?: string; description?: string;
+  }) => {
+    const result = await mosslandCloneVoice({
+      apiKey: payload.apiKey,
+      filePath: payload.filePath,
+      name: payload.name,
+      description: payload.description,
+    });
+    return {
+      voiceId: result.voiceId,
+      name: result.name,
+      createdAt: result.createdAt,
+    };
+  });
+
+  // Mossland 拉取账号下音色列表
+  ipcMain.handle(IPC.TTS_LIST_MOSSLAND_VOICES, async (_event, payload: {
+    apiKey: string; limit?: number;
+  }) => {
+    const result = await mosslandListVoices({
+      apiKey: payload.apiKey,
+      limit: payload.limit,
+    });
+    return { voices: result.voices };
+  });
+
   // 聊天会话存储 IPC（chats-store.initialize 会建好 cyrene-chats 目录并加载 index）
   registerChatsIpc();
   initializeProactiveChatService();
+  initializeProactiveTrigger();
 
   // 历史召回工具（recall_history）——让模型能回忆滚出窗口的对话
   registerRecallHistoryTool();
@@ -4439,10 +4662,17 @@ app.whenReady().then(async () => {
     console.error("[Cyrene] playwright MCP sync failed:", e)
   );
 
+  // 截图：原生 helper IPC、全局热键和后台预热。预热失败不会阻止应用启动。
+  screenshotService = initializeScreenshotService(
+    initialSettings.screenshotHotkey ?? "Alt+Shift+S",
+  );
+  void screenshotService.prewarm();
+
   // Cloud Music MCP wiring (MusicService + IPC + 5 Agent tools + shutdown latch)
   const musicPaths = resolveMusicPaths();
   const musicBootstrap = bootstrapMusicService(musicPaths, {
-    onPresented: recordMusicCompanionPresentation,
+    contextRefs: contextRefRegistry,
+    ingestContextEvent: (event) => citaService.ingest(event),
     sendCard: (card) => {
       if (chatWindow && !chatWindow.isDestroyed()) {
         chatWindow.webContents.send(IPC.AGUI_EVENT, {
@@ -4450,7 +4680,9 @@ app.whenReady().then(async () => {
           name: "cyrene.music",
           value: card,
         });
+        return true;
       }
+      return false;
     },
   });
   installShutdownLatch(musicBootstrap);
@@ -4492,9 +4724,11 @@ app.whenReady().then(async () => {
     // Phase 3.3：按 toolSandbox 过滤可用工具
     const sandbox = loadChannelsSettings().toolSandbox;
     const allTools = toolRegistry.getEnabledTools();
-    const filteredTools: ToolDefinition[] = sandbox === "safe-only"
-      ? allTools.filter((t) => (t.risk ?? "safe") === ("safe" as ToolRiskLevel))
-      : allTools;
+    const filteredTools: ToolDefinition[] = sandbox === "off"
+      ? []
+      : sandbox === "safe-only"
+        ? allTools.filter((t) => (t.risk ?? "safe") === ("safe" as ToolRiskLevel))
+        : allTools;
     console.log(
       "[Channels] bot run:",
       `msg.channel=${msg.channel} sandbox=${sandbox} tools=${filteredTools.length}/${allTools.length} priorMsgs=${priorMessages?.length ?? 0}`,
@@ -4512,11 +4746,7 @@ app.whenReady().then(async () => {
     // 把 IncomingMessage 转成 AguiRunInput，调 CyreneAgent
     const channelModelSettings = loadModelSettings();
     const imageSendStrategy = decideImageSendStrategy({
-      provider: channelModelSettings.provider,
-      baseUrl: channelModelSettings.baseUrl,
-      model: channelModelSettings.model,
-      apiKey: channelModelSettings.apiKey,
-      explicitTransport: channelModelSettings.explicitTransport,
+      multimodal: channelModelSettings.multimodal,
       vision: loadVisionConfig(),
     });
     const attachmentInputs = await buildChannelAttachmentInputs(msg, {
@@ -4551,6 +4781,11 @@ app.whenReady().then(async () => {
         attachments: attachmentInputs.attachments,
         imageAttachments: attachmentInputs.imageAttachments,
         channel: msg.channel,
+        executionMode: sandbox === "off" ? "chat" : "work",
+        ...(sandbox === "off" ? {
+          userTurnId: `${msg.channel}:${msg.senderId}:${msg.at.toISOString()}:user`,
+          assistantTurnId: `${msg.channel}:${msg.senderId}:${msg.at.toISOString()}:assistant`,
+        } : {}),
       },
       buildOptionsDeps,
     );
@@ -4624,8 +4859,8 @@ app.whenReady().then(async () => {
       return {
         audio: result.audio,
         format: result.format,
-        mime: result.format === "wav" ? "audio/wav" : "audio/mpeg",
-        extension: result.format === "wav" ? ".wav" : ".mp3",
+        mime: result.format === "wav" ? "audio/wav" : result.format === "pcm" ? "audio/pcm" : "audio/mpeg",
+        extension: result.format === "wav" ? ".wav" : result.format === "pcm" ? ".pcm" : ".mp3",
       };
     } catch (err) {
       console.warn("[Channels] TTS 合成失败:", err instanceof Error ? err.message : err);
@@ -4717,12 +4952,88 @@ app.whenReady().then(async () => {
   registerSchedulerIpc(schedulerStore, schedulerEngine, () => toolRegistry.getAllTools());
 
   // AG-UI 事件流桥：渲染进程 invoke(AGUI_RUN) → CyreneAgent 跑 FC 循环 → 事件透传
-  // buildOptions 复用 requestModelReply 的上下文构建；onRunFinished 复用副作用
+  // buildOptions 负责统一构建上下文；onRunFinished 复用副作用
   // Phase 0 重构：抽出到 orchestrator/build-options.ts，三处共用（桌面 / scheduler / bot）
   // deps 函数签名故意宽 (unknown/ReadonlyArray)；这里做一次包装把强类型函数适配进去
+  const socialAtomStore = createSocialAtomStore(
+    path.join(app.getPath("userData"), "chat-social-atoms.json"),
+  );
+  const socialContextScheduler = createSocialContextScheduler({
+    store: socialAtomStore,
+    enqueue: (label, task) => enqueueLLMTask(label, task, {
+      log: false,
+      retryRateLimit: false,
+    }),
+    generate: async (input, repair) => {
+      const settings = loadModelSettings();
+      const config: VendorConfig = {
+        provider: settings.provider,
+        baseUrl: settings.baseUrl,
+        model: settings.model,
+        apiKey: settings.apiKey,
+        explicitTransport: settings.explicitTransport,
+        reasoning: { mode: "off" },
+      };
+      const adapter = getAdapterForConfig(config);
+      const profile = resolveStructuredOutputProfile({
+        provider: adapter.id,
+        model: config.model,
+        transport: adapter.transport,
+        endpointKind: classifyStructuredOutputEndpoint({
+          providerId: adapter.id,
+          configuredBaseUrl: config.baseUrl,
+          officialBaseUrl: adapter.capability.baseUrl,
+        }),
+      });
+      const structuredOutput: StructuredOutputRequest = profile.mode === "provider_json_schema"
+        ? {
+            mode: "json_schema",
+            name: "chat_social_atoms",
+            schema: SOCIAL_EXTRACTION_SCHEMA,
+            strict: true,
+          }
+        : profile.mode === "provider_json_object"
+          ? { mode: "json_object" }
+          : {
+              mode: "prompt_json",
+              sendJsonObjectHint: profile.requestHints.sendJsonObject,
+            };
+      const response = await callChatCompletionsNonStream(
+        settings,
+        [
+          {
+            role: "system",
+            content: "Extract only directly supported chat continuity facts. Return exactly one JSON object and no prose.",
+          },
+          { role: "user", content: buildSocialExtractionPrompt(input, repair) },
+        ],
+        0,
+        12_000,
+        "Chat social context extraction",
+        { mode: "off" },
+        {
+          structuredOutput,
+          maxTokens: 1_000,
+          ...(profile.requestHints.reasoningSplit
+            ? { extraBody: { reasoning_split: true } }
+            : {}),
+        },
+      );
+      if (response.refusal || normalizeFinishReason(response.finishReason) !== "complete") {
+        throw new Error("CHAT_SOCIAL_EXTRACTION_INCOMPLETE");
+      }
+      return response.text;
+    },
+    recordMetric: (metric) => {
+      console.log(
+        `[ChatSocialContext] outcome=${metric.outcome} accepted=${metric.acceptedCount} rejected=${metric.rejectedCount} attempts=${metric.attempts} repairs=${metric.repairCount}`,
+      );
+    },
+  });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const buildOptionsDeps: BuildOptionsDeps = {
     loadModelSettings: () => loadModelSettings(),
+    loadGeneralSettings: () => loadGeneralSettings(),
     loadUserProfile: () => loadUserProfile(),
     buildEnvironmentContext: ((model: { provider: string; model: string }, profile: unknown) =>
       buildEnvironmentContext(model as any, profile as any)) as BuildOptionsDeps["buildEnvironmentContext"],
@@ -4730,6 +5041,8 @@ app.whenReady().then(async () => {
       buildSkillCatalog(skills as any)) as BuildOptionsDeps["buildSkillCatalog"],
     buildAutoInjectedSkillContext: ((skills: ReadonlyArray<unknown>) =>
       buildAutoInjectedSkillContext(skills as any, (id) => skillRegistry.getBody(id))) as BuildOptionsDeps["buildAutoInjectedSkillContext"],
+    buildAutoInjectedSoulContext: ((skills: ReadonlyArray<unknown>) =>
+      buildAutoInjectedSoulContext(skills as any, (id) => skillRegistry.getBody(id))) as BuildOptionsDeps["buildAutoInjectedSoulContext"],
     skillRegistry: skillRegistry as unknown as BuildOptionsDeps["skillRegistry"],
     resolveSlashActivation: ((messages: ReadonlyArray<{ role: string; content?: string }>) =>
       resolveSlashActivation(messages as any)) as BuildOptionsDeps["resolveSlashActivation"],
@@ -4743,6 +5056,8 @@ app.whenReady().then(async () => {
     buildSystemPrompt,
     buildToolSystemPrompt: (enabledTools, isOptimizedFirstRound) => buildToolSystemPrompt(enabledTools as ToolDefinition[], isOptimizedFirstRound),
     buildSoulSystemBasePrompt,
+    readStylePrompt,
+    resolveSoulSampling: resolveSoulSamplingForStyle,
     toolRegistry: { getEnabled: () => toolRegistry.getEnabledTools() },
     logWorldbookInjection,
     normalizeChatMessages: ((raw: ReadonlyArray<unknown>) =>
@@ -4766,11 +5081,26 @@ app.whenReady().then(async () => {
         return { ok: false, error: err?.message || String(err) };
       }
     },
-    buildMusicCompanionContext,
+    loadActionGateSystemPrompt: () => loadPromptFile("action_gate_system.md"),
+    loadNativeFcSystemPrompt: () => loadPromptFile("native_fc_system.md"),
+    loadAskSystemPrompt: () => loadPromptFile("ask_system.md"),
+    loadAskPersonaPrompt: () => loadPromptFile("ask_persona.md"),
+    loadAskQuotesPrompt: () => loadPromptFile("ask_quotes.md"),
+    prepareCitaTurn: (input) => citaService.prepareTurn(input),
+    buildChatSocialContext: async ({ conversationId, query }) => {
+      const now = Date.now();
+      const active = socialAtomStore.listActive(conversationId, now);
+      const retrievedAtoms = rankSocialAtoms(query, active, { now, limit: 5 });
+      return {
+        contextBlock: compileSocialContextBlock(retrievedAtoms),
+        retrievedAtoms,
+      };
+    },
   };
   const onRunFinishedDeps: OnRunFinishedDeps = {
     loadModelSettings: () => loadModelSettings(),
     scheduleMemoryWrite,
+    scheduleSocialAtomExtraction: (input) => socialContextScheduler.schedule(input),
     inferRuntimeState,
     runtimeState,
     feelingToExpression,
@@ -4859,9 +5189,10 @@ app.on("window-all-closed", () => {});
 app.on("before-quit", () => {
   petWindowMoveController.dispose();
   schedulerEngine?.stop();
-  stopOpener();
+  stopProactiveTrigger();
   flushTokenUsage();
   void shutdownChannels();
+  void screenshotService?.shutdown();
 });
 
 app.on("activate", () => {

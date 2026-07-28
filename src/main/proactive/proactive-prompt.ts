@@ -16,6 +16,12 @@ export interface BuildProactiveMessagesInput {
   localNow: Date;
   idleSec: number;
   unansweredCount: 0 | 1 | 2;
+  /**
+   * 已 resolver 后的用户有效时区（合法 IANA 字符串）。
+   * 所有"本地"时间解释（早晚判定、history 行、trigger 行的"电脑本地时间"）都基于该时区。
+   * 不接受未校验的 profile.timezone 字符串；调用方需先经 resolveChatContextTimezone。
+   */
+  timezone: string;
 }
 
 export type ProactiveModelDecision =
@@ -44,26 +50,72 @@ const NIGHT_SYSTEM = `[night_system]
 const FOLLOWUP_SYSTEM = `[followup_system]
 这是用户未回复情况下允许的最后一次主动机会。
 本地系统已经确认出现了不同于上一次的新场景理由，但你仍应判断它是否值得打扰用户。
-不要责怪、催促、卖惨或表现出被冷落，也不要机械地重复“在吗”。
+不要责怪、催促、卖惨或表现出被冷落，也不要机械地重复"在吗"。
 没有充分理由时必须返回 silent。`;
 
-function isActiveNight(localNow: Date, idleSec: number): boolean {
-  const hour = localNow.getHours();
+/**
+ * 用 Intl 把日期拆成 {year, month, day, hour, minute}（按 timezone）。
+ * 不依赖 toLocaleString 的本地化标点和顺序。
+ * 失败回退 system-local（resolver 已保证 timezone 合法，此分支仅 debug）。
+ */
+function getZonedDateParts(
+  date: Date,
+  timezone: string,
+): { year: number; month: number; day: number; hour: number; minute: number } {
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(date);
+  } catch {
+    return {
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      day: date.getDate(),
+      hour: date.getHours(),
+      minute: date.getMinutes(),
+    };
+  }
+  const get = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  return {
+    year: Number(get("year")),
+    month: Number(get("month")),
+    day: Number(get("day")),
+    hour: Number(get("hour")),
+    minute: Number(get("minute")),
+  };
+}
+
+/** 早晚判定：基于用户时区的 hour。保留原 22:00-08:00 + idle<60 语义。 */
+function isActiveNight(date: Date, timezone: string, idleSec: number): boolean {
+  const { hour } = getZonedDateParts(date, timezone);
   return (hour >= 22 || hour < 8) && idleSec < 60;
 }
 
-function formatLocalTime(date: Date): string {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+/** 用户时区下的"本地时间"格式化：`YYYY-MM-DD HH:MM`。 */
+function formatLocalTime(date: Date, timezone: string): string {
+  const p = getZonedDateParts(date, timezone);
+  const mm = String(p.month).padStart(2, "0");
+  const dd = String(p.day).padStart(2, "0");
+  const hh = String(p.hour).padStart(2, "0");
+  const min = String(p.minute).padStart(2, "0");
+  return `${p.year}-${mm}-${dd} ${hh}:${min}`;
 }
 
-function formatHistory(label: string, history: ProactiveHistoryTurn[]): string {
+function formatHistory(label: string, history: ProactiveHistoryTurn[], timezone: string): string {
   const recent = history
     .filter((turn) => turn && (turn.role === "user" || turn.role === "model") && turn.content.trim())
     .slice(-MAX_HISTORY_MESSAGES);
   const lines = recent.map((turn) => {
     const role = turn.role === "model" ? "assistant" : "user";
-    return `[${formatLocalTime(new Date(turn.at))}] ${role}: ${turn.content.trim()}`;
+    return `[${formatLocalTime(new Date(turn.at), timezone)}] ${role}: ${turn.content.trim()}`;
   });
   return `[${label}]\n${lines.length > 0 ? lines.join("\n") : "（暂无）"}`;
 }
@@ -72,13 +124,13 @@ export function buildProactiveMessages(input: BuildProactiveMessagesInput): Chat
   const systemParts = [input.basePersona.trim(), PROACTIVE_SYSTEM];
   if (input.userProfile?.trim()) systemParts.push(`[用户画像]\n${input.userProfile.trim()}`);
   if (input.relevantMemory?.trim()) systemParts.push(`[相关长期记忆]\n${input.relevantMemory.trim()}`);
-  systemParts.push(formatHistory("最近使用的普通聊天会话", input.ordinaryHistory));
-  systemParts.push(formatHistory("主动聊天专用会话", input.proactiveHistory));
-  if (isActiveNight(input.localNow, input.idleSec)) systemParts.push(NIGHT_SYSTEM);
+  systemParts.push(formatHistory("最近使用的普通聊天会话", input.ordinaryHistory, input.timezone));
+  systemParts.push(formatHistory("主动聊天专用会话", input.proactiveHistory, input.timezone));
+  if (isActiveNight(input.localNow, input.timezone, input.idleSec)) systemParts.push(NIGHT_SYSTEM);
   if (input.unansweredCount === 1) systemParts.push(FOLLOWUP_SYSTEM);
 
   const trigger = `[本次主动聊天候选]
-电脑本地时间：${formatLocalTime(input.localNow)}
+电脑本地时间：${formatLocalTime(input.localNow, input.timezone)}
 候选场景：${input.sceneId}
 连续未回复次数：${input.unansweredCount}
 

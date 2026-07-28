@@ -12,4 +12,16 @@ describe("tools_system prompt truthfulness fallback", () => {
     expect(prompt).toContain("music_present_tracks");
     expect(prompt).toContain("不得凭记忆补全");
   });
+
+  it("does not request a duplicate card when daily recommendations already include presentation", () => {
+    const prompt = fs.readFileSync(path.join(process.cwd(), "prompts", "tools_system.md"), "utf8");
+    const skill = fs.readFileSync(
+      path.join(process.cwd(), "skills", "cyrene-music-companion", "SKILL.md"),
+      "utf8",
+    );
+
+    expect(prompt).toContain("`presentation.presented` 为 true");
+    expect(skill).toContain("`presentation.presented` 为 true");
+    expect(skill).toContain("不要重复");
+  });
 });

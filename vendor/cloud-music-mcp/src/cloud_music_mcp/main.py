@@ -68,14 +68,16 @@ def cloud_music_login():
 def cloud_music_get_daily_recommend():
     logger.info("Calling cloud_music_get_daily_recommend")
     result = get_daily_recommendations()
-    if result["success"]:
-        # 格式化输出以便阅读
-        text = f"📅 今日推荐 ({len(result['songs'])}首):\n"
-        for i, song in enumerate(result["songs"][:10], 1):  # 只展示前10首
-            text += f"{i}. {song['name']} - {song['artist']} (ID: {song['id']})\n"
-        return text
-    else:
-        return f"获取失败: {result.get('error')}"
+    if result.get("success"):
+        return {"success": True, "songs": result.get("songs", [])}
+    return {
+        "success": False,
+        "songs": [],
+        "error": {
+            "code": "E_DAILY_RECOMMEND_FAILED",
+            "message": str(result.get("error") or "unknown error"),
+        },
+    }
 
 
 @mcp.tool(description=load_prompt("cloud_music_my_playlists"))
@@ -248,6 +250,7 @@ from cloud_music_mcp.auth import (  # noqa: E402
     begin_login,
     check_login,
     cancel_login,
+    validate_session_three_state,
     _sanitize,
 )
 
@@ -262,6 +265,12 @@ def cyrene_music_login_begin():
 def cyrene_music_login_check(session_id: str):
     logger.info(_sanitize(f"cyrene_music_login_check session_id={session_id}"))
     return check_login(session_id)
+
+
+@mcp.tool(description="[Cyrene] Validate restored login cookies without a QR login session.")
+def cyrene_music_validate_session():
+    logger.info(_sanitize("cyrene_music_validate_session called"))
+    return validate_session_three_state()
 
 
 @mcp.tool(description="[Cyrene] Cancel an in-flight login session.")

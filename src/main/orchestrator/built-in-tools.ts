@@ -6,8 +6,25 @@ import { toolRegistry } from "./tool-registry";
 import { addMcpServer } from "./mcp-manager";
 import { sendToLive2DWindow } from "../index";
 import { createPlayLive2DActionTool } from "./tools/play-live2d-action";
+import { resolveChatContextTimezone } from "../chat-time-context";
 
 const LOG_PREFIX = "[BuiltinTools]";
+
+/**
+ * 工具侧统一 timezone 注入：index.ts 启动时调 setUserTimezoneConfig。
+ * 任何工具要给模型格式化时间，统一走 `currentUserTimezone()`，禁止各自直接读 profile/Intl。
+ */
+let userTimezoneGetter: (() => string | undefined) | null = null;
+
+export function setUserTimezoneConfig(timezoneGetter: () => string | undefined): void {
+  userTimezoneGetter = timezoneGetter;
+}
+
+/** 当前用户的有效时区（缺/非法时回退 Asia/Shanghai）。统一封装，所有工具复用。 */
+export function currentUserTimezone(): string {
+  const raw = userTimezoneGetter?.();
+  return resolveChatContextTimezone(raw);
+}
 
 // ── 工具 1：fetch_url ─────────────────────────────────────
 // 拉一个 URL 的纯文本 / Markdown 形式的 body，给 agent 读 README 用
@@ -517,26 +534,33 @@ async function omFetchWeather(city: string): Promise<string> {
     const adm = loc.admin1 ? `${loc.admin1}` : loc.country;
     const icon = weatherIconFromCode(c.weather_code);
 
+    const weatherData = {
+      city: loc.name,
+      region: adm,
+      weather: wmoText,
+      temperature: c.temperature_2m,
+      feelsLike: c.apparent_temperature,
+      humidity: c.relative_humidity_2m,
+      windDirection: windDir,
+      windSpeed: `${c.wind_speed_10m}km/h`,
+      precipitation: c.precipitation,
+      pressure: Math.round(c.surface_pressure),
+      source: "Open-Meteo",
+      updateTime: new Date().toLocaleString("zh-CN", { hour: "2-digit", minute: "2-digit", timeZone: currentUserTimezone() }),
+    };
+
     // 发送天气卡片数据给渲染端
     if (weatherCardCallback) {
       weatherCardCallback({
-        city: loc.name, adm, temp: c.temperature_2m, feelsLike: c.apparent_temperature,
-        text: wmoText, icon,
-        humidity: c.relative_humidity_2m, windDir, windScale: `${c.wind_speed_10m}km/h`,
-        precip: c.precipitation, pressure: Math.round(c.surface_pressure),
-        source: "Open-Meteo", updateTime: new Date().toLocaleString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+        city: weatherData.city, adm: weatherData.region, temp: weatherData.temperature,
+        feelsLike: weatherData.feelsLike, text: weatherData.weather, icon,
+        humidity: weatherData.humidity, windDir: weatherData.windDirection,
+        windScale: weatherData.windSpeed, precip: weatherData.precipitation,
+        pressure: weatherData.pressure, source: weatherData.source, updateTime: weatherData.updateTime,
       });
     }
 
-    return [
-      `城市：${loc.name}（${adm}）`,
-      `天气：${wmoText}`,
-      `温度：${c.temperature_2m}°C（体感 ${c.apparent_temperature}°C）`,
-      `风向风速：${windDir} ${c.wind_speed_10m}km/h`,
-      `湿度：${c.relative_humidity_2m}%`,
-      `降水量：${c.precipitation}mm`,
-      `气压：${c.surface_pressure}hPa`,
-    ].join("\n");
+    return JSON.stringify(weatherData);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return "[错误] 天气查询失败：" + msg;
@@ -613,26 +637,33 @@ async function amapFetchWeather(city: string, key: string): Promise<string> {
     }
     const w = data.lives[0];
     const icon = weatherIconFromText(w.weather);
+    const weatherData = {
+      city: w.city,
+      region: w.province,
+      weather: w.weather,
+      temperature: Number(w.temperature),
+      feelsLike: Number(w.temperature),
+      humidity: Number(w.humidity),
+      windDirection: w.winddirection,
+      windSpeed: `${w.windpower}级`,
+      precipitation: 0,
+      pressure: 0,
+      source: "高德天气",
+      updateTime: w.reporttime.slice(11, 16) || new Date().toLocaleString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+    };
 
     // 发送天气卡片数据给渲染端
     if (weatherCardCallback) {
       weatherCardCallback({
-        city: w.city, adm: w.province, temp: Number(w.temperature), feelsLike: Number(w.temperature),
-        text: w.weather, icon,
-        humidity: Number(w.humidity), windDir: w.winddirection, windScale: `${w.windpower}级`,
-        precip: 0, pressure: 0,
-        source: "高德天气", updateTime: w.reporttime.slice(11, 16) || new Date().toLocaleString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+        city: weatherData.city, adm: weatherData.region, temp: weatherData.temperature,
+        feelsLike: weatherData.feelsLike, text: weatherData.weather, icon,
+        humidity: weatherData.humidity, windDir: weatherData.windDirection,
+        windScale: weatherData.windSpeed, precip: weatherData.precipitation,
+        pressure: weatherData.pressure, source: weatherData.source, updateTime: weatherData.updateTime,
       });
     }
 
-    return [
-      `城市：${w.city}（${w.province}）`,
-      `天气：${w.weather}`,
-      `温度：${w.temperature}°C`,
-      `风向风速：${w.winddirection}风 ${w.windpower}级`,
-      `湿度：${w.humidity}%`,
-      `发布时间：${w.reporttime}`,
-    ].join("\n");
+    return JSON.stringify(weatherData);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return "[错误] 天气查询失败：" + msg;
@@ -653,6 +684,18 @@ async function executeWeather(args: Record<string, unknown>): Promise<string> {
   if (!city) {
     city = (weatherCityGetter?.() ?? "").trim();
   }
+  // 城市解析日志：用于确认模型是否仍自行传入"上海"。
+  // 脱敏：仅记城市名（公开地理名）+ 来源标签；不带用户 ID/任何凭证。
+  const argsCityRaw = String(args.city ?? "").trim();
+  const defaultCityRaw = (weatherCityGetter?.() ?? "").trim();
+  const source2: "arg" | "default" | "none" = argsCityRaw
+    ? "arg"
+    : defaultCityRaw
+      ? "default"
+      : "none";
+  console.log(
+    `[Weather] city resolution: argsCity=${argsCityRaw || "(empty)"} defaultCity=${defaultCityRaw || "(empty)"} final=${city || "(empty)"} source=${source2}`,
+  );
   if (!city) {
     return "[提示] 没有指定城市，也没设置默认城市。请告诉用户：在 设置 → 我的信息 填默认城市，或直接说出要查的城市名。";
   }
@@ -696,6 +739,24 @@ toolRegistry.register({
     },
     required: [],
   },
+  soulActionLabel: "查询天气",
+  soulProjection: {
+    projector: "entity_detail",
+    source: "trusted_internal",
+    fields: {
+      title: "city",
+      region: "region",
+      weather: "weather",
+      temperature: "temperature",
+      feelsLike: "feelsLike",
+      humidity: "humidity",
+      windDirection: "windDirection",
+      windSpeed: "windSpeed",
+    },
+  },
+  completionEvidence: [
+    { kind: "tool_succeeded" },
+  ],
   execute: executeWeather,
 });
 
@@ -735,7 +796,34 @@ interface BochaResult {
   siteName?: string;
 }
 
-/** 博查搜索：调 /v1/web-search，返回结构化文本给模型。 */
+/** 搜索结果统一结构 */
+interface WebSearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+  source?: string;
+}
+
+/** 搜索输出统一结构（ToolCallResult.output 的 JSON） */
+interface WebSearchOutput {
+  success: true;
+  query: string;
+  resultCount: number;
+  results: WebSearchResult[];
+}
+
+/** snippet 最大长度 */
+const MAX_SNIPPET_LEN = 500;
+/** projection 最大条数 */
+const MAX_PROJECTION_RESULTS = 8;
+
+/** 截断 snippet */
+function truncateSnippet(text: string): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  return clean.length > MAX_SNIPPET_LEN ? clean.slice(0, MAX_SNIPPET_LEN) + "..." : clean;
+}
+
+/** 博查搜索：调 /v1/web-search，返回结构化 JSON。 */
 async function bochaSearch(query: string, key: string): Promise<string> {
   const url = "https://api.bochaai.com/v1/web-search";
   const ctrl = new AbortController();
@@ -755,42 +843,39 @@ async function bochaSearch(query: string, key: string): Promise<string> {
       }),
     });
     if (!resp.ok) {
-      return `[错误] 搜索失败：HTTP ${resp.status}`;
+      throw new Error(`HTTP ${resp.status}`);
     }
-    // 博查 API 响应包了一层 { code, data: { webPages: { value: [...] } } }
-    // 兼容旧结构（直接 webPages）和新结构（data.webPages）
     const raw = await resp.json() as {
       webPages?: { value?: BochaResult[] };
       data?: { webPages?: { value?: BochaResult[] } };
     };
-    const results = raw.data?.webPages?.value ?? raw.webPages?.value ?? [];
-    if (results.length === 0) {
-      return `[提示] 搜索"${query}"没有找到结果。`;
-    }
-    // 格式化成模型易读的文本
-    const lines: string[] = [`搜索"${query}"的结果（共 ${results.length} 条）：`, ""];
-    for (let i = 0; i < results.length; i++) {
-      const r = results[i];
-      lines.push(`【${i + 1}】${r.name}`);
-      if (r.siteName) lines.push(`  来源：${r.siteName}`);
-      lines.push(`  链接：${r.url}`);
-      lines.push(`  摘要：${r.summary || r.snippet || "（无摘要）"}`);
-      lines.push("");
-    }
-    return lines.join("\n");
+    const bochaResults = raw.data?.webPages?.value ?? raw.webPages?.value ?? [];
+    const results: WebSearchResult[] = bochaResults.map((r) => ({
+      title: r.name,
+      url: r.url,
+      snippet: truncateSnippet(r.summary || r.snippet || ""),
+      ...(r.siteName ? { source: r.siteName } : {}),
+    }));
+    const output: WebSearchOutput = {
+      success: true,
+      query,
+      resultCount: results.length,
+      results,
+    };
+    return JSON.stringify(output);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return "[错误] 搜索失败：" + msg;
+    throw new Error(`搜索失败：${msg}`);
   } finally {
     clearTimeout(timer);
   }
 }
 
-/** Tavily 搜索：调 /search，返回结构化文本给模型。 */
+/** Tavily 搜索：调 /search，返回结构化 JSON。 */
 async function tavilySearch(query: string, key: string): Promise<string> {
   const url = "https://api.tavily.com/search";
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), getTimeoutSettings().searchTimeout);
+  const timer = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
   try {
     const resp = await fetch(url, {
       method: "POST",
@@ -804,31 +889,28 @@ async function tavilySearch(query: string, key: string): Promise<string> {
       }),
     });
     if (!resp.ok) {
-      return `[错误] 搜索失败：HTTP ${resp.status}`;
+      throw new Error(`HTTP ${resp.status}`);
     }
     const data = await resp.json() as {
       answer?: string;
       results?: Array<{ title: string; url: string; content: string }>;
     };
-    const results = data.results ?? [];
-    if (results.length === 0) {
-      return `[提示] 搜索"${query}"没有找到结果。`;
-    }
-    const lines: string[] = [`搜索"${query}"的结果（共 ${results.length} 条）：`, ""];
-    if (data.answer) {
-      lines.push(`摘要：${data.answer}`, "");
-    }
-    for (let i = 0; i < results.length; i++) {
-      const r = results[i];
-      lines.push(`【${i + 1}】${r.title}`);
-      lines.push(`  链接：${r.url}`);
-      lines.push(`  摘要：${r.content || "（无摘要）"}`);
-      lines.push("");
-    }
-    return lines.join("\n");
+    const tavilyResults = data.results ?? [];
+    const results: WebSearchResult[] = tavilyResults.map((r) => ({
+      title: r.title,
+      url: r.url,
+      snippet: truncateSnippet(data.answer && r.content ? `${data.answer}\n${r.content}` : r.content || ""),
+    }));
+    const output: WebSearchOutput = {
+      success: true,
+      query,
+      resultCount: results.length,
+      results,
+    };
+    return JSON.stringify(output);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return "[错误] 搜索失败：" + msg;
+    throw new Error(`搜索失败：${msg}`);
   } finally {
     clearTimeout(timer);
   }
@@ -871,7 +953,7 @@ async function anySearchSearch(query: string, key: string): Promise<string> {
     return lines.join("\n");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return "[错误] 搜索失败：" + msg;
+    throw new Error(`搜索失败：${msg}`);
   } finally {
     clearTimeout(timer);
   }
@@ -880,18 +962,18 @@ async function anySearchSearch(query: string, key: string): Promise<string> {
 async function executeWebSearch(args: Record<string, unknown>): Promise<string> {
   const engine = searchEngineGetter?.() ?? "off";
   if (engine === "off") {
-    return "[提示] 联网搜索未启用。请在 设置 → 插件 → 联网搜索 选择搜索源并填入 Key。";
+    throw new Error("E_SEARCH_NOT_ENABLED");
   }
 
   const query = String(args.query ?? "").trim();
   if (!query) {
-    return "[提示] 请提供搜索关键词。";
+    throw new Error("E_SEARCH_QUERY_EMPTY");
   }
 
   if (engine === "bocha") {
     const key = searchBochaKeyGetter?.() ?? "";
     if (!key) {
-      return "[错误] 还没有配置博查搜索 Key。请在 设置 → 插件 → 联网搜索 填入博查 Key。";
+      throw new Error("E_SEARCH_KEY_MISSING");
     }
     return bochaSearch(query, key);
   }
@@ -899,7 +981,7 @@ async function executeWebSearch(args: Record<string, unknown>): Promise<string> 
   if (engine === "tavily") {
     const key = searchTavilyKeyGetter?.() ?? "";
     if (!key) {
-      return "[错误] 还没有配置 Tavily 搜索 Key。请在 设置 → 插件 → 联网搜索 填入 Tavily Key。";
+      throw new Error("E_SEARCH_KEY_MISSING");
     }
     return tavilySearch(query, key);
   }
@@ -908,9 +990,9 @@ async function executeWebSearch(args: Record<string, unknown>): Promise<string> 
     const key = searchAnySearchKeyGetter?.() ?? "";
     return anySearchSearch(query, key);
   }
-
+  
   // 其他搜索引擎暂未接入
-  return `[提示] 搜索引擎"${engine}"暂未接入，目前支持 bocha，anySearch 和 tavily。`;
+  throw new Error(`E_SEARCH_ENGINE_NOT_SUPPORTED:${engine}`);
 }
 
 toolRegistry.register({
@@ -923,8 +1005,8 @@ toolRegistry.register({
     "- 用户问的事需要联网才能知道（股价、赛事、最新技术）\n" +
     "- 用户只给关键词，没给具体网址\n\n" +
     "不要用于：\n" +
-    "- 用户已经给了明确网址 → 用 fetch_url\n" +
-    "- 用户问本机文件 → read_file / list_dir\n" +
+    "- 用户已经给了明确网址 -> 用 fetch_url\n" +
+    "- 用户问本机文件 -> read_file / list_dir\n" +
     "- 能凭已有知识直接回答的简单问题\n\n" +
     "参数：query（必填，搜索关键词）。",
   enabled: true,
@@ -936,6 +1018,27 @@ toolRegistry.register({
     },
     required: ["query"],
   },
+  soulActionLabel: "网络搜索",
+  soulProjection: {
+    projector: "entity_list",
+    source: "external_untrusted",
+    itemsPath: "results",
+    fields: {
+      title: "title",
+      url: "url",
+      snippet: "snippet",
+      source: "source",
+    },
+    maxItems: MAX_PROJECTION_RESULTS,
+  },
+  soulErrorMessages: {
+    E_SEARCH_NOT_ENABLED: "联网搜索未启用",
+    E_SEARCH_KEY_MISSING: "搜索 API Key 未配置",
+    E_SEARCH_QUERY_EMPTY: "搜索关键词为空",
+  },
+  completionEvidence: [
+    { kind: "tool_succeeded" },
+  ],
   execute: executeWebSearch,
 });
 
@@ -1040,6 +1143,7 @@ toolRegistry.register({
     "参数：task（子任务的完整描述，子代理会独立理解并执行）。" ,
   enabled: true,
   risk: "safe",
+  hideInPlanMode: true,  // 子代理走旧 FC Loop，避免在 Plan 步骤里降级
   inputSchema: {
     type: "object",
     properties: {

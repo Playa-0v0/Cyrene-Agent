@@ -92,4 +92,9 @@ describe("channels/settings-store", () => {
     const loaded = loadChannelsSettings();
     expect(loaded.feishu.appSecret).toBe("new");
   });
+
+  it("saveChannelsSettings: persists the off tool sandbox", () => {
+    saveChannelsSettings({ toolSandbox: "off" });
+    expect(loadChannelsSettings().toolSandbox).toBe("off");
+  });
 });

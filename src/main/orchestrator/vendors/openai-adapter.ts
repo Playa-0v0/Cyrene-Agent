@@ -1,4 +1,4 @@
-// OpenAI 兼容 transport —— 覆盖 火山 AgentPlan / DeepSeek / GLM / Kimi / Qwen / ChatGPT
+// OpenAI 兼容 transport —— 覆盖 豆包 / DeepSeek / GLM / Kimi / Qwen / ChatGPT
 // 请求体协议：POST {baseUrl}/chat/completions，messages + tools[].type=function
 import {
   ChatMessage, ChatRequest, ChatResponse, ChatVendorAdapter,
@@ -9,6 +9,7 @@ import { authHeaderFor } from "./auth";
 import { resolveReasoningCapability } from "../../../shared/reasoning";
 import { applyReasoningPreference } from "./reasoning";
 import { getTimeoutSettings } from "../../timeout-manager";
+import { resolveAutomaticToolChoicePolicy, resolveToolChoicePolicy } from "./tool-choice-policy";
 
 function buildUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim().replace(/\/+$/, "");
@@ -65,16 +66,71 @@ export class OpenAICompatAdapter implements ChatVendorAdapter {
     // 不传时让厂商用默认值——不同型号约束不同（如 Kimi k2.6 只允许 1），
     // 硬编码兜底值会在某些模型上报错。
     if (req.temperature !== undefined) body.temperature = req.temperature;
+    if (req.topP !== undefined) body.top_p = req.topP;
+    if (req.frequencyPenalty !== undefined) body.frequency_penalty = req.frequencyPenalty;
+    if (req.repetitionPenalty !== undefined) body.repetition_penalty = req.repetitionPenalty;
     // maxTokens：调用方显式传时才塞（流式场景下通常不传）
     if (req.maxTokens !== undefined) body.max_tokens = req.maxTokens;
     const tools = toWireTools(req.tools);
     if (tools) {
       body.tools = tools;
-      body.tool_choice = req.toolChoice
-        ? { type: "function", function: { name: req.toolChoice.name } }
-        : "auto";
+      if (req.toolChoiceOverride) {
+        // Action Gate 专用：直接指定 tool_choice wire 值，绕过 resolveToolChoicePolicy
+        switch (req.toolChoiceOverride.kind) {
+          case "named":
+            body.tool_choice = { type: "function", function: { name: req.toolChoiceOverride.toolName } };
+            break;
+          case "required":
+            body.tool_choice = "required";
+            break;
+          case "auto":
+            body.tool_choice = "auto";
+            break;
+          case "none":
+            body.tool_choice = "none";
+            break;
+          case "omit":
+            // 不发 tool_choice 字段
+            break;
+        }
+      } else if (req.toolChoiceIntent) {
+        const policy = resolveToolChoicePolicy({
+          providerId: this.capability.id,
+          model: cfg.model,
+          transport: this.transport,
+          reasoning: cfg.reasoning ?? { mode: "auto" },
+          requestedToolName: req.toolChoiceIntent.toolName,
+          supportedModes: this.capability.toolChoiceModes,
+        });
+        if (policy.kind === "named") body.tool_choice = { type: "function", function: { name: policy.name } };
+        else if (policy.kind === "required") body.tool_choice = "required";
+        else if (policy.kind === "auto") body.tool_choice = "auto";
+      } else if (resolveAutomaticToolChoicePolicy({
+        providerId: this.capability.id,
+        model: cfg.model,
+        transport: this.transport,
+        reasoning: cfg.reasoning ?? { mode: "auto" },
+        supportedModes: this.capability.toolChoiceModes,
+      }) === "auto") {
+        body.tool_choice = "auto";
+      }
     }
     if (req.extraBody) Object.assign(body, req.extraBody);
+    if (req.structuredOutput?.mode === "json_schema") {
+      body.response_format = {
+        type: "json_schema",
+        json_schema: {
+          name: req.structuredOutput.name,
+          strict: req.structuredOutput.strict,
+          schema: req.structuredOutput.schema,
+        },
+      };
+    } else if (
+      req.structuredOutput?.mode === "json_object"
+      || req.structuredOutput?.mode === "prompt_json" && req.structuredOutput.sendJsonObjectHint
+    ) {
+      body.response_format = { type: "json_object" };
+    }
     // 推理控制：按 (providerId, model) 解析 capability，调用 applyReasoningPreference 转换 body。
     // cfg.reasoning 缺省视为 auto（不发送任何字段）。
     const reasoningCap = resolveReasoningCapability(this.capability.id, cfg.model);
@@ -146,6 +202,7 @@ export class OpenAICompatAdapter implements ChatVendorAdapter {
           tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }>;
           reasoning_content?: string;
           thinking?: string;
+          refusal?: string | null;
         };
         finish_reason?: string;
       }>;
@@ -155,6 +212,7 @@ export class OpenAICompatAdapter implements ChatVendorAdapter {
     const msg = choice?.message;
     const text = msg?.content ?? "";
     const thinking = msg?.reasoning_content || msg?.thinking || undefined;
+    const refusal = msg?.refusal || undefined;
 
     const toolCalls: ToolCall[] = (msg?.tool_calls ?? []).map(tc => ({
       id: tc.id,
@@ -178,6 +236,7 @@ export class OpenAICompatAdapter implements ChatVendorAdapter {
       assistantMessage,
       text,
       thinking,
+      refusal,
       toolCalls,
       finishReason: choice?.finish_reason ?? "stop",
       raw,

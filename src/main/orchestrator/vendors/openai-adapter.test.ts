@@ -18,19 +18,118 @@ const capability: ProviderCapability = {
 };
 
 describe("OpenAICompatAdapter", () => {
-  test("maps an explicit required tool to OpenAI tool_choice", () => {
+  test("maps structured json_schema requests to response_format", () => {
+    const adapter = new OpenAICompatAdapter("test-openai", capability);
+    const schema = {
+      type: "object",
+      properties: { decision: { type: "string", enum: ["respond"] } },
+      required: ["decision"],
+      additionalProperties: false,
+    };
+    const req = adapter.buildRequest({
+      model: "m",
+      messages: [{ role: "user", content: "hi" }],
+      structuredOutput: { mode: "json_schema", name: "action_decision", schema, strict: true },
+    }, { provider: "p", baseUrl: "https://e.test/v1", model: "m", apiKey: "k" });
+
+    expect(JSON.parse(req.body).response_format).toEqual({
+      type: "json_schema",
+      json_schema: { name: "action_decision", strict: true, schema },
+    });
+  });
+
+  test("maps json_object and prompt-json hints without tools", () => {
+    const adapter = new OpenAICompatAdapter("test-openai", capability);
+    const config = { provider: "p", baseUrl: "https://e.test/v1", model: "m", apiKey: "k" };
+    const makeBody = (structuredOutput: {
+      mode: "json_object";
+    } | {
+      mode: "prompt_json";
+      sendJsonObjectHint: true;
+    }) => JSON.parse(adapter.buildRequest({
+      model: "m",
+      messages: [{ role: "user", content: "hi" }],
+      structuredOutput,
+    }, config).body);
+
+    expect(makeBody({ mode: "json_object" }).response_format).toEqual({ type: "json_object" });
+    expect(makeBody({ mode: "prompt_json", sendJsonObjectHint: true }).response_format)
+      .toEqual({ type: "json_object" });
+  });
+
+  test("preserves refusal even when finish_reason is stop", () => {
+    const adapter = new OpenAICompatAdapter("test-openai", capability);
+    expect(adapter.parseResponse({
+      choices: [{
+        message: { role: "assistant", content: null, refusal: "blocked" },
+        finish_reason: "stop",
+      }],
+    })).toMatchObject({
+      text: "",
+      refusal: "blocked",
+      finishReason: "stop",
+    });
+  });
+
+  test("keeps ordinary native Function Calling on auto", () => {
+    const adapter = new OpenAICompatAdapter("test-openai", capability);
+    const req = adapter.buildRequest({
+      model: "m", messages: [{ role: "user", content: "搜歌" }],
+      tools: [{ name: "music_search", description: "搜索", parameters: { type: "object" } }],
+    }, { provider: "p", baseUrl: "https://e.test/v1", model: "m", apiKey: "k" });
+    expect(JSON.parse(req.body).tool_choice).toBe("auto");
+  });
+
+  test("maps a must-call intent to named OpenAI tool_choice when supported", () => {
     const adapter = new OpenAICompatAdapter("test-openai", capability);
     const req = adapter.buildRequest({
       model: "m",
       messages: [{ role: "user", content: "搜歌" }],
       tools: [{ name: "music_search", description: "搜索", parameters: { type: "object" } }],
-      toolChoice: { name: "music_search" },
+      toolChoiceIntent: { mode: "must_call", toolName: "music_search" },
     }, { provider: "p", baseUrl: "https://e.test/v1", model: "m", apiKey: "sk-test" });
 
     expect(JSON.parse(req.body).tool_choice).toEqual({
       type: "function",
       function: { name: "music_search" },
     });
+  });
+
+  test("maps must-call intent through the active provider and thinking policy", () => {
+    const toolRequest = {
+      model: "m",
+      messages: [{ role: "user" as const, content: "搜歌" }],
+      tools: [{ name: "music_search", description: "搜索", parameters: { type: "object" } }],
+      toolChoiceIntent: { mode: "must_call" as const, toolName: "music_search" },
+    };
+    const deepseek = new OpenAICompatAdapter("deepseek", { ...capability, id: "deepseek" });
+    const deepseekBody = JSON.parse(deepseek.buildRequest(toolRequest, {
+      provider: "DeepSeek（深度求索）", baseUrl: "https://api.deepseek.com", model: "deepseek-v4-pro",
+      apiKey: "k", reasoning: { mode: "on", effort: "high" },
+    }).body);
+    expect(deepseekBody.tools).toHaveLength(1);
+    expect(deepseekBody.tool_choice).toBeUndefined();
+
+    const minimax = new OpenAICompatAdapter("minimax", { ...capability, id: "minimax" });
+    const minimaxBody = JSON.parse(minimax.buildRequest(toolRequest, {
+      provider: "MiniMax（稀宇科技）", baseUrl: "https://api.minimaxi.com/v1", model: "MiniMax-M3",
+      apiKey: "k", reasoning: { mode: "on" },
+    }).body);
+    expect(minimaxBody.tool_choice).toBe("auto");
+  });
+
+  test("maps a required-only provider policy to OpenAI required", () => {
+    const adapter = new OpenAICompatAdapter("required-only", {
+      ...capability,
+      id: "required-only",
+      toolChoiceModes: ["required"],
+    });
+    const req = adapter.buildRequest({
+      model: "m", messages: [{ role: "user", content: "搜歌" }],
+      tools: [{ name: "music_search", description: "搜索", parameters: { type: "object" } }],
+      toolChoiceIntent: { mode: "must_call", toolName: "music_search" },
+    }, { provider: "p", baseUrl: "https://e.test/v1", model: "m", apiKey: "k", reasoning: { mode: "off" } });
+    expect(JSON.parse(req.body).tool_choice).toBe("required");
   });
 
   test("preserves user content blocks for direct image attachments", () => {
@@ -87,7 +186,7 @@ describe("OpenAICompatAdapter", () => {
     expect(req.headers.Authorization).toBeUndefined();
   });
 
-  // ─── 流式 / 非流式 reasoning_content 解析（覆盖 DeepSeek / Qwen / GLM / MiMo /volcengine） ───
+  // ─── 流式 / 非流式 reasoning_content 解析（覆盖 DeepSeek / Qwen / GLM / MiMo / Doubao） ───
 
   test("parseStreamEvent: delta.reasoning_content → chunk.deltaThinking（DeepSeek/Qwen/GLM/MiMo 流式）", () => {
     const adapter = new OpenAICompatAdapter("test-openai", capability);

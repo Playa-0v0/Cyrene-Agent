@@ -75,7 +75,7 @@ function renderDate(): void {
   const now = new Date();
   const el = $("schedule-date");
   if (!el) return;
-  el.textContent = `📅 ${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 · ${WEEKDAYS[now.getDay()]}`;
+  el.innerHTML = `<svg width="14" height="14" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="vertical-align:-2px; margin-right:2px"><path d="M5 19H43V40C43 41.1046 42.1046 42 41 42H7C5.89543 42 5 41.1046 5 40V19Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M5 9C5 7.89543 5.89543 7 7 7H41C42.1046 7 43 7.89543 43 9V19H5V9Z" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M16 4V12" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 4V12" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M28 34H34" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 34H20" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M28 26H34" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 26H20" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg> ${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 · ${WEEKDAYS[now.getDay()]}`;
 }
 
 // ── 渲染：今日 Token 用量 + 进度条（拉满+电流感） ────────────
@@ -86,10 +86,6 @@ function renderTodayUsage(data7: TokenDayData[]): void {
 
   const numEl = $("usage-number");
   if (numEl) numEl.textContent = formatThousands(todayTotal);
-
-  // 进度条永远拉满（无预算概念），电流感由 CSS 动画驱动
-  const fill = $("usage-bar__fill");
-  if (fill) fill.style.width = "100%";
 }
 
 // ── 渲染：7 天柱状图（周日起算，今日之后留空柱） ────────────
@@ -168,7 +164,7 @@ function renderWeeklyBars(data7: TokenDayData[]): void {
     if (span) span.textContent = `日均 ${formatTokenShort(avg)}`;
   }
   if (noteEl && peakSlot) {
-    noteEl.textContent = `📊 本周 Token 消耗趋势 ｜ 峰值 ${formatTokenShort(peakSlot.total ?? 0)}（${peakSlot.weekday}）`;
+    noteEl.innerHTML = `<svg width="18" height="18" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="vertical-align:-2px"><title>Token</title><path d="M4 42H44" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><rect x="8" y="28" width="6" height="14" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><rect x="21" y="18" width="6" height="24" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><rect x="34" y="6" width="6" height="36" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></svg> 本周 Token 消耗趋势 ｜ 峰值 ${formatTokenShort(peakSlot.total ?? 0)}（${peakSlot.weekday}）`;
   }
 }
 

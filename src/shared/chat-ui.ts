@@ -15,7 +15,6 @@ export interface ChatSessionMetaUI {
 }
 
 // 默认 identity 显示名（职位面板未做，所有会话先用这个）
-export const CHAT_DEFAULT_IDENTITY_LABEL = "聊天陪伴";
 
 // 微信式相对时间：刚刚 / N 分钟前 / 今天 HH:mm / 昨天 HH:mm / N 天前 / MM-DD / YYYY-MM-DD
 export function formatChatRelativeTime(at: number): string {

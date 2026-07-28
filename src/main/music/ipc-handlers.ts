@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain, BrowserWindow } from "electron";
 import { IPC } from "../../shared/ipc-channels";
 import { MusicInputError, type MusicBackendState, type MusicAccountState, type MusicPlayerState } from "./types";
 import type { MusicService } from "./music-service";
@@ -75,7 +75,7 @@ export function registerMusicIpcHandlers(service: MusicService): () => void {
   channels.push(IPC.MUSIC_PRESENT_TRACKS);
 
   ipcMain.handle(IPC.MUSIC_PLAY_TRACK, (_e, trackId: string) =>
-    wrap(() => service.playTrack(trackId), service),
+    wrap(() => service.playTrackFromUi(trackId), service),
   );
   channels.push(IPC.MUSIC_PLAY_TRACK);
 
@@ -89,7 +89,15 @@ export function registerMusicIpcHandlers(service: MusicService): () => void {
   );
   channels.push(IPC.MUSIC_DETECT_PLAYER);
 
+  // ── 状态变更推送：任何 state 轴变化都广播到所有窗口 ──────────
+  const unsubState = service.onStateChange((snapshot) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send(IPC.MUSIC_STATE_CHANGED, snapshot);
+    }
+  });
+
   return function dispose() {
     for (const ch of channels) ipcMain.removeHandler(ch);
+    unsubState();
   };
 }

@@ -42,9 +42,18 @@ let tail: Promise<unknown> = Promise.resolve();
  * @param task  返回 Promise 的任务函数
  * @returns 任务结果的 Promise；失败时 reject，调用方自己处理（一般 .catch 吞掉，不影响主流程）
  */
-export function enqueueLLMTask<T>(label: string, task: () => Promise<T>): Promise<T> {
+export function enqueueLLMTask<T>(
+  label: string,
+  task: () => Promise<T>,
+  options: { log?: boolean; retryRateLimit?: boolean } = {},
+): Promise<T> {
   const next = tail.then(async (): Promise<T> => {
-    return runWithRetry(label, task);
+    return runWithRetry(
+      label,
+      task,
+      options.log !== false,
+      options.retryRateLimit !== false,
+    );
   });
   // tail 必须包住错误，否则一个失败的任务会让整条链断（后续任务永远不执行）
   tail = next.catch(() => {
@@ -54,28 +63,33 @@ export function enqueueLLMTask<T>(label: string, task: () => Promise<T>): Promis
 }
 
 /** 执行任务，限流时退避 5s 重试 1 次。 */
-async function runWithRetry<T>(label: string, task: () => Promise<T>): Promise<T> {
+async function runWithRetry<T>(
+  label: string,
+  task: () => Promise<T>,
+  logEnabled: boolean,
+  retryRateLimit: boolean,
+): Promise<T> {
   const startedAt = Date.now();
-  console.log(LOG_PREFIX, "开始执行:", label);
+  if (logEnabled) console.log(LOG_PREFIX, "开始执行:", label);
   try {
     const result = await task();
-    console.log(LOG_PREFIX, "完成:", label, "耗时=" + (Date.now() - startedAt) + "ms");
+    if (logEnabled) console.log(LOG_PREFIX, "完成:", label, "耗时=" + (Date.now() - startedAt) + "ms");
     return result;
   } catch (err) {
-    if (!isRateLimitError(err)) {
+    if (!retryRateLimit || !isRateLimitError(err)) {
       // 非限流错误直接抛，不重试
-      console.warn(LOG_PREFIX, "失败（非限流，不重试）:", label, err instanceof Error ? err.message : String(err));
+      if (logEnabled) console.warn(LOG_PREFIX, "失败（非限流，不重试）:", label, err instanceof Error ? err.message : String(err));
       throw err;
     }
     // 限流：退避 5s 重试 1 次
-    console.warn(LOG_PREFIX, "限流，" + (RETRY_DELAY_MS / 1000) + "s 后重试 1 次:", label);
+    if (logEnabled) console.warn(LOG_PREFIX, "限流，" + (RETRY_DELAY_MS / 1000) + "s 后重试 1 次:", label);
     await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
     try {
       const result = await task();
-      console.log(LOG_PREFIX, "重试成功:", label, "总耗时=" + (Date.now() - startedAt) + "ms");
+      if (logEnabled) console.log(LOG_PREFIX, "重试成功:", label, "总耗时=" + (Date.now() - startedAt) + "ms");
       return result;
     } catch (retryErr) {
-      console.error(LOG_PREFIX, "重试仍失败，放弃:", label, retryErr instanceof Error ? retryErr.message : String(retryErr));
+      if (logEnabled) console.error(LOG_PREFIX, "重试仍失败，放弃:", label, retryErr instanceof Error ? retryErr.message : String(retryErr));
       throw retryErr;
     }
   }

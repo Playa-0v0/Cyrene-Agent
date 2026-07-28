@@ -163,6 +163,30 @@ def _write_session_cookies(cookies: dict) -> None:
     _atomic_write_json(target, cookies)
 
 
+def ensure_runtime_session() -> bool:
+    """Hydrate the one shared pyncm Session from Cyrene runtime cookies.
+
+    Login-aware NetEase APIs call this instead of the legacy package-local
+    ``load_session`` path. It performs no network request; the API call itself
+    remains authoritative for expired credentials.
+    """
+    session = GetCurrentSession()
+    current = session.cookies.get_dict()
+    if current.get("MUSIC_U"):
+        return True
+
+    cookies_path = os.path.join(_storage_dir(), "cookies.json")
+    try:
+        with open(cookies_path, "r", encoding="utf-8") as f:
+            cookies = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return False
+    if not isinstance(cookies, dict) or not cookies.get("MUSIC_U"):
+        return False
+    session.cookies.update(cookies)
+    return True
+
+
 def _sanitize(value: str) -> str:
     """Sanitize log lines: redact cookies, MUSIC_U, CSRF."""
     import re
@@ -307,12 +331,14 @@ def validate_session_three_state() -> dict:
         return {"state": "invalid_credentials"}
 
     try:
+        GetCurrentSession().cookies.update(cookies)
         user_info = apis.login.GetCurrentLoginStatus()
     except Exception as e:  # noqa: BLE001
         _logger.warning(_sanitize(f"validate_session transient error: {e}"))
         return {"state": "temporarily_unavailable", "reason": "api_unreachable"}
 
-    if user_info.get("code") == 200 and user_info.get("profile"):
+    code = user_info.get("code")
+    if code == 200 and user_info.get("profile"):
         profile = user_info["profile"]
         return {
             "state": "valid",
@@ -323,4 +349,6 @@ def validate_session_three_state() -> dict:
                 "nickname": profile.get("nickname") or "",
             },
         }
-    return {"state": "invalid_credentials"}
+    if code == 200 or code in {301, 302, 400, 401, 403}:
+        return {"state": "invalid_credentials"}
+    return {"state": "temporarily_unavailable", "reason": "api_unreachable"}

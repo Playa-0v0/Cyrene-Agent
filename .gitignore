@@ -4,6 +4,8 @@
 dist/main/
 dist/preload/
 dist/renderer/assets
+dist/renderer/feeling/
+dist/renderer/status/
 dist/renderer/call/index.html
 dist/renderer/chat/index.html
 dist/renderer/settings/index.html
@@ -14,8 +16,12 @@ dist/renderer/index.html
 dist/renderer/live2dcubismcore.min.js
 dist/sim/
 dist/skills/
+release/
 *.js.map
 *.tsbuildinfo
+
+# Native screenshot helper is built locally and staged for electron-builder.
+resources/bin/*.exe
 
 # NOTE: dist/renderer/audio, dist/renderer/avatars, dist/renderer/models,
 # dist/renderer/stickers are intentionally NOT ignored (product assets).
@@ -28,6 +34,11 @@ coverage/
 verify-*.js
 verify-*.png
 verify-*.html
+test-output/
+scripts/test-action-gate-anthropic.mjs
+scripts/test-action-gate-contract.mjs
+scripts/test-cita-fc-compare.mjs
+scripts/test-cita-minimax.mjs
 .zcode/
 .worktrees/
 

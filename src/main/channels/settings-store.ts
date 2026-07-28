@@ -153,6 +153,8 @@ export function decryptFeishuSecret(cfg: FeishuChannelConfig | undefined): strin
   return decryptField(cfg?.appSecret ?? "");
 }
 
+export type ChannelToolSandbox = "off" | "safe-only" | "all";
+
 export interface ChannelsSettings {
   wechat: WechatChannelConfig;
   feishu: FeishuChannelConfig;
@@ -170,8 +172,8 @@ export interface ChannelsSettings {
   stickerEnabled: boolean;
   /** 全局：是否把 bot 会话镜像到桌面端 chatWindow */
   mirrorToDesktop: boolean;
-  /** 全局：工具沙箱 'safe-only' | 'all' */
-  toolSandbox: "safe-only" | "all";
+  /** 全局：Chat 关闭工具；Work 可限制工具风险等级。 */
+  toolSandbox: ChannelToolSandbox;
 }
 
 const DEFAULT_SETTINGS: ChannelsSettings = {
@@ -201,6 +203,8 @@ function normalize(input: Partial<ChannelsSettings> | null | undefined): Channel
     typeof v === "boolean" ? v : fallback;
 
   const safeStr = (v: unknown): string => (typeof v === "string" ? v : "");
+  const safeToolSandbox = (v: unknown): ChannelToolSandbox =>
+    v === "off" || v === "all" ? v : "safe-only";
 
   const w: Partial<WechatChannelConfig> | undefined = input?.wechat;
   const f: Partial<FeishuChannelConfig> | undefined = input?.feishu;
@@ -234,7 +238,7 @@ feishu: {
     ttsEnabled: safeBool(input?.ttsEnabled, true),
     stickerEnabled: safeBool(input?.stickerEnabled, true),
     mirrorToDesktop: safeBool(input?.mirrorToDesktop, true),
-    toolSandbox: input?.toolSandbox === "all" ? "all" : "safe-only",
+    toolSandbox: safeToolSandbox(input?.toolSandbox),
   };
 }
 
@@ -297,7 +301,7 @@ export type ChannelConfigPatch = Partial<{
   ttsEnabled: boolean;
   stickerEnabled: boolean;
   mirrorToDesktop: boolean;
-  toolSandbox: "safe-only" | "all";
+  toolSandbox: ChannelToolSandbox;
 }>;
 
 /** 给定 channelId 返回对应的配置子集（用于 adapter 内部读取自己的开关）。 */
