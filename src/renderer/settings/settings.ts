@@ -1659,9 +1659,9 @@ async function loadTimeoutSettings() {
     timeoutUserChoiceInput.value = String(cfg.userChoiceTimeout / 1000);
     timeoutTestInput.value = String(cfg.testTimeout);
     timeoutMemoryJudgeInput.value = String(cfg.memoryJudgeTimeout);
-    timeoutProfileTotalBudgetInput.value = timeoutToString(cfg.profileTotalBudgetMs);
-    timeoutProfilePerAttemptInput.value = timeoutToString(cfg.profilePerAttemptTimeoutMs);
-    timeoutProfileRemainingInput.value = timeoutToString(cfg.profileMinimumRemainingBudgetMs);
+    timeoutProfileTotalBudgetInput.value = cfg.profileTotalBudgetMs === -1 ? "" : String(cfg.profileTotalBudgetMs / 1000);
+    timeoutProfilePerAttemptInput.value = cfg.profilePerAttemptTimeoutMs === -1 ? "" : String(cfg.profilePerAttemptTimeoutMs / 1000);
+    timeoutProfileRemainingInput.value = cfg.profileMinimumRemainingBudgetMs === -1 ? "" : String(cfg.profileMinimumRemainingBudgetMs / 1000);
     setTimeoutSaveStatus("时间设置保存后，对后续请求生效．");
   } catch {
     setTimeoutSaveStatus("读取偏好失败", "is-error");
@@ -1697,6 +1697,16 @@ function parseN1IntOrThrow(input: string, th: any) {
   return result;
 }
 
+/** 解析秒数（支持小数），返回毫秒；空串返回 -1 */
+function parseN1SecToMsOrThrow(input: string, th: any): number {
+  if (input === "") return -1;
+  const result = parseFloat(input);
+  if (Number.isNaN(result) || result <= 0) {
+    throw th;
+  }
+  return Math.round(result * 1000);
+}
+
 async function saveTimeoutSettings(saveTestTimeout: boolean) {
   let settings: Partial<TimeoutSettings>;
   try {
@@ -1706,9 +1716,9 @@ async function saveTimeoutSettings(saveTestTimeout: boolean) {
         visionTimeout: parsePositiveIntOrThrow(timeoutVisionInput.value, "视觉模型单次 API 超时"),
         userChoiceTimeout: 1000 * parsePositiveIntOrThrow(timeoutUserChoiceInput.value, "工具请求确认时间限制"),
         memoryJudgeTimeout: parsePositiveIntOrThrow(timeoutMemoryJudgeInput.value, "记忆总结阶段 API 超时"),
-        profileTotalBudgetMs: parseN1IntOrThrow(timeoutProfileTotalBudgetInput.value, "阶段总时间限制"),
-        profilePerAttemptTimeoutMs: parseN1IntOrThrow(timeoutProfilePerAttemptInput.value, "单次请求超时"),
-        profileMinimumRemainingBudgetMs: parseN1IntOrThrow(timeoutProfileRemainingInput.value, "最小余量"),
+        profileTotalBudgetMs: parseN1SecToMsOrThrow(timeoutProfileTotalBudgetInput.value, "阶段总时间预算"),
+        profilePerAttemptTimeoutMs: parseN1SecToMsOrThrow(timeoutProfilePerAttemptInput.value, "单次尝试超时"),
+        profileMinimumRemainingBudgetMs: parseN1SecToMsOrThrow(timeoutProfileRemainingInput.value, "最小剩余时间"),
       };
     } else {
       settings = {
