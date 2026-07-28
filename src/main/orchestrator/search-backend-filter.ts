@@ -43,7 +43,7 @@ export function validateSearchApiKey(rawKey: string, label: string): KeyValidati
 export const BUILTIN_SEARCH_TOOL_ID = "web_search";
 export const MINIMAX_SEARCH_TOOL_PREFIX = "minimax-web-search-";
 
-export type SearchBackend = "off" | "bocha" | "tavily" | "minimax";
+export type SearchBackend = "off" | "bocha" | "tavily" | "minimax" | "anySearch";
 
 /**
  * 判断一个工具是否应该根据当前搜索后端设置被暴露。
@@ -54,7 +54,7 @@ export function shouldExposeSearchTool(
   activeBackend: SearchBackend,
 ): boolean {
   if (toolId === BUILTIN_SEARCH_TOOL_ID) {
-    return activeBackend === "bocha" || activeBackend === "tavily";
+    return activeBackend === "bocha" || activeBackend === "tavily" || activeBackend === "anySearch";
   }
   if (toolId.startsWith(MINIMAX_SEARCH_TOOL_PREFIX)) {
     return activeBackend === "minimax";

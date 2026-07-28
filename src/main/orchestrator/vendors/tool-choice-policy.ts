@@ -49,6 +49,7 @@ export function resolveToolChoicePolicy(input: ToolChoicePolicyInput): ToolChoic
 
   // MiniMax OpenAI-compatible text API documents auto/none only.
   if (input.providerId === "minimax") return choose("auto");
+  if (input.providerId === "anySearch") return choose("auto");
   // DeepSeek thinking rejects tool_choice entirely, while non-thinking accepts named selection.
   if (input.providerId === "deepseek" && thinkingEnabled) return choose("omit");
   // Kimi fixed/thinking models reject specified selection; auto keeps native Function Calling enabled.
