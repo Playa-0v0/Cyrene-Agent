@@ -74,6 +74,7 @@ export interface LangGraphAgentLoopOptions {
   contextualizedQuery: string;
   citaContextBlock: string;
   trustedRefs?: string[];
+  perCallTimeoutMs: number;
   timeoutMs: number;
   maxIterations?: number;
   imageCaptionFallback?: () => Promise<ChatMessage[]>;
@@ -283,7 +284,7 @@ export async function runLangGraphAgentLoop(options: LangGraphAgentLoopOptions):
   } else {
     flowLog("Task Router disabled: feature_flag=false");
   }
-  const perCallTimeout = Math.max(1_000, Math.min(75_000, options.timeoutMs));
+  const perCallTimeout = options.perCallTimeoutMs;
   const enabledTools = options.tools.filter((tool) => tool.enabled);
   // 过滤后的版本（按 inPlanMode 动态切换）
   let enabledToolsFiltered = enabledTools;

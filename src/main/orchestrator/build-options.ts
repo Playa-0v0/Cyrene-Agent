@@ -174,6 +174,7 @@ export interface ModelSettingsLite {
   runtimeSync?: string;
   stickerEnabled?: boolean;
   stickerSimilarityThreshold?: number;
+  disableLangGraph?: boolean;
   optimizeFirstRound?: boolean;
 }
 
@@ -658,6 +659,7 @@ export async function buildAgentRunOptions(
       ...(imageCaptionFallback ? { imageCaptionFallback } : {}),
       ...(isChatMode ? { tools: runTools as ToolDefinition[] } : {}),
       ...(availableSkills.length > 0 ? { availableSkills } : {}),
+      agentRuntime: settings.disableLangGraph ? "legacy" : "langgraph",
       optimizeFirstRound: settings.optimizeFirstRound,
     },
     latestUserText,

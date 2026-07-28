@@ -274,6 +274,7 @@ interface ModelSettings {
     model: string;
   };
   multimodal: boolean;
+  disableLangGraph?: boolean;
   optimizeFirstRound?: boolean;
 }
 
@@ -862,6 +863,7 @@ const timeoutTestInput = document.getElementById("timeout-test") as HTMLInputEle
 const timeoutTestReset = document.getElementById("timeout-test-reset-btn") as HTMLButtonElement;
 const timeoutMemoryJudgeInput = document.getElementById("timeout-memory-judge") as HTMLInputElement;
 const timeoutMemoryJudgeReset = document.getElementById("timeout-memory-judge-reset-btn") as HTMLButtonElement;
+const fcModeLangGraphButton = document.getElementById("fc-mode-langgraph") as HTMLButtonElement;
 const fcModeEnableOptimizationButton = document.getElementById("fc-mode-enable-optimization") as HTMLButtonElement;
 const fcModeDisableOptimizationButton = document.getElementById("fc-mode-disable-optimization") as HTMLButtonElement;
 
@@ -1180,9 +1182,10 @@ function applyUiThemeSelection(theme: GeneralSettings["uiTheme"]): void {
   document.documentElement.dataset.uiTheme = theme;
 }
 
-function applyFcOptimizeSelection(optimizeFirstRound?: boolean) {
-  fcModeEnableOptimizationButton.className = optimizeFirstRound ? "fc-mode-option is-active" : "fc-mode-option";
-  fcModeDisableOptimizationButton.className = !optimizeFirstRound ? "fc-mode-option is-active" : "fc-mode-option";
+function applyFcOptimizeSelection(optimizeFirstRound?: boolean, disableLangGraph?: boolean) {
+  fcModeLangGraphButton.className = !disableLangGraph ? "fc-mode-option is-active" : "fc-mode-option";
+  fcModeEnableOptimizationButton.className = (disableLangGraph && optimizeFirstRound) ? "fc-mode-option is-active" : "fc-mode-option";
+  fcModeDisableOptimizationButton.className = (disableLangGraph && !optimizeFirstRound) ? "fc-mode-option is-active" : "fc-mode-option";
 }
 
 function renderUiFont(font: UiFont): void {
@@ -1506,7 +1509,7 @@ async function loadConfig(): Promise<void> {
     const threshold = cfg.stickerSimilarityThreshold ?? 0.55;
     stickerThresholdInput.value = String(threshold);
     stickerThresholdVal.textContent = threshold.toFixed(2);
-    applyFcOptimizeSelection(cfg.optimizeFirstRound);
+    applyFcOptimizeSelection(cfg.optimizeFirstRound, cfg.disableLangGraph);
 
     // 视觉模型配置已并入 applyPreset（preferredVision 参数）。
 
@@ -1654,13 +1657,17 @@ timeoutVisionReset.addEventListener("click", () => { timeoutVisionInput.value = 
 timeoutMemoryJudgeReset.addEventListener("click", () => { timeoutMemoryJudgeInput.value = String(DEFAULT_MEMORY_JUDGE_MS) });
 timeoutUserChoiceReset.addEventListener("click", () => { timeoutUserChoiceInput.value = "60" });
 
+fcModeLangGraphButton.addEventListener("click", async () => {
+  await window.settings!.saveConfig({ disableLangGraph: false });
+  applyFcOptimizeSelection(false, false);
+});
 fcModeEnableOptimizationButton.addEventListener("click", async () => {
-  await window.settings!.saveConfig({ optimizeFirstRound: true });
-  applyFcOptimizeSelection(true);
+  await window.settings!.saveConfig({ optimizeFirstRound: true, disableLangGraph: true });
+  applyFcOptimizeSelection(true, true);
 });
 fcModeDisableOptimizationButton.addEventListener("click", async () => {
-  await window.settings!.saveConfig({ optimizeFirstRound: false });
-  applyFcOptimizeSelection(false);
+  await window.settings!.saveConfig({ optimizeFirstRound: false, disableLangGraph: true });
+  applyFcOptimizeSelection(false, true);
 });
 
 runtimeSyncSelect.querySelectorAll<HTMLButtonElement>(".option-block").forEach((button) => {

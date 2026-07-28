@@ -102,6 +102,7 @@ function options(adapter: FakeAdapter, executeTool = vi.fn(async () => ({
     trustedRefs: ["ctx_song_1", "ctx_song_2"],
     timeoutMs: 30_000,
     executeTool,
+    perCallTimeoutMs: 75000,
   };
 }
 

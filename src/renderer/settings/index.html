@@ -212,18 +212,22 @@
         <form class="settings-panel is-hidden" id="api-fc-mode-form" data-panel="api-advanced">
           <div class="panel-heading">
             <div>
-              <h1>API 调用模式</h1>
-              <p>注：在调用工具时，两种模式 API 调用次数相同，且均会丢弃倒数第二次回复．</p>
+              <h1>Work 模式下 API 调用模式</h1>
+              <p>注：两种旧版模式 API 调用次数相同，且均会丢弃倒数第二次回复．</p>
             </div>
           </div>
           <div class="settings-list">
+            <button type="button" class="fc-mode-option" id="fc-mode-langgraph">
+              <span class="fc-mode-option__icon"></span>
+              <span class="fc-mode-option__copy"><strong>新版 LangGraph 模式</strong><small>v0.8.0 加入的新模式</small></span>
+            </button>
             <button type="button" class="fc-mode-option" id="fc-mode-enable-optimization">
               <span class="fc-mode-option__icon"></span>
-              <span class="fc-mode-option__copy"><strong>极速问答模式</strong><small>首轮带完整人设；无工具时直接回复，节省一次 API 轮次，调用工具时后续轮次回到双阶段模式．适合无工具/低频调用工具．<br />首次 API 请求 Token 输入量较大，不调用工具时进行一次 API 请求，调用工具时 Token 总消耗较大．</small></span>
+              <span class="fc-mode-option__copy"><strong>旧版双阶段循环 - 极速问答模式</strong><small>首轮带完整人设；无工具时直接回复，节省一次 API 轮次，调用工具时后续轮次回到双阶段模式．适合无工具/低频调用工具．<br />首次 API 请求 Token 输入量较大，不调用工具时进行一次 API 请求，调用工具时 Token 总消耗较大．</small></span>
             </button>
             <button type="button" class="fc-mode-option" id="fc-mode-disable-optimization">
               <span class="fc-mode-option__icon"></span>
-              <span class="fc-mode-option__copy"><strong>双阶段模式</strong><small>首轮先精简探查，最后带人设总结；无工具时丢弃第一次回复，调用工具时输入上下文更轻量．适合高频调用工具的复杂任务．<br />首次 API 请求 Token 输入量较小，不调用工具时进行两次 API 请求，调用工具时 Token 总消耗较小．</small></span>
+              <span class="fc-mode-option__copy"><strong>旧版双阶段循环 - 双阶段模式</strong><small>首轮先精简探查，最后带人设总结；无工具时丢弃第一次回复，调用工具时输入上下文更轻量．适合高频调用工具的复杂任务．<br />首次 API 请求 Token 输入量较小，不调用工具时进行两次 API 请求，调用工具时 Token 总消耗较小．</small></span>
             </button>
           </div>
         </form>
@@ -251,14 +255,14 @@
               </div>
             </label>
             <label class="field field--full">
-              <span>工具阶段每轮 API 超时（ms）</span>
+              <span>新版 LangGraph 模式 - 每轮 API 超时 / 旧版双阶段循环 - 工具阶段每轮 API 超时（ms）</span>
               <div class="timeout-row">
                 <input id="timeout-per-round" type="number" placeholder="单位ms（1s=1000ms）" autocomplete="off" />
                 <button type="button" class="timeout-reset" id="timeout-per-round-reset-btn" title="重置为默认（75s）">↻</button>
               </div>
             </label>
             <label class="field field--full">
-              <span>工具总结阶段 API 超时（ms）</span>
+              <span>旧版双阶段循环 - 工具总结阶段 API 超时（ms）</span>
               <div class="timeout-row">
                 <input id="timeout-summary" type="number" placeholder="单位ms（1s=1000ms）" autocomplete="off" />
                 <button type="button" class="timeout-reset" id="timeout-summary-reset-btn" title="重置为默认（90s）">↻</button>

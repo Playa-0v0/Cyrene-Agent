@@ -79,6 +79,7 @@ export interface CyreneRunOptions {
   toolSystemContentOptimizedForFirstRound?: string;
   /** Soul 阶段使用的基础 system prompt（人设 + 环境/记忆/关系/附件）。 */
   soulSystemBaseContent: string;
+  disableLangGraph?: boolean;
   optimizeFirstRound?: boolean;
   /** 只应用到 Soul 最终自然语言回复，禁止影响 CITA、Action Gate 与 Native FC。 */
   soulSampling?: ApprovedStyleSampling;
@@ -252,6 +253,7 @@ export class CyreneAgent extends AbstractAgent {
     const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const conversationId = options.conversationId ?? "default";
     const abortController = new AbortController();
+    const timeoutSettings = getTimeoutSettings();
 
     // first-source-wins：谁先触发 abort，谁就是最终分类
     let abortSource: AbortSource | undefined;
@@ -344,10 +346,13 @@ export class CyreneAgent extends AbstractAgent {
                 trustedRefs: options.trustedRefs ?? [],
                 imageCaptionFallback: options.imageCaptionFallback,
                 executionLedger,
+                perCallTimeoutMs: timeoutSettings.perRoundTimeout,
               }))
               : await perf.track("legacy_agent_loop", () => runTwoPhaseFcLoop({
                 ...commonOptions,
                 imageCaptionFallback: options.imageCaptionFallback,
+                perRoundTimeoutMs: timeoutSettings.perRoundTimeout,
+                forceSummaryTimeoutMs: timeoutSettings.forceSummaryTimeout,
               }));
           }
 

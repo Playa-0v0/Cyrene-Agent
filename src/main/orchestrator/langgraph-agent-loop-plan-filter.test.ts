@@ -121,6 +121,7 @@ function defaultOptions(adapter: FakeAdapter, tools = allTools) {
       status: "succeeded" as const,
       output: JSON.stringify({ ok: true }),
     })),
+    perCallTimeoutMs: 75000,
   };
 }
 
