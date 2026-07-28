@@ -875,7 +875,7 @@ async function bochaSearch(query: string, key: string): Promise<string> {
 async function tavilySearch(query: string, key: string): Promise<string> {
   const url = "https://api.tavily.com/search";
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), getTimeoutSettings().searchTimeout);
   try {
     const resp = await fetch(url, {
       method: "POST",
