@@ -12,6 +12,7 @@ import type {
   ChatVendorAdapter,
 } from "./vendors/types";
 import type { ApprovedStyleSampling } from "./vendors/style-sampling";
+import { getTimeoutSettings } from "../timeout-manager";
 
 export interface ChatLoopOptions {
   settings: AgentLoopSettings;
@@ -54,11 +55,13 @@ export async function runChatLoop(options: ChatLoopOptions): Promise<TwoPhaseFcR
   const usageRecorder = options.recordUsage ?? ((input, output, calls) => recordUsage(input, output, calls));
   let usedImageCaptionFallback = false;
 
+  const timeout = getTimeoutSettings().chatRequestTimeout;
+
   const remainingBudget = (): number => {
     if (options.signal?.aborted) throw new Error("E_SOUL_ONLY_CANCELLED");
     const remaining = options.timeoutMs - (Date.now() - startedAt);
     if (remaining <= 0) throw new Error("E_SOUL_ONLY_TIMEOUT");
-    return Math.max(1, Math.min(75_000, remaining));
+    return Math.max(1, Math.min(timeout, remaining));
   };
 
   const invoke = async (messages: ChatMessage[]) => {
