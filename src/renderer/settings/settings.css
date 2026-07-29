@@ -317,10 +317,6 @@ body {
   gap: 7px;
 }
 
-.field[hidden] {
-  display: none;
-}
-
 .field--full {
   grid-column: 1 / -1;
 }
