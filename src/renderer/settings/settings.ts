@@ -745,6 +745,7 @@ const bgmAudio = new Audio("/audio/bgm.mp3");
 bgmAudio.preload = "auto";
 bgmAudio.loop = true;
 const apiForm = document.getElementById("api-form") as HTMLFormElement;
+const apiRuntimeForm = document.getElementById("api-runtime-form") as HTMLFormElement;
 const apiTimeoutForm = document.getElementById("api-timeout-form") as HTMLFormElement;
 const apiFcModeForm = document.getElementById("api-fc-mode-form") as HTMLFormElement;
 const appearanceForm = document.getElementById("appearance-form") as HTMLFormElement;
@@ -766,6 +767,7 @@ const saveStatus = document.getElementById("save-status") as HTMLElement;
 const appearanceSaveStatus = document.getElementById("appearance-save-status") as HTMLElement;
 const generalSaveStatus = document.getElementById("general-save-status") as HTMLElement;
 const timeoutSaveStatus = document.getElementById("timeout-save-status") as HTMLElement;
+const runtimeSaveStatus = document.getElementById("runtime-save-status") as HTMLElement;
 const preferencesSaveStatus = document.getElementById("preferences-save-status") as HTMLElement;
 const cyreneSaveStatus = document.getElementById("cyrene-save-status") as HTMLElement;
 
@@ -835,8 +837,6 @@ const maxRefreshInput = document.getElementById("max-refresh") as HTMLInputEleme
 const perCallTimeoutSecInput = document.getElementById("per-call-timeout-sec") as HTMLInputElement;
 const citaRepairBudgetSecInput = document.getElementById("cita-repair-budget-sec") as HTMLInputElement;
 const actionGateRepairBudgetSecInput = document.getElementById("action-gate-repair-budget-sec") as HTMLInputElement;
-const advancedToggle = document.getElementById("advanced-toggle") as HTMLButtonElement;
-const advancedFieldsWrap = document.getElementById("advanced-fields-wrap") as HTMLElement;
 
 // 渲染端内存缓存：保存每个厂商上一次填写的 baseUrl / model / apiKey
 // 切厂商时从这里读，保存时同步进去；持久化由 main 进程的 saveModelSettings 负责（perProvider 字段）。
@@ -890,10 +890,6 @@ const openStickerManagerBtn = document.getElementById("open-sticker-manager-btn"
 const addStickerBtn = document.getElementById("add-sticker-btn") as HTMLButtonElement;
 const stickerThresholdInput = document.getElementById("sticker-threshold") as HTMLInputElement;
 const stickerThresholdVal = document.getElementById("sticker-threshold-val") as HTMLElement;
-const timeoutChatRequestInput = document.getElementById("timeout-chat-request") as HTMLInputElement;
-const timeoutChatRequestReset = document.getElementById("timeout-chat-request-reset-btn") as HTMLButtonElement;
-const timeoutPerRoundInput = document.getElementById("timeout-per-round") as HTMLInputElement;
-const timeoutPerRoundReset = document.getElementById("timeout-per-round-reset-btn") as HTMLButtonElement;
 const timeoutSummaryInput = document.getElementById("timeout-summary") as HTMLInputElement;
 const timeoutSummaryReset = document.getElementById("timeout-summary-reset-btn") as HTMLButtonElement;
 const timeoutVisionInput = document.getElementById("timeout-vision") as HTMLInputElement;
@@ -931,7 +927,7 @@ const NAV_LABELS: Record<string, { emoji: string; title: string; hint: string }>
   appearance: { emoji: `<svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="vertical-align:-3px"><title>外观设置</title><path d="M24 44C29.9601 44 26.3359 35.136 30 31C33.1264 27.4709 44 29.0856 44 24C44 12.9543 35.0457 4 24 4C12.9543 4 4 12.9543 4 24C4 35.0457 12.9543 44 24 44Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M28 17C29.6569 17 31 15.6569 31 14C31 12.3431 29.6569 11 28 11C26.3431 11 25 12.3431 25 14C25 15.6569 26.3431 17 28 17Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M16 21C17.6569 21 19 19.6569 19 18C19 16.3431 17.6569 15 16 15C14.3431 15 13 16.3431 13 18C13 19.6569 14.3431 21 16 21Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M17 34C18.6569 34 20 32.6569 20 31C20 29.3431 18.6569 28 17 28C15.3431 28 14 29.3431 14 31C14 32.6569 15.3431 34 17 34Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></svg>`, title: "外观设置", hint: "调整窗口布局、界面主题与昔涟桌宠" },
   general: { emoji: `<svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="vertical-align:-3px"><title>通用设置</title><path d="M18.2838 43.1713C14.9327 42.1736 11.9498 40.3213 9.58787 37.867C10.469 36.8227 11 35.4734 11 34.0001C11 30.6864 8.31371 28.0001 5 28.0001C4.79955 28.0001 4.60139 28.01 4.40599 28.0292C4.13979 26.7277 4 25.3803 4 24.0001C4 21.9095 4.32077 19.8938 4.91579 17.9995C4.94381 17.9999 4.97188 18.0001 5 18.0001C8.31371 18.0001 11 15.3138 11 12.0001C11 11.0488 10.7786 10.1493 10.3846 9.35011C12.6975 7.1995 15.5205 5.59002 18.6521 4.72314C19.6444 6.66819 21.6667 8.00013 24 8.00013C26.3333 8.00013 28.3556 6.66819 29.3479 4.72314C32.4795 5.59002 35.3025 7.1995 37.6154 9.35011C37.2214 10.1493 37 11.0488 37 12.0001C37 15.3138 39.6863 18.0001 43 18.0001C43.0281 18.0001 43.0562 17.9999 43.0842 17.9995C43.6792 19.8938 44 21.9095 44 24.0001C44 25.3803 43.8602 26.7277 43.594 28.0292C43.3986 28.01 43.2005 28.0001 43 28.0001C39.6863 28.0001 37 30.6864 37 34.0001C37 35.4734 37.531 36.8227 38.4121 37.867C36.0502 40.3213 33.0673 42.1736 29.7162 43.1713C28.9428 40.752 26.676 39.0001 24 39.0001C21.324 39.0001 19.0572 40.752 18.2838 43.1713Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M24 31C27.866 31 31 27.866 31 24C31 20.134 27.866 17 24 17C20.134 17 17 20.134 17 24C17 27.866 20.134 31 24 31Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></svg>`, title: "通用设置", hint: "管理窗口、音频和系统行为" },
   api: { emoji: `<svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="vertical-align:-3px"><title>API 设置</title><g clip-path="url(#api-key-nav-clip)"><circle cx="15" cy="33" r="8" fill="none" stroke="currentColor" stroke-width="4"/><path d="M29 16L35.5 22" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 26L37 7" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M35 11L42 17.5" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></g><defs><clipPath id="api-key-nav-clip"><rect width="48" height="48" fill="none"/></clipPath></defs></svg>`, title: "API 设置", hint: "选择预设后只需要填写 API Key。" },
-  "api-advanced": { emoji: "", title: "API 高级设置", hint: "配置 API 超时时间、调用模式．" },
+  "api-advanced": { emoji: `<svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="vertical-align:-3px"><title>高级设置</title><path d="M34.0003 41L44 24L34.0003 7H14.0002L4 24L14.0002 41H34.0003Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M24 29C26.7614 29 29 26.7614 29 24C29 21.2386 26.7614 19 24 19C21.2386 19 19 21.2386 19 24C19 26.7614 21.2386 29 24 29Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></svg>`, title: "高级设置", hint: "配置 API 超时时间、调用模式．" },
   cyrene: { emoji: "🌸", title: "昔涟设置", hint: "管理 Agent 行为、记忆、RAG 与权限" },
   tts: { emoji: "🎙️", title: "TTS 设置", hint: "语音合成与朗读偏好" },
   asr: { emoji: "🎧", title: "ASR 设置", hint: "语音识别与通话配置" },
@@ -1239,6 +1235,13 @@ function applyFcOptimizeSelection(optimizeFirstRound?: boolean, disableLangGraph
   fcModeLangGraphButton.className = !disableLangGraph ? "fc-mode-option is-active" : "fc-mode-option";
   fcModeEnableOptimizationButton.className = (disableLangGraph && optimizeFirstRound) ? "fc-mode-option is-active" : "fc-mode-option";
   fcModeDisableOptimizationButton.className = (disableLangGraph && !optimizeFirstRound) ? "fc-mode-option is-active" : "fc-mode-option";
+  // 根据模式显隐相关参数
+  const isLangGraph = !disableLangGraph;
+  document.querySelectorAll<HTMLElement>("[data-mode]").forEach(el => {
+    const mode = el.dataset.mode;
+    if (mode === "langgraph") el.classList.toggle("is-hidden-mode", !isLangGraph);
+    else if (mode === "twophase") el.classList.toggle("is-hidden-mode", isLangGraph);
+  });
 }
 
 function renderUiFont(font: UiFont): void {
@@ -1268,6 +1271,12 @@ function setTimeoutSaveStatus(text: string, cls?: string): void {
   timeoutSaveStatus.textContent = text;
   timeoutSaveStatus.className = "save-status";
   if (cls) timeoutSaveStatus.classList.add(cls);
+}
+
+function setRuntimeSaveStatus(text: string, cls?: string): void {
+  runtimeSaveStatus.textContent = text;
+  runtimeSaveStatus.className = "save-status";
+  if (cls) runtimeSaveStatus.classList.add(cls);
 }
 
 function fillPresetOptions(): void {
@@ -1652,16 +1661,14 @@ function timeoutToString(timeout: number) {
 async function loadTimeoutSettings() {
   try {
     const cfg = await window.settings!.getTimeoutSettings();
-    timeoutChatRequestInput.value = String(cfg.chatRequestTimeout);
-    timeoutPerRoundInput.value = String(cfg.perRoundTimeout);
     timeoutSummaryInput.value = String(cfg.forceSummaryTimeout);
     timeoutVisionInput.value = String(cfg.visionTimeout);
     timeoutUserChoiceInput.value = String(cfg.userChoiceTimeout / 1000);
     timeoutTestInput.value = String(cfg.testTimeout);
     timeoutMemoryJudgeInput.value = String(cfg.memoryJudgeTimeout);
-    timeoutProfileTotalBudgetInput.value = timeoutToString(cfg.profileTotalBudgetMs);
-    timeoutProfilePerAttemptInput.value = timeoutToString(cfg.profilePerAttemptTimeoutMs);
-    timeoutProfileRemainingInput.value = timeoutToString(cfg.profileMinimumRemainingBudgetMs);
+    timeoutProfileTotalBudgetInput.value = cfg.profileTotalBudgetMs === -1 ? "" : String(cfg.profileTotalBudgetMs / 1000);
+    timeoutProfilePerAttemptInput.value = cfg.profilePerAttemptTimeoutMs === -1 ? "" : String(cfg.profilePerAttemptTimeoutMs / 1000);
+    timeoutProfileRemainingInput.value = cfg.profileMinimumRemainingBudgetMs === -1 ? "" : String(cfg.profileMinimumRemainingBudgetMs / 1000);
     setTimeoutSaveStatus("时间设置保存后，对后续请求生效．");
   } catch {
     setTimeoutSaveStatus("读取偏好失败", "is-error");
@@ -1697,20 +1704,28 @@ function parseN1IntOrThrow(input: string, th: any) {
   return result;
 }
 
+/** 解析秒数（支持小数），返回毫秒；空串返回 -1 */
+function parseN1SecToMsOrThrow(input: string, th: any): number {
+  if (input === "") return -1;
+  const result = parseFloat(input);
+  if (Number.isNaN(result) || result <= 0) {
+    throw th;
+  }
+  return Math.round(result * 1000);
+}
+
 async function saveTimeoutSettings(saveTestTimeout: boolean) {
   let settings: Partial<TimeoutSettings>;
   try {
     if (!saveTestTimeout) {
       settings = {
-        perRoundTimeout: parsePositiveIntOrThrow(timeoutPerRoundInput.value, "工具阶段每轮 API 超时"),
         forceSummaryTimeout: parsePositiveIntOrThrow(timeoutSummaryInput.value, "工具总结阶段 API 超时"),
-        chatRequestTimeout: parsePositiveIntOrThrow(timeoutChatRequestInput.value, "单次回复总时间限制"),
         visionTimeout: parsePositiveIntOrThrow(timeoutVisionInput.value, "视觉模型单次 API 超时"),
         userChoiceTimeout: 1000 * parsePositiveIntOrThrow(timeoutUserChoiceInput.value, "工具请求确认时间限制"),
         memoryJudgeTimeout: parsePositiveIntOrThrow(timeoutMemoryJudgeInput.value, "记忆总结阶段 API 超时"),
-        profileTotalBudgetMs: parseN1IntOrThrow(timeoutProfileTotalBudgetInput.value, "阶段总时间限制"),
-        profilePerAttemptTimeoutMs: parseN1IntOrThrow(timeoutProfilePerAttemptInput.value, "单次请求超时"),
-        profileMinimumRemainingBudgetMs: parseN1IntOrThrow(timeoutProfileRemainingInput.value, "最小余量"),
+        profileTotalBudgetMs: parseN1SecToMsOrThrow(timeoutProfileTotalBudgetInput.value, "阶段总时间预算"),
+        profilePerAttemptTimeoutMs: parseN1SecToMsOrThrow(timeoutProfilePerAttemptInput.value, "单次尝试超时"),
+        profileMinimumRemainingBudgetMs: parseN1SecToMsOrThrow(timeoutProfileRemainingInput.value, "最小剩余时间"),
       };
     } else {
       settings = {
@@ -1744,8 +1759,6 @@ async function saveTimeoutSettings(saveTestTimeout: boolean) {
 }
 
 timeoutTestReset.addEventListener("click", () => { timeoutTestInput.value = "15000" });
-timeoutChatRequestReset.addEventListener("click", () => { timeoutChatRequestInput.value = String(DEFAULT_CHAT_REQUEST_TIMEOUT_MS) });
-timeoutPerRoundReset.addEventListener("click", () => { timeoutPerRoundInput.value = String(DEFAULT_PER_ROUND_TIMEOUT_MS) });
 timeoutSummaryReset.addEventListener("click", () => { timeoutSummaryInput.value = String(DEFAULT_FORCE_SUMMARY_TIMEOUT_MS) });
 timeoutVisionReset.addEventListener("click", () => { timeoutVisionInput.value = String(DEFAULT_VISION_TIMEOUT_MS) });
 timeoutMemoryJudgeReset.addEventListener("click", () => { timeoutMemoryJudgeInput.value = String(DEFAULT_MEMORY_JUDGE_MS) });
@@ -1790,15 +1803,6 @@ runtimeSyncSelect.querySelectorAll<HTMLButtonElement>(".option-block").forEach((
 
 stickerEnabledInput.addEventListener("change", () => {
   setCyreneSaveStatus("有未保存的更改");
-});
-
-// 高级运行设置折叠
-advancedToggle.addEventListener("click", () => {
-  const expanded = advancedToggle.getAttribute("aria-expanded") === "true";
-  const next = !expanded;
-  advancedToggle.setAttribute("aria-expanded", String(next));
-  if (next) advancedFieldsWrap.removeAttribute("hidden");
-  else advancedFieldsWrap.setAttribute("hidden", "");
 });
 
 // 任何高级字段改动都标记"有未保存的更改"
@@ -3038,10 +3042,49 @@ async function renderSchedulerList(): Promise<void> {
   }
 }
 
-apiTimeoutForm.addEventListener("submit", (e) => {
+apiRuntimeForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setRuntimeSaveStatus("保存中…");
+  try {
+    const parsedTimeoutSec = Math.max(30, Math.min(1800, parseInt(chatRequestTimeoutSecInput.value, 10) || 300));
+    const parsedMaxIterations = Math.max(5, Math.min(30, parseInt(maxIterationsInput.value, 10) || 12));
+    const parsedMaxReplans = Math.max(1, Math.min(5, parseInt(maxReplansInput.value, 10) || 2));
+    const parsedMaxRefresh = Math.max(0, Math.min(3, parseInt(maxRefreshInput.value, 10) || 1));
+    const parsedPerCallSec = Math.max(30, Math.min(120, parseInt(perCallTimeoutSecInput.value, 10) || 75));
+    const parsedCitaSec = Math.max(4, Math.min(30, parseInt(citaRepairBudgetSecInput.value, 10) || 8));
+    const parsedAgSec = Math.max(5, Math.min(40, parseInt(actionGateRepairBudgetSecInput.value, 10) || 10));
+    await window.settings!.saveConfig({
+      chatRequestTimeoutSec: parsedTimeoutSec,
+      maxIterations: parsedMaxIterations,
+      maxReplans: parsedMaxReplans,
+      maxRefresh: parsedMaxRefresh,
+      perCallTimeoutSec: parsedPerCallSec,
+      citaRepairBudgetSec: parsedCitaSec,
+      actionGateRepairBudgetSec: parsedAgSec,
+    });
+    // 同步超时到 TimeoutSettings（秒→毫秒）
+    await window.settings!.saveTimeoutSettings({
+      chatRequestTimeout: parsedTimeoutSec * 1000,
+      perRoundTimeout: parsedPerCallSec * 1000,
+      profileTotalBudgetMs: parseN1SecToMsOrThrow(timeoutProfileTotalBudgetInput.value, "Action Gate 总阶段时限"),
+      profilePerAttemptTimeoutMs: parseN1SecToMsOrThrow(timeoutProfilePerAttemptInput.value, "阶段内单次尝试超时"),
+      profileMinimumRemainingBudgetMs: parseN1SecToMsOrThrow(timeoutProfileRemainingInput.value, "最小剩余时间"),
+    });
+    setRuntimeSaveStatus("已保存", "is-ok");
+  } catch {
+    setRuntimeSaveStatus("保存失败", "is-error");
+  }
+});
+
+apiTimeoutForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   setTimeoutSaveStatus("保存中…");
-  saveTimeoutSettings(false);
+  try {
+    await saveTimeoutSettings(false);
+    setTimeoutSaveStatus("已保存", "is-ok");
+  } catch {
+    setTimeoutSaveStatus("保存失败", "is-error");
+  }
 });
 
 appearanceForm.addEventListener("submit", async (e) => {
@@ -3089,25 +3132,11 @@ cyrenePanel.addEventListener("submit", async (e) => {
   e.preventDefault();
   setCyreneSaveStatus("保存中…");
   try {
-    const parsedTimeoutSec = Math.max(30, Math.min(1800, parseInt(chatRequestTimeoutSecInput.value, 10) || 300));
-    const parsedMaxIterations = Math.max(5, Math.min(30, parseInt(maxIterationsInput.value, 10) || 12));
-    const parsedMaxReplans = Math.max(1, Math.min(5, parseInt(maxReplansInput.value, 10) || 2));
-    const parsedMaxRefresh = Math.max(0, Math.min(3, parseInt(maxRefreshInput.value, 10) || 1));
-    const parsedPerCallSec = Math.max(30, Math.min(120, parseInt(perCallTimeoutSecInput.value, 10) || 75));
-    const parsedCitaSec = Math.max(4, Math.min(30, parseInt(citaRepairBudgetSecInput.value, 10) || 8));
-    const parsedAgSec = Math.max(5, Math.min(40, parseInt(actionGateRepairBudgetSecInput.value, 10) || 10));
     await window.settings!.saveConfig({
       runtimeSync: getRuntimeSyncValue(),
       stickerEnabled: stickerEnabledInput.checked,
       stickerSize: getStickerSizeValue(),
       stickerSimilarityThreshold: parseFloat(stickerThresholdInput.value),
-      chatRequestTimeoutSec: parsedTimeoutSec,
-      maxIterations: parsedMaxIterations,
-      maxReplans: parsedMaxReplans,
-      maxRefresh: parsedMaxRefresh,
-      perCallTimeoutSec: parsedPerCallSec,
-      citaRepairBudgetSec: parsedCitaSec,
-      actionGateRepairBudgetSec: parsedAgSec,
     });
     setCyreneSaveStatus("已保存", "is-ok");
   } catch {
@@ -3343,6 +3372,7 @@ function switchSection(section: string): void {
   const isAsr = section === "asr";
   const isMusic = section === "music";
   apiForm.classList.toggle("is-hidden", !isApi);
+  apiRuntimeForm.classList.toggle("is-hidden", !isApiAdvanced);
   apiTimeoutForm.classList.toggle("is-hidden", !isApiAdvanced);
   apiFcModeForm.classList.toggle("is-hidden", !isApiAdvanced);
   appearanceForm.classList.toggle("is-hidden", !isAppearance);
