@@ -9,6 +9,7 @@ import type { DocumentIndexProgress } from "../main/rag/document-index-queue";
 import { getLive2DIpcListenerCounts } from "./live2d-listener-diagnostics";
 import { exposeMusicApi } from "./music";
 import { normalizeChatAppearance, type ChatAppearanceSettings } from "../shared/chat-appearance";
+import { exposeCodexOAuthApi } from "./codex-oauth";
 
 const cyreneApi = {
   minimize: () => ipcRenderer.send(IPC.WINDOW_MINIMIZE),
@@ -718,3 +719,4 @@ const gameBotApi = {
 contextBridge.exposeInMainWorld("gameBot", gameBotApi);
 
 exposeMusicApi();
+exposeCodexOAuthApi();

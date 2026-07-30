@@ -25,6 +25,7 @@ export const LogTag = {
   Reranker: "Reranker",
   InboundServer: "InboundServer",
   Channels: "Channels",
+  CodexOAuth: "CodexOAuth",
   Feishu: "Feishu",
   Wechat: "Wechat",
   StickerEmbed: "StickerEmbed",

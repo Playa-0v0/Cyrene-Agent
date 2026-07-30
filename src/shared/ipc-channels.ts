@@ -347,5 +347,10 @@ export const IPC = {
 
   // TODO 卡片：初始加载当前状态（常驻需求）
   TODOS_GET_CURRENT: "todos:get-current",
+
+  // ChatGPT / Codex 订阅 OAuth（本机桥 + PKCE 登录）
+  CODEX_OAUTH_GET_STATUS: "codex-oauth:get-status",
+  CODEX_OAUTH_BEGIN_LOGIN: "codex-oauth:begin-login",
+  CODEX_OAUTH_LOGOUT: "codex-oauth:logout",
 } as const;
 

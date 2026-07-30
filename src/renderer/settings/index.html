@@ -136,6 +136,16 @@
               <datalist id="model-input-suggestions"></datalist>
             </label>
 
+            <div class="field field--full" id="codex-oauth-panel" style="display:none">
+              <span>ChatGPT 订阅登录</span>
+              <div class="codex-oauth-row">
+                <button type="button" class="codex-oauth-btn" id="codex-oauth-login-btn">登录 ChatGPT</button>
+                <button type="button" class="codex-oauth-btn" id="codex-oauth-logout-btn" style="display:none">退出登录</button>
+                <span class="form-hint" id="codex-oauth-status">尚未登录</span>
+              </div>
+              <span class="form-hint">用你的 ChatGPT Plus / Pro / Team 订阅跑 Chat 模式，不需要 API Key；登录成功后会自动填好上面的 Base URL / API Key。仅支持 Chat 模式。</span>
+            </div>
+
             <label class="field">
               <span>上下文窗口（Token）</span>
               <input id="context-window-input" type="number" min="4096" step="1" placeholder="256000" autocomplete="off" />

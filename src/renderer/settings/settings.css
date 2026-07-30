@@ -2137,6 +2137,36 @@ body {
   color: var(--rb-text-on-pink);
 }
 
+/* Codex（ChatGPT 订阅）OAuth 登录面板 */
+.codex-oauth-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.codex-oauth-btn {
+  flex-shrink: 0;
+  width: auto;
+  padding: 0 14px;
+  height: 36px;
+  border-radius: 12px;
+  color: var(--rb-text-muted);
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 182, 220, 0.14);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.codex-oauth-btn:hover {
+  border-color: rgba(255, 182, 220, 0.34);
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--rb-text-on-pink);
+}
+.codex-oauth-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 /* 厂商卡片网格 + 官网链接 */
 .preset-row {
   margin-top: 6px;

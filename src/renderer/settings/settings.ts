@@ -389,7 +389,13 @@ interface ModelPreset {
   // 自定义端点的云端/本地变体共用一张可见卡片，但分别持久化配置。
   customEndpointMode?: CustomEndpointMode;
   hiddenInPresetList?: boolean;
+  // 该预设不用 API Key，而是走 ChatGPT 订阅 OAuth 登录（本地桥 + PKCE）。
+  // 为 true 时显示「登录 ChatGPT」面板，登录成功后自动回填 Base URL / API Key。
+  oauthLogin?: boolean;
 }
+
+/** ChatGPT / Codex（订阅）预设的 providerName，OAuth 状态回填时用来判断"当前选中的就是它"。 */
+const CODEX_OAUTH_PROVIDER_NAME = "ChatGPT / Codex（订阅）";
 
 interface GeneralSettings extends ChatAppearanceSettings {
   citaEnabled: boolean;
@@ -617,6 +623,19 @@ const MODEL_PRESETS: ModelPreset[] = [
     websiteUrl: "https://platform.openai.com/",
   },
   {
+    // 用 ChatGPT Plus/Pro/Team 订阅跑 Chat，不用 API Key——本地桥 + PKCE OAuth 登录。
+    // baseUrl/mainModels 都是占位：登录成功后由 codex-oauth-panel 自动回填真实值。
+    providerName: CODEX_OAUTH_PROVIDER_NAME,
+    shortName: "Codex",
+    baseUrl: "http://127.0.0.1:0/v1",
+    // 必须是 Codex 后端 /models 返回的 slug——跟 OpenAI API 的型号名不是一套。
+    // 填 API 那边的名字（gpt-5.1-codex / gpt-5.6 之类）会被回 400。
+    mainModels: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"],
+    iconUrl: "../icons/providers/openai.svg",
+    websiteUrl: "https://developers.openai.com/codex/auth",
+    oauthLogin: true,
+  },
+  {
     providerName: "Claude（Anthropic）",
     shortName: "Claude",
     baseUrl: "https://api.anthropic.com/v1",
@@ -806,6 +825,89 @@ let editingSchedulerTaskId: string | null = null;
 
 const presetCards = document.getElementById("preset-cards") as HTMLElement;
 const presetWebsiteLink = document.getElementById("preset-website-link") as HTMLAnchorElement;
+
+// ChatGPT / Codex（订阅）OAuth 登录面板。
+// window.codexOAuth.* 由 preload/codex-oauth.ts 通过 contextBridge 暴露；跟 window.music
+// 一样，main/preload 是 esbuild、renderer 是 Vite 打包，两端类型不互通，弱类型化调用。
+interface CodexOAuthIpcResult<T> {
+  ok: boolean;
+  data?: T;
+  error?: string;
+}
+interface CodexOAuthStatusPayload {
+  loggedIn: boolean;
+  accountId?: string;
+  bridge: { baseUrl: string; token: string };
+}
+interface CodexOAuthApi {
+  getStatus: () => Promise<CodexOAuthIpcResult<CodexOAuthStatusPayload>>;
+  beginLogin: () => Promise<CodexOAuthIpcResult<{ accountId: string }>>;
+  logout: () => Promise<CodexOAuthIpcResult<void>>;
+}
+function getCodexOAuthApi(): CodexOAuthApi | null {
+  const w = window as unknown as { codexOAuth?: CodexOAuthApi };
+  return w.codexOAuth ?? null;
+}
+
+const codexOAuthPanel = document.getElementById("codex-oauth-panel") as HTMLDivElement | null;
+const codexOAuthLoginBtn = document.getElementById("codex-oauth-login-btn") as HTMLButtonElement | null;
+const codexOAuthLogoutBtn = document.getElementById("codex-oauth-logout-btn") as HTMLButtonElement | null;
+const codexOAuthStatusEl = document.getElementById("codex-oauth-status") as HTMLElement | null;
+
+async function refreshCodexOAuthStatus(): Promise<void> {
+  if (!codexOAuthPanel || codexOAuthPanel.style.display === "none") return;
+  const api = getCodexOAuthApi();
+  if (!api) {
+    if (codexOAuthStatusEl) codexOAuthStatusEl.textContent = "window.codexOAuth 未就绪";
+    return;
+  }
+  const result = await api.getStatus();
+  if (!result.ok || !result.data) {
+    if (codexOAuthStatusEl) codexOAuthStatusEl.textContent = `状态查询失败：${result.error ?? "未知错误"}`;
+    return;
+  }
+  const { loggedIn, accountId, bridge } = result.data;
+  if (codexOAuthStatusEl) {
+    codexOAuthStatusEl.textContent = loggedIn
+      ? `已登录（账户 ${accountId ? accountId.slice(0, 8) : "?"}…）`
+      : "尚未登录";
+  }
+  if (codexOAuthLogoutBtn) codexOAuthLogoutBtn.style.display = loggedIn ? "" : "none";
+  if (codexOAuthLoginBtn) codexOAuthLoginBtn.textContent = loggedIn ? "重新登录" : "登录 ChatGPT";
+  // 只有当前选中的确实是 Codex 预设时才回填，避免切到别的厂商后被悄悄覆盖。
+  if (loggedIn && activeProvider === CODEX_OAUTH_PROVIDER_NAME) {
+    baseUrlInput.value = bridge.baseUrl;
+    apiKeyInput.value = bridge.token;
+  }
+}
+
+codexOAuthLoginBtn?.addEventListener("click", () => {
+  void (async () => {
+    const api = getCodexOAuthApi();
+    if (!api || !codexOAuthLoginBtn) return;
+    codexOAuthLoginBtn.disabled = true;
+    if (codexOAuthStatusEl) codexOAuthStatusEl.textContent = "正在打开浏览器登录…";
+    try {
+      const result = await api.beginLogin();
+      if (!result.ok) {
+        if (codexOAuthStatusEl) codexOAuthStatusEl.textContent = `登录失败：${result.error ?? "未知错误"}`;
+        return;
+      }
+      await refreshCodexOAuthStatus();
+    } finally {
+      codexOAuthLoginBtn.disabled = false;
+    }
+  })();
+});
+
+codexOAuthLogoutBtn?.addEventListener("click", () => {
+  void (async () => {
+    const api = getCodexOAuthApi();
+    if (!api) return;
+    await api.logout();
+    await refreshCodexOAuthStatus();
+  })();
+});
 // 模式按钮已删除——baseUrl 永远可改、模型名永远可手填（datalist 出预设建议）
 // provider 不再暴露给用户（从预设内部拿，保证 capabilities 匹配不出错）。
 // 用户看到的是"昵称"框——给模型起自定义名字，状态栏"正在喂养"显示它。
@@ -1508,6 +1610,17 @@ function applyPreset(
     presetWebsiteLink.style.display = "";
   } else {
     presetWebsiteLink.style.display = "none";
+  }
+
+  // ChatGPT / Codex（订阅）面板：只有选中该预设才显示；显示时立刻拉一次登录状态
+  // （登录过就自动回填 Base URL / API Key，见 refreshCodexOAuthStatus）。
+  if (codexOAuthPanel) {
+    if (preset.oauthLogin) {
+      codexOAuthPanel.style.display = "";
+      void refreshCodexOAuthStatus();
+    } else {
+      codexOAuthPanel.style.display = "none";
+    }
   }
 
   activeProvider = preset.providerName;

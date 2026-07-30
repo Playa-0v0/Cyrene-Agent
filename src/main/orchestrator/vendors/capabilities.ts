@@ -115,6 +115,27 @@ export const PROVIDER_CAPABILITIES = [
     supportsVision: false,
   },
   {
+    id: "codex",
+    displayName: "ChatGPT / Codex（订阅）",
+    // baseUrl 是占位：真实端口由 codex-bridge 启动时随机分配，桥的 baseUrl/token
+    // 登录成功后由设置面板自动填入（见 codex-oauth-ipc.ts 的 CODEX_OAUTH_GET_STATUS）。
+    transport: "openai",
+    baseUrl: "http://127.0.0.1:0/v1",
+    authStyle: "bearer",
+    // 只能填 Codex 后端 /models 列出的 slug。用 API 那边的名字（gpt-5.1-codex 之类）
+    // 会被回 400 "not supported when using Codex with a ChatGPT account"。
+    defaultModel: "gpt-5.6-sol",
+    // 只支持 Chat：Work 模式的 tools 会被桥以 400 拦掉（见 codex-bridge.ts 文件头）。
+    // 注意 supportsTools 全仓库没有读取点，这里标 false 只是声明意图，拦截靠桥本身。
+    supportsTools: false,
+    supportsThinking: false,
+    thinkingField: null,
+    cacheStrategy: "none",
+    testStrategy: "text",
+    // 桥把消息压成纯文本 input_text/output_text，图片走不过去。
+    supportsVision: false,
+  },
+  {
     id: "claude",
     displayName: "Claude（Anthropic）",
     transport: "anthropic",

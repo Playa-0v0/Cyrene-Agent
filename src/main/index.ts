@@ -192,6 +192,7 @@ import {
 } from "./skills/music-companion-host";
 import { initGameBot } from "./game-bot";
 import { initChannels, shutdownChannels, setChannelsConversationLifecycle } from "./channels/init";
+import { bootstrapCodexOAuth, type CodexOAuthBootstrap } from "./orchestrator/vendors/codex-oauth-bootstrap";
 import { buildChannelAttachmentInputs } from "./channels/agent-input";
 import { setDispatcherBuildAndRunAgent, setDispatcherSynthesizeTts, setDispatcherBroadcastChat, setDispatcherLoadGeneralSettings, setDispatcherLoadRecentHistory } from "./channels/dispatcher";
 import { createWindowLifecycleTracker } from "./electron-window-lifecycle";
@@ -263,6 +264,8 @@ let callWindow: BrowserWindow | null = null;
 let schedulerEngine: SchedulerEngine | null = null;
 let screenshotService: ScreenshotService | null = null;
 let proactiveChatService: ProactiveChatService | null = null;
+/** ChatGPT / Codex（订阅）桥 + OAuth 的句柄；退出时要关掉监听。 */
+let codexOAuthBootstrap: CodexOAuthBootstrap | null = null;
 let normalConversationBusyCount = 0;
 let proactiveScreenLocked = false;
 const live2dWindowLifecycle = createWindowLifecycleTracker<BrowserWindow>("live2d-main", {
@@ -5364,6 +5367,22 @@ app.whenReady().then(async () => {
 
   void initChannels();
 
+  // ChatGPT / Codex（订阅）：本地桥 + OAuth 会话管理 + 登录用的 IPC。
+  // 桥起来不代表已登录——未登录时对 /v1/chat/completions 的请求会收到清楚的 401，
+  // 引导用户去设置里点「登录 ChatGPT」。桥起不来不该拖垮整个 app。
+  void bootstrapCodexOAuth()
+    .then(bootstrap => {
+      codexOAuthBootstrap = bootstrap;
+      logger.info(
+        LogTag.CodexOAuth,
+        `桥已启动。设置 → 模型设置里选「ChatGPT / Codex（订阅）」，点击「登录 ChatGPT」` +
+          `完成授权后会自动填好 Base URL / API Key。`,
+      );
+    })
+    .catch(err => {
+      logger.warn(LogTag.CodexOAuth, "启动失败（其它厂商不受影响）:", err);
+    });
+
   // 任务清单（todo_write 工具的持久化 + 事件广播）：
   // - loadTodos 从磁盘恢复上次未完成的任务（跨重启延续）
   // - onTodosChange 按 mode 订阅变化，把 TodoState 作为 CUSTOM 事件转发给所有聊天窗口
@@ -5705,6 +5724,7 @@ app.on("before-quit", () => {
   flushTokenUsage();
   void shutdownChannels();
   void screenshotService?.shutdown();
+  void codexOAuthBootstrap?.dispose();
 });
 
 app.on("activate", () => {
