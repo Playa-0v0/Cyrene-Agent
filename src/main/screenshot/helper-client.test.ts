@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ElectronScreenshotHelperClient,
   type HelperChildProcess,
@@ -164,5 +164,80 @@ describe("ElectronScreenshotHelperClient", () => {
     await expect(second).rejects.toThrow("HELPER_EXITED");
     expect(client.pendingRequests.size).toBe(0);
     expect(client.captureState).toBe("idle");
+  });
+});
+
+// ── 回归：helper 先退出时，往断掉的 stdin 写入不许把主进程炸掉 ──────────────
+//
+// 线上故障：helper 进程一旦先于主进程退出，stdin 管道**立刻**断开，而 'exit' 事件
+// 要到下一个 tick 才送达 —— handleExit 把 this.child 置空也就跟着晚一步。
+// before-quit 里同步调用的 shutdown() 正好落在这个空档，写进断掉的管道后拿到异步
+// EPIPE；stdin 上没有 'error' 监听器时 Node 会升级成 uncaughtException，在 Electron
+// 里就是那个 "A JavaScript error occurred in the main process" 弹窗。
+//
+// 修复分三层（同步守卫 / try-catch / 异步 error 监听器），下面一条用例钉一层，
+// 每一条都验证过：去掉对应那层修复，它就会失败。
+describe("ElectronScreenshotHelperClient —— helper 先退出时的 stdin 写入", () => {
+  interface StdinStub {
+    write: ReturnType<typeof vi.fn>;
+    on?: ReturnType<typeof vi.fn>;
+    destroyed?: boolean;
+  }
+
+  function createClientWith(stdin: StdinStub): ElectronScreenshotHelperClient {
+    const noopOn = () => undefined;
+    const child = {
+      stdin,
+      stdout: { on: noopOn },
+      stderr: { on: noopOn },
+      on: noopOn,
+    } as unknown as HelperChildProcess;
+    return new ElectronScreenshotHelperClient({
+      spawnImpl: () => child,
+      resolveHelperPath: () => "C:\helper\cyrene-screenshot.exe",
+      screenshotDirectory: "C:\shots",
+      logger: { debug: () => {}, warn: () => {}, error: () => {} },
+    });
+  }
+
+  it("第一层：stdin 已 destroyed 时根本不再写入", async () => {
+    const stdin: StdinStub = { write: vi.fn(() => true), on: vi.fn(), destroyed: true };
+    const client = createClientWith(stdin);
+    void client.ensureStarted();
+
+    await expect(client.shutdown()).resolves.toBeUndefined();
+
+    expect(stdin.write, "管道已断还去写，就是 EPIPE 的来源").not.toHaveBeenCalled();
+  });
+
+  it("第二层：write 同步抛出时 shutdown 不把异常抛给调用方", async () => {
+    const stdin: StdinStub = {
+      write: vi.fn(() => {
+        throw Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
+      }),
+      on: vi.fn(),
+      destroyed: false,
+    };
+    const client = createClientWith(stdin);
+    void client.ensureStarted();
+
+    // before-quit 里没人 catch 这个 promise，抛出去就是未捕获异常
+    await expect(client.shutdown()).resolves.toBeUndefined();
+    expect(stdin.write).toHaveBeenCalled();
+  });
+
+  it("第三层：spawn 时必须给 stdin 挂 error 监听器（异步 EPIPE 的唯一出口）", async () => {
+    const stdin: StdinStub = { write: vi.fn(() => true), on: vi.fn(), destroyed: false };
+    const client = createClientWith(stdin);
+    void client.ensureStarted();
+
+    // 异步 EPIPE 是 emit 出来的，try/catch 拦不住，只有监听器能兜住
+    expect(stdin.on, "没有 error 监听器时 Node 会把 EPIPE 升级成 uncaughtException").toHaveBeenCalledWith(
+      "error",
+      expect.any(Function),
+    );
+    // 监听器本身必须能安全吞掉错误，不能再抛
+    const handler = stdin.on!.mock.calls.find(c => c[0] === "error")?.[1] as (e: Error) => void;
+    expect(() => handler(Object.assign(new Error("write EPIPE"), { code: "EPIPE" }))).not.toThrow();
   });
 });

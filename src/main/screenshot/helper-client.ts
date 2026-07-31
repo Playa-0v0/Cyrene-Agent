@@ -45,7 +45,15 @@ type DataListener = (chunk: Buffer | string) => void;
 type ProcessListener = (...args: unknown[]) => void;
 
 export interface HelperChildProcess {
-  stdin: { write(line: string): boolean };
+  stdin: {
+    write(line: string): boolean;
+    /**
+     * 真实 ChildProcess 的 stdin 是一条流，管道断了会在这上面抛 'error'。
+     * 可选是因为测试里的假实现不需要造一条真流。
+     */
+    on?(event: "error", listener: (error: Error) => void): unknown;
+    readonly destroyed?: boolean;
+  };
   stdout: { on(event: "data", listener: DataListener): unknown };
   stderr?: { on(event: "data", listener: DataListener): unknown };
   on(event: "error" | "exit", listener: ProcessListener): unknown;
@@ -115,6 +123,16 @@ export class ElectronScreenshotHelperClient implements ScreenshotHelperClient {
         "--parent-pid", String(this.options.parentProcessId ?? process.pid),
       ]);
       this.child = child;
+      // helper 进程一旦先于主进程退出，stdin 管道会**立刻**断开，而 'exit' 事件要到
+      // 下一个 tick 才送达——handleExit 把 this.child 置空也就跟着晚了一步。这个空档
+      // 里的任何一次写入都会拿到异步 EPIPE，而 stdin 上没有 'error' 监听器时 Node 会
+      // 把它升级成 uncaughtException，在 Electron 里就是那个
+      // "A JavaScript error occurred in the main process" 弹窗（退出应用时最容易撞上，
+      // 因为 shutdown() 正是在 before-quit 里同步调用的）。
+      // 这里挂个监听器把它吃掉即可：真正的收尾由 'exit' → handleExit 负责。
+      child.stdin.on?.("error", (error) => {
+        this.options.logger?.debug("[ScreenshotHelper] stdin 写入失败（helper 可能已退出）:", error);
+      });
       child.stdout.on("data", (chunk) => this.handleStdout(chunk.toString()));
       child.stderr?.on("data", (chunk) => this.options.logger?.debug("[ScreenshotHelper stderr]", chunk.toString()));
       child.on("error", (error) => this.handleExit(error instanceof Error ? error : new Error("HELPER_PROCESS_ERROR")));
@@ -166,8 +184,22 @@ export class ElectronScreenshotHelperClient implements ScreenshotHelperClient {
     return result;
   }
 
+  /**
+   * 往 helper 的 stdin 写一条命令。
+   *
+   * helper 已经退出时写入注定失败，而这条命令本身也已经没有意义了，所以三层都兜住：
+   * - `destroyed` 提前挡掉已知已断的管道
+   * - try/catch 兜同步抛出
+   * - 异步 EPIPE 由 ensureStarted 里挂的 stdin 'error' 监听器兜住（见那里的注释）
+   */
   private writeCommand(command: Record<string, unknown>): void {
-    this.child?.stdin.write(`${JSON.stringify(command)}\n`);
+    const stdin = this.child?.stdin;
+    if (!stdin || stdin.destroyed) return;
+    try {
+      stdin.write(`${JSON.stringify(command)}\n`);
+    } catch (error) {
+      this.options.logger?.debug("[ScreenshotHelper] 写入命令失败（helper 可能已退出）:", error);
+    }
   }
 
   private handleStdout(chunk: string): void {
