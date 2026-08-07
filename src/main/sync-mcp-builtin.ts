@@ -3,6 +3,7 @@
 // pulling in the whole Electron entry-point.
 
 import { addMcpServer, removeMcpServer, listMcpServers } from "./orchestrator/mcp-manager";
+import * as path from "path";
 
 const LOG_PREFIX = "[Cyrene]";
 
@@ -17,7 +18,8 @@ export const REMOVED_BUILTIN_MCP_IDS: readonly string[] = ["firecrawl-hosted"];
 /**
  * Sync the Playwright MCP server.
  * Default OFF: opt-in via settings.playwrightMcpEnabled.
- * Stdio + npx + @playwright/mcp@latest, isolated, headless, no-sandbox.
+ * 离线化：使用本地 @playwright/mcp 的 cli.js，不再 npx 在线下载。
+ * --browser msedge：自动检测系统 Edge，有头模式（用户可见）。
  */
 export async function syncPlaywrightMcp(settings: {
   playwrightMcpEnabled: boolean;
@@ -31,8 +33,12 @@ export async function syncPlaywrightMcp(settings: {
         id: PLAYWRIGHT_MCP_ID,
         name: "Playwright 浏览器",
         transport: "stdio",
-        command: "npx",
-        args: ["-y", "@playwright/mcp@latest", "--isolated", "--headless", "--no-sandbox"],
+        // 离线化：使用本地 cli.js；--browser msedge 代替 Chromium
+        command: "node",
+        args: [
+          path.resolve(__dirname, "..", "..", "..", "node_modules", "@playwright", "mcp", "cli.js"),
+          "--browser", "msedge", "--isolated", "--no-sandbox",
+        ],
       });
       if (result.ok) {
         console.log(LOG_PREFIX, "Playwright MCP 注册成功,工具:", result.toolIds?.join(", "));

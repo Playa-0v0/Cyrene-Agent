@@ -114,7 +114,7 @@ export function createTtsSynthesisService(): TtsSynthesisService {
         vocalEnhance: { enabled: settings.ttsMinimaxVocalEnhance },
       };
       cacheKey = buildTtsCacheKey(payload);
-      if (settings.ttsStreaming) {
+      if (settings.ttsStreaming && request.supportsStreamingPlayback !== false) {
         cacheKey = versionTtsCacheKey(cacheKey, request.converterVersion);
         const cachePath = getTtsCachePath(cacheKey, format);
         const persist = (buffer: Buffer) => {

@@ -28,7 +28,9 @@ export function getActiveChatSessionId(): string | null {
 }
 
 export function registerChatUiIpc(deps: ChatUiIpcDependencies): void {
-  const { live2dWindowLifecycle, windowManager } = deps;
+  const { live2dWindowLifecycle } = deps;
+  // 注意：windowManager 不能解构 —— getter 在 initIpcHandlers() 调用时值为 null，
+  // 解构会固化该值；必须通过 deps.windowManager 延迟求值。
 
   ipcMain.handle(IPC.LIVE2D_GET_MAIN_DIAGNOSTICS, () => ({
     window: live2dWindowLifecycle.getDiagnostics(),
@@ -166,7 +168,7 @@ export function registerChatUiIpc(deps: ChatUiIpcDependencies): void {
   // 状态栏专用入口：打开/复用 reactChatWindow
   ipcMain.handle(IPC.CHATS_OPEN_IN_REACT_WINDOW, (_event, sessionId: string) => {
     if (typeof sessionId !== "string" || sessionId.trim().length === 0) return false;
-    windowManager?.createReactChatWindow(sessionId);
+    deps.windowManager?.createReactChatWindow(sessionId);
     return true;
   });
 

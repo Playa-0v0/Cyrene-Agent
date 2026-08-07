@@ -1,0 +1,38 @@
+v1.0.1: Based on Playa-0v0/Cyrene-Agent v1.0.0 with comprehensive fixes and enhancements.
+
+Upstream: https://github.com/Playa-0v0/Cyrene-Agent (v1.0.0)
+Author: Playa-0v0
+
+## Core: TTS Audio Playback
+- Fixed zero audio output on Electron 43 + Intel Arc A380 GPU
+- VBS wscript WMPlayer.OCX.7 bypasses broken Chromium audio pipeline
+- AudioContext for mouth animation timing, system player for speaker output
+- MiniMax API volume 0.8->2.0, file-size-based mouth sync
+
+## GPU Compatibility
+- Intel Arc A380: --disable-gpu --in-process-gpu
+- Nvidia GPU: start-nvidia.bat (no flags needed)
+- DEPLOY-GUIDE.md for dual-GPU deployment
+
+## Electron 43 Compatibility
+- ELECTRON_RUN_AS_NODE cleanup in startup scripts
+- IPC handlers delayed to app.whenReady()
+- socialContextService deferred initialization
+- registerPrivilegedSchemes try-catch defense
+- Renderer loadFile paths fixed (7 locations)
+
+## Migrated from v0.5.0
+- Playwright offline + msedge + headed
+- XML/DSML 7-layer leak protection
+- Max rounds 20->100 + N=10 no-progress detection
+- EPIPE defense on process.stdout.write
+- Portable mode (PORTABLE marker + userdata routing)
+- BGE-M3, Reranker, opener-pack models
+
+## UI Fixes
+- Chat history blank on first load: 200ms cold-start delay
+- Chat window reopen after close: deps.windowManager lazy evaluation
+- Todo panel 100% auto-dismiss
+
+## Version
+package.json: 1.0.0 -> 1.0.1

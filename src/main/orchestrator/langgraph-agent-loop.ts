@@ -175,9 +175,16 @@ async function callAdapter(
 export const SOUL_NO_TOOL_DIRECTIVE: string = loadPromptFile("soul_no_tool_directive.md");
 
 function stripToolProtocol(text: string): string {
+  // 0. HTML entity decode first (some models leak encoded XML)
+  const decoded = text
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&");
   // MiniMax 内部协议使用 \uffff 作为分隔符；合法回复中不应出现
-  const uffffIndex = text.indexOf("\uffff");
-  if (uffffIndex >= 0) text = text.slice(0, uffffIndex);
+  const uffffIndex = decoded.indexOf("\uffff");
+  if (uffffIndex >= 0) text = decoded.slice(0, uffffIndex);
+  else text = decoded;
   // 中文标签协议块：[系统提示]/[工具调用]/[工具结果]
   const labelIndex = text.search(/\[系统提示\]|\[工具调用\]|\[工具结果\]/);
   if (labelIndex >= 0) text = text.slice(0, labelIndex);
@@ -186,6 +193,13 @@ function stripToolProtocol(text: string): string {
     .replace(/<tool_call\b[^>]*>[\s\S]*?<\/tool_call>/gi, "")
     .replace(/\[tool_call\][\s\S]*?\[\/tool_call\]/gi, "")
     .replace(/<invoke\b[^>]*>[\s\S]*?<\/invoke>/gi, "")
+    // DSML format with full-width pipes (U+FF5C), used by DeepSeek
+    .replace(/<\u{FF5C}\u{FF5C}DSML\u{FF5C}\u{FF5C}>tool_calls[\s\S]*?<\/\u{FF5C}\u{FF5C}DSML\u{FF5C}\u{FF5C}>tool_calls>/gu, "")
+    .replace(/<\u{FF5C}\u{FF5C}DSML\u{FF5C}\u{FF5C}>invoke[\s\S]*?<\/\u{FF5C}\u{FF5C}DSML\u{FF5C}\u{FF5C}>invoke>/gu, "")
+    .replace(/<\u{FF5C}\u{FF5C}DSML\u{FF5C}\u{FF5C}>parameter[\s\S]*?<\/\u{FF5C}\u{FF5C}DSML\u{FF5C}\u{FF5C}>parameter>/gu, "")
+    // <tool_calls> wrapper without attributes (some models emit this)
+    .replace(/<tool_calls(?:\s[^>]*?)?>[\s\S]*?<\/tool_calls>/gi, "")
+    .replace(/<function_call\b[^>]*>[\s\S]*?<\/function_call>/gi, "")
     .trim();
 }
 

@@ -204,8 +204,29 @@ function playTtsAudio(base64: string, format: "wav" | "mp3" = "mp3"): void {
     const blob = new Blob([bytes], { type: mime });
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
+    let played = false;
+    audio.onended = () => { URL.revokeObjectURL(url); };
+    audio.onerror = () => {
+      if (played) return;
+      played = true;
+      URL.revokeObjectURL(url);
+      // HTMLAudioElement 失败时尝试 Web Audio API
+      const ctx = new AudioContext();
+      if (ctx.state === "suspended") { void ctx.resume(); }
+      const arrayBuf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+      ctx.decodeAudioData(arrayBuf, (buffer) => {
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        const gainNode = ctx.createGain();
+        gainNode.gain.value = 5.0;
+        source.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        source.start();
+        // 系统播放器输出真实音频
+        try { (window as any).__cyreneTtsFallback?.({ base64, mime }); } catch {}
+      }, () => console.warn("[TTS] Web Audio 解码也失败"));
+    };
     audio.play().catch((err) => console.warn("[TTS] 播放失败:", err));
-    audio.onended = () => URL.revokeObjectURL(url);
   } catch (err) {
     console.warn("[TTS] 音频解码失败:", err);
   }

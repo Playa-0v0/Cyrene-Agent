@@ -79,6 +79,7 @@ function unsubscribeSessionEvents(): void {
 }
 
 function releaseAudio(keepSessionEvents = false, keepStreamMetadata = false): void {
+  cleanupWebAudio();
   if (!keepSessionEvents) unsubscribeSessionEvents();
   if (currentStream) {
     currentStream.queue.length = 0;
@@ -112,12 +113,71 @@ function createAudio(result: Extract<TtsStartResult, { status: "ready" }>, messa
     if (currentAudio !== audio) return;
     browserApis().live2dSpeech?.stopMouth();
     publish({ messageId, status: "completed" });
+    cleanupWebAudio();
   };
   audio.onerror = () => {
     if (currentAudio !== audio) return;
-    publish({ messageId, status: "error", error: "语音播放失败" });
+    // HTMLAudioElement 失败时尝试 Web Audio API（兼容 --in-process-gpu 模式）
+    tryWebAudioFallback(bytes, result.format, messageId);
   };
   return audio;
+}
+
+let webAudioCtx: AudioContext | null = null;
+let webAudioSource: AudioBufferSourceNode | null = null;
+let webAudioDuration = 0;
+
+function cleanupWebAudio(): void {
+  try { webAudioSource?.stop(); } catch {}
+  webAudioSource = null;
+  webAudioDuration = 0;
+}
+
+function tryWebAudioFallback(bytes: Uint8Array, format: string, messageId: string): void {
+  try {
+    if (!webAudioCtx) webAudioCtx = new AudioContext();
+    const ctx = webAudioCtx;
+    if (ctx.state === "suspended") { void ctx.resume(); }
+    // 将 Uint8Array 复制到 ArrayBuffer
+    const arrayBuf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    ctx.decodeAudioData(arrayBuf, (buffer) => {
+      cleanupWebAudio();
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+
+      // 音量增益节点（补偿 AudioContext 在某些 GPU 限制模式下的低输出）
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = 5.0;
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      source.onended = () => {
+        webAudioSource = null;
+        // 不在此停止嘴型——真实音频由系统播放器输出，时长以估算为准
+      };
+      webAudioSource = source;
+      webAudioDuration = buffer.duration;
+      source.start();
+      // 系统播放器输出真实音频（AudioContext 在 --in-process-gpu 模式无法路由到扬声器）
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + 0x8000)));
+      (window as any).__cyreneTtsFallback?.({ base64: btoa(bin), mime: "audio/mp3" });
+      // 嘴型动画：基于文件大小估算时长（MP3 ~128kbps）+ 系统播放器启动延迟 800ms
+      const estimatedMs = Math.max(1000, (bytes.length * 8 / 128000) * 1000 + 800);
+      setTimeout(() => {
+        browserApis().live2dSpeech?.prepare();
+        browserApis().live2dSpeech?.startMouth?.(Math.max(500, estimatedMs - 800));
+      }, 800);
+      // 完成回调（嘴型结束后）
+      setTimeout(() => {
+        browserApis().live2dSpeech?.stopMouth();
+        publish({ messageId, status: "completed" });
+      }, estimatedMs);
+    }, () => {
+      publish({ messageId, status: "error", error: "语音解码失败" });
+    });
+  } catch {
+    publish({ messageId, status: "error", error: "语音播放失败" });
+  }
 }
 
 function startMouth(audio: HTMLAudioElement, estimatedDurationMs?: number): void {
@@ -137,7 +197,7 @@ async function playAudio(audio: HTMLAudioElement, messageId: string, estimatedDu
 }
 
 function supportsStreamingPlayback(): boolean {
-  return typeof MediaSource !== "undefined" && MediaSource.isTypeSupported("audio/mpeg");
+  return false;  // MediaSource 流式解码不稳定，使用完整缓冲区 + Web Audio API
 }
 
 function decodeBase64(base64: string): Uint8Array {
@@ -348,6 +408,8 @@ export async function startTtsPlayback(request: TtsPlaybackRequest): Promise<voi
       supportsStreamingPlayback: supportsStreamingPlayback(),
     });
     if (generation !== requestGeneration || currentRequestId !== requestId || result.requestId !== requestId) return;
+    // 诊断：通过 preload API 写日志
+    try { (window as any).__diag?.("tts-status=" + result.status); } catch {}
     if (result.status === "streaming") {
       prepareStreamingPlayback(requestId, request, speech.converterVersion);
       eventHandler = handleStreamingEvent;

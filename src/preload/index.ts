@@ -720,4 +720,9 @@ const gameBotApi = {
 };
 contextBridge.exposeInMainWorld("gameBot", gameBotApi);
 
+// TTS 系统播放保底（绕过 Electron 43 AudioContext 输出路由问题）
+contextBridge.exposeInMainWorld("__cyreneTtsFallback", (payload: { base64: string; mime: string }) => {
+  ipcRenderer.invoke(IPC.TTS_SYSTEM_PLAY, payload);
+});
+
 exposeMusicApi();

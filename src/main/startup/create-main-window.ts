@@ -85,7 +85,7 @@ export function createMainWindow(ctx: CreateMainWindowContext): BrowserWindow {
   if (ctx.isDev) {
     win.loadURL("http://localhost:5173");
   } else {
-    win.loadFile(path.join(__dirname, "..", "..", "renderer", "index.html"));
+    win.loadFile(path.join(__dirname, "..", "..", "..", "renderer", "index.html"));
   }
 
   if (!ctx.isDev) {

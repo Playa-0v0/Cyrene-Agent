@@ -583,6 +583,8 @@ export function ChatPage() {
 
     void (async () => {
       try {
+        // 等待 200ms 确保 IPC 桥接完全就绪
+        await new Promise(r => setTimeout(r, 200));
         const urlSessionId = new URLSearchParams(window.location.search).get("sessionId");
         if (urlSessionId) {
           const opened = await openSessionById(urlSessionId);
@@ -594,10 +596,12 @@ export function ChatPage() {
         }
       } catch (error) {
         console.error("[ChatPage] Failed to bootstrap React session:", error);
+        // 再等 300ms 重试
+        await new Promise(r => setTimeout(r, 300));
         try {
           await refreshSessionsRef.current(activeModeRef.current, true);
         } catch (fallbackError) {
-          console.error("[ChatPage] Bootstrap fallback failed:", fallbackError);
+          console.error("[ChatPage] Bootstrap retry also failed:", fallbackError);
         }
       } finally {
         // cold-start 全程完成才标记 bootstrap 完成；只有该标志置位后
