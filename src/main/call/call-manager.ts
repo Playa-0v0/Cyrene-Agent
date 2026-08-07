@@ -19,6 +19,9 @@ import { splitForEarlySpeech } from "./tts-segmentation";
 import { captionImage } from "../orchestrator/vision-captioner";
 import { parseSharedScreenFrame, shouldUseSharedScreen, type SharedScreenFrame } from "./screen-context";
 import { startCallUsage, stopCallUsage } from "../call-usage-store";
+import { indexConversationTurn } from "../orchestrator/history-tools";
+import { scheduleMemoryWrite } from "../orchestrator/context-builder";
+import { appendConversationEntry } from "../memory/conversation-archive";
 
 const LOG_PREFIX = "[CallManager]";
 
@@ -29,6 +32,7 @@ let asrStream: VolcanoAsrStream | null = null;
 let currentState: CallState = "IDLE";
 let finalText = "";
 let active = false;
+let activeCallSessionId: string | null = null;
 let latestScreenFrame: SharedScreenFrame | null = null;
 
 /** 通話上下文：保留最近 N 輪對話歷史（每輪 = user + assistant 一對）。
@@ -282,6 +286,7 @@ export function startCall(): void {
   }
 
   active = true;
+  activeCallSessionId = `call:desktop:${Date.now()}`;
   startCallUsage("desktop");
   finalText = "";
   localAudioBuffer = Buffer.alloc(0);
@@ -349,6 +354,18 @@ export async function endTurn(passedText?: string): Promise<void> {
 
   sendState("THINKING");
 
+  const callSessionId = activeCallSessionId || `call:desktop:${Date.now()}`;
+  const archiveTurnId = `${callSessionId}:${Date.now()}`;
+  // ASR 一產出最終文字就永久保存，不依賴後續 LLM/TTS 是否成功。
+  appendConversationEntry({
+    id: `${archiveTurnId}:user`,
+    sessionId: callSessionId,
+    channel: "call",
+    role: "user",
+    content: text,
+    at: Date.now(),
+  });
+
   try {
     // 調 agent 獲取回覆
     const reply = await runAgentTurn(text);
@@ -358,6 +375,13 @@ export async function endTurn(passedText?: string): Promise<void> {
       restartAsr();
       return;
     }
+
+    // ASR 原文與實際回覆同步寫入永久跨渠道檔案，並參與 L0/L1/L2 記憶提煉。
+    void indexConversationTurn(callSessionId, text, reply, {
+      channel: "call",
+      turnId: archiveTurnId,
+    });
+    scheduleMemoryWrite(text, reply);
 
     // TTS 合成（按 ttsEngine 分發到對應引擎）
     const tts = ttsSettingsGetter?.();
@@ -468,6 +492,7 @@ export function stopCall(): void {
   active = false;
   stopCallUsage("desktop");
   callHistory.length = 0;
+  activeCallSessionId = null;
   latestScreenFrame = null;
   localAudioBuffer = Buffer.alloc(0);
   if (asrStream) {

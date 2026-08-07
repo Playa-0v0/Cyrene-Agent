@@ -1,0 +1,12 @@
+{
+  "HOST": "127.0.0.1",
+  "PORT": "8765",
+  "LANGUAGE": "zh-cn",
+  "ENABLE_HTTP": true,
+  "WS_TOKEN": "local-only",
+  "TRUSTED_IPS": ["localhost", "::1", "127.0.0.1"],
+  "masters": ["798893182883463179"],
+  "superusers": [],
+  "command_start": [],
+  "enable_empty_start": true
+}

@@ -2,12 +2,15 @@ import "../ui/base.css";
 import "./notebook.css";
 import "../ui/theme";
 
-// Expose sidebars types on Window
 declare global {
   interface Window {
     sidebar?: {
       readSharedNotebook: () => Promise<string>;
       openSharedNotebook: () => Promise<boolean>;
+      getNotebookEntries?: () => Promise<any[]>;
+      addNotebookEntry?: (options: any) => Promise<{ ok: boolean; entry?: any }>;
+      updateNotebookEntry?: (id: string, content: string, title?: string) => Promise<{ ok: boolean }>;
+      deleteNotebookEntry?: (id: string) => Promise<{ ok: boolean }>;
       onSharedNotebookChanged?: (callback: () => void) => () => void;
     };
   }
@@ -22,10 +25,29 @@ const rightPageNum = document.getElementById("right-page-num");
 const prevPageBtn = document.getElementById("prev-page-btn") as HTMLButtonElement | null;
 const nextPageBtn = document.getElementById("next-page-btn") as HTMLButtonElement | null;
 const openNotebookBtn = document.getElementById("open-notebook-btn");
+const addNoteBtn = document.getElementById("add-note-btn");
 const chaptersListContainer = document.getElementById("chapters-list-container");
+const searchInput = document.getElementById("notebook-search-input") as HTMLInputElement | null;
+const categoryTabsContainer = document.getElementById("category-tabs-container");
 
+// Modal Elements
+const noteModal = document.getElementById("note-modal");
+const modalCloseBtn = document.getElementById("modal-close-btn");
+const modalCancelBtn = document.getElementById("modal-cancel-btn");
+const modalSaveBtn = document.getElementById("modal-save-btn");
+const modalTitle = document.getElementById("modal-title");
+const noteTitleInput = document.getElementById("note-title-input") as HTMLInputElement | null;
+const noteCategorySelect = document.getElementById("note-category-select") as HTMLSelectElement | null;
+const noteContentInput = document.getElementById("note-content-input") as HTMLTextAreaElement | null;
+const noteTagsInput = document.getElementById("note-tags-input") as HTMLInputElement | null;
+
+let editingEntryId: string | null = null;
+let rawMarkdown = "";
 let pages: string[] = [];
-let currentPageIndex = 0; // 單頁模式逐頁遞增；雙頁模式維持偶數索引。
+let currentPageIndex = 0;
+let activeCategory = "all";
+let searchQuery = "";
+
 const singlePageMedia = window.matchMedia("(max-width: 760px)");
 
 function pageStep(): number {
@@ -33,7 +55,6 @@ function pageStep(): number {
 }
 
 function parseMarkdown(md: string): string {
-  // Escape HTML to prevent injection
   let html = md
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -46,56 +67,47 @@ function parseMarkdown(md: string): string {
   for (let line of lines) {
     let trimmed = line.trim();
 
-    // 自動日誌使用的去重標記不顯示在書頁上。
-    if (/^&lt;!--\s*cyrene-discord[^]*--&gt;$/.test(trimmed)) {
-      resultLines.push("");
-      continue;
-    }
+    // Preserve comment ID for action buttons
+    const idMatch = line.match(/&lt;!--\s*cyrene-discord:([a-f0-9]+)\s*--&gt;/i);
+    const entryId = idMatch ? idMatch[1] : "";
+
     line = line.replace(/\s*&lt;!--\s*cyrene-discord[^]*?--&gt;/g, "");
     trimmed = line.trim();
 
-    // Check blockquotes
     if (trimmed.startsWith("&gt;")) {
       const content = trimmed.substring(4).trim();
       line = `<blockquote>${content}</blockquote>`;
-    }
-    // Check headings
-    else if (trimmed.startsWith("###")) {
+    } else if (trimmed.startsWith("###")) {
       line = `<h3>${trimmed.substring(3).trim()}</h3>`;
     } else if (trimmed.startsWith("##")) {
       line = `<h2>${trimmed.substring(2).trim()}</h2>`;
     } else if (trimmed.startsWith("#")) {
       line = `<h1>${trimmed.substring(1).trim()}</h1>`;
-    }
-    // Check divider
-    else if (trimmed === "---") {
+    } else if (trimmed === "---") {
       line = `<hr />`;
-    }
-    // Check list item
-    else if (trimmed.startsWith("*") || trimmed.startsWith("-")) {
+    } else if (trimmed.startsWith("*") || trimmed.startsWith("-")) {
       const content = trimmed.substring(1).trim();
-      line = `<li>${content}</li>`;
+      const actionButtons = entryId
+        ? `<span class="entry-actions"><button type="button" class="btn-edit-entry" data-id="${entryId}" title="編輯">✏️</button><button type="button" class="btn-delete-entry" data-id="${entryId}" title="刪除">🗑️</button></span>`
+        : "";
+      line = `<li class="notebook-entry-item">${content} ${actionButtons}</li>`;
       if (!inList) {
-        line = `<ul>` + line;
+        line = `<ul class="notebook-entry-list">` + line;
         inList = true;
       }
     } else {
-      // If we were in a list and line is not list, close it
       if (inList) {
         resultLines[resultLines.length - 1] += `</ul>`;
         inList = false;
       }
     }
 
-    // Bold text **word**
     line = line.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-    // 僅允許自動日誌產生的 http(s) 連結。
     line = line.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
     
     resultLines.push(line);
   }
 
-  // Final check to close open list
   if (inList && resultLines.length > 0) {
     resultLines[resultLines.length - 1] += `</ul>`;
   }
@@ -108,30 +120,64 @@ function splitIntoPages(text: string): string[] {
   const cleanText = text.trim();
   if (!cleanText) return [];
 
-  // Find first entry heading
   const firstHashIndex = cleanText.indexOf("###");
   if (firstHashIndex === -1) {
     resultPages.push(cleanText);
     return resultPages;
   }
 
-  // Page 0 (Cover / Intro) is everything before the first "###"
   const intro = cleanText.substring(0, firstHashIndex).trim();
   if (intro) {
     resultPages.push(intro);
   }
 
-  // Split rest of the document by lookahead "###" to preserve headings
   const rest = cleanText.substring(firstHashIndex);
   const sections = rest.split(/(?=###)/g);
   for (const sec of sections) {
     const cleanSec = sec.trim();
     if (cleanSec) {
-      resultPages.push(cleanSec);
+      // Filter section by active category or search query
+      if (shouldIncludeSection(cleanSec)) {
+        resultPages.push(cleanSec);
+      }
     }
   }
 
   return resultPages;
+}
+
+function shouldIncludeSection(sectionText: string): boolean {
+  if (activeCategory !== "all" && !matchesCategory(sectionText, activeCategory)) {
+    return false;
+  }
+  if (searchQuery && !sectionText.toLowerCase().includes(searchQuery)) {
+    return false;
+  }
+  return true;
+}
+
+function matchesCategory(sectionText: string, category: string): boolean {
+  if (category === "all") return true;
+
+  // Direct emoji/string match
+  if (sectionText.includes(category)) return true;
+
+  const catName = category.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "").trim();
+
+  if (catName === "日誌" || catName === "陪伴" || category.includes("🌸")) {
+    return /🌸|陪伴|日誌|回憶|愛意|足跡|昔漣/i.test(sectionText);
+  }
+  if (catName === "聽歌" || category.includes("🎵")) {
+    return /🎵|聽歌|音樂|樂章|樂聲|旋律|歌|曲子/i.test(sectionText);
+  }
+  if (catName === "學習" || catName === "筆記" || category.includes("📝")) {
+    return /📝|筆記|學習|物理|動力學|考試|成績|測驗|專注|做完|程式/i.test(sectionText);
+  }
+  if (catName === "悄悄話" || category.includes("💖")) {
+    return /💖|悄悄話|心事|私語|愛意|秘密|牽掛|幸福/i.test(sectionText);
+  }
+
+  return sectionText.includes(catName);
 }
 
 function getChapterTitle(content: string, index: number): string {
@@ -140,7 +186,6 @@ function getChapterTitle(content: string, index: number): string {
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.startsWith("###")) {
-      // Strip hashes and clean up
       return trimmed.replace(/^###\s*/, "").replace(/📅\s*/, "").trim();
     }
   }
@@ -160,12 +205,36 @@ function buildChaptersSidebar() {
     item.setAttribute("data-page-index", String(idx));
     
     item.addEventListener("click", () => {
-      // 窄畫面逐頁閱讀；寬畫面則翻到包含該章節的雙頁。
       currentPageIndex = singlePageMedia.matches ? idx : Math.floor(idx / 2) * 2;
       updatePageDisplay();
     });
 
     chaptersListContainer.appendChild(item);
+  });
+}
+
+function attachEntryActionListeners(container: HTMLElement) {
+  container.querySelectorAll(".btn-delete-entry").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const id = (btn as HTMLElement).getAttribute("data-id");
+      if (id && window.sidebar?.deleteNotebookEntry) {
+        if (confirm("確定要刪除這條共同筆記嗎？")) {
+          await window.sidebar.deleteNotebookEntry(id);
+          void init();
+        }
+      }
+    });
+  });
+
+  container.querySelectorAll(".btn-edit-entry").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = (btn as HTMLElement).getAttribute("data-id");
+      if (id) {
+        openEditModal(id);
+      }
+    });
   });
 }
 
@@ -176,6 +245,7 @@ function updatePageDisplay() {
   if (currentPageIndex < pages.length) {
     leftPageContent.innerHTML = parseMarkdown(pages[currentPageIndex]);
     leftPageNum.textContent = String(currentPageIndex + 1);
+    attachEntryActionListeners(leftPageContent);
   } else {
     leftPageContent.innerHTML = `
       <div class="empty-page-tip">
@@ -191,6 +261,7 @@ function updatePageDisplay() {
   if (rightIndex < pages.length) {
     rightPageContent.innerHTML = parseMarkdown(pages[rightIndex]);
     rightPageNum.textContent = String(rightIndex + 1);
+    attachEntryActionListeners(rightPageContent);
   } else {
     rightPageContent.innerHTML = `
       <div class="empty-page-tip">
@@ -201,11 +272,9 @@ function updatePageDisplay() {
     rightPageNum.textContent = String(rightIndex + 1);
   }
 
-  // Button States
   if (prevPageBtn) prevPageBtn.disabled = (currentPageIndex === 0);
   if (nextPageBtn) nextPageBtn.disabled = (currentPageIndex + pageStep() >= pages.length);
 
-  // 更新左側 sidebar 章節的高亮狀態
   const items = chaptersListContainer?.querySelectorAll(".chapter-item");
   if (items) {
     items.forEach((item) => {
@@ -239,21 +308,21 @@ function turnPage(direction: "next" | "prev") {
     }
     updatePageDisplay();
     bookContainer.classList.remove(animationClass);
-  }, 350); // Match CSS transition duration
+  }, 350);
 }
 
 prevPageBtn?.addEventListener("click", () => turnPage("prev"));
 nextPageBtn?.addEventListener("click", () => turnPage("next"));
 
-// 點擊左頁面邊角也能往前翻頁
 document.getElementById("book-left-page")?.addEventListener("click", (e) => {
-  if ((e.target as HTMLElement).tagName === "A" || (e.target as HTMLElement).tagName === "BUTTON") return;
+  const target = e.target as HTMLElement;
+  if (target.tagName === "A" || target.tagName === "BUTTON" || target.closest(".entry-actions")) return;
   if (currentPageIndex > 0) turnPage("prev");
 });
 
-// 點擊右頁面邊角也能往後翻頁
 document.getElementById("book-right-page")?.addEventListener("click", (e) => {
-  if ((e.target as HTMLElement).tagName === "A" || (e.target as HTMLElement).tagName === "BUTTON") return;
+  const target = e.target as HTMLElement;
+  if (target.tagName === "A" || target.tagName === "BUTTON" || target.closest(".entry-actions")) return;
   if (currentPageIndex + pageStep() < pages.length) turnPage("next");
 });
 
@@ -261,15 +330,90 @@ openNotebookBtn?.addEventListener("click", () => {
   window.sidebar?.openSharedNotebook();
 });
 
+// Category Tab Switching
+categoryTabsContainer?.querySelectorAll(".cat-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    categoryTabsContainer.querySelectorAll(".cat-tab").forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    activeCategory = tab.getAttribute("data-cat") || "all";
+    pages = splitIntoPages(rawMarkdown);
+    currentPageIndex = 0;
+    buildChaptersSidebar();
+    updatePageDisplay();
+  });
+});
+
+// Search Input Listener
+searchInput?.addEventListener("input", () => {
+  searchQuery = searchInput.value.trim().toLowerCase();
+  pages = splitIntoPages(rawMarkdown);
+  currentPageIndex = 0;
+  buildChaptersSidebar();
+  updatePageDisplay();
+});
+
+// Modal Logic
+function openAddModal() {
+  editingEntryId = null;
+  if (modalTitle) modalTitle.textContent = "✍️ 新增共同筆記";
+  if (noteTitleInput) noteTitleInput.value = "";
+  if (noteContentInput) noteContentInput.value = "";
+  if (noteTagsInput) noteTagsInput.value = "";
+  noteModal?.classList.remove("hidden");
+}
+
+function openEditModal(id: string) {
+  editingEntryId = id;
+  if (modalTitle) modalTitle.textContent = "✏️ 編輯共同筆記";
+  noteModal?.classList.remove("hidden");
+}
+
+function closeModal() {
+  noteModal?.classList.add("hidden");
+}
+
+addNoteBtn?.addEventListener("click", openAddModal);
+modalCloseBtn?.addEventListener("click", closeModal);
+modalCancelBtn?.addEventListener("click", closeModal);
+
+modalSaveBtn?.addEventListener("click", async () => {
+  const title = noteTitleInput?.value.trim() || "無標題";
+  const category = (noteCategorySelect?.value as any) || "🌸 陪伴";
+  const content = noteContentInput?.value.trim() || "";
+  const tagsStr = noteTagsInput?.value.trim() || "";
+  const tags = tagsStr ? tagsStr.split(",").map((s) => s.trim()).filter(Boolean) : [];
+
+  if (!content) {
+    alert("請輸入筆記內容");
+    return;
+  }
+
+  if (editingEntryId) {
+    if (window.sidebar?.updateNotebookEntry) {
+      await window.sidebar.updateNotebookEntry(editingEntryId, content, title);
+    }
+  } else {
+    if (window.sidebar?.addNotebookEntry) {
+      await window.sidebar.addNotebookEntry({
+        title,
+        content,
+        category,
+        tags,
+      });
+    }
+  }
+
+  closeModal();
+  void init();
+});
+
 async function init() {
   if (window.sidebar?.readSharedNotebook) {
-    const text = await window.sidebar.readSharedNotebook();
-    pages = splitIntoPages(text);
+    rawMarkdown = await window.sidebar.readSharedNotebook();
+    pages = splitIntoPages(rawMarkdown);
     
-    // 建立左側章節清單
     buildChaptersSidebar();
 
-    // 開啟時自動翻到最新紀錄；雙頁模式對齊偶數頁。
     currentPageIndex = singlePageMedia.matches
       ? Math.max(0, pages.length - 1)
       : Math.floor(Math.max(0, pages.length - 1) / 2) * 2;

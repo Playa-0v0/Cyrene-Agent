@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>我們共同的筆記本</title>
+  <title>如我所書</title>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Noto+Serif+TC:wght@500;700&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="../assets/notebook-hB6VCOMU.js"></script>
+  <script type="module" crossorigin src="../assets/notebook-B1ycJ7-0.js"></script>
   <link rel="modulepreload" crossorigin href="../assets/base-BiRJewod.js">
   <link rel="modulepreload" crossorigin href="../assets/theme-ComulTz5.js">
   <link rel="stylesheet" crossorigin href="../assets/base-DniUa1S7.css">
   <link rel="stylesheet" crossorigin href="../assets/theme-BCjXO-3u.css">
-  <link rel="stylesheet" crossorigin href="../assets/notebook-BkJ3_MJl.css">
+  <link rel="stylesheet" crossorigin href="../assets/notebook-Cqx3WfN9.css">
 </head>
 <body>
   <div class="starfield"></div>
@@ -19,12 +19,32 @@
     <header class="notebook-header">
       <div class="notebook-header__title">
         <span class="notebook-logo">📖</span>
-        <span class="hsr-title">AS I HAVE WRITTEN · 如我所書</span>
+        <span class="hsr-title">如我所書 · 共享筆記本</span>
       </div>
-      <button type="button" class="notebook-header__btn" id="open-notebook-btn">
-        <span>📂 外部打開</span>
-      </button>
+      
+      <!-- 工具欄：關鍵字搜尋與新增筆記 -->
+      <div class="notebook-toolbar">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="notebook-search-input" placeholder="搜尋共同記憶與筆記..." />
+        </div>
+        <button type="button" class="notebook-header__btn" id="add-note-btn">
+          <span>✍️ 新增筆記</span>
+        </button>
+        <button type="button" class="notebook-header__btn" id="open-notebook-btn">
+          <span>📂 外部打開</span>
+        </button>
+      </div>
     </header>
+
+    <!-- 分類 Tabs -->
+    <div class="category-tabs" id="category-tabs-container">
+      <button type="button" class="cat-tab active" data-cat="all">全部 📌</button>
+      <button type="button" class="cat-tab" data-cat="🌸 陪伴">日誌 🌸</button>
+      <button type="button" class="cat-tab" data-cat="🎵 聽歌">聽歌 🎵</button>
+      <button type="button" class="cat-tab" data-cat="📝 筆記">學習 📝</button>
+      <button type="button" class="cat-tab" data-cat="💖 悄悄話">悄悄話 💖</button>
+    </div>
 
     <div class="notebook-body-layout">
       <!-- 左側：章節選單 -->
@@ -68,5 +88,43 @@
       </div>
     </div>
   </div>
+
+  <!-- 新增/編輯筆記 Modal -->
+  <div class="modal-overlay hidden" id="note-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-title">✍️ 新增共同筆記</h3>
+        <button type="button" class="modal-close-btn" id="modal-close-btn">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>標題</label>
+          <input type="text" id="note-title-input" placeholder="例如：一起聽歌感悟..." />
+        </div>
+        <div class="form-group">
+          <label>分類</label>
+          <select id="note-category-select">
+            <option value="🌸 陪伴">🌸 陪伴</option>
+            <option value="🎵 聽歌">🎵 聽歌</option>
+            <option value="📝 筆記">📝 筆記</option>
+            <option value="💖 悄悄話">💖 悄悄話</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>內文</label>
+          <textarea id="note-content-input" rows="5" placeholder="寫下值得收藏的回憶..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>標籤（以逗點分隔）</label>
+          <input type="text" id="note-tags-input" placeholder="例如：物理, 動力學" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="modal-cancel-btn">取消</button>
+        <button type="button" class="btn btn-primary" id="modal-save-btn">儲存</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>

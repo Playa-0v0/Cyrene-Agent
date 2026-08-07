@@ -17,13 +17,13 @@ afterEach(async () => {
 async function notebookFile(initial = "# 共同筆記\n\n原本的內容\n"): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "cyrene-discord-notes-"));
   tempDirs.push(dir);
-  const file = path.join(dir, "我們共同的筆記本.md");
+  const file = path.join(dir, "Shared Notebook.md");
   await fs.writeFile(file, initial, "utf8");
   return file;
 }
 
 describe("Discord notebook activity", () => {
-  it("groups songs into a dated Discord memory section", async () => {
+  it("groups music sessions into a dated narrative memory section", async () => {
     const file = await notebookFile();
     const common = {
       companionName: "Clark",
@@ -33,18 +33,15 @@ describe("Discord notebook activity", () => {
     await recordDiscordMusicInNotebook({ ...common, title: "Song Two", url: "https://example.com/two", playlistTitle: "夜晚歌單" }, file);
 
     const content = await fs.readFile(file, "utf8");
-    expect(content).toContain("### ✦ 2026年7月22日 · Discord 共同足跡");
-    expect(content).toContain("**晚上 · 一起聽歌**，和 夥伴");
-    expect(content).not.toContain("Clark");
-    expect(content).toContain("[Song One](https://example.com/one)");
-    expect(content).toContain("[Song Two](https://example.com/two)");
-    expect(content).not.toContain("音樂房");
-    expect(content).not.toContain("夥伴的伺服器");
-    expect(content.match(/Discord 共同足跡/g)).toHaveLength(1);
+    expect(content).toContain("### 📅 2026年7月22日 · 樂聲與微風相伴的時光 🎵");
+    expect(content).toContain("**記錄人**：昔漣 🌸");
+    expect(content).toContain("**今日回憶**：");
+    expect(content).toContain("旋律會悄悄流轉，但與夥伴一起聽歌的溫暖經驗");
+    expect(content.match(/樂聲與微風相伴的時光/g)).toHaveLength(1);
     expect(content).toContain("原本的內容");
   });
 
-  it("does not duplicate the same song on the same day", async () => {
+  it("does not duplicate the narrative block on the same day", async () => {
     const file = await notebookFile();
     const entry = {
       title: "Repeat Song",
@@ -55,7 +52,7 @@ describe("Discord notebook activity", () => {
     await recordDiscordMusicInNotebook(entry, file);
 
     const content = await fs.readFile(file, "utf8");
-    expect(content.match(/\[Repeat Song\]/g)).toHaveLength(1);
+    expect(content.match(/樂聲與微風相伴的時光/g)).toHaveLength(1);
   });
 
   it("keeps only completed actions and ignores informational tools", () => {
@@ -67,7 +64,7 @@ describe("Discord notebook activity", () => {
       .toMatchObject({ label: "完成 PDF 文件", detail: "report.pdf" });
   });
 
-  it("writes approved actions beside music in the same daily section", async () => {
+  it("writes approved actions in the same daily section", async () => {
     const file = await notebookFile();
     await recordDiscordToolActionsInNotebook([
       { toolId: "weather", args: { city: "台北" }, output: "晴天" },
@@ -77,16 +74,5 @@ describe("Discord notebook activity", () => {
     const content = await fs.readFile(file, "utf8");
     expect(content).toContain("**晚上 · 完成事項**，和 夥伴：寄出郵件「週報」");
     expect(content).not.toContain("台北");
-  });
-
-  it("keeps YuYing as the companion name", async () => {
-    const file = await notebookFile();
-    await recordDiscordMusicInNotebook({
-      title: "Song",
-      url: "https://example.com/song",
-      companionName: "Yu_Ying",
-      occurredAt: new Date("2026-07-22T02:00:00.000Z"),
-    }, file);
-    expect(await fs.readFile(file, "utf8")).toContain("**上午 · 一起聽歌**，和 YuYing");
   });
 });

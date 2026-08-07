@@ -54,6 +54,14 @@ export const IPC = {
   SETTINGS_SAVE_CONFIG: "settings:save-config",
   SETTINGS_TEST_CONNECTION: "settings:test-connection",
   SETTINGS_TEST_VISION: "settings:test-vision",
+  WAVES_UID_STATUS: "wavesuid:status",
+  WAVES_UID_RUN: "wavesuid:run",
+  WAVES_UID_PICK_FILE: "wavesuid:pick-file",
+  WAVES_UID_CAPTURE_DISCORD: "wavesuid:capture-discord",
+  WAVES_UID_LOGIN: "wavesuid:login",
+  WAVES_UID_LOGIN_STATUS: "wavesuid:login-status",
+  WAVES_UID_DATA_STATUS: "wavesuid:data-status",
+  WAVES_UID_DELETE_DATA: "wavesuid:delete-data",
   SETTINGS_GET_GENERAL: "settings:get-general",
   SETTINGS_SAVE_GENERAL: "settings:save-general",
   UI_THEME_GET: "ui-theme:get",
@@ -80,6 +88,7 @@ export const IPC = {
 
   // chat sessions (multi-conversation history, persisted to userData/cyrene-chats/)
   CHATS_LIST: "chats:list",
+  CHATS_STATS: "chats:stats",
   CHATS_GET: "chats:get",
   CHATS_CREATE: "chats:create",
   CHATS_APPEND: "chats:append",

@@ -4,13 +4,14 @@ import { PassThrough, type Readable } from "node:stream";
 import { constants as fsConstants, promises as fs } from "node:fs";
 import { createHash } from "node:crypto";
 import os from "node:os";
+import ffmpegStaticPath from "ffmpeg-static";
 import { toTraditionalTaiwan } from "../../../utils/opencc";
 
 // 足以涵蓋 Bilibili 跨作品音樂合集，同時避免無界清單耗盡記憶體。
 const MAX_PLAYLIST_ITEMS = 500;
-const MUSIC_STARTUP_BUFFER_BYTES = 384 * 1024;
-const MUSIC_BUFFER_CAPACITY_BYTES = 2 * 1024 * 1024;
-const MUSIC_BUFFER_TIMEOUT_MS = 12_000;
+const MUSIC_STARTUP_BUFFER_BYTES = 512 * 1024;
+const MUSIC_BUFFER_CAPACITY_BYTES = 4 * 1024 * 1024;
+const MUSIC_BUFFER_TIMEOUT_MS = 15_000;
 const YT_DLP_RELEASE_BASE = "https://github.com/yt-dlp/yt-dlp/releases/latest/download";
 const SUPPORTED_HOSTS = new Set([
   "youtube.com",
@@ -512,6 +513,7 @@ export function normalizeYtDlpResult(result: YtDlpResult, sourceUrl: string): Di
 
 export async function resolveDiscordMusicTracks(input: string): Promise<DiscordMusicTrack[]> {
   const trimmed = input.trim();
+  if (!trimmed) throw new Error("請輸入歌曲名稱或音樂連結。");
   // Bilibili's share action prefixes the URL with 【video title】. Slash command
   // options may therefore contain prose plus a valid link; always canonicalize it.
   let sourceUrl = findDiscordMusicUrl(trimmed) ?? trimmed;
@@ -520,10 +522,16 @@ export async function resolveDiscordMusicTracks(input: string): Promise<DiscordM
     const parsed = new URL(sourceUrl);
     sourceHost = parsed.hostname;
   } catch {
-    // /play 明確表示音樂請求；不是網址時交給 yt-dlp 搜尋第一個結果。
+    // 非網址文字請求：優先使用 Spotify 搜尋取得歌曲資訊與 Spotify 連結
+    try {
+      const { searchSpotifyTracks } = await import("../../spotify-control");
+      const spotifyTracks = await searchSpotifyTracks(trimmed, 1);
+      if (spotifyTracks.length > 0) return spotifyTracks;
+    } catch (err) {
+      console.warn("[DiscordMusicSource] Spotify 搜尋失敗，改用 YouTube 搜尋:", err instanceof Error ? err.message : err);
+    }
     sourceUrl = `ytsearch1:${trimmed}`;
   }
-  if (!trimmed) throw new Error("請輸入歌曲名稱或音樂連結。");
   const isBilibili = /(^|\.)bilibili\.com$|^b23\.tv$/i.test(sourceHost);
   const isSpotify = /^open\.spotify\.com$|^spotify\.link$/i.test(sourceHost);
   if (isSpotify) return await resolveSpotifyReference(sourceUrl);
@@ -592,13 +600,36 @@ export async function resolveDiscordMusicTracks(input: string): Promise<DiscordM
       });
     }
   }
-  return normalizeYtDlpResult(result, sourceUrl);
+  const ytTracks = normalizeYtDlpResult(result, sourceUrl);
+  if (ytTracks.length === 1 && /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com|youtu\.be)\//i.test(ytTracks[0].url)) {
+    try {
+      const { searchSpotifyTracks } = await import("../../spotify-control");
+      const spotifyMatch = (await searchSpotifyTracks(ytTracks[0].title, 1))[0];
+      if (spotifyMatch?.url) {
+        return [{
+          ...ytTracks[0],
+          url: spotifyMatch.url,
+          playbackUrl: ytTracks[0].playbackUrl ?? ytTracks[0].url,
+        }];
+      }
+    } catch {
+      // 保留 YouTube 連結作為備用
+    }
+  }
+  return ytTracks;
 }
 
 export async function searchDiscordMusicTracks(query: string, limit = 5): Promise<DiscordMusicTrack[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
   const safeLimit = Math.max(1, Math.min(10, Math.floor(limit)));
+  try {
+    const { searchSpotifyTracks } = await import("../../spotify-control");
+    const spotifyTracks = await searchSpotifyTracks(trimmed, safeLimit);
+    if (spotifyTracks.length > 0) return spotifyTracks;
+  } catch (err) {
+    console.warn("[DiscordMusicSource] Spotify 搜尋失敗，改用 YouTube 搜尋:", err instanceof Error ? err.message : err);
+  }
   const binary = await ensureYtDlpBinary();
   const result = await runYtDlpJson(binary, [
     "--dump-single-json",
@@ -768,15 +799,19 @@ export function discordMusicSeekArgs(startAtSeconds = 0): string[] {
 }
 
 export function discordMusicStreamArgs(source: string, startAtSeconds = 0): string[] {
+  const ffmpegPath = ffmpegStaticPath?.replace("app.asar", "app.asar.unpacked");
   return [
     ...bilibiliCookieArgs(source),
     "--no-playlist",
     "--no-warnings",
     "--no-progress",
-    "--retries", "5",
-    "--fragment-retries", "5",
+    "--retries", "10",
+    "--fragment-retries", "10",
     "--retry-sleep", "1",
-    "--socket-timeout", "20",
+    "--socket-timeout", "15",
+    "--buffer-size", "64k",
+    "--http-chunk-size", "10M",
+    ...(ffmpegPath ? ["--ffmpeg-location", ffmpegPath] : []),
     "--format", "bestaudio/best",
     ...discordMusicSeekArgs(startAtSeconds),
     "--output", "-",

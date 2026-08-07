@@ -45,6 +45,7 @@ describe("DiscordAdapter message security", () => {
     expect(shouldHandleDiscordMessage(fakeMessage({ guildId: "guild-1" }), defaults, "bot-1")).toBe(false);
     expect(shouldHandleDiscordMessage(fakeMessage({ guildId: "guild-1", mentioned: true }), defaults, "bot-1")).toBe(true);
     expect(shouldHandleDiscordMessage(fakeMessage({ guildId: "guild-1", content: "/你好" }), defaults, "bot-1")).toBe(true);
+    expect(shouldHandleDiscordMessage(fakeMessage({ guildId: "guild-1", content: "ww幫助" }), defaults, "bot-1")).toBe(true);
   });
 
   it("ignores bots and enforces all configured allowlists", () => {
@@ -80,6 +81,20 @@ describe("DiscordAdapter text voice attachment routing", () => {
     expect(isDiscordTextVoiceRequestText("能傳一段晚安的語音嗎")).toBe(true);
     expect(isDiscordTextVoiceRequestText("能說句鳴潮牛逼嗎")).toBe(true);
     expect(isDiscordTextVoiceRequestText("能只說句鳴潮牛逼！嗎")).toBe(true);
+  });
+
+  it("recognizes expanded natural voice requests and capability questions", () => {
+    expect(isDiscordTextVoiceRequestText("你能傳語音嗎")).toBe(true);
+    expect(isDiscordTextVoiceRequestText("你會發語音嗎")).toBe(true);
+    expect(isDiscordTextVoiceRequestText("想聽你的聲音")).toBe(true);
+    expect(isDiscordTextVoiceRequestText("用語音回我")).toBe(true);
+    expect(isDiscordTextVoiceRequestText("用講的")).toBe(true);
+    expect(isDiscordTextVoiceRequestText("唸個笑話給我聽")).toBe(true);
+    expect(isDiscordTextVoiceRequestText("發個語音吧")).toBe(true);
+    expect(isDiscordTextVoiceRequestText("和我說睡前 ASMR 陪伴我休息")).toBe(true);
+    expect(isDiscordTextVoiceRequestText("唱首歌給我聽吧")).toBe(true);
+    expect(isDiscordTextVoiceRequestText("/asmr")).toBe(true);
+    expect(isDiscordTextVoiceRequestText("/sing")).toBe(true);
   });
 
   it("does not divert normal chat or music controls into TTS attachments", () => {

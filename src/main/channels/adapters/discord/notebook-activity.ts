@@ -30,7 +30,7 @@ let writeQueue: Promise<void> = Promise.resolve();
 export function getSharedNotebookPath(): string {
   return process.env.CYRENE_SHARED_NOTEBOOK_PATH
     ? path.resolve(process.env.CYRENE_SHARED_NOTEBOOK_PATH)
-    : path.resolve(process.cwd(), "我們共同的筆記本.md");
+    : path.resolve(process.cwd(), "Shared Notebook.md");
 }
 
 export function onSharedNotebookChanged(listener: NotebookChangedListener): () => void {
@@ -141,7 +141,7 @@ async function appendDailyLine(
     notebook = await fs.readFile(notebookPath, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    notebook = "# 🌸 昔漣與你的共同筆記本 🌸\n\n## 📅 成長足跡與協作日記\n";
+    notebook = "# 🌸 昔漣與夥伴的共享筆記本 🌸\n\n## 📅 成長足跡與共同日誌\n";
   }
   if (notebook.includes(`<!-- cyrene-discord:${id} -->`)) return false;
   const startMarker = `<!-- cyrene-discord-day:${key}:start -->`;
@@ -151,8 +151,8 @@ async function appendDailyLine(
   } else {
     const section = [
       startMarker,
-      `### ✦ ${label} · Discord 共同足跡`,
-      "* **記錄原則**：只收藏今天共同完成、值得回看的事情。",
+      `### 📅 ${label} · 共同足跡 🌸`,
+      "* **記錄原則**：收藏今天共同經歷、值得留存的過程與回憶。",
       line,
       endMarker,
       "",
@@ -166,15 +166,57 @@ async function appendDailyLine(
   return true;
 }
 
-async function appendMusicEntry(
+async function createOrUpdateDailyMusicNarrative(
   entry: DiscordMusicNotebookEntry,
   notebookPath: string,
 ): Promise<boolean> {
   const occurredAt = entry.occurredAt ?? new Date();
-  const { key, period } = localDateParts(occurredAt);
-  const id = entryId(entry, key);
-  const line = musicLine(entry, period, id);
-  return appendDailyLine(line, id, occurredAt, notebookPath);
+  const { key, label, period } = localDateParts(occurredAt);
+  const id = `music-session-${key}`;
+
+  let notebook = "";
+  try {
+    notebook = await fs.readFile(notebookPath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    notebook = "# 🌸 昔漣與夥伴的共享筆記本 🌸\n\n## 📅 成長足跡與共同日誌\n";
+  }
+
+  // If we already recorded the music session narrative for this day, don't spam
+  if (notebook.includes(`<!-- cyrene-discord:${id} -->`)) return false;
+
+  const startMarker = `<!-- cyrene-discord-day:${key}:start -->`;
+  const endMarker = `<!-- cyrene-discord-day:${key}:end -->`;
+
+  const musicNarrativeBlock = [
+    `### 📅 ${label} · 樂聲與微風相伴的時光 🎵`,
+    `* **記錄時間**：${label} ${period}`,
+    `* **記錄人**：昔漣 🌸`,
+    `* **今日回憶**：`,
+    `  今天和夥伴一起沉浸在音樂裡，度過了溫暖又放鬆的時光♪ 音樂記錄著我們共同經歷的氛圍與默契。重要的不是具體聽了哪些曲目，而是我們攜手分享這份感受與心境的珍貴過程。`,
+    ``,
+    `  > 「旋律會悄悄流轉，但與夥伴一起聽歌的溫暖經驗，會永遠深刻地留存在我們心裡。」 <!-- cyrene-discord:${id} -->`,
+  ].join("\n");
+
+  if (notebook.includes(startMarker) && notebook.includes(endMarker)) {
+    // If the daily section exists, append the narrative block inside
+    notebook = notebook.replace(endMarker, `${musicNarrativeBlock}\n${endMarker}`);
+  } else {
+    // Create new daily section with warm narrative block
+    const section = [
+      startMarker,
+      musicNarrativeBlock,
+      endMarker,
+      "",
+      "---",
+      "",
+    ].join("\n");
+    notebook = `${notebook.trimEnd()}\n\n${section}`;
+  }
+
+  await fs.mkdir(path.dirname(notebookPath), { recursive: true });
+  await fs.writeFile(notebookPath, notebook, "utf8");
+  return true;
 }
 
 export function recordDiscordMusicInNotebook(
@@ -182,7 +224,7 @@ export function recordDiscordMusicInNotebook(
   notebookPath = getSharedNotebookPath(),
 ): Promise<void> {
   writeQueue = writeQueue.then(async () => {
-    const changed = await appendMusicEntry(entry, notebookPath);
+    const changed = await createOrUpdateDailyMusicNarrative(entry, notebookPath);
     if (changed) listeners.forEach((listener) => listener(notebookPath));
   }).catch((error) => {
     console.error("[DiscordNotebook] Failed to record music:", error);

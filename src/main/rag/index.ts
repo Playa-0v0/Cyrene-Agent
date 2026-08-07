@@ -140,6 +140,23 @@ export async function addMemory(
   return entry.id;
 }
 
+/** 批量寫入記憶索引。對話逐字檔案回填時使用，避免每一則都重複跑存檔。 */
+export async function addMemoryBatch(
+  items: Array<{ text: string; source?: string; metadata?: Record<string, unknown> }>,
+): Promise<string[]> {
+  if (!store || !provider) throw new Error("RAG not initialized");
+  if (items.length === 0) return [];
+  const entries = await store.addBatch(
+    items.map((item) => ({
+      text: item.text,
+      source: item.source ?? "user_memory",
+      metadata: item.metadata,
+    })),
+    provider,
+  );
+  return entries.map((entry) => entry.id);
+}
+
 export function removeMemory(id: string): boolean {
   return store?.removeById(id) ?? false;
 }

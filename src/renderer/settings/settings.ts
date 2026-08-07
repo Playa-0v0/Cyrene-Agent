@@ -6,6 +6,7 @@ import {
   formatChatRelativeTime,
   type ChatSessionMetaUI,
 } from "../../shared/chat-ui";
+import type { Chart as ChartInstance, ChartConfiguration } from "chart.js";
 
 // Inline modal (to avoid Vite tree-shaking)
 let _cyModalOverlay: HTMLElement | null = null;
@@ -168,10 +169,21 @@ interface ModelSettings {
   stickerSize: "small" | "standard" | "large";
   stickerSimilarityThreshold: number;
   vision?: {
+    enabled?: boolean;
+    autoAnalyze?: boolean;
+    maxImages?: number;
+    maxImageMb?: number;
     syncWithMain: boolean;
     baseUrl: string;
     apiKey: string;
     model: string;
+    screenCompanionEnabled?: boolean;
+    observeIntervalSeconds?: number;
+    talkativeness?: "quiet" | "normal" | "active" | "chatty";
+    minTalkIntervalSeconds?: number;
+    proactiveTarget?: "desktop" | "discord" | "wechat";
+    discordSubTarget?: "dm" | "channel";
+    discordChannelId?: string;
   };
 }
 
@@ -891,6 +903,19 @@ const visionModelInput = document.getElementById("vision-model") as HTMLInputEle
 const visionFieldsWrap = document.querySelector(".vision-fields") as HTMLElement;
 const testVisionBtn = document.getElementById("test-vision-btn") as HTMLButtonElement;
 const visionTestStatus = document.getElementById("vision-test-status") as HTMLElement;
+const visionEnabledInput = document.getElementById("vision-enabled") as HTMLInputElement;
+const visionAutoAnalyzeInput = document.getElementById("vision-auto-analyze") as HTMLInputElement;
+const visionMaxImagesSelect = document.getElementById("vision-max-images") as HTMLSelectElement;
+const visionMaxImageMbSelect = document.getElementById("vision-max-image-mb") as HTMLSelectElement;
+const screenCompanionEnabledInput = document.getElementById("screen-companion-enabled") as HTMLInputElement | null;
+const companionObserveIntervalBlocks = document.getElementById("companion-observe-interval") as HTMLElement | null;
+const companionTalkativenessBlocks = document.getElementById("companion-talkativeness") as HTMLElement | null;
+const companionMinIntervalBlocks = document.getElementById("companion-min-interval") as HTMLElement | null;
+const companionProactiveTargetBlocks = document.getElementById("companion-proactive-target") as HTMLElement | null;
+const companionDiscordSubgroup = document.getElementById("companion-discord-subgroup") as HTMLElement | null;
+const companionDiscordSubtargetBlocks = document.getElementById("companion-discord-subtarget") as HTMLElement | null;
+const companionDiscordChannelWrap = document.getElementById("companion-discord-channel-wrap") as HTMLElement | null;
+const companionDiscordChannelIdInput = document.getElementById("companion-discord-channel-id") as HTMLInputElement | null;
 
 // 渲染端內存緩存：保存每個廠商上一次填寫的 baseUrl / model / apiKey
 // 切廠商時從這裡讀，保存時同步進去；持久化由 main 進程的 saveModelSettings 負責（perProvider 字段）。
@@ -1124,7 +1149,15 @@ function getCurrentModelValue(): string {
  * 用 visionBaseUrl 填視覺框，讓用戶看到的就是正確的視覺入口，不用手動改。
  */
 function applyVisionSyncUI(): void {
+  const enabled = visionEnabledInput.checked;
   const synced = visionSyncMainBtn.classList.contains("is-active");
+  visionSyncMainBtn.disabled = !enabled;
+  visionSyncIndepBtn.disabled = !enabled;
+  visionAutoAnalyzeInput.disabled = !enabled;
+  visionMaxImagesSelect.disabled = !enabled;
+  visionMaxImageMbSelect.disabled = !enabled;
+  testVisionBtn.disabled = !enabled;
+  visionFieldsWrap.closest(".vision-config-section")?.classList.toggle("is-disabled", !enabled);
   if (synced) {
     visionFieldsWrap.classList.add("is-locked");
     // 找當前廠商 preset，看有沒有 visionBaseUrl
@@ -1136,6 +1169,9 @@ function applyVisionSyncUI(): void {
   } else {
     visionFieldsWrap.classList.remove("is-locked");
   }
+  for (const input of [visionBaseUrlInput, visionApiKeyInput, visionModelInput]) {
+    input.disabled = !enabled;
+  }
 }
 
 /** 切換視覺同步膠囊按鈕的激活態。synced=true 激活"與主相同"，false 激活"獨立配置"。 */
@@ -1144,6 +1180,43 @@ function setVisionSyncState(synced: boolean): void {
   visionSyncMainBtn.setAttribute("aria-pressed", String(synced));
   visionSyncIndepBtn.classList.toggle("is-active", !synced);
   visionSyncIndepBtn.setAttribute("aria-pressed", String(!synced));
+}
+
+function getOptionBlockValue(container: HTMLElement | null, fallback: string): string {
+  if (!container) return fallback;
+  const activeBtn = container.querySelector(".option-block.is-active") as HTMLButtonElement | null;
+  return activeBtn?.dataset.value ?? fallback;
+}
+
+function setOptionBlockValue(container: HTMLElement | null, value: string): void {
+  if (!container) return;
+  const buttons = container.querySelectorAll<HTMLButtonElement>(".option-block");
+  for (const btn of buttons) {
+    const isActive = btn.dataset.value === value;
+    btn.classList.toggle("is-active", isActive);
+    btn.setAttribute("aria-pressed", String(isActive));
+  }
+}
+
+function bindOptionBlocksClick(container: HTMLElement | null, onChange?: () => void): void {
+  if (!container) return;
+  container.querySelectorAll<HTMLButtonElement>(".option-block").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setOptionBlockValue(container, btn.dataset.value ?? "");
+      onChange?.();
+    });
+  });
+}
+
+function syncCompanionDiscordUI(): void {
+  const target = getOptionBlockValue(companionProactiveTargetBlocks, "desktop");
+  if (companionDiscordSubgroup) {
+    companionDiscordSubgroup.style.display = target === "discord" ? "" : "none";
+  }
+  const subtarget = getOptionBlockValue(companionDiscordSubtargetBlocks, "dm");
+  if (companionDiscordChannelWrap) {
+    companionDiscordChannelWrap.style.display = target === "discord" && subtarget === "channel" ? "" : "none";
+  }
 }
 
 function applyPreset(providerName: string, preferredModel?: string, preferredApiKey?: string, preferredBaseUrl?: string, preferredDisplayName?: string, preferredExplicitTransport?: "openai" | "anthropic" | "auto"): void {
@@ -1232,18 +1305,44 @@ async function loadConfig(): Promise<void> {
     // 視覺模型配置
     const vision = cfg.vision;
     if (vision) {
+      visionEnabledInput.checked = vision.enabled !== false;
+      visionAutoAnalyzeInput.checked = vision.autoAnalyze !== false;
+      visionMaxImagesSelect.value = String(Math.max(1, Math.min(4, vision.maxImages ?? 4)));
+      visionMaxImageMbSelect.value = String([1, 5, 10].includes(vision.maxImageMb ?? 10) ? (vision.maxImageMb ?? 10) : 10);
       setVisionSyncState(vision.syncWithMain);
       visionBaseUrlInput.value = vision.baseUrl || "";
       visionApiKeyInput.value = vision.apiKey || "";
       visionModelInput.value = vision.model || "";
+      if (screenCompanionEnabledInput) screenCompanionEnabledInput.checked = vision.screenCompanionEnabled === true;
+      setOptionBlockValue(companionObserveIntervalBlocks, String(vision.observeIntervalSeconds ?? 300));
+      setOptionBlockValue(companionTalkativenessBlocks, vision.talkativeness ?? "normal");
+      setOptionBlockValue(companionMinIntervalBlocks, String(vision.minTalkIntervalSeconds ?? 30));
+      setOptionBlockValue(companionProactiveTargetBlocks, vision.proactiveTarget ?? "desktop");
+      setOptionBlockValue(companionDiscordSubtargetBlocks, vision.discordSubTarget ?? "dm");
+      if (companionDiscordChannelIdInput) companionDiscordChannelIdInput.value = vision.discordChannelId || "";
+      syncCompanionDiscordUI();
+      syncScreenCompanionUI();
     } else {
       // 用戶從未配過視覺。按當前主模型 supportsVision 決定默認——
       // 多模態主模型用戶開箱即用（默認"與主相同"），非視覺主模型則默認"獨立配置"。
       const preset = findPreset(cfg.provider);
+      visionEnabledInput.checked = preset?.supportsVision === true;
+      visionAutoAnalyzeInput.checked = true;
+      visionMaxImagesSelect.value = "4";
+      visionMaxImageMbSelect.value = "10";
       setVisionSyncState(preset?.supportsVision === true);
       visionBaseUrlInput.value = "";
       visionApiKeyInput.value = "";
       visionModelInput.value = "";
+      if (screenCompanionEnabledInput) screenCompanionEnabledInput.checked = false;
+      setOptionBlockValue(companionObserveIntervalBlocks, "300");
+      setOptionBlockValue(companionTalkativenessBlocks, "normal");
+      setOptionBlockValue(companionMinIntervalBlocks, "30");
+      setOptionBlockValue(companionProactiveTargetBlocks, "desktop");
+      setOptionBlockValue(companionDiscordSubtargetBlocks, "dm");
+      if (companionDiscordChannelIdInput) companionDiscordChannelIdInput.value = "";
+      syncCompanionDiscordUI();
+      syncScreenCompanionUI();
     }
     applyVisionSyncUI();
 
@@ -1311,6 +1410,35 @@ sidebarVisibleInput.addEventListener("change", () => {
   if (sidebarVisibleInput.checked) window.settings?.openSidebar();
   else window.settings?.closeSidebar();
   void window.settings?.saveGeneral({ sidebarVisible: sidebarVisibleInput.checked });
+});
+
+bindOptionBlocksClick(companionObserveIntervalBlocks, () => setSaveStatus("有未保存的更改"));
+bindOptionBlocksClick(companionTalkativenessBlocks, () => setSaveStatus("有未保存的更改"));
+bindOptionBlocksClick(companionMinIntervalBlocks, () => setSaveStatus("有未保存的更改"));
+bindOptionBlocksClick(companionProactiveTargetBlocks, () => {
+  syncCompanionDiscordUI();
+  setSaveStatus("有未保存的更改");
+});
+bindOptionBlocksClick(companionDiscordSubtargetBlocks, () => {
+  syncCompanionDiscordUI();
+  setSaveStatus("有未保存的更改");
+});
+function syncScreenCompanionUI(): void {
+  const enabled = screenCompanionEnabledInput?.checked === true;
+  const section = screenCompanionEnabledInput?.closest(".screen-companion-section");
+  if (!section) return;
+  section.classList.toggle("is-disabled", !enabled);
+  syncCompanionDiscordUI();
+}
+
+screenCompanionEnabledInput?.addEventListener("change", async () => {
+  syncScreenCompanionUI();
+  try {
+    await persistApiSettings();
+    setSaveStatus("已保存", "is-ok");
+  } catch {
+    setSaveStatus("保存失敗", "is-error");
+  }
 });
 
 tasksVisibleInput.addEventListener("change", () => {
@@ -2124,6 +2252,18 @@ visionSyncIndepBtn.addEventListener("click", () => {
   applyVisionSyncUI();
   setSaveStatus("有未保存的更改");
 });
+visionEnabledInput.addEventListener("change", async () => {
+  applyVisionSyncUI();
+  try {
+    await persistApiSettings();
+    setSaveStatus("已保存", "is-ok");
+  } catch {
+    setSaveStatus("保存失敗", "is-error");
+  }
+});
+for (const control of [visionAutoAnalyzeInput, visionMaxImagesSelect, visionMaxImageMbSelect]) {
+  control.addEventListener("change", () => setSaveStatus("有未保存的更改"));
+}
 
 // 主配置變化時，若處於"與主相同"，聯動更新視覺三框。
 // baseUrl 用 visionBaseUrl（若有），其他直接複製。
@@ -2333,11 +2473,22 @@ async function persistApiSettings(): Promise<void> {
     apiKey: apiKeyInput.value.trim(),
     explicitTransport: transportSelect.value as "openai" | "anthropic" | "auto",
     vision: {
+      enabled: visionEnabledInput.checked,
+      autoAnalyze: visionAutoAnalyzeInput.checked,
+      maxImages: Number(visionMaxImagesSelect.value),
+      maxImageMb: Number(visionMaxImageMbSelect.value),
       syncWithMain: isVisionSynced(),
       // syncWithMain=true 時三字段傳空（main 進程不落盤，運行時從主配置讀）
       baseUrl: isVisionSynced() ? "" : visionBaseUrlInput.value.trim(),
       apiKey: isVisionSynced() ? "" : visionApiKeyInput.value.trim(),
       model: isVisionSynced() ? "" : visionModelInput.value.trim(),
+      screenCompanionEnabled: screenCompanionEnabledInput?.checked === true,
+      observeIntervalSeconds: Number(getOptionBlockValue(companionObserveIntervalBlocks, "300")),
+      talkativeness: getOptionBlockValue(companionTalkativenessBlocks, "normal") as "quiet" | "normal" | "active" | "chatty",
+      minTalkIntervalSeconds: Number(getOptionBlockValue(companionMinIntervalBlocks, "30")),
+      proactiveTarget: getOptionBlockValue(companionProactiveTargetBlocks, "desktop") as "desktop" | "discord" | "wechat",
+      discordSubTarget: getOptionBlockValue(companionDiscordSubtargetBlocks, "dm") as "dm" | "channel",
+      discordChannelId: companionDiscordChannelIdInput ? companionDiscordChannelIdInput.value.trim() : "",
     },
   });
 }
@@ -2559,12 +2710,16 @@ function switchSection(section: string): void {
   if (isSkills) void renderSkills();
   const tokenPanel = document.getElementById("token-panel");
   if (tokenPanel) tokenPanel.classList.toggle("is-hidden", !isTokens);
-  if (isTokens) void refreshAgentActivity(7);
+  if (isTokens) {
+    void refreshTokenPanel(tokenRangeDays);
+    void refreshAgentActivity(tokenRangeDays);
+  }
   const securityPanel = document.getElementById("security-panel");
   if (securityPanel) securityPanel.classList.toggle("is-hidden", !isSecurity);
   if (isSecurity) void loadSecurityPanel();
   const channelsPanel = document.getElementById("channels-panel");
   if (channelsPanel) channelsPanel.classList.toggle("is-hidden", !isChannels);
+  setChannelsPolling(isChannels);
   if (isChannels) {
     void loadChannelsPanel().then(() => {
       if (!isDiscordChannel) return;
@@ -2983,6 +3138,27 @@ let discordMusicRefreshTimer: number | null = null;
 let discordMusicVolumeTimer: number | null = null;
 let spotifyStatus: SpotifyPlaybackStatus = { configured: false, connected: false, devices: [] };
 let spotifyRefreshTimer: number | null = null;
+
+function setChannelsPolling(active: boolean): void {
+  if (discordMusicRefreshTimer != null) {
+    window.clearInterval(discordMusicRefreshTimer);
+    discordMusicRefreshTimer = null;
+  }
+  if (spotifyRefreshTimer != null) {
+    window.clearInterval(spotifyRefreshTimer);
+    spotifyRefreshTimer = null;
+  }
+  if (!active || document.visibilityState === "hidden") return;
+
+  // 音樂狀態需要接近即時，但只在使用者真的看著「連接手機」面板時輪詢。
+  discordMusicRefreshTimer = window.setInterval(() => void refreshDiscordMusic(), 2_000);
+  spotifyRefreshTimer = window.setInterval(() => void refreshSpotify(), 5_000);
+}
+
+document.addEventListener("visibilitychange", () => {
+  const channelsPanel = document.getElementById("channels-panel");
+  setChannelsPolling(!!channelsPanel && !channelsPanel.classList.contains("is-hidden"));
+});
 let spotifyVolumeTimer: number | null = null;
 
 function setDiscordProfileFeedback(kind: "info" | "ok" | "err", message: string): void {
@@ -3449,50 +3625,46 @@ async function loadChannelsPanel(): Promise<void> {
   channelsInitialized = true;
   try {
     const cfg = await window.settings.channelsGetConfig();
-    if (channelsWechatEnabledEl) channelsWechatEnabledEl.checked = !!cfg.wechat.enabled;
-    if (channelsFeishuEnabledEl) channelsFeishuEnabledEl.checked = !!cfg.feishu.enabled;
-    if (channelsDiscordEnabledEl) channelsDiscordEnabledEl.checked = !!cfg.discord.enabled;
-    if (channelsRateUserEl) channelsRateUserEl.value = String(cfg.rateLimitPerUser ?? 10);
-    if (channelsRateChannelEl) channelsRateChannelEl.value = String(cfg.rateLimitPerChannel ?? 100);
-    if (channelsTtsEl) channelsTtsEl.checked = cfg.ttsEnabled !== false;
-    if (channelsStickerEl) channelsStickerEl.checked = cfg.stickerEnabled !== false;
-    if (channelsMirrorEl) channelsMirrorEl.checked = cfg.mirrorToDesktop !== false;
-    if (channelsSandboxEl) channelsSandboxEl.checked = cfg.toolSandbox === "safe-only";
+    if (channelsWechatEnabledEl) channelsWechatEnabledEl.checked = !!cfg?.wechat?.enabled;
+    if (channelsFeishuEnabledEl) channelsFeishuEnabledEl.checked = !!cfg?.feishu?.enabled;
+    if (channelsDiscordEnabledEl) channelsDiscordEnabledEl.checked = !!cfg?.discord?.enabled;
+    if (channelsRateUserEl) channelsRateUserEl.value = String(cfg?.rateLimitPerUser ?? 10);
+    if (channelsRateChannelEl) channelsRateChannelEl.value = String(cfg?.rateLimitPerChannel ?? 100);
+    if (channelsTtsEl) channelsTtsEl.checked = cfg?.ttsEnabled !== false;
+    if (channelsStickerEl) channelsStickerEl.checked = cfg?.stickerEnabled !== false;
+    if (channelsMirrorEl) channelsMirrorEl.checked = cfg?.mirrorToDesktop !== false;
+    if (channelsSandboxEl) channelsSandboxEl.checked = cfg?.toolSandbox === "safe-only";
 
     // 飛書字段填充（長連接模式只需要 App ID；secret 加密存盤，UI 不回填明文）
-    if (channelsFeishuAppIdEl) channelsFeishuAppIdEl.value = cfg.feishu.appId ?? "";
+    if (channelsFeishuAppIdEl) channelsFeishuAppIdEl.value = cfg?.feishu?.appId ?? "";
     if (channelsFeishuAppSecretEl) {
       channelsFeishuAppSecretEl.value = "";
-      channelsFeishuAppSecretEl.placeholder = cfg.feishu.appSecret
+      channelsFeishuAppSecretEl.placeholder = cfg?.feishu?.appSecret
         ? "已保存（輸入新值會覆蓋）"
         : "點擊保存配置時加密保存";
     }
     if (channelsDiscordTokenEl) {
       channelsDiscordTokenEl.value = "";
-      channelsDiscordTokenEl.placeholder = cfg.discord.botToken ? "已保存（輸入新值會覆蓋）" : "保存時會加密";
+      channelsDiscordTokenEl.placeholder = cfg?.discord?.botToken ? "已保存（輸入新值會覆蓋）" : "保存時會加密";
     }
-    if (channelsDiscordGuildIdsEl) channelsDiscordGuildIdsEl.value = (cfg.discord.allowedGuildIds ?? []).join(", ");
-    if (channelsDiscordChannelIdsEl) channelsDiscordChannelIdsEl.value = (cfg.discord.allowedChannelIds ?? []).join(", ");
-    if (channelsDiscordUserIdsEl) channelsDiscordUserIdsEl.value = (cfg.discord.allowedUserIds ?? []).join(", ");
-    if (channelsDiscordCodexOwnerIdEl) channelsDiscordCodexOwnerIdEl.value = cfg.discord.codexImageOwnerId ?? "";
-    if (channelsDiscordRequireMentionEl) channelsDiscordRequireMentionEl.checked = cfg.discord.requireMention !== false;
-    if (channelsDiscordVoiceEnabledEl) channelsDiscordVoiceEnabledEl.checked = cfg.discord.voiceEnabled !== false;
-    if (channelsSpotifyClientIdEl) channelsSpotifyClientIdEl.value = cfg.spotify.clientId ?? "";
+    if (channelsDiscordGuildIdsEl) channelsDiscordGuildIdsEl.value = (cfg?.discord?.allowedGuildIds ?? []).join(", ");
+    if (channelsDiscordChannelIdsEl) channelsDiscordChannelIdsEl.value = (cfg?.discord?.allowedChannelIds ?? []).join(", ");
+    if (channelsDiscordUserIdsEl) channelsDiscordUserIdsEl.value = (cfg?.discord?.allowedUserIds ?? []).join(", ");
+    if (channelsDiscordCodexOwnerIdEl) channelsDiscordCodexOwnerIdEl.value = cfg?.discord?.codexImageOwnerId ?? "";
+    if (channelsDiscordRequireMentionEl) channelsDiscordRequireMentionEl.checked = cfg?.discord?.requireMention !== false;
+    if (channelsDiscordVoiceEnabledEl) channelsDiscordVoiceEnabledEl.checked = cfg?.discord?.voiceEnabled !== false;
+    if (channelsSpotifyClientIdEl) channelsSpotifyClientIdEl.value = cfg?.spotify?.clientId ?? "";
     if (channelsSpotifyClientSecretEl) {
       channelsSpotifyClientSecretEl.value = "";
-      channelsSpotifyClientSecretEl.placeholder = cfg.spotify.clientSecret ? "已加密保存（輸入新值會覆蓋）" : "從 Spotify Developer Dashboard 複製";
+      channelsSpotifyClientSecretEl.placeholder = cfg?.spotify?.clientSecret ? "已加密保存（輸入新值會覆蓋）" : "從 Spotify Developer Dashboard 複製";
     }
 
     // 拉一次渠道狀態
-    const status = (await window.settings.channelsGetStatus()) as Record<string, { phase: string; message?: string }>;
-    renderChannelStatus(channelsWechatStatusEl, status.wechat?.phase ?? "offline", status.wechat?.message);
-    renderChannelStatus(channelsFeishuStatusEl, status.feishu?.phase ?? "offline", status.feishu?.message);
-    renderChannelStatus(channelsDiscordStatusEl, status.discord?.phase ?? "offline", status.discord?.message);
+    const status = ((await window.settings?.channelsGetStatus?.()) || {}) as Record<string, { phase: string; message?: string }>;
+    renderChannelStatus(channelsWechatStatusEl, status?.wechat?.phase ?? "offline", status?.wechat?.message);
+    renderChannelStatus(channelsFeishuStatusEl, status?.feishu?.phase ?? "offline", status?.feishu?.message);
+    renderChannelStatus(channelsDiscordStatusEl, status?.discord?.phase ?? "offline", status?.discord?.message);
     await Promise.all([refreshDiscordProfile(), refreshDiscordMusic(), refreshSpotify(), refreshBilibili()]);
-    if (discordMusicRefreshTimer == null) {
-      discordMusicRefreshTimer = window.setInterval(() => void refreshDiscordMusic(), 1000);
-    }
-    if (spotifyRefreshTimer == null) spotifyRefreshTimer = window.setInterval(() => void refreshSpotify(), 3000);
     // Phase 3.4：拉一次消息日誌
     void refreshChannelsLog();
 
@@ -4040,17 +4212,15 @@ channelsLogClearBtn?.addEventListener("click", async () => {
   await refreshChannelsLog();
 });
 
-// 首次進入 channels panel 時拉一次日誌
-// （也可以在用戶展開 details 時再拉，但保持簡單直接拉）
-void loadChannelsPanel();
 // 啟動時讀 URL hash 決定初始標籤（main 通過 loadURL 帶 #api 實現"切換模型按鈕跳 API"）。
 // 無 hash 默認 general。
 const initialSection = (window.location.hash || "#general").slice(1);
 switchSection(initialSection);
-window.addEventListener("hashchange", () => {
-  switchSection((window.location.hash || "#general").slice(1));
+window.addEventListener("message", (event) => {
+  if (event.data && typeof event.data === "object" && event.data.type === "switch-section" && typeof event.data.section === "string") {
+    switchSection(event.data.section);
+  }
 });
-// 監聽 main 發來的切標籤事件（窗口已打開時，main 不重新 loadURL，改發事件）
 window.settings?.onSwitchSection?.((section) => {
   switchSection(section);
 });
@@ -5479,9 +5649,15 @@ window.chatStore?.onActiveSessionChanged((sessionId) => {
    - 全空時顯示空態（暫無用量數據）
    ============================================================ */
 
-import { Chart, registerables, type ChartConfiguration } from "chart.js";
+let chartModulePromise: Promise<typeof import("chart.js")> | null = null;
 
-Chart.register(...registerables);
+async function loadChartModule(): Promise<typeof import("chart.js")> {
+  chartModulePromise ??= import("chart.js").then((module) => {
+    module.Chart.register(...module.registerables);
+    return module;
+  });
+  return chartModulePromise;
+}
 
 interface TokenDayData {
   date: string;       // ISO 日期 "06-15"
@@ -5609,12 +5785,14 @@ function hideTokenTooltip(): void {
 }
 
 // Chart.js 波浪面積圖
-let tokenTrendChart: Chart | null = null;
+let tokenTrendChart: ChartInstance | null = null;
 let tokenRangeDays = 7;
 
-function renderTokenTrendChart(data: TokenDayData[]): void {
+async function renderTokenTrendChart(data: TokenDayData[]): Promise<void> {
   const canvas = document.getElementById("token-trend-chart") as HTMLCanvasElement | null;
   if (!canvas) return;
+
+  const { Chart } = await loadChartModule();
 
   // 銷燬舊實例避免重疊
   if (tokenTrendChart) { tokenTrendChart.destroy(); tokenTrendChart = null; }
@@ -5768,7 +5946,7 @@ async function refreshTokenPanel(days: number): Promise<void> {
   if (chartsEl) chartsEl.classList.remove("is-hidden");
   updateTokenStats(data);
   renderTokenBarChart(data);
-  renderTokenTrendChart(data);
+  await renderTokenTrendChart(data);
 }
 
 // 時間範圍按鈕交互
@@ -5858,9 +6036,7 @@ document.getElementById("diagnostic-export-btn")?.addEventListener("click", asyn
   }
 });
 
-// 初始渲染
-void refreshTokenPanel(7);
-void refreshAgentActivity(tokenRangeDays);
+// Token 圖表與 Chart.js 只在切到此面板時載入，避免每次打開設定頁都先解析大型圖表套件。
 
 /* ============================================================
    🎙️ TTS 設置面板交互
@@ -6313,6 +6489,78 @@ for (const [elId, field] of ttsSaveFields) {
 // MiniMax 流式播放開關
 ttsEl("tts-streaming").addEventListener("change", () => {
   void saveTtsField("ttsStreaming", ttsEl("tts-streaming").checked);
+});
+
+const cardOld = document.getElementById("voice-card-old");
+const cardNew = document.getElementById("voice-card-new");
+
+function updateVoiceCardUI(selected: "old" | "new") {
+  if (!cardOld || !cardNew) return;
+  if (selected === "old") {
+    cardOld.style.borderColor = "#ff94c2";
+    cardOld.style.background = "rgba(255,148,194,0.1)";
+    cardNew.style.borderColor = "rgba(255,255,255,0.15)";
+    cardNew.style.background = "transparent";
+  } else {
+    cardNew.style.borderColor = "#ff94c2";
+    cardNew.style.background = "rgba(255,148,194,0.1)";
+    cardOld.style.borderColor = "rgba(255,255,255,0.15)";
+    cardOld.style.background = "transparent";
+  }
+}
+
+cardOld?.addEventListener("click", () => {
+  updateVoiceCardUI("old");
+  const oldPath = "/Users/clark/Downloads/昔涟測試語音_官方包.wav";
+  ttsEl("tts-gptsovits-ref-audio").value = oldPath;
+  ttsEl("tts-gptsovits-prompt-text").value = "我是昔漣，今天也請多指教囉！";
+  void saveTtsField("ttsGptsovitsRefAudioPath", oldPath);
+  void saveTtsField("ttsGptsovitsPromptText", "我是昔漣，今天也請多指教囉！");
+});
+
+cardNew?.addEventListener("click", () => {
+  updateVoiceCardUI("new");
+  const newPath = "/Users/clark/Downloads/[BraveDown.Com] [昔涟全互动语音  用于训练AI] [1785565362] .mp3_0000914560_0001019200/[BraveDown.Com] [昔涟全互动语音  用于训练AI] [1785565362] .mp3_0000914560_0001019200.wav";
+  ttsEl("tts-gptsovits-ref-audio").value = newPath;
+  ttsEl("tts-gptsovits-prompt-text").value = "你好，我是昔漣，很高興遇見你～";
+  void saveTtsField("ttsGptsovitsRefAudioPath", newPath);
+  void saveTtsField("ttsGptsovitsPromptText", "你好，我是昔漣，很高興遇見你～");
+});
+
+// GPT-SoVITS 音色預設選擇
+document.getElementById("tts-gptsovits-preset-select")?.addEventListener("change", (e) => {
+  const val = (e.target as HTMLSelectElement).value;
+  if (val === "cyrene_mp3") {
+    updateVoiceCardUI("old");
+    const audioPath = "/Users/clark/Downloads/Cyrene.mp3";
+    ttsEl("tts-gptsovits-ref-audio").value = audioPath;
+    ttsEl("tts-gptsovits-prompt-text").value = "你好，我是昔漣。";
+    void saveTtsField("ttsGptsovitsRefAudioPath", audioPath);
+    void saveTtsField("ttsGptsovitsPromptText", ttsEl("tts-gptsovits-prompt-text").value);
+  } else if (val === "cyrene_official") {
+    updateVoiceCardUI("new");
+    const audioPath = "/Users/clark/Downloads/[BraveDown.Com] [昔涟全互动语音  用于训练AI] [1785565362] .mp3_0000914560_0001019200/[BraveDown.Com] [昔涟全互动语音  用于训练AI] [1785565362] .mp3_0000914560_0001019200.wav";
+    ttsEl("tts-gptsovits-ref-audio").value = audioPath;
+    ttsEl("tts-gptsovits-prompt-text").value = "你好，我是昔漣，很高興遇見你～";
+    void saveTtsField("ttsGptsovitsRefAudioPath", audioPath);
+    void saveTtsField("ttsGptsovitsPromptText", ttsEl("tts-gptsovits-prompt-text").value);
+  } else if (val === "cyrene_wav_pack") {
+    updateVoiceCardUI("old");
+    const audioPath = "/Users/clark/Downloads/昔涟測試語音_官方包.wav";
+    ttsEl("tts-gptsovits-ref-audio").value = audioPath;
+    ttsEl("tts-gptsovits-prompt-text").value = "我是昔漣，今天也請多指教囉！";
+    void saveTtsField("ttsGptsovitsRefAudioPath", audioPath);
+    void saveTtsField("ttsGptsovitsPromptText", ttsEl("tts-gptsovits-prompt-text").value);
+  } else if (val === "cyrene_sweet") {
+    ttsEl("tts-gptsovits-prompt-text").value = "你好，我是昔漣，今天想和你分享好多溫暖的故事喔～";
+    void saveTtsField("ttsGptsovitsPromptText", ttsEl("tts-gptsovits-prompt-text").value);
+  } else if (val === "cyrene_gentle") {
+    ttsEl("tts-gptsovits-prompt-text").value = "累了嗎？過來坐下吧，有我在你身邊呢。";
+    void saveTtsField("ttsGptsovitsPromptText", ttsEl("tts-gptsovits-prompt-text").value);
+  } else if (val === "cyrene_lively") {
+    ttsEl("tts-gptsovits-prompt-text").value = "太棒啦！今天我們也要元氣滿滿地一起出發囉！";
+    void saveTtsField("ttsGptsovitsPromptText", ttsEl("tts-gptsovits-prompt-text").value);
+  }
 });
 
 // GPT-SoVITS 選擇參考音頻

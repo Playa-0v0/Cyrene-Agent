@@ -35,16 +35,21 @@ function loadModelSettings(): ModelSettings {
     const filePath = path.join(app.getPath("userData"), "model-settings.json");
     if (!fs.existsSync(filePath)) return defaults;
     const raw = fs.readFileSync(filePath, "utf8");
-    const parsed = revealSecrets(JSON.parse(raw)) as Partial<ModelSettings>;
-    const explicitTransport: ModelSettings["explicitTransport"] =
-      parsed.explicitTransport === "openai" || parsed.explicitTransport === "anthropic" || parsed.explicitTransport === "auto"
-        ? parsed.explicitTransport
-        : undefined;
+    const parsed = revealSecrets(JSON.parse(raw)) as any;
+    const provider = typeof parsed.provider === "string" && parsed.provider.trim() ? parsed.provider.trim() : defaults.provider;
+    const perProfile = parsed.perProvider && typeof parsed.perProvider === "object" ? parsed.perProfile[provider] : null;
+
+    const baseUrl = (perProfile?.baseUrl || parsed.baseUrl || defaults.baseUrl).trim();
+    const model = (perProfile?.model || parsed.model || defaults.model).trim();
+    const apiKey = (perProfile?.apiKey || parsed.apiKey || "").trim();
+    const rawTransport = perProfile?.explicitTransport || parsed.explicitTransport;
+    const explicitTransport = rawTransport === "openai" || rawTransport === "anthropic" || rawTransport === "auto" ? rawTransport : undefined;
+
     return {
-      provider: typeof parsed.provider === "string" && parsed.provider.trim() ? parsed.provider.trim() : defaults.provider,
-      baseUrl: typeof parsed.baseUrl === "string" && parsed.baseUrl.trim() ? parsed.baseUrl.trim() : defaults.baseUrl,
-      model: typeof parsed.model === "string" && parsed.model.trim() ? parsed.model.trim() : defaults.model,
-      apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey.trim() : "",
+      provider,
+      baseUrl,
+      model,
+      apiKey,
       explicitTransport,
     };
   } catch { return defaults; }

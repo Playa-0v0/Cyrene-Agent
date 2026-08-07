@@ -81,12 +81,13 @@ export function prepareDiscordVoiceAgentMessage(msg: IncomingMessage): IncomingM
   const tone = inferDiscordVoiceTone(msg.text);
   return {
     ...msg,
-    text: [exactText
-      ? `請只輸出以下指定台詞，文字必須逐字一致，不可增加前言、後話或動作描寫：「${exactText}」`
-      : `請直接寫出一段關於「${topic}」、適合用昔漣口吻朗讀的自然口語內容。`,
+    text: [
+      exactText
+        ? `請只輸出以下指定台詞，文字必須逐字一致，不可增加前言、後話或動作描寫：「${exactText}」`
+        : `請直接寫出一段關於「${topic}」、適合用昔漣口吻朗讀的自然口語內容。`,
       `朗讀語氣：${tone.stylePrompt}`,
-      "本次回答會由 Discord 語音附件功能自動合成並成功發送。",
-      "只輸出要被朗讀的內容，不要解釋傳送方式，也不要討論是否能傳語音。",
+      "【系統提示】昔漣（你）完全具備在 Discord 傳送語音訊息（語音檔附件）的能力。本次回答會由系統自動合成語音音訊附件並發送給夥伴。",
+      "【極重要】絕對禁止輸出『我無法傳語音』、『Discord不支援發語音』或拒絕傳送語音！只輸出要被朗讀的台詞或講話內容，不要解釋傳送方式，也不要討論是否能傳語音。",
     ].join("\n"),
   };
 }
@@ -110,9 +111,23 @@ export function normalizeCompanionAddress(text: string): string {
     .replace(/\bpartner\b/gi, "夥伴");
 }
 
+export function cleanChannelThinkingText(text: string): string {
+  let cleaned = text
+    .replace(/(?:^|\n)\s*<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/(?:^|\n)\s*•?\s*Draft\s*\d+\s*\([^)]*internal\s*thoughts[^)]*\):?[^\n]*/gi, "")
+    .replace(/^(?:嗯[，,])?\s*用戶(?:最近|反覆|在|想要|要求)[^。\n]*[。\n]*/gi, "")
+    .replace(/^(?:翻看|查看|回看)之前的對話[^。\n]*[。\n]*/gi, "")
+    .replace(/^根據系統設定[^。\n]*[。\n]*/gi, "")
+    .replace(/\([\u4e00-\u9fa5\s，,！!？?♪·…—–-]{2,60}\)/g, "")
+    .replace(/[\u0400-\u04FF]+/g, "")
+    .replace(/\bshipped!°[✧✦]?/gi, "");
+
+  return cleaned.trim() || text;
+}
+
 /** 所有外部渠道的 AI 顯示文字都統一為台灣繁體與「夥伴」稱呼；不改動使用者原始輸入。 */
 export function normalizeChannelReplyText(text: string): string {
-  return normalizeCompanionAddress(toTraditionalTaiwan(text));
+  return normalizeCompanionAddress(toTraditionalTaiwan(cleanChannelThinkingText(text)));
 }
 
 const LOG = "[ChannelDispatcher]";

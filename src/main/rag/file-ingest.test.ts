@@ -70,12 +70,12 @@ describe("擴展名判斷", () => {
   it("isUnsupportedExt true", () => {
     expect(isUnsupportedExt(".zip")).toBe(true);
     expect(isUnsupportedExt(".pdf")).toBe(true);
-    expect(isUnsupportedExt(".png")).toBe(true);
     expect(isUnsupportedExt(".exe")).toBe(true);
   });
   it("isUnsupportedExt false", () => {
     expect(isUnsupportedExt(".txt")).toBe(false);
     expect(isUnsupportedExt(".md")).toBe(false);
+    expect(isUnsupportedExt(".png")).toBe(false);
     expect(isUnsupportedExt("")).toBe(false);
     expect(isUnsupportedExt(".unknown")).toBe(false);
   });
@@ -142,10 +142,11 @@ describe("ingestOneFile", () => {
     }
   });
 
-  it("圖片 (.png) → kind:unsupported", async () => {
+  it("圖片 (.png) → 保留路徑供本輪視覺辨識", async () => {
     const fp = write("img.png", makeBin(100));
     const r = await ingestOneFile(fp, mockImport);
-    expect(r.kind).toBe("unsupported");
+    expect(r).toMatchObject({ kind: "image", filePath: fp, mime: "image/png" });
+    expect(mockImport).not.toHaveBeenCalled();
   });
 
   it("無擴展名、二進制（含 null 字節） → unsupported", async () => {
@@ -251,14 +252,14 @@ describe("ingestPaths", () => {
     expect(names).toContain("sub/b.md");
   });
 
-  it("混合輸入（文件+目錄+二進制）", async () => {
+  it("混合輸入（文件+目錄+圖片）", async () => {
     const fp = write("notes.txt", "some text");
     write("sub/img.png", makeBin(100));
     write("sub/code.js", "const x = 1;");
     const r = await ingestPaths([fp, tmpDir], mockImport);
     expect(r).toHaveLength(3);
     expect(r.filter((a) => a.kind === "text")).toHaveLength(2);
-    expect(r.filter((a) => a.kind === "unsupported")).toHaveLength(1);
+    expect(r.filter((a) => a.kind === "image")).toHaveLength(1);
   });
 
   it("不存在路徑 → 跳過不拋", async () => {

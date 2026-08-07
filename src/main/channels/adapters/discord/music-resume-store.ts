@@ -33,11 +33,12 @@ export function getDiscordMusicResumePath(): string {
 }
 
 export async function loadDiscordMusicResumeData(filePath = getDiscordMusicResumePath()): Promise<ResumeData> {
+  const fallback: ResumeData = { version: 1 };
   try {
     const parsed = JSON.parse(await fs.readFile(filePath, "utf8")) as ResumeData;
-    return parsed?.version === 1 ? parsed : { version: 1 };
+    return parsed?.version === 1 ? parsed : fallback;
   } catch {
-    return { version: 1 };
+    return fallback;
   }
 }
 

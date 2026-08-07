@@ -20,6 +20,7 @@ import {
   type ChatMessage,
   type ChatSession,
   type ChatSessionMeta,
+  type ChatStats,
 } from "../../shared/chat-types";
 
 const ROOT_DIR_NAME = "cyrene-chats";
@@ -104,6 +105,7 @@ function metaFromSession(session: ChatSession): ChatSessionMeta {
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     messageCount: session.messages.length,
+    userMessageCount: session.messages.filter((message) => message.role === "user").length,
   };
 }
 
@@ -136,6 +138,19 @@ export function initialize(): void {
   indexPath = path.join(rootDir, INDEX_FILE);
   ensureDirs();
   indexCache = readIndexFromDisk();
+  // v1 索引沒有 userMessageCount。只在升級後首次啟動讀取舊會話，
+  // 後續統計完全使用輕量 indexCache，不再輪詢所有 session 文件。
+  let upgraded = false;
+  indexCache = indexCache.map((meta) => {
+    if (typeof meta.userMessageCount === "number") return meta;
+    const session = readSessionFile(meta.id);
+    upgraded = true;
+    return {
+      ...meta,
+      userMessageCount: session?.messages.filter((message) => message.role === "user").length ?? 0,
+    };
+  });
+  if (upgraded) persistIndex();
   initialized = true;
 }
 
@@ -146,6 +161,17 @@ export function getRootDir(): string {
 export function listSessions(): ChatSessionMeta[] {
   // 返回深拷貝，避免外部修改影響緩存
   return indexCache.map((m) => ({ ...m }));
+}
+
+export function getStats(): ChatStats {
+  return indexCache.reduce<ChatStats>(
+    (stats, meta) => {
+      stats.messageCount += meta.messageCount;
+      stats.userMessageCount += meta.userMessageCount ?? 0;
+      return stats;
+    },
+    { sessionCount: indexCache.length, messageCount: 0, userMessageCount: 0 },
+  );
 }
 
 export function getSession(id: string): ChatSession | null {

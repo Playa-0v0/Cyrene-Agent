@@ -28,6 +28,8 @@ export function registerChatsIpc(): void {
 
   ipcMain.handle(IPC.CHATS_LIST, () => chatsStore.listSessions());
 
+  ipcMain.handle(IPC.CHATS_STATS, () => chatsStore.getStats());
+
   ipcMain.handle(IPC.CHATS_GET, (_event, id: string) => chatsStore.getSession(id));
 
   ipcMain.handle(

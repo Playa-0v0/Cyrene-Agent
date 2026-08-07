@@ -393,14 +393,14 @@ saveNotebookBtn.addEventListener("click", async () => {
   const percent = Math.round((correctCount / currentQuiz.length) * 100);
   const timeStr = resultTotalTime.textContent || "00:00";
 
-  const savePrompt = `請將我剛才的考試成績記錄在我的共同筆記本中（/Users/clark/cy/我們共同的筆記本.md）。
+  const savePrompt = `請將我剛才的考試成績記錄在如我所書（共享筆記本）中（/Users/clark/cy/Shared Notebook.md）。
 這是我的考試資料：
 - 科目：${currentSubject}
 - 題數：${currentQuiz.length} 題
 - 得分：${percent}% (答對 ${correctCount} 題)
 - 用時：${timeStr}
 
-請調用你的工具將這筆紀錄以溫柔活潑的口吻新增在筆記本的「📅 成長足跡與協作日記」章節的最後面。
+請調用你的工具將這筆紀錄以溫柔活潑的口吻新增在筆記本的「📅 成長足跡與共同日誌」章節的最後面。
 記錄完成後，請用你昔漣的身份回覆我「已經幫你記在我們的筆記本囉！夥伴真的太棒了～🌸」`;
 
   try {

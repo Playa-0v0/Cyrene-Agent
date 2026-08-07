@@ -75,8 +75,8 @@ describe("channels/dispatcher", () => {
     expect(extractDiscordVoiceRequestTopic(msg.text)).toBe("介紹妳自己");
     const prepared = prepareDiscordVoiceAgentMessage(msg);
     expect(prepared.text).toContain("介紹妳自己");
-    expect(prepared.text).toContain("自動合成並成功發送");
-    expect(prepared.text).toContain("只輸出要被朗讀的內容");
+    expect(prepared.text).toContain("自動合成語音音訊附件並發送給夥伴");
+    expect(prepared.text).toContain("只輸出要被朗讀的台詞或講話內容");
     expect(msg.text).toContain("能傳一段");
   });
 

@@ -52,7 +52,7 @@ describe("Discord 文字頻道語音回答", () => {
 
     const outgoing = await dispatcher.handleIncoming(voiceRequest("voice-success"));
 
-    expect(agentInput).toContain("自動合成並成功發送");
+    expect(agentInput).toContain("自動合成語音音訊附件並發送給夥伴");
     expect(outgoing?.parts).toHaveLength(2);
     expect(outgoing?.parts[0]).toMatchObject({ kind: "audio", mime: "audio/wav" });
     expect(outgoing?.parts[1]).toEqual({ kind: "sticker", stickerId: "happy", imagePath: "/tmp/happy.png" });

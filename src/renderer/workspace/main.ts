@@ -1,4 +1,5 @@
 import "../ui/theme";
+import { startVisiblePolling } from "../ui/visible-polling";
 
 declare global {
   interface Window {
@@ -45,7 +46,7 @@ declare global {
     };
     chatStore?: {
       list: () => Promise<Array<{ id: string; title: string; updatedAt: number }>>;
-      getMessages?: (sessionId: string) => Promise<Array<{ role: string }>>;
+      stats: () => Promise<{ sessionCount: number; messageCount: number; userMessageCount: number }>;
       rename: (id: string, title: string) => Promise<unknown>;
       delete: (id: string) => Promise<boolean>;
       onChanged?: (cb: () => void) => () => void;
@@ -125,8 +126,8 @@ tabs.forEach((tab) => {
       updateTitlebarModeText(targetTab);
     }
 
-    // 如果是共同筆記本、遊戲房或考試模式，隱藏右側資訊面板以騰出全寬空間，並將停靠在裡面的桌寵暫時隱藏（不讓其彈出到桌面）
-    if (targetTab === "notebook" || targetTab === "game-room" || targetTab === "exam") {
+    // Hide the right info panel for Shared Notebook, game room, and exam mode to keep the main canvas wide.
+    if (targetTab === "notebook" || targetTab === "game-room" || targetTab === "exam" || targetTab === "wavesuid") {
       setInfoPanelVisible(false);
       syncPetDockVisibilityAfterLayout(false);
     } else {
@@ -140,22 +141,40 @@ tabs.forEach((tab) => {
     } else if (targetTab === "tasks") {
       iframe.src = "../tasks/index.html";
     } else if (targetTab === "memory") {
-      iframe.src = "../settings/index.html#memory";
+      navigateSettingsIframe("memory");
     } else if (targetTab === "notebook") {
       iframe.src = "../notebook/index.html";
     } else if (targetTab === "exam") {
       iframe.src = "../exam/index.html";
     } else if (targetTab === "game-room") {
       iframe.src = "../game-room/index.html";
+    } else if (targetTab === "wavesuid") {
+      iframe.src = "../wavesuid/index.html";
     } else if (targetTab === "channels") {
-      iframe.src = "../settings/index.html#channels";
+      navigateSettingsIframe("channels");
     } else if (targetTab === "stickers") {
       iframe.src = "../paint/index.html";
     } else if (targetTab === "settings") {
-      iframe.src = "../settings/index.html#general";
+      navigateSettingsIframe("general");
     }
   });
 });
+
+function navigateSettingsIframe(section: string): void {
+  const targetUrl = `../settings/index.html#${section}`;
+  if (iframe.src.includes("settings/index.html")) {
+    iframe.src = targetUrl;
+    try {
+      if (iframe.contentWindow) {
+        iframe.contentWindow.location.hash = `#${section}`;
+      }
+    } catch {
+      // ignore
+    }
+  } else {
+    iframe.src = targetUrl;
+  }
+}
 
 compactInfoPanelQuery.addEventListener("change", () => {
   const activeInfoTab = document.querySelector(".info-tab.is-active")?.textContent?.trim();
@@ -177,11 +196,13 @@ function updateTitlebarModeText(tab: string) {
   } else if (tab === "tasks") {
     titlebarModeEl.textContent = "備忘任務";
   } else if (tab === "notebook") {
-    titlebarModeEl.textContent = "共同筆記本";
+    titlebarModeEl.textContent = "如我所書";
   } else if (tab === "exam") {
     titlebarModeEl.textContent = "考試模式";
   } else if (tab === "game-room") {
     titlebarModeEl.textContent = "遊戲房";
+  } else if (tab === "wavesuid") {
+    titlebarModeEl.textContent = "鳴潮工具";
   } else if (tab === "settings" || tab === "memory") {
     titlebarModeEl.textContent = "系統設置";
   } else if (tab === "channels") {
@@ -463,7 +484,7 @@ async function initStatusSync() {
     void updateRuntimeDisplay();
     window.runtimeState.onChanged(() => { void updateRuntimeDisplay(); });
     window.modelConfig.onChanged(() => { void updateRuntimeDisplay(); });
-    window.setInterval(() => void updateRuntimeDisplay(), 5_000);
+    startVisiblePolling(updateRuntimeDisplay, 30_000);
   }
 
   // 5. 數據統計讀取 (今日概覽)
@@ -565,7 +586,7 @@ async function initStatusSync() {
   // Token 數據來自主進程的持久化用量存儲；定期重讀，讓聊天後的
   // input/output token 累加能在面板仍開啟時同步顯示。
   void updateTokenUsageStats();
-  window.setInterval(() => void updateTokenUsageStats(), 10_000);
+  startVisiblePolling(updateTokenUsageStats, 30_000);
 
   function formatCallDuration(ms: number, compact = false): string {
     const seconds = Math.max(0, Math.floor(ms / 1000));
@@ -634,7 +655,7 @@ async function initStatusSync() {
   }
 
   void updateCallUsageStats();
-  window.setInterval(() => void updateCallUsageStats(), 5_000);
+  startVisiblePolling(updateCallUsageStats, 5_000);
 
   async function updateScheduleVisibility() {
     const summary = document.getElementById("schedule-summary");
@@ -671,31 +692,19 @@ async function initStatusSync() {
   async function updateChatStats() {
     try {
       if (window.chatStore) {
-        const sessions = await window.chatStore.list();
-        if (agentSessionCountEl) agentSessionCountEl.textContent = `${sessions.length} 個會話`;
-        let totalMsgs = 0;
-        let totalInteractions = 0; // 用戶發送次數
-        
-        // 遍歷所有會話統計消息
-        for (const s of sessions) {
-          // 如果 preload 曝露了 getMessages 則統計，否則用預估/預設值
-          if (window.chatStore.getMessages) {
-            const msgs = await window.chatStore.getMessages(s.id);
-            totalMsgs += msgs.length;
-            totalInteractions += msgs.filter(m => m.role === "user").length;
-          }
-        }
-        
-        if (statMessagesEl) statMessagesEl.textContent = String(totalMsgs);
-        if (statInteractionsEl) statInteractionsEl.textContent = String(totalInteractions);
+        const stats = await window.chatStore.stats();
+        if (agentSessionCountEl) agentSessionCountEl.textContent = `${stats.sessionCount} 個會話`;
+        if (statMessagesEl) statMessagesEl.textContent = String(stats.messageCount);
+        if (statInteractionsEl) statInteractionsEl.textContent = String(stats.userMessageCount);
       }
     } catch (err) {
       console.warn("Failed to load chat message stats:", err);
     }
   }
 
-  updateChatStats();
-  setInterval(updateChatStats, 10000);
+  void updateChatStats();
+  startVisiblePolling(updateChatStats, 60_000);
+  window.chatStore?.onChanged?.(() => void updateChatStats());
 }
 
 initStatusSync();
@@ -746,7 +755,7 @@ async function updateConnectionStatus() {
 }
 
 void updateConnectionStatus();
-window.setInterval(() => void updateConnectionStatus(), 5_000);
+startVisiblePolling(updateConnectionStatus, 15_000);
 
 // ── 6. 桌寵停靠與召回管理 ──
 let isPetDocked = true; // 預設為停靠狀態
@@ -755,7 +764,7 @@ function reportSlotBounds() {
   if (!window.sidebar?.reportSlotBounds) return;
   
   const currentTab = document.querySelector(".sidebar__tab.is-active")?.getAttribute("data-tab");
-  const usesFullWidth = currentTab === "notebook" || currentTab === "game-room" || currentTab === "exam";
+  const usesFullWidth = currentTab === "notebook" || currentTab === "game-room" || currentTab === "exam" || currentTab === "wavesuid";
 
   const activeInfoTab = document.querySelector(".info-tab.is-active")?.textContent?.trim();
   const isOverview = activeInfoTab === "概覽";

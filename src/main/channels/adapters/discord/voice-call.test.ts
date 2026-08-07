@@ -4,10 +4,19 @@ import { PassThrough } from "node:stream";
 import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import { DiscordVoiceCall, discordMusicVolumeGain, formatDiscordMusicActivity, formatDiscordMusicActivityDescription, parseDiscordVoiceCommand, stereo48kToMono16k } from "./voice-call";
+import { DiscordVoiceCall, discordMusicVolumeGain, formatDiscordMusicActivity, formatDiscordMusicActivityDescription, parseDiscordVoiceCommand, shouldAutoShuffleSpotifyPlaylist, stereo48kToMono16k } from "./voice-call";
 import * as musicSource from "./music-source";
 
 describe("Discord voice commands", () => {
+  it("automatically enables shuffle only for multi-track Spotify playlists", () => {
+    expect(shouldAutoShuffleSpotifyPlaylist([
+      { title: "A", url: "https://open.spotify.com/track/a", playlistUrl: "https://open.spotify.com/playlist/mix", index: 1, total: 2 },
+      { title: "B", url: "https://open.spotify.com/track/b", playlistUrl: "https://open.spotify.com/playlist/mix", index: 2, total: 2 },
+    ])).toBe(true);
+    expect(shouldAutoShuffleSpotifyPlaylist([
+      { title: "A", url: "https://youtube.com/watch?v=a", index: 1, total: 1 },
+    ])).toBe(false);
+  });
   it.each(["加入通話", "進來通話！", "加入語音頻道", "陪我通話"])("parses join: %s", (text) => {
     expect(parseDiscordVoiceCommand(text)).toBe("join");
   });

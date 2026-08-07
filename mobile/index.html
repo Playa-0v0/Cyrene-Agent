@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="昔漣" />
+  <meta name="theme-color" content="#0a0a12" />
+  <title>昔漣 · 手機版</title>
+  <meta name="description" content="Cyrene-Agent 手機聊天介面，隨時隨地與昔漣對話" />
+  <link rel="manifest" href="/mobile/manifest.json" />
+  <link rel="apple-touch-icon" href="/mobile/icon-192.png" />
+  <link rel="stylesheet" href="/mobile/style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- 連線設置頁 -->
+  <div id="page-connect" class="page">
+    <div class="connect__logo">🌸</div>
+    <h1 class="connect__title">昔漣</h1>
+    <p class="connect__subtitle">連接你的電腦，開始對話</p>
+
+    <form class="connect__form" onsubmit="return false">
+      <div class="field">
+        <label class="field__label" for="input-ip">電腦 IP 地址</label>
+        <input
+          id="input-ip"
+          class="field__input"
+          type="text"
+          placeholder="192.168.1.100"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="none"
+          spellcheck="false"
+          inputmode="url"
+        />
+        <span class="field__hint">在同一個 WiFi 下，查看電腦 IP 後填入</span>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="input-token">連接 Token</label>
+        <input
+          id="input-token"
+          class="field__input"
+          type="text"
+          placeholder="123456"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="none"
+          spellcheck="false"
+          inputmode="numeric"
+          maxlength="8"
+        />
+        <span class="field__hint">在電腦的 Cyrene 主程序裡查看 6 位 Token</span>
+      </div>
+
+      <p id="connect-error" class="connect__error"></p>
+
+      <button id="btn-connect" class="btn-primary" type="button">連接昔漣</button>
+    </form>
+
+    <p id="connect-saved" class="connect__saved"></p>
+  </div>
+
+  <!-- 聊天頁 -->
+  <div id="page-chat" class="page hidden">
+
+    <!-- 頂部導航欄 -->
+    <header class="chat__navbar">
+      <button id="chat-menu-btn" class="chat__menu-btn" aria-label="會話列表">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="15" y2="18"/>
+        </svg>
+      </button>
+
+      <div class="chat__avatar">🌸</div>
+
+      <div class="chat__info">
+        <div class="chat__name">昔漣</div>
+        <div id="chat-status" class="chat__status offline">連接中…</div>
+      </div>
+
+      <button id="chat-new-btn" class="chat__new-btn" aria-label="新對話" title="新對話">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- 訊息區域 -->
+    <main id="chat-messages" class="chat__messages" aria-live="polite" aria-label="對話記錄">
+    </main>
+
+    <!-- 空狀態 -->
+    <div id="chat-empty" class="chat__empty" style="display:none">
+      <div class="chat__empty-icon">🌸</div>
+      <p class="chat__empty-text">昔漣期待與你聊天哦 ✨<br/>快說些什麼吧</p>
+    </div>
+
+    <!-- 輸入框 -->
+    <footer class="chat__composer">
+      <textarea
+        id="composer-input"
+        class="composer__input"
+        placeholder="說點什麼… Enter 發送"
+        rows="1"
+        autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+      ></textarea>
+
+      <button id="composer-cancel" class="chat__cancel" aria-label="取消" type="button">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+          <rect x="4" y="4" width="16" height="16" rx="3"/>
+        </svg>
+      </button>
+
+      <button id="composer-send" class="composer__send" aria-label="發送" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </footer>
+  </div>
+
+</div>
+
+<!-- 連線中斷橫幅 -->
+<div id="connection-banner" class="connection-banner">
+  📡 連接已中斷，正在重連…
+</div>
+
+<!-- Toast 通知 -->
+<div id="toast" class="toast"></div>
+
+<!-- 會話抽屜覆蓋層 -->
+<div id="drawer-overlay" class="drawer-overlay"></div>
+
+<!-- 會話側滑抽屜 -->
+<aside id="sessions-drawer" class="sessions-drawer" aria-label="會話列表">
+  <div class="drawer__header">
+    <div class="drawer__title">對話記錄</div>
+    <button id="drawer-new-btn" class="drawer__new-btn" type="button">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      新對話
+    </button>
+  </div>
+  <div id="drawer-session-list" class="drawer__list"></div>
+  <div id="drawer-empty" class="drawer__empty" style="display:none">
+    📭 還沒有對話記錄
+  </div>
+</aside>
+
+<script src="/mobile/app.js"></script>
+</body>
+</html>

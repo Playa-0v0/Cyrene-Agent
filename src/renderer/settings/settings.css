@@ -19,6 +19,8 @@ body {
   position: relative;
   display: grid;
   grid-template-columns: 168px 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  box-sizing: border-box;
   height: 100vh;
   width: 100vw;
   margin: 0;
@@ -298,7 +300,10 @@ body {
 .settings-main {
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .settings-titlebar {
@@ -381,8 +386,13 @@ body {
 }
 
 .settings-panel {
+  min-height: calc(100% - 24px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   border-radius: 24px;
-  padding: 20px;
+  padding: 24px;
+  margin-bottom: 24px;
   background:
     radial-gradient(circle at 12% 0%, rgba(255, 110, 199, 0.16), transparent 40%),
     radial-gradient(circle at 86% 18%, rgba(168, 85, 247, 0.14), transparent 42%),
@@ -1713,15 +1723,15 @@ body {
 }
 .plugin-list {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 .plugin-card {
   display: grid;
-  grid-template-columns: 42px 1fr auto;
+  grid-template-columns: 36px 1fr auto;
   align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border-radius: 16px;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.07);
   background: rgba(255, 255, 255, 0.045);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
@@ -1740,14 +1750,17 @@ body {
   cursor: default;
 }
 .plugin-card__icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: grid;
   place-items: center;
   background: rgba(255, 110, 199, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 22px;
+  font-size: 18px;
+}
+.plugin-card__body {
+  min-width: 0;
 }
 .plugin-card__body h2 {
   margin: 0;
@@ -1759,6 +1772,8 @@ body {
   margin: 4px 0 0;
   color: rgba(235, 229, 245, 0.52);
   font: var(--rb-text-small);
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 /* 插件卡片內可摺疊的配置區（key 輸入等） */
@@ -1945,8 +1960,84 @@ body {
   align-items: flex-start;
   margin-bottom: 16px;
 }
+.vision-master-switch {
+  position: relative;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.vision-master-switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.vision-master-switch span {
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.14);
+  position: relative;
+  transition: background .18s ease;
+}
+.vision-master-switch:focus-within span {
+  outline: 2px solid rgba(255, 182, 220, 0.72);
+  outline-offset: 2px;
+}
+.vision-master-switch span::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
+  border-radius: 50%;
+  background: white;
+  transition: transform .18s ease;
+}
+.vision-master-switch input:checked + span { background: linear-gradient(135deg, #f064bd, #9f50df); }
+.vision-master-switch input:checked + span::after { transform: translateX(18px); }
+.vision-master-switch b { font-size: 12px; }
+.vision-behavior-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) repeat(2, minmax(130px, .75fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.vision-auto-card {
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 13px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 14px;
+  background: rgba(255,255,255,.035);
+}
+.vision-auto-card input { accent-color: #d858c7; width: 17px; height: 17px; }
+.vision-auto-card span { display: grid; gap: 3px; }
+.vision-auto-card b { font-size: 13px; }
+.vision-auto-card small { color: var(--rb-text-muted); line-height: 1.35; }
+.vision-config-section.is-disabled > :not(.vision-config-heading) { opacity: .48; }
+@media (max-width: 760px) { .vision-behavior-grid { grid-template-columns: 1fr; } }
 .vision-config-icon { font-size: 24px; }
 .vision-config-heading h2 { margin: 0 0 4px; font-size: 16px; }
+.cloud-unsupported-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ff9ebb;
+  background: rgba(255, 120, 160, 0.12);
+  border: 1px solid rgba(255, 120, 160, 0.3);
+  border-radius: 4px;
+}
 .vision-config-heading p { margin: 0; font-size: 12px; opacity: 0.7; }
 .vision-sync-row {
   display: flex;
@@ -1971,6 +2062,42 @@ body {
 }
 .vision-fields.is-locked input {
   opacity: 0.5;
+  pointer-events: none;
+}
+
+/* 螢幕陪伴與主動搭話區塊樣式修正 */
+.screen-companion-section {
+  display: block;
+  margin-top: 24px;
+}
+
+.screen-companion-section .agent-setting-subgroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 182, 220, 0.10);
+  box-sizing: border-box;
+}
+
+.screen-companion-section .option-blocks--wide {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.screen-companion-section .option-blocks--wide .option-block {
+  flex: 1 1 90px;
+  min-width: 75px;
+  text-align: center;
+}
+
+.screen-companion-section.is-disabled > :not(.vision-config-heading) {
+  opacity: 0.45;
   pointer-events: none;
 }
 

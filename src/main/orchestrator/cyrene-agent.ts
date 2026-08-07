@@ -283,8 +283,9 @@ async function runFcLoopWithEvents(
             output = "[已拒絕] " + (perm.reason || "權限不足");
             console.warn(LOG_PREFIX, "權限拒絕 [" + tc.name + "]:", perm.reason);
           } else {
+            const isOwner = (options as { isOwner?: boolean })?.isOwner ?? true;
             const ctx: ToolContext | undefined = tool.needsContext
-              ? { userQuery: extractLastUserQuery(conversation) }
+              ? { userQuery: extractLastUserQuery(conversation), isOwner }
               : undefined;
             try {
               output = await tool.execute(args, ctx);

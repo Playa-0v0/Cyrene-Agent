@@ -99,12 +99,29 @@ async function getAccessToken(): Promise<string> {
   if (accessToken && Date.now() < accessTokenExpiresAt - 30_000) return accessToken;
   if (accessTokenRefresh) return accessTokenRefresh;
   accessTokenRefresh = (async () => {
-    const { refreshToken } = credentials();
-    if (!refreshToken) throw new Error("Spotify 尚未完成帳號授權");
-    const token = await tokenRequest(new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }));
-    accessToken = token.access_token;
-    accessTokenExpiresAt = Date.now() + Math.max(60, token.expires_in) * 1000;
-    if (token.refresh_token) saveChannelsSettings({ spotify: { enabled: true, refreshToken: token.refresh_token } });
+    const { clientId, clientSecret, refreshToken } = credentials();
+    if (refreshToken) {
+      const token = await tokenRequest(new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }));
+      accessToken = token.access_token;
+      accessTokenExpiresAt = Date.now() + Math.max(60, token.expires_in) * 1000;
+      if (token.refresh_token) saveChannelsSettings({ spotify: { enabled: true, refreshToken: token.refresh_token } });
+      return accessToken;
+    }
+    if (clientId && clientSecret) {
+      const token = await tokenRequest(new URLSearchParams({ grant_type: "client_credentials" }));
+      accessToken = token.access_token;
+      accessTokenExpiresAt = Date.now() + Math.max(60, token.expires_in) * 1000;
+      return accessToken;
+    }
+    const response = await fetch("https://open.spotify.com/get_access_token?reason=transport&productType=web_player", {
+      headers: { "user-agent": "Mozilla/5.0 CyreneDiscordBot/1.0" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) throw new Error(`Spotify 尚未完成帳號授權`);
+    const payload = await response.json() as { accessToken?: string; accessTokenExpirationTimestampMs?: number };
+    if (!payload.accessToken) throw new Error("Spotify 尚未完成帳號授權");
+    accessToken = payload.accessToken;
+    accessTokenExpiresAt = payload.accessTokenExpirationTimestampMs ?? (Date.now() + 3600_000);
     return accessToken;
   })();
   try {
@@ -267,7 +284,7 @@ export async function getSpotifyPlaylists(limit = 25): Promise<SpotifyPlaylistSu
 
 export async function getSpotifyPlaylistTracks(
   playlist: SpotifyPlaylistSummary,
-  maxItems = 500,
+  maxItems = 5000,
 ): Promise<DiscordMusicTrack[]> {
   const collected: Array<{
     id: string;
@@ -277,7 +294,7 @@ export async function getSpotifyPlaylistTracks(
     imageUrl?: string;
     duration?: number;
   }> = [];
-  const safeMax = Math.max(1, Math.min(500, Math.floor(maxItems)));
+  const safeMax = Math.max(1, Math.min(5000, Math.floor(maxItems)));
   for (let offset = 0; offset < safeMax; offset += 100) {
     const limit = Math.min(100, safeMax - offset);
     const payload = await spotifyApi<{
@@ -386,6 +403,43 @@ export async function getSpotifyArtistTopTracks(artistId: string): Promise<Disco
       playbackUrl: `ytsearch1:${buildSpotifySearchQuery(title, artists)}`,
       thumbnail: track.album?.images?.[0]?.url ?? artist?.images?.[0]?.url,
       playlistTitle: `${artistName} · 熱門歌曲`,
+      duration: typeof track.duration_ms === "number" ? Math.round(track.duration_ms / 1000) : undefined,
+      index: index + 1,
+      total: tracks.length,
+    };
+  });
+}
+
+export async function searchSpotifyTracks(query: string, limit = 5): Promise<DiscordMusicTrack[]> {
+  const safeQuery = query.trim();
+  if (!safeQuery) return [];
+  const safeLimit = Math.max(1, Math.min(10, Math.floor(limit)));
+  const params = new URLSearchParams({ q: safeQuery, type: "track", limit: String(safeLimit) });
+  const payload = await spotifyApi<{
+    tracks?: {
+      items?: Array<{
+        id?: string;
+        name?: string;
+        duration_ms?: number;
+        artists?: Array<{ name?: string }>;
+        external_urls?: { spotify?: string };
+        album?: { images?: Array<{ url?: string }> };
+      } | null>;
+    };
+  }>(`/search?${params}`);
+
+  const tracks = (payload?.tracks?.items ?? [])
+    .filter((track): track is NonNullable<typeof track> & { id: string; name: string } => Boolean(track?.id && track.name));
+
+  return tracks.map((track, index) => {
+    const title = toTraditionalTaiwan(track.name);
+    const artists = toTraditionalTaiwan(track.artists?.map((item) => item.name).filter(Boolean).join("、") ?? "");
+    return {
+      id: track.id,
+      title: artists ? `${title} — ${artists}` : title,
+      url: track.external_urls?.spotify ?? `https://open.spotify.com/track/${track.id}`,
+      playbackUrl: `ytsearch1:${buildSpotifySearchQuery(title, artists)}`,
+      thumbnail: track.album?.images?.[0]?.url,
       duration: typeof track.duration_ms === "number" ? Math.round(track.duration_ms / 1000) : undefined,
       index: index + 1,
       total: tracks.length,

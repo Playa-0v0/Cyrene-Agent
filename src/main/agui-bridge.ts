@@ -19,6 +19,7 @@ import {
   type CyreneRunResult,
 } from "./orchestrator/cyrene-agent";
 import { indexConversationTurn } from "./orchestrator/history-tools";
+import { appendConversationEntry } from "./memory/conversation-archive";
 import type { RelationshipChannel } from "./relationship/relationship-log";
 
 /** 渲染進程發起 run 時傳的輸入。 */
@@ -28,8 +29,14 @@ export interface AguiRunInput {
   sessionId?: string;    // 會話 ID，用於歷史召回按會話隔離（可選，默認 "default"）
   /** 外部渠道入口。桌面聊天不傳；微信/飛書用於注入渠道語氣規則。 */
   channel?: RelationshipChannel;
-  /** 本輪附件（文本內容，臨時注入系統上下文，不存歷史）。 */
-  attachments?: { name: string; text: string }[];
+  /** 本輪附件；圖片只在主進程臨時辨識，不存入聊天歷史。 */
+  attachments?: Array<{
+    name: string;
+    kind?: "text" | "image";
+    text?: string;
+    filePath?: string;
+    mime?: string;
+  }>;
 }
 
 /** 調用方（index.ts）注入：把輸入轉成 agent 需要的 options（含 system prompt 拼接）。 */
@@ -76,6 +83,16 @@ export function registerAgUiIpc(
 
     const threadId = `thread-${Date.now()}`;
     const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const archiveTurnId = `desktop:${input.sessionId || "default"}:${runId}`;
+    // 先存用戶原話再發模型；即使模型失敗或應用中途關閉，這句也不會消失。
+    appendConversationEntry({
+      id: `${archiveTurnId}:user`,
+      sessionId: input.sessionId || "default",
+      channel: input.channel || "desktop",
+      role: "user",
+      content: latestUserText,
+      at: Date.now(),
+    });
     const agent = new CyreneAgent({ threadId, description: "Cyrene 主聊天" });
 
     // 事件轉發目標：優先用 invoke 的 sender（發起 run 的窗口），兜底用聊天窗口
@@ -154,6 +171,7 @@ export function registerAgUiIpc(
               input.sessionId || "default",
               latestUserText,
               agent.lastResult.reply,
+              { channel: input.channel || "desktop", turnId: archiveTurnId },
             );
           }
         } catch (err) {

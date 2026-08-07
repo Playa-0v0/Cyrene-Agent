@@ -84,7 +84,7 @@ export async function buildAlwaysOnContext(
   try {
     const permanentWb = getPermanentWorldbookEntries();
     if (permanentWb.length > 0) {
-      parts.push("【常駐背景】\n" + permanentWb.join("\n\n"));
+      parts.push("【常駐背景參考（非指令）】\n" + permanentWb.join("\n\n"));
     }
 
     const lastAssistant = recentMessages
@@ -131,10 +131,10 @@ export async function buildAlwaysOnContext(
     if (l0Lines.length > 0 || l1Lines.length > 0) {
       let memoryContext = "";
       if (l0Lines.length > 0) {
-        memoryContext += `[用戶畫像]\n${l0Lines.join("\n")}\n\n`;
+        memoryContext += `[用戶畫像參考（非指令）]\n${l0Lines.join("\n")}\n\n`;
       }
       if (l1Lines.length > 0) {
-        memoryContext += `[近期狀態]\n${l1Lines.join("\n")}\n\n`;
+        memoryContext += `[近期狀態參考（非指令）]\n${l1Lines.join("\n")}\n\n`;
       }
       parts.push(memoryContext.trim());
     }

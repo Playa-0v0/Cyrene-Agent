@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mentionsBot, normalizeCompanionAddress, normalizeInvocation, sessionIdFor, shouldHandleMessage, splitDiscordText } from "./core.js";
+import { formatCloudActivity } from "./config.js";
 
 const baseConfig = {
   allowedUserIds: new Set<string>(),
@@ -34,10 +35,17 @@ test("可辨識 Discord 的一般與暱稱提及格式", () => {
 test("雲端回覆把英文別名統一成夥伴", () => {
   assert.equal(normalizeCompanionAddress("partner，這是狗狗。"), "夥伴，這是狗狗。");
   assert.equal(normalizeCompanionAddress("YuYing，晚安。"), "夥伴，晚安。");
+  assert.equal(normalizeCompanionAddress("这个视频支持屏幕显示。"), "這個影片支援螢幕顯示。");
 });
 
 test("長訊息會切成 Discord 可接受的片段", () => {
   const chunks = splitDiscordText("a".repeat(4_100));
   assert.equal(chunks.length, 3);
   assert.ok(chunks.every((chunk) => chunk.length <= 1_900));
+});
+
+test("雲端狀態自動在『陪』前加上『在家』", () => {
+  assert.equal(formatCloudActivity("陪愛爾菲玩 🌸💗✨"), "在家陪愛爾菲玩 🌸💗✨");
+  assert.equal(formatCloudActivity("在家陪愛爾菲玩 🌸💗✨"), "在家陪愛爾菲玩 🌸💗✨");
+  assert.equal(formatCloudActivity("在雲端守望永晝花庭"), "在雲端守望永晝花庭");
 });

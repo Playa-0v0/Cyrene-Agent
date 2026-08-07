@@ -25,8 +25,7 @@ describe("Discord slash commands", () => {
 
   it("covers chat, voice, music controls, queue editing and status", () => {
     expect(DISCORD_SLASH_COMMAND_NAMES).toEqual(expect.arrayContaining([
-      "chat", "draw", "game", "join", "leave", "play", "nowplaying",
-      "queue", "history", "like", "favorites", "spotify", "clear", "remove", "status", "help",
+      "chat", "draw", "game", "join", "leave", "play", "list", "status", "help",
     ]));
   });
 
@@ -47,16 +46,15 @@ describe("Discord slash commands", () => {
     const payload = buildDiscordHelp({ username: "昔漣寶寶", avatarUrl: "https://example.com/avatar.png" });
     const embed = payload.embeds[0].toJSON();
     expect(embed.author?.name).toContain("昔漣寶寶");
-    expect(embed.title).toContain("聊天");
+    expect(embed.title).toContain("昔漣");
     expect(embed.fields?.map((field) => field.name)).toEqual(expect.arrayContaining([
-      "💬  Chat & Voice", "🎮  Play & Draw", "🎧  Music Playback", "♡  Music Library", "⚙  Playback Queue", "✦  Quick start",
+      "💬  文字聊天與發送語音 (Chat & Voice Message)",
+      "⚔️  遊戲代肝與自動每日 (Game Daily Automation)",
+      "🎵  音樂代播與聲優導播 (Music & DJ)",
+      "🌙  生活陪伴與助眠儀式 (Living & Sleep)",
+      "♟️  娛樂與遊戲對弈 (Games & Draw)",
     ]));
     expect(embed.thumbnail?.url).toBe("https://example.com/avatar.png");
-    expect(payload.components[0].toJSON().components.map((button) => "custom_id" in button ? button.custom_id : undefined)).toEqual([
-      "cyrene:music:favorites",
-      "cyrene:music:history",
-      "cyrene:music:queue",
-    ]);
   });
 
   it("builds a five-button public music control row", () => {
@@ -153,7 +151,7 @@ describe("Discord slash commands", () => {
     expect(musicRequestFromButton("cyrene:music:volume-up", false, false, "off", false, 150)).toEqual({ command: "volume", value: 150 });
     const playlists = [{
       id: "default",
-      name: "💖 My Favorites",
+      name: "Bili/YT favorites",
       tracks: [{
         id: "favorite-one",
         title: "勇者",
@@ -164,7 +162,7 @@ describe("Discord slash commands", () => {
       createdAt: "2026-07-26T10:00:00.000Z"
     }];
     const payload = buildDiscordMusicPlaylists(playlists, "default");
-    expect(payload.embeds[0].toJSON().author?.name).toContain("💖 My Favorites");
+    expect(payload.embeds[0].toJSON().author?.name).toContain("Bili/YT favorites");
     expect(payload.components[0].toJSON().components[0]).toMatchObject({
       custom_id: "cyrene:music:favorites-select",
     });
@@ -176,18 +174,17 @@ describe("Discord slash commands", () => {
     ]);
   });
 
-  it("offers a singular like command with an optional song URL", () => {
-    const command = DISCORD_SLASH_COMMANDS.find((item) => item.name === "like");
-    expect(command?.options?.[0]).toMatchObject({ name: "url", required: false });
+  it("verifies that favorite is not registered", () => {
     expect(DISCORD_SLASH_COMMAND_NAMES).not.toContain("favorite");
+    expect(DISCORD_SLASH_COMMAND_NAMES).not.toContain("like");
   });
 
-  it("describes play and spotify as official Spotify device controls", () => {
+  it("describes play and list as music playback commands", () => {
     const play = DISCORD_SLASH_COMMANDS.find((item) => item.name === "play");
-    const spotify = DISCORD_SLASH_COMMANDS.find((item) => item.name === "spotify");
-    expect(play?.description).toContain("官方 Spotify 裝置");
-    expect(play?.description).not.toMatch(/YouTube|Bilibili|SoundCloud/);
-    expect(spotify?.description).toContain("官方 Spotify 裝置");
+    const list = DISCORD_SLASH_COMMANDS.find((item) => item.name === "list");
+    expect(play?.description).toContain("搜尋歌曲");
+    expect(play?.description).toMatch(/YouTube|Bilibili|SoundCloud|Spotify/);
+    expect(list?.description).toContain("Spotify");
   });
 
   it("builds a private selectable Spotify playlist list", () => {
@@ -203,6 +200,20 @@ describe("Discord slash commands", () => {
     expect(embed.description).toContain("My Mix");
     expect(payload.components[0].toJSON().components[0]).toMatchObject({
       custom_id: "cyrene:music:spotify-select",
+    });
+  });
+
+  it("groups saved Spotify links in a local folder without showing account playlists", () => {
+    const payload = buildDiscordMusicPlaylists([
+      { id: "default", name: "Bili/YT favorites", tracks: [], createdAt: "2026-01-01T00:00:00Z" },
+      { id: "saved-mix", name: "JAPANESE FUNK", url: "https://open.spotify.com/playlist/funk", folder: "spotify", tracks: [], total: 47, createdAt: "2026-01-01T00:00:00Z" },
+    ], undefined, [{ id: "account-only", name: "Should not appear", url: "https://open.spotify.com/playlist/account", total: 99 }]);
+    const description = payload.embeds[0].toJSON().description ?? "";
+    expect(description).toContain("Spotify Playlist");
+    expect(description).toContain("JAPANESE FUNK");
+    expect(description).not.toContain("Should not appear");
+    expect(payload.components[0].toJSON().components[0]).toMatchObject({
+      options: expect.arrayContaining([expect.objectContaining({ value: "spotify:saved-mix" })]),
     });
   });
 
@@ -234,8 +245,8 @@ describe("Discord slash commands", () => {
     expect(payload.components[0].toJSON().components[0]).toMatchObject({
       custom_id: "cyrene:music:spotify-artist-select",
     });
-    const command = DISCORD_SLASH_COMMANDS.find((item) => item.name === "spotify");
-    expect(command?.options?.[0]).toMatchObject({ name: "artist", required: false });
+    const listCommand = DISCORD_SLASH_COMMANDS.find((item) => item.name === "list");
+    expect(listCommand?.options?.[0]).toMatchObject({ name: "name", required: false });
   });
 
   it("keeps long or malformed history inside Discord embed limits", () => {

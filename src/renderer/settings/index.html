@@ -178,6 +178,38 @@
                 <h2>視覺模型（可選）</h2>
                 <p>配置後昔漣能看懂圖片。留空則遇到圖片會誠實告知看不了。</p>
               </div>
+              <label class="vision-master-switch" title="Enable vision">
+                <input id="vision-enabled" type="checkbox" checked />
+                <span aria-hidden="true"></span>
+                <b>啟用</b>
+              </label>
+            </div>
+
+            <div class="vision-behavior-grid">
+              <label class="vision-auto-card">
+                <input id="vision-auto-analyze" type="checkbox" checked />
+                <span>
+                  <b>自動查看附圖</b>
+                  <small>開啟後，分享午餐或照片時不必另外說「看圖片」</small>
+                </span>
+              </label>
+              <label class="field">
+                <span>每次最多辨識</span>
+                <select id="vision-max-images">
+                  <option value="1">1 張</option>
+                  <option value="2">2 張</option>
+                  <option value="3">3 張</option>
+                  <option value="4" selected>4 張</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>單張大小上限</span>
+                <select id="vision-max-image-mb">
+                  <option value="1">1 MB</option>
+                  <option value="5">5 MB</option>
+                  <option value="10" selected>10 MB</option>
+                </select>
+              </label>
             </div>
 
             <div class="vision-sync-row">
@@ -206,6 +238,84 @@
 
             <button type="button" class="save-btn save-btn--ghost" id="test-vision-btn">測試視覺模型</button>
             <div class="save-status" id="vision-test-status"></div>
+
+            <hr class="api-section-divider" style="margin: 20px 0;" />
+
+            <!-- 螢幕陪伴 / 主動搭話設定（僅本機 Electron 生效，不支援雲端） -->
+            <div class="vision-config-section screen-companion-section">
+              <div class="vision-config-heading">
+                <span class="vision-config-icon">👁️</span>
+                <div>
+                  <h2>螢幕陪伴與主動搭話 <small class="cloud-unsupported-tag">ⓘ 僅本機 Electron 桌面端生效，不支援雲端</small></h2>
+                  <p>昔漣會定期觀察你的螢幕，在合適的時候主動搭話陪伴；需要開啟多模態視覺模型。</p>
+                </div>
+                <label class="vision-master-switch" title="Enable screen companion">
+                  <input id="screen-companion-enabled" type="checkbox" />
+                  <span aria-hidden="true"></span>
+                  <b>啟用</b>
+                </label>
+              </div>
+
+              <div class="agent-setting-subgroup">
+                <strong>觀察間隔（每隔多久看一次螢幕；越頻繁越耗 Token）</strong>
+                <div class="option-blocks option-blocks--wide" id="companion-observe-interval" role="radiogroup" aria-label="觀察間隔">
+                  <button type="button" class="option-block is-active" data-value="300" aria-pressed="true">5分鐘</button>
+                  <button type="button" class="option-block" data-value="600" aria-pressed="false">10分鐘</button>
+                  <button type="button" class="option-block" data-value="1800" aria-pressed="false">30分鐘</button>
+                  <button type="button" class="option-block" data-value="3600" aria-pressed="false">1小時</button>
+                  <button type="button" class="option-block" data-value="10800" aria-pressed="false">3小時</button>
+                  <button type="button" class="option-block" data-value="43200" aria-pressed="false">12小時</button>
+                </div>
+              </div>
+
+              <div class="agent-setting-subgroup" style="margin-top: 14px;">
+                <strong>話癆程度（整體說話頻率）</strong>
+                <div class="option-blocks option-blocks--wide" id="companion-talkativeness" role="radiogroup" aria-label="話癆程度">
+                  <button type="button" class="option-block" data-value="quiet" aria-pressed="false">安靜</button>
+                  <button type="button" class="option-block is-active" data-value="normal" aria-pressed="true">正常</button>
+                  <button type="button" class="option-block" data-value="active" aria-pressed="false">活潑</button>
+                  <button type="button" class="option-block" data-value="chatty" aria-pressed="false">話癆</button>
+                </div>
+              </div>
+
+              <div class="agent-setting-subgroup" style="margin-top: 14px;">
+                <strong>說話冷卻（兩次主動搭話之間最少間隔多久，避免太吵）</strong>
+                <div class="option-blocks option-blocks--wide" id="companion-min-interval" role="radiogroup" aria-label="說話冷卻">
+                  <button type="button" class="option-block is-active" data-value="30" aria-pressed="true">30秒</button>
+                  <button type="button" class="option-block" data-value="60" aria-pressed="false">1分鐘</button>
+                  <button type="button" class="option-block" data-value="300" aria-pressed="false">5分鐘</button>
+                  <button type="button" class="option-block" data-value="600" aria-pressed="false">10分鐘</button>
+                  <button type="button" class="option-block" data-value="1800" aria-pressed="false">30分鐘</button>
+                  <button type="button" class="option-block" data-value="3600" aria-pressed="false">1小時</button>
+                </div>
+              </div>
+
+              <div class="agent-setting-subgroup" style="margin-top: 14px;">
+                <strong>主動消息發送到（設定昔漣在哪裡主動發送搭話訊息）</strong>
+                <div class="option-blocks option-blocks--wide" id="companion-proactive-target" role="radiogroup" aria-label="主動消息發送到">
+                  <button type="button" class="option-block is-active" data-value="desktop" aria-pressed="true">僅本地</button>
+                  <button type="button" class="option-block" data-value="discord" aria-pressed="false">僅 Discord</button>
+                  <button type="button" class="option-block" data-value="wechat" aria-pressed="false">僅微信</button>
+                </div>
+              </div>
+
+              <!-- Discord 發送方式與頻道配置（當選擇「僅 Discord」時顯示） -->
+              <div class="agent-setting-subgroup companion-discord-subgroup" id="companion-discord-subgroup" style="margin-top: 14px; display: none;">
+                <strong>Discord 發送對象（選擇傳送私訊或於 Discord 伺服器頻道發送）</strong>
+                <div class="option-blocks option-blocks--wide" id="companion-discord-subtarget" role="radiogroup" aria-label="Discord 發送對象">
+                  <button type="button" class="option-block is-active" data-value="dm" aria-pressed="true">💬 私訊屋主</button>
+                  <button type="button" class="option-block" data-value="channel" aria-pressed="false">📢 指定伺服器頻道</button>
+                </div>
+
+                <div class="form-grid companion-discord-channel-wrap" id="companion-discord-channel-wrap" style="margin-top: 10px; display: none;">
+                  <label class="field field--full">
+                    <span>Discord 伺服器文字頻道 ID</span>
+                    <input id="companion-discord-channel-id" type="text" placeholder="請輸入 18-19 位數字頻道 ID（如：1234567890123456789）" autocomplete="off" />
+                  </label>
+                  <p class="vision-hint" style="margin-top: 4px;">ⓘ 昔漣會在此 Discord 伺服器頻道發送搭話訊息，並自動 @標註 屋主帳號</p>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="form-actions">
@@ -1963,13 +2073,14 @@
               </div>
               <div class="tts-field">
                 <label>參考音頻路徑</label>
-                <input type="text" id="tts-gptsovits-ref-audio" placeholder="點擊右側選擇音頻文件" readonly />
-                <button type="button" class="ghost-btn tts-pick-btn" id="tts-gptsovits-ref-pick">選擇</button>
+                <div style="display: flex; gap: 8px; width: 100%;">
+                  <input type="text" id="tts-gptsovits-ref-audio" placeholder="點擊右側選擇音頻文件" readonly style="flex: 1;" />
+                  <button type="button" class="ghost-btn tts-pick-btn" id="tts-gptsovits-ref-pick" style="white-space: nowrap;">📂 選擇音頻</button>
+                </div>
               </div>
               <div class="tts-field">
                 <label>參考音頻對應的文本</label>
                 <input type="text" id="tts-gptsovits-prompt-text" placeholder="例：你好，我是昔漣" />
-              </div>
               <div class="tts-field">
                 <label>輸出格式</label>
                 <select id="tts-gptsovits-format">

@@ -131,11 +131,22 @@ const sidebarApi = {
   setPetDockVisible: (visible: boolean) => ipcRenderer.send(IPC.SIDEBAR_SET_PET_DOCK_VISIBLE, visible),
   readSharedNotebook: () => ipcRenderer.invoke("sidebar:read-shared-notebook"),
   openSharedNotebook: () => ipcRenderer.invoke("sidebar:open-shared-notebook"),
+  getNotebookEntries: () => ipcRenderer.invoke("sidebar:get-notebook-entries"),
+  addNotebookEntry: (options: any) => ipcRenderer.invoke("sidebar:add-notebook-entry", options),
+  updateNotebookEntry: (id: string, content: string, title?: string) =>
+    ipcRenderer.invoke("sidebar:update-notebook-entry", id, content, title),
+  deleteNotebookEntry: (id: string) => ipcRenderer.invoke("sidebar:delete-notebook-entry", id),
   onSharedNotebookChanged: (callback: () => void) => {
     const handler = () => callback();
     ipcRenderer.on("shared-notebook:changed", handler);
     return () => ipcRenderer.removeListener("shared-notebook:changed", handler);
   },
+  getAllMemories: () => ipcRenderer.invoke("memory:get-all-memories"),
+  updateL0: (patch: any) => ipcRenderer.invoke("memory:update-l0", patch),
+  updateL1: (patch: any) => ipcRenderer.invoke("memory:update-l1", patch),
+  addL2: (memory: any) => ipcRenderer.invoke("memory:add-l2", memory),
+  deleteL2: (id: string) => ipcRenderer.invoke("memory:delete-l2", id),
+  pinL2: (id: string, pinned: boolean) => ipcRenderer.invoke("memory:pin-l2", id, pinned),
   reportSlotBounds: (bounds: { x: number; y: number; width: number; height: number; isDocked: boolean }) =>
     ipcRenderer.send("sidebar:report-slot-bounds", bounds),
   onPetDockChanged: (callback: (docked: boolean) => void) => {
@@ -157,6 +168,20 @@ const tasksApi = {
 
 contextBridge.exposeInMainWorld("sidebar", sidebarApi);
 contextBridge.exposeInMainWorld("tasks", tasksApi);
+
+const wavesUidApi = {
+  status: () => ipcRenderer.invoke(IPC.WAVES_UID_STATUS),
+  run: (command: string, attachments?: Array<{ name: string; url: string; contentType?: string }>) =>
+    ipcRenderer.invoke(IPC.WAVES_UID_RUN, { command, attachments: attachments ?? [] }),
+  pickFile: () => ipcRenderer.invoke(IPC.WAVES_UID_PICK_FILE),
+  captureDiscord: () => ipcRenderer.invoke(IPC.WAVES_UID_CAPTURE_DISCORD),
+  login: () => ipcRenderer.invoke(IPC.WAVES_UID_LOGIN),
+  loginStatus: () => ipcRenderer.invoke(IPC.WAVES_UID_LOGIN_STATUS),
+  dataStatus: () => ipcRenderer.invoke(IPC.WAVES_UID_DATA_STATUS),
+  deleteData: (uid: string) => ipcRenderer.invoke(IPC.WAVES_UID_DELETE_DATA, uid),
+};
+
+contextBridge.exposeInMainWorld("wavesUid", wavesUidApi);
 
 const gameRoomApi = {
   getStats: () => ipcRenderer.invoke(IPC.GAME_ROOM_GET_STATS),
@@ -451,6 +476,7 @@ contextBridge.exposeInMainWorld("openerBridge", openerApi);
 // 聊天會話存儲（多對話歷史）
 const chatStoreApi = {
   list: () => ipcRenderer.invoke(IPC.CHATS_LIST),
+  stats: () => ipcRenderer.invoke(IPC.CHATS_STATS),
   get: (id: string) => ipcRenderer.invoke(IPC.CHATS_GET, id),
   create: (payload?: { title?: string; identityId?: string | null }) =>
     ipcRenderer.invoke(IPC.CHATS_CREATE, payload ?? {}),

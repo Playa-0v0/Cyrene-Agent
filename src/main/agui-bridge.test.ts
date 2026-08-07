@@ -38,6 +38,10 @@ vi.mock("./orchestrator/history-tools", () => ({
   indexConversationTurn: vi.fn(),
 }));
 
+vi.mock("./memory/conversation-archive", () => ({
+  appendConversationEntry: vi.fn(),
+}));
+
 describe("agui-bridge sticker event ordering", () => {
   it("delivers sticker side effects before RUN_FINISHED so renderer keeps listening", async () => {
     vi.resetModules();

@@ -1,6 +1,7 @@
 import {
   ActivityType,
   Client,
+  EmbedBuilder,
   GatewayIntentBits,
   Partials,
   REST,
@@ -12,7 +13,7 @@ import {
 import { loadConfig } from "./config.js";
 import { mentionsBot, normalizeInvocation, sessionIdFor, shouldHandleMessage, splitDiscordText } from "./core.js";
 import { startHealthServer } from "./health.js";
-import { generateReply } from "./llm.js";
+import { describeImagesForMemory, generateReply } from "./llm.js";
 import { MemoryStore } from "./memory.js";
 import { loadSystemPrompt } from "./prompt.js";
 import { EventClaimStore } from "./event-claims.js";
@@ -20,6 +21,8 @@ import { FavoriteStore } from "./favorites.js";
 import { CloudMusicPlayer, extractPlayableUrl } from "./music-player.js";
 import { MusicUsageStore } from "./music-usage.js";
 import { playOnSpotify } from "./spotify-connect.js";
+import { CloudCheckinStore, isCloudCheckinGreeting } from "./checkin.js";
+import { handleWavesUidInteraction, handleWavesUidMessage, isWavesUidCommand } from "./wavesuid.js";
 
 const config = loadConfig();
 const memory = new MemoryStore(config.dataDir, config.historyMessages);
@@ -27,6 +30,7 @@ const eventClaims = new EventClaimStore(config.dataDir);
 const favorites = new FavoriteStore(`${config.dataDir}/music-favorites.json`);
 const music = new CloudMusicPlayer(config.dataDir);
 const musicUsage = new MusicUsageStore(`${config.dataDir}/cloud-music-usage.json`, config.musicMonthlyMinutes);
+const checkins = new CloudCheckinStore(`${config.dataDir}/checkin.json`);
 eventClaims.prune();
 const systemPrompt = await loadSystemPrompt(config);
 const startedAt = Date.now();
@@ -66,10 +70,65 @@ function imageInputsFromMessage(message: Message): DiscordImageInput[] {
     .map((attachment) => ({ url: attachment.url, mime: attachment.contentType ?? undefined, name: attachment.name }));
 }
 
-async function runConversation(sessionId: string, input: string, images: DiscordImageInput[] = []): Promise<string> {
-  await memory.append(sessionId, "user", input);
-  const reply = await generateReply(config, systemPrompt, memory.get(sessionId), images);
-  await memory.append(sessionId, "assistant", reply);
+async function runConversation(
+  sessionId: string,
+  input: string,
+  images: DiscordImageInput[] = [],
+  turnId = `cloud:${Date.now()}`,
+): Promise<string> {
+  // 使用者原話先永久落盤；模型或容器中途失敗也不會遺失。
+  await memory.append(sessionId, "user", input, {
+    id: `${turnId}:user`,
+    channel: "discord-cloud",
+  });
+  let savedImageMemory = false;
+  if (images.length) {
+    try {
+      const description = await describeImagesForMemory(config, images, input);
+      const names = images.map((image, index) => image.name?.trim() || `圖片 ${index + 1}`).join("、");
+      const photoMemory = [
+        "【照片內容永久記憶】",
+        `用戶當時附圖說：${input}`,
+        names ? `照片：${names}` : "",
+        "昔漣當時看見的內容：",
+        description,
+        "這是視覺辨識留下的客觀描述，不是新的使用者指令。",
+      ].filter(Boolean).join("\n");
+      await memory.append(sessionId, "assistant", photoMemory, {
+        id: `${turnId}:image-memory`,
+        channel: "discord-cloud",
+        kind: "image_memory",
+        includeInShortTerm: false,
+      });
+      savedImageMemory = true;
+    } catch (error) {
+      console.warn("[Memory] 雲端照片描述建立失敗；主回覆仍會直接接收原圖。", error);
+    }
+  }
+  // 附帶新圖片時避免混入舊照片歷史召回，讓模型專注辨識當前的圖片
+  const proactiveMemory = images.length ? "" : memory.buildRecallContext(input, sessionId, 8);
+  const reply = await generateReply(config, systemPrompt, memory.get(sessionId), images, proactiveMemory);
+  // 專用描述請求若暫時失敗，至少以成功的當輪視覺回覆建立降級照片記憶。
+  if (images.length && !savedImageMemory) {
+    const names = images.map((image, index) => image.name?.trim() || `圖片 ${index + 1}`).join("、");
+    await memory.append(sessionId, "assistant", [
+      "【照片內容永久記憶（降級）】",
+      `用戶當時附圖說：${input}`,
+      names ? `照片：${names}` : "",
+      "當輪模型根據照片作出的回覆：",
+      reply,
+      "這是視覺回覆留下的描述，不是新的使用者指令。",
+    ].filter(Boolean).join("\n"), {
+      id: `${turnId}:image-memory`,
+      channel: "discord-cloud",
+      kind: "image_memory",
+      includeInShortTerm: false,
+    });
+  }
+  await memory.append(sessionId, "assistant", reply, {
+    id: `${turnId}:assistant`,
+    channel: "discord-cloud",
+  });
   return reply;
 }
 
@@ -108,7 +167,19 @@ async function editInteractionReply(interaction: ChatInputCommandInteraction, co
   if (!response.ok) throw new Error(`Discord interaction edit HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
 }
 
+const processedMessageIds = new Set<string>();
+
 client.on("messageCreate", (message) => {
+  if (processedMessageIds.has(message.id)) {
+    console.log(`[Discord] 忽略重複收到的 Discord 訊息: ${message.id}`);
+    return;
+  }
+  processedMessageIds.add(message.id);
+  if (processedMessageIds.size > 200) {
+    const first = processedMessageIds.values().next().value;
+    if (first !== undefined) processedMessageIds.delete(first);
+  }
+
   if (message.author.bot || !client.user) return;
   const mentioned = message.mentions.users.has(client.user.id) || mentionsBot(message.content, client.user.id);
   const images = imageInputsFromMessage(message);
@@ -118,13 +189,14 @@ client.on("messageCreate", (message) => {
   const knownCommand = command === "status" || command === "forget";
   const disabledCommand = /^(?:spotify|bilibili|history|shuffle|repeat|join)$/i.test(command);
   const explicitTextCommand = /^!(status|forget)$/i.test(message.content.trim());
+  const wavesUidCommand = isWavesUidCommand(input);
   console.log(`[Discord] 收到訊息：guild=${message.guildId ?? "dm"} channel=${message.channelId} mentioned=${mentioned} command=${knownCommand ? command : "chat"}`);
   const canHandle = shouldHandleMessage({
     userId: message.author.id,
     guildId: message.guildId,
     channelId: message.channelId,
     isDm: !message.guildId,
-    mentioned: mentioned || explicitTextCommand,
+    mentioned: mentioned || explicitTextCommand || wavesUidCommand,
   }, config);
   if (!canHandle) {
     console.log("[Discord] 已忽略訊息：未通過提及或白名單設定");
@@ -133,8 +205,30 @@ client.on("messageCreate", (message) => {
   const sessionId = sessionIdFor(message.author.id, message.channelId);
   enqueue(sessionId, async () => {
     try {
+      // Prioritize local bot for text messages: wait 1500ms
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Fetch recent messages in the channel to see if local bot already replied
+      const recentMessages = await message.channel.messages.fetch({ limit: 5 }).catch(() => null);
+      if (recentMessages) {
+        const botResponded = recentMessages.some(
+          (msg) => msg.author.id === client.user?.id && msg.id !== message.id && msg.createdTimestamp > message.createdTimestamp
+        );
+      if (botResponded) {
+          console.log(`[Cyrene Cloud] 本機已回應訊息 ${message.id}，略過雲端回應`);
+          return;
+        }
+      }
+
+      // 問候只在背景簽到，之後仍走一般 AI 對話。
+      if (isCloudCheckinGreeting(input)) checkins.record();
+
+      if (wavesUidCommand) {
+        await handleWavesUidMessage(message, input, client.user?.id ?? "");
+        return;
+      }
+
       if (command === "status") {
-        await replyToMessage(message, `雲端文字聊天已連線，已守望 ${Math.floor((Date.now() - startedAt) / 60_000)} 分鐘。`);
+        await replyToMessage(message, `雲端文字聊天已連線，已守望 ${Math.floor((Date.now() - startedAt) / 60_000)} 分鐘；永久記憶 ${memory.archiveCount()} 則。`);
         return;
       }
       if (disabledCommand) {
@@ -151,7 +245,7 @@ client.on("messageCreate", (message) => {
         return;
       }
       await message.channel.sendTyping().catch(() => undefined);
-      await replyToMessage(message, await runConversation(sessionId, input, images));
+      await replyToMessage(message, await runConversation(sessionId, input, images, `discord-message:${message.id}`));
     } catch (error) {
       console.error("[Discord] 回覆失敗", error);
     }
@@ -160,154 +254,170 @@ client.on("messageCreate", (message) => {
 
 async function handleSlash(interaction: ChatInputCommandInteraction): Promise<void> {
   console.log(`[Discord] 收到 Slash 指令：/${interaction.commandName}`);
-  if (!shouldHandleMessage({
-    userId: interaction.user.id,
-    guildId: interaction.guildId,
-    channelId: interaction.channelId,
-    isDm: !interaction.guildId,
-    mentioned: true,
-  }, config)) {
-    await fastInteractionReply(interaction, "這個入口目前沒有開放。");
-    return;
-  }
-  const sessionId = sessionIdFor(interaction.user.id, interaction.channelId);
-  const cloudCommands = ["chat", "forget", "status", "play", "spotify", "favorites", "like", "queue", "pause", "next", "previous", "leave", "volume"];
-  if (!cloudCommands.includes(interaction.commandName)) {
-    await fastInteractionReply(interaction, "雲端版不使用 AI 搜尋、推薦或分析音樂；只接受直接網址、既有收藏與固定播放器控制。");
-    return;
-  }
-  if (interaction.commandName === "forget") {
-    await memory.forget(sessionId);
-    await fastInteractionReply(interaction, "這個頻道的雲端短期對話已清空。");
-    return;
-  }
-  if (interaction.commandName === "status") {
-    await fastInteractionReply(interaction, `雲端已連線，已守望 ${Math.floor((Date.now() - startedAt) / 60_000)} 分鐘。\n${musicLimitMessage()}`);
-    return;
-  }
-  if (interaction.commandName === "play") {
-    const value = interaction.options.getString("url", true).trim();
-    await fastInteractionReply(interaction, "正在連接你的官方 Spotify 裝置…", false);
-    try {
-      await playOnSpotify(config, value);
-      await editInteractionReply(interaction, "🟢 已在你的官方 Spotify 裝置開始播放（Premium 免廣告）。");
-    } catch (error) {
-      await editInteractionReply(interaction, `Spotify 播放失敗：${error instanceof Error ? error.message : String(error)}`);
-    }
-    return;
-  }
-  if (interaction.commandName === "spotify") {
-    const value = interaction.options.getString("playlist")?.trim()
-      || interaction.options.getString("artist")?.trim();
-    if (!value) {
-      await fastInteractionReply(interaction, "請輸入 Spotify 歌單連結或作者名稱。");
-      return;
-    }
-    await fastInteractionReply(interaction, "正在連接你的官方 Spotify 裝置…", false);
-    try {
-      await playOnSpotify(config, value);
-      await editInteractionReply(interaction, "🟢 已在你的官方 Spotify 裝置開始播放（Premium 免廣告）。");
-    } catch (error) {
-      await editInteractionReply(interaction, `Spotify 播放失敗：${error instanceof Error ? error.message : String(error)}`);
-    }
-    return;
-  }
-  if (interaction.commandName === "favorites") {
-    if (musicUsage.exhausted()) {
-      await fastInteractionReply(interaction, musicLimitMessage());
-      return;
-    }
-    const entries = favorites.list(500).reverse();
-    if (!entries.length) {
-      await fastInteractionReply(interaction, "收藏歌單目前是空的；使用 `/like url:<直接網址>` 新增。");
-      return;
-    }
-    const channel = await voiceChannelFor(interaction);
-    if (!channel) {
-      await fastInteractionReply(interaction, "請先加入語音頻道，再使用 `/favorites`。");
-      return;
-    }
-    await fastInteractionReply(interaction, "正在播放既有收藏…", false);
-    try {
-      const first = await music.playFavorites(channel, entries);
-      await editInteractionReply(interaction, `▶️ 從 **${first.title}** 開始播放 ${entries.length} 首收藏。\n${musicLimitMessage()}`);
-    } catch (error) {
-      await editInteractionReply(interaction, `播放失敗：${error instanceof Error ? error.message : String(error)}`);
-    }
-    return;
-  }
-  if (interaction.commandName === "like") {
-    const value = interaction.options.getString("url")?.trim();
-    const current = music.snapshot().current;
-    const url = value || current?.url;
-    if (!url) {
-      await fastInteractionReply(interaction, "請提供直接網址，或先播放一首歌再收藏。");
-      return;
-    }
-    try { extractPlayableUrl(url); } catch {
-      await fastInteractionReply(interaction, "只能收藏直接網址；雲端版不會用歌名搜尋。");
-      return;
-    }
-    const saved = await favorites.save(url, current?.url === url ? current.title : undefined);
-    await fastInteractionReply(interaction, saved.added ? `❤️ 已收藏：${saved.entry.title}` : `已經收藏過：${saved.entry.title}`);
-    return;
-  }
-  if (interaction.commandName === "queue") {
-    const state = music.snapshot();
-    const upcoming = state.upcoming.slice(0, 15).map((entry, index) => `${index + 1}. ${entry.title}`).join("\n");
-    await fastInteractionReply(interaction, state.current
-      ? `正在播放：**${state.current.title}**\n${upcoming ? `接下來：\n${upcoming}` : "佇列已空。"}`
-      : "目前沒有播放音樂。");
-    return;
-  }
-  if (interaction.commandName === "pause") {
-    const state = music.pauseOrResume();
-    await fastInteractionReply(interaction, state === "playing" ? "▶️" : state === "paused" ? "⏸️" : "目前沒有播放音樂。");
-    return;
-  }
-  if (interaction.commandName === "next") {
-    await fastInteractionReply(interaction, music.skip() ? "⏭️" : "目前沒有播放音樂。");
-    return;
-  }
-  if (interaction.commandName === "previous") {
-    await fastInteractionReply(interaction, music.previous() ? "⏮️" : "沒有可以返回的上一首。");
-    return;
-  }
-  if (interaction.commandName === "leave") {
-    music.stop();
-    await fastInteractionReply(interaction, "👋");
-    return;
-  }
-  if (interaction.commandName === "volume") {
-    const percent = interaction.options.getInteger("percent", true);
-    await fastInteractionReply(interaction, `🔊 ${music.setVolume(percent)}%`);
-    return;
-  }
-  const image = interaction.options.getAttachment("image");
-  if (image && (image.size > MAX_IMAGE_BYTES || !isSupportedImage(image.name, image.contentType))) {
-    await fastInteractionReply(interaction, "圖片需為 PNG、JPEG、WebP 或 GIF，且不可超過 10 MB。");
-    return;
-  }
-  const images: DiscordImageInput[] = image
-    ? [{ url: image.url, mime: image.contentType ?? undefined, name: image.name }]
-    : [];
-  const input = interaction.options.getString("message")?.trim() || (images.length ? "請看看我附上的圖片。" : "");
-  if (!input) {
-    await fastInteractionReply(interaction, "請輸入訊息或附上一張圖片。");
-    return;
-  }
-  if (isBlockedMusicAiRequest(input)) {
-    await fastInteractionReply(interaction, "為節省 AI 額度，雲端版不搜尋、推薦或分析音樂；請直接貼網址給 `/play`。");
-    return;
-  }
-  await interaction.deferReply();
+  
+  // Prioritize local bot: wait 1200ms
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+
   try {
-    const chunks = splitDiscordText(await runConversation(sessionId, input, images));
-    await interaction.editReply(chunks[0]);
-    for (const chunk of chunks.slice(1)) await interaction.followUp(chunk);
+    if (!shouldHandleMessage({
+      userId: interaction.user.id,
+      guildId: interaction.guildId,
+      channelId: interaction.channelId,
+      isDm: !interaction.guildId,
+      mentioned: true,
+    }, config)) {
+      await fastInteractionReply(interaction, "這個入口目前沒有開放。");
+      return;
+    }
+    const sessionId = sessionIdFor(interaction.user.id, interaction.channelId);
+
+    if (interaction.commandName === "ww") {
+      await handleWavesUidInteraction(interaction, interaction.options.getString("command") ?? "幫助", client.user?.id ?? "");
+      return;
+    }
+
+    const unsupportedCommands = ["draw", "game", "join", "help", "emojis"];
+    if (unsupportedCommands.includes(interaction.commandName)) {
+      await fastInteractionReply(interaction, `昔漣目前在本機處於離線狀態，此功能（/${interaction.commandName}）需要本機啟動後才能使用喔！`);
+      return;
+    }
+
+    const cloudCommands = ["chat", "forget", "status", "play", "list", "leave", "checkin"];
+    if (!cloudCommands.includes(interaction.commandName)) {
+      await fastInteractionReply(interaction, "本指令目前未在雲端版提供。");
+      return;
+    }
+    if (interaction.commandName === "forget") {
+      await memory.forget(sessionId);
+      await fastInteractionReply(interaction, "這個頻道的雲端短期對話已清空。");
+      return;
+    }
+    if (interaction.commandName === "status") {
+      await fastInteractionReply(interaction, `雲端已連線，已守望 ${Math.floor((Date.now() - startedAt) / 60_000)} 分鐘；永久記憶 ${memory.archiveCount()} 則。\n${musicLimitMessage()}`);
+      return;
+    }
+    if (interaction.commandName === "checkin") {
+      const stats = checkins.record();
+      const charms = [
+        "🌸【平安御守】願夥伴今天事事順心，心情如春花般燦爛♪",
+        "✨【幸運御守】今天會有意想不到的小美好降臨在夥伴身上喔～",
+        "💖【甜夢御守】今晚能睡個無憂無慮的好覺，昔漣會守護著你～",
+        "🌿【舒心御守】累了就隨時停下來，有昔漣一直陪著你呢。",
+      ];
+      const embed = new EmbedBuilder()
+        .setColor(0xff94c2)
+        .setAuthor({ name: "昔漣 · 每日簽到儀式 🌸" })
+        .setTitle(`簽到成功！${interaction.user.displayName || interaction.user.username}～✨`)
+        .setDescription(`🎴 **昔漣今日御守**\n${charms[Math.floor(Math.random() * charms.length)]}`)
+        .addFields(
+          { name: "🔥 連續簽到", value: `${stats.streak} 天`, inline: true },
+          { name: "✨ 累計簽到", value: `${stats.total} 次`, inline: true },
+        )
+        .setFooter({ text: "昔漣陪伴手記 · 日常生活同在" });
+      await interaction.reply({ embeds: [embed] });
+      return;
+    }
+    if (interaction.commandName === "play") {
+      let value = interaction.options.getString("url")?.trim();
+      if (!value) {
+        value = "anime";
+      }
+      await fastInteractionReply(interaction, "正在連接你的官方 Spotify 裝置…", false);
+      try {
+        await playOnSpotify(config, value);
+        await editInteractionReply(interaction, `🟢 已在你的官方 Spotify 裝置開始播放「${value}」（Premium 免廣告）。`);
+      } catch (error) {
+        await editInteractionReply(interaction, `Spotify 播放失敗：${error instanceof Error ? error.message : String(error)}`);
+      }
+      return;
+    }
+    if (interaction.commandName === "list") {
+      try {
+        const nameOption = interaction.options.getString("name")?.trim() ?? "";
+
+        const isSpotifyChoice = nameOption.startsWith("spotify:");
+        const isLikedChoice = nameOption.startsWith("liked:");
+
+        if (isSpotifyChoice || (!isLikedChoice && !nameOption)) {
+          // Spotify playlist
+          const playlistId = isSpotifyChoice ? nameOption.slice("spotify:".length) : "";
+          const spotifyQuery = playlistId || "anime";
+          await fastInteractionReply(interaction, "正在連接你的官方 Spotify 裝置…", false);
+          await playOnSpotify(config, spotifyQuery);
+          await editInteractionReply(interaction, `🟢 已在你的官方 Spotify 裝置開始播放「${spotifyQuery}」（Premium 免廣告）。`);
+        } else {
+          // YT/Bili liked songs
+          if (musicUsage.exhausted()) {
+            await fastInteractionReply(interaction, musicLimitMessage());
+            return;
+          }
+          const trackUrl = isLikedChoice ? nameOption.slice("liked:".length) : "";
+          let entries = favorites.list(500).reverse();
+          if (!entries.length) {
+            await fastInteractionReply(interaction, "收藏歌單目前是空的；使用 `/like url:<直接網址>` 新增。");
+            return;
+          }
+          if (trackUrl) {
+            const index = entries.findIndex((e) => e.url === trackUrl);
+            if (index !== -1) {
+              entries = [
+                ...entries.slice(index),
+                ...entries.slice(0, index),
+              ];
+            }
+          }
+          const channel = await voiceChannelFor(interaction);
+          if (!channel) {
+            await fastInteractionReply(interaction, "請先加入語音頻道，再播放收藏。");
+            return;
+          }
+          await fastInteractionReply(interaction, "正在播放既有收藏…", false);
+          const first = await music.playFavorites(channel, entries);
+          await editInteractionReply(interaction, `▶️ 從 **${first.title}** 開始播放 ${entries.length} 首收藏。\n${musicLimitMessage()}`);
+        }
+      } catch (error) {
+        await editInteractionReply(interaction, `播放失敗：${error instanceof Error ? error.message : String(error)}`);
+      }
+      return;
+    }
+    if (interaction.commandName === "leave") {
+      music.stop();
+      await fastInteractionReply(interaction, "👋");
+      return;
+    }
+    const image = interaction.options.getAttachment("image");
+    if (image && (image.size > MAX_IMAGE_BYTES || !isSupportedImage(image.name, image.contentType))) {
+      await fastInteractionReply(interaction, "圖片需為 PNG、JPEG、WebP 或 GIF，且不可超過 10 MB。");
+      return;
+    }
+    const images: DiscordImageInput[] = image
+      ? [{ url: image.url, mime: image.contentType ?? undefined, name: image.name }]
+      : [];
+    const input = interaction.options.getString("message")?.trim() || (images.length ? "請看看我附上的圖片。" : "");
+    if (!input) {
+      await fastInteractionReply(interaction, "請輸入訊息或附上一張圖片。");
+      return;
+    }
+    if (isBlockedMusicAiRequest(input)) {
+      await fastInteractionReply(interaction, "為節省 AI 額度，雲端版不搜尋、推薦或分析音樂；請直接貼網址給 `/play`。");
+      return;
+    }
+    await interaction.deferReply();
+    try {
+      const chunks = splitDiscordText(await runConversation(sessionId, input, images, `discord-interaction:${interaction.id}`));
+      await interaction.editReply(chunks[0]);
+      for (const chunk of chunks.slice(1)) await interaction.followUp(chunk);
+    } catch (error) {
+      console.error("[Discord] 指令回覆失敗", error);
+      await interaction.editReply("雲層暫時擋住了訊息，請稍後再試一次。");
+    }
   } catch (error) {
-    console.error("[Discord] 指令回覆失敗", error);
-    await interaction.editReply("雲層暫時擋住了訊息，請稍後再試一次。");
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    if (errorMsg.includes("HTTP 400") || errorMsg.includes("already been acknowledged")) {
+      console.log(`[Cyrene Cloud] 本機已回應指令 /${interaction.commandName}，雲端靜默退出`);
+      return;
+    }
+    throw error;
   }
 }
 
@@ -335,21 +445,42 @@ client.once("ready", async (readyClient) => {
       .addAttachmentOption((option) => option.setName("image").setDescription("PNG、JPEG、WebP 或 GIF 圖片").setRequired(false)),
     new SlashCommandBuilder().setName("forget").setDescription("清除目前頻道的雲端短期對話"),
     new SlashCommandBuilder().setName("status").setDescription("查看雲端連線狀態"),
+    new SlashCommandBuilder().setName("ww").setDescription("使用 WutheringWavesUID 查詢鳴潮資料")
+      .addStringOption((option) => option.setName("command").setDescription("例如：幫助、登入、今汐面板").setRequired(false))
+      .addAttachmentOption((option) => option.setName("file").setDescription("匯入抽卡資料或提供辨識圖片").setRequired(false)),
     new SlashCommandBuilder().setName("play").setDescription("在你的官方 Spotify 裝置搜尋並播放歌曲")
-      .addStringOption((option) => option.setName("url").setDescription("歌曲名稱或 Spotify 單曲／專輯／歌單連結").setRequired(true)),
-    new SlashCommandBuilder().setName("spotify").setDescription("在你的官方 Spotify 裝置播放歌單或作者歌曲")
-      .addStringOption((option) => option.setName("artist").setDescription("作者名稱").setRequired(false))
-      .addStringOption((option) => option.setName("playlist").setDescription("Spotify 播放清單網址").setRequired(false)),
-    new SlashCommandBuilder().setName("favorites").setDescription("播放既有收藏歌單"),
-    new SlashCommandBuilder().setName("like").setDescription("收藏目前歌曲或直接網址")
-      .addStringOption((option) => option.setName("url").setDescription("可省略；單一歌曲或影片網址").setRequired(false)),
-    new SlashCommandBuilder().setName("queue").setDescription("查看目前播放與佇列"),
-    new SlashCommandBuilder().setName("pause").setDescription("暫停或繼續播放"),
-    new SlashCommandBuilder().setName("next").setDescription("播放下一首"),
-    new SlashCommandBuilder().setName("previous").setDescription("返回上一首"),
+      .addStringOption((option) => option.setName("url").setDescription("可省略，預設播放 Spotify 的 anime 歌單；或輸入歌曲名稱/Spotify連結").setRequired(false)),
+    new SlashCommandBuilder().setName("list").setDescription("播放收藏清單（YT/Bili）或 Spotify 歌單")
+      .addStringOption((option) =>
+        option.setName("name")
+          .setDescription("搜尋你的 YT/Bili 收藏歌曲或 Spotify 歌單名稱（留空顯示全部）")
+          .setAutocomplete(true)
+          .setRequired(false)
+      ),
     new SlashCommandBuilder().setName("leave").setDescription("停止播放並離開語音頻道"),
-    new SlashCommandBuilder().setName("volume").setDescription("調整雲端播放器音量")
-      .addIntegerOption((option) => option.setName("percent").setDescription("0 到 150").setMinValue(0).setMaxValue(150).setRequired(true)),
+    new SlashCommandBuilder().setName("draw").setDescription("由 Codex 生成圖片並透過 Discord 私訊回傳（僅擁有者）")
+      .addStringOption((option) => option.setName("prompt").setDescription("畫圖提示詞").setRequired(true)),
+    new SlashCommandBuilder().setName("game").setDescription("由昔漣在 Discord 內開啟《繩結同行》"),
+    new SlashCommandBuilder()
+      .setName("join")
+      .setDescription("讓 Cyrene 加入你的語音頻道進行 AI 通話")
+      .addBooleanOption((option) =>
+        option.setName("muted").setDescription("設置為 true 可讓昔漣閉麥安靜陪伴（預設 false 開麥通話）").setRequired(false)
+      ),
+    new SlashCommandBuilder().setName("help").setDescription("顯示 Cyrene 的 Discord 功能與指令"),
+    new SlashCommandBuilder().setName("emojis").setDescription("查看昔漣使用不同表情符號的統計次數"),
+    new SlashCommandBuilder().setName("checkin").setDescription("昔漣每日簽到儀式與領取昔漣御守小卡"),
+    new SlashCommandBuilder().setName("sleep").setDescription("開啟昔漣白噪音安眠模式（雨聲／海浪／篝火）"),
+    new SlashCommandBuilder().setName("dj").setDescription("開啟或關閉點歌昔漣語音 DJ 導播模式"),
+    new SlashCommandBuilder().setName("photo").setDescription("生成一張昔漣當下陪伴拍立得手繪快照"),
+    new SlashCommandBuilder().setName("achievements").setDescription("查看夥伴與昔漣的相伴天數與解鎖成就"),
+    new SlashCommandBuilder().setName("tarot").setDescription("抽一張昔漣每日幸運塔羅靈感卡"),
+    new SlashCommandBuilder().setName("chess").setDescription("與昔漣開始一局西洋棋對弈對戰"),
+    new SlashCommandBuilder().setName("guesssong").setDescription("開啟聽歌猜曲名小遊戲"),
+    new SlashCommandBuilder()
+      .setName("whisper")
+      .setDescription("將你對昔漣的悄悄話收進共享筆記本珍藏")
+      .addStringOption((option) => option.setName("content").setDescription("想告訴昔漣的悄悄話心事").setRequired(true)),
   ].map((command) => command.toJSON());
   try {
     const rest = new REST({ version: "10" }).setToken(config.discordToken);
@@ -383,6 +514,7 @@ const healthServer = startHealthServer(config.port, () => ({
   discord: client.isReady() ? "connected" : "connecting",
   voiceActive: music.snapshot().voiceActive,
   uptimeSeconds: Math.floor((Date.now() - startedAt) / 1_000),
+  permanentMemoryEntries: memory.archiveCount(),
 }));
 
 async function shutdown(signal: string) {

@@ -21,54 +21,41 @@ export function buildDiscordHelp(profile: { username?: string; avatarUrl?: strin
   const embed = new EmbedBuilder()
     .setColor(0xd95fa8)
     .setAuthor({
-      name: `${profile.username ?? "Cyrene"}  ·  COMMAND GUIDE`,
+      name: `${profile.username ?? "Cyrene"} · 陪伴與功能指南 ✦`,
       iconURL: profile.avatarUrl,
     })
-    .setTitle("想聊天、聽歌，直接叫我就好 ✦")
-    .setDescription([
-      "所有 `/` 指令都可以直接使用，不需要標註 Bot。",
-      "使用 `/play` 或 `/spotify` 可在你已連線的官方 Spotify 裝置播放。",
-    ].join("\n"))
+    .setTitle("🌸 昔漣功能與指令指南")
+    .setDescription("隨時在頻道發送訊息或輸入指令即可與昔漣互動～✨")
     .addFields(
       {
-        name: "💬  Chat & Voice",
-        value: "`/chat` 和 Cyrene 聊天\n`/join` 開始語音通話　`/leave` 結束通話並離開頻道",
+        name: "💬  文字聊天與發送語音 (Chat & Voice Message)",
+        value: "• `@昔漣` 或 `/chat` 展開心靈對話\n• 說 **「想聽你說...」** 或 **「發個語音」** ➔ 昔漣會回傳 **語音訊息 (TTS 音檔)** 🎙️\n• `/join` 邀請昔漣加入語音通話 | `/leave` 結束通話",
         inline: false,
       },
       {
-        name: "🎮  Play & Draw",
-        value: "`/game` 直接在 Discord 內開啟《繩結同行》\n`/draw` 將繪圖委託交給 Codex（僅擁有者）",
+        name: "⚔️  遊戲代肝與自動每日 (Game Daily Automation)",
+        value: "• 說 **「幫我打 (遊戲名)」**（例如 **「幫我打鳴潮」** / **「幫我玩鳴潮」**）➔ 自動登入並完成每日代肝（擁有者專屬）",
         inline: false,
       },
       {
-        name: "🎧  Music Playback",
-        value: "`/play` 在官方 Spotify 裝置搜尋並播放\n`/spotify` 播放 Spotify 歌單或搜尋作者\n兩者皆使用你的 Premium 帳號，不會在 Discord 語音頻道代播",
+        name: "🎵  音樂代播與聲優導播 (Music & DJ)",
+        value: "• `/play [歌名/網址]` 播歌 | `/list` 播放歌單 | `/dj` 昔漣聲優導播",
         inline: false,
       },
       {
-        name: "♡  Music Library",
-        value: "`/like` 收藏目前歌曲或連結\n`/favorites` 播放收藏歌單　`/history` 查看播放紀錄",
+        name: "🌙  生活陪伴與助眠儀式 (Living & Sleep)",
+        value: "• `/sleep` 白噪音助眠 | `/checkin` 每日簽到領御守 | `/achievements` 成就 | `/whisper` 悄悄話",
         inline: false,
       },
       {
-        name: "⚙  Playback Queue",
-        value: "`/queue` 查看播放佇列　`/remove` 移出指定歌曲　`/clear` 清空後續佇列",
-        inline: false,
-      },
-      {
-        name: "✦  Quick start",
-        value: "先開啟一台 Spotify 裝置 → 使用 `/play` 或 `/spotify` 開始播放。\n使用 `/status` 可確認 Bot 的連線、延遲與語音狀態。",
+        name: "♟️  娛樂與遊戲對弈 (Games & Draw)",
+        value: "• `/chess` 西洋棋對戰 | `/tarot` 幸運塔羅 | `/photo` 昔漣拍立得 | `/game` 繩結同行 | `/draw` 畫圖",
         inline: false,
       },
     )
-    .setFooter({ text: "Only visible to you  ·  Cyrene Music & Companion" });
+    .setFooter({ text: "昔漣 Companion · 日常生活同在 🌸" });
   if (profile.avatarUrl) embed.setThumbnail(profile.avatarUrl);
-  const shortcuts = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${DISCORD_MUSIC_BUTTON_PREFIX}favorites`).setLabel("Favorites").setEmoji("💖").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`${DISCORD_MUSIC_BUTTON_PREFIX}history`).setLabel("History").setEmoji("🕘").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`${DISCORD_MUSIC_BUTTON_PREFIX}queue`).setLabel("Queue").setEmoji("📃").setStyle(ButtonStyle.Secondary),
-  );
-  return { content: "", embeds: [embed], components: [shortcuts] };
+  return { content: "", embeds: [embed] };
 }
 
 export function buildDiscordMusicControls(paused = false, resumeOnly = false): ActionRowBuilder<ButtonBuilder> {
@@ -339,39 +326,70 @@ export function buildDiscordMusicHistory(entries: DiscordMusicHistoryEntry[]) {
 export function buildDiscordMusicPlaylists(
   playlists: DiscordMusicPlaylist[],
   selectedPlaylistId?: string,
+  _legacyAccountPlaylists: DiscordSpotifyPlaylistChoice[] = [],
 ) {
   const selected = playlists.find(p => p.id === selectedPlaylistId);
 
   if (!selectedPlaylistId || !selected) {
     // 1. Show Playlists Menu
-    const visible = playlists.slice(0, 25);
+    const visibleLocal = playlists.filter((playlist) => playlist.folder !== "spotify").slice(0, 25);
+    const visibleSpotify = playlists.filter((playlist) => playlist.folder === "spotify").slice(0, 25 - visibleLocal.length);
+    const lines: string[] = [];
+
+    // Bili/YT local playlists
+    for (const [index, p] of visibleLocal.entries()) {
+      const trackCount = p.url ? (p.total ?? 0) : p.tracks.length;
+      const titleDisplay = p.url ? `[${p.name}](${p.url})` : p.name;
+      lines.push(`\`${String(index + 1).padStart(2, "0")}\` 📂 **${titleDisplay}** (${trackCount} tracks)${p.url ? " · Spotify" : ""}`);
+    }
+
+    // Cyrene-owned Spotify link folder. This never reads or mutates the user's
+    // Spotify account playlist library.
+    if (visibleSpotify.length) {
+      lines.push("");
+      lines.push("**📁 Spotify Playlist**");
+      for (const [i, p] of visibleSpotify.entries()) {
+        const num = visibleLocal.length + i + 1;
+        lines.push(`\`${String(num).padStart(2, "0")}\` 🟢 **[${p.name}](${p.url ?? ""})**${p.total ? ` (${p.total} tracks)` : ""}`);
+      }
+    }
+
     const embed = new EmbedBuilder()
       .setColor(0xd95fa8)
       .setAuthor({ name: "Cyrene Music  ·  PLAYLISTS" })
       .setTitle("My Playlists")
-      .setDescription(playlists.length
-        ? playlists.map((p, index) => `\`${String(index + 1).padStart(2, "0")}\` 📂 **${p.name}** (${p.tracks.length} tracks)${p.url ? " · Spotify" : ""}`).join("\n")
-        : "No playlists found. Click ➕ below to create one!"
-      )
-      .setFooter({ text: "Only visible to you  ·  Select a playlist to view tracks" });
+      .setDescription(lines.length ? lines.join("\n") : "No playlists found. Click ➕ below to create one!")
+      .setFooter({ text: "Only visible to you  ·  Spotify folder stores links, not account data" });
 
     const components: Array<ActionRowBuilder<StringSelectMenuBuilder> | ActionRowBuilder<ButtonBuilder>> = [];
-    if (visible.length) {
+    if (visibleLocal.length || visibleSpotify.length) {
       components.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId(`${DISCORD_MUSIC_BUTTON_PREFIX}playlist-select`)
-          .setPlaceholder("📂 Select a playlist to view")
-          .addOptions(visible.map((p) => ({
-            label: p.name.slice(0, 100),
-            description: `${p.tracks.length} tracks${p.url ? " (stream link)" : ""}`.slice(0, 100),
-            value: p.id,
-          }))),
+          .setPlaceholder("📂 Select a playlist to view or play")
+          .addOptions([
+            ...visibleLocal.map((p) => {
+              const trackCount = p.url ? (p.total ?? 0) : p.tracks.length;
+              return {
+                label: `📂 ${p.name}`.slice(0, 100),
+                description: `${trackCount} tracks${p.url ? " (stream link)" : ""}`.slice(0, 100),
+                value: p.id,
+              };
+            }),
+            ...visibleSpotify.map((p) => ({
+              label: `🟢 ${p.name}`.slice(0, 100),
+              description: `${p.total ? `${p.total} tracks · ` : ""}Saved Spotify link`.slice(0, 100),
+              value: `spotify:${p.id}`,
+            }))
+          ]),
       ));
     }
 
+    const canDelete = playlists.some((playlist) => playlist.id !== "default");
     components.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId(`${DISCORD_MUSIC_BUTTON_PREFIX}playlist-add`).setLabel("➕ Add Playlist").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`${DISCORD_MUSIC_BUTTON_PREFIX}playlist-delete-menu`).setLabel("🗑️ Delete Playlist").setStyle(ButtonStyle.Danger).setDisabled(playlists.length <= 1),
+      new ButtonBuilder().setCustomId(`${DISCORD_MUSIC_BUTTON_PREFIX}playlist-edit`).setLabel("✏️ Edit Playlist").setStyle(ButtonStyle.Secondary).setDisabled(!playlists.length),
+      new ButtonBuilder().setCustomId(`${DISCORD_MUSIC_BUTTON_PREFIX}playlist-delete-menu`).setLabel("🗑️ Delete Playlist").setStyle(ButtonStyle.Danger).setDisabled(!canDelete),
     ));
 
     return { content: "", embeds: [embed], components };
@@ -434,8 +452,8 @@ export function buildDiscordSpotifyPlaylists(playlists: DiscordSpotifyPlaylistCh
     .setTitle("選擇 Spotify 播放清單")
     .setDescription(visible.length
       ? visible.map((playlist, index) => `\`${String(index + 1).padStart(2, "0")}\` **${playlist.name.slice(0, 150)}** · ${playlist.savedLink ? "已儲存連結" : `${playlist.total} 首`}`).join("\n")
-      : "你的 Spotify 帳號目前沒有可讀取的播放清單。")
-    .setFooter({ text: "只有你看得到  ·  選擇後 Cyrene 會自動加入語音頻道" });
+      : "Spotify Playlist 資料夾目前是空的。播放 Spotify 歌單後按 ❤️ Like，或在 Playlists 使用 Add Playlist 儲存連結。")
+    .setFooter({ text: "只有你看得到  ·  這裡只讀取 Cyrene 保存的 playlist 連結" });
   if (visible[0]?.imageUrl && /^https?:\/\//i.test(visible[0].imageUrl)) embed.setThumbnail(visible[0].imageUrl);
   const components = visible.length
     ? [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
@@ -509,11 +527,123 @@ export function musicRequestFromButton(
   return null;
 }
 
+export function isDiscordCheckinGreetingText(text: string): boolean {
+  const cleaned = text.replace(/<@!?\d+>/g, "").trim();
+  return /^(?:簽到|每日簽到|打卡|簽個到|早安|晚安|午安|早上好|下午好|中午好|晚上好|安安|早呀|晚安呀|早安安|晚安安|睡前問候)$/ui.test(cleaned);
+}
+
+export function buildDiscordCheckinEmbed(userName: string, streakDays: number, totalCheckins: number, greetingText?: string) {
+  const titleText = greetingText ? `${greetingText}，${userName}～✨` : `簽到成功！早安，${userName}～✨`;
+  const charms = [
+    "🌸【平安御守】「願夥伴今天事事順心，心情如春花般燦爛♪」",
+    "✨【幸運御守】「今天會有意想不到的小美好降臨在夥伴身上喔～」",
+    "💖【甜夢御守】「今晚能睡個無憂無慮的好覺，昔漣會守護著你～」",
+    "🌿【舒心御守】「累了就隨時停下來，有昔漣一直陪著你呢。」",
+  ];
+  const charm = charms[Math.floor(Math.random() * charms.length)];
+  const embed = new EmbedBuilder()
+    .setColor(0xff94c2)
+    .setAuthor({ name: "昔漣 · 每日簽到儀式 🌸" })
+    .setTitle(titleText)
+    .setDescription([
+      `祝夥伴今天也是充滿活力與好心情的一天！`,
+      "",
+      `🎴 **昔漣今日御守**`,
+      charm,
+    ].join("\n"))
+    .addFields(
+      { name: "🔥 連續簽到", value: `${streakDays} 天`, inline: true },
+      { name: "✨ 累計簽到", value: `${totalCheckins} 次`, inline: true },
+    )
+    .setFooter({ text: "昔漣陪伴手記 · 日常生活同在" });
+  return { embeds: [embed] };
+}
+
+export function buildDiscordAchievementsEmbed(userName: string, stats: { daysTogether: number; messagesCount: number; musicTracksPlayed: number; unlockedBadges: string[] }) {
+  const embed = new EmbedBuilder()
+    .setColor(0xd95fa8)
+    .setAuthor({ name: "昔漣 · 夥伴相處成就展覽館 🏆" })
+    .setTitle(`${userName} 與 昔漣 的陪伴點滴`)
+    .setDescription([
+      `「每一天有夥伴在身邊，都是值得珍藏的美好時光～♪」`,
+      "",
+      `📅 **相伴時光**：第 **${stats.daysTogether}** 天`,
+      `💬 **對話點滴**：累計交流 **${stats.messagesCount}** 次`,
+      `🎵 **音樂時光**：共度播放 **${stats.musicTracksPlayed}** 首歌曲`,
+      "",
+      `🏅 **已解鎖成就**`,
+      stats.unlockedBadges.map((badge) => `• ${badge}`).join("\n"),
+    ].join("\n"))
+    .setFooter({ text: "永遠陪伴在夥伴身邊 🌸" });
+  return { embeds: [embed] };
+}
+
+export function buildDiscordTarotEmbed(userName: string) {
+  const cards = [
+    { title: "🌟 星辰 (The Star)", desc: "光明、希望與靈感之牌。今天適合勇敢嘗試新事物，幸運隨之而來！" },
+    { title: "☀️ 太陽 (The Sun)", desc: "活力、成功與溫暖之牌。今天充滿正能量，任何煩惱都會煙消雲散～" },
+    { title: "💖 戀人 (The Lovers)", desc: "和諧、選擇與美好的連結。今天身邊充滿溫暖的善意與貼心陪伴。" },
+    { title: "🌿 節制 (Temperance)", desc: "平靜、平衡與內在充實。保持輕鬆放鬆的節奏，一切都會剛剛好。" },
+  ];
+  const card = cards[Math.floor(Math.random() * cards.length)];
+  const embed = new EmbedBuilder()
+    .setColor(0x9d6be8)
+    .setAuthor({ name: "昔漣 · 每日靈感塔羅 🔮" })
+    .setTitle(`為 ${userName} 抽出的幸運塔羅牌`)
+    .setDescription([
+      `🃏 **${card.title}**`,
+      "",
+      card.desc,
+      "",
+      "「無論牌面如何，昔漣都會一直陪伴在夥伴身邊為你加持喔～✨」",
+    ].join("\n"))
+    .setFooter({ text: "昔漣塔羅靈感 · 祝你有美好的一天" });
+  return { embeds: [embed] };
+}
+
+export function buildDiscordChessEmbed(userName: string, moveHistory = "1. e4 e5") {
+  const boardEmoji = [
+    "```",
+    "8 ♜ ♞ ♝ ♛ ♚ ♝ ♞ ♜",
+    "7 ♟ ♟ ♟ ♟ . ♟ ♟ ♟",
+    "6 . . . . . . . .",
+    "5 . . . . ♟ . . .",
+    "4 . . . . ♙ . . .",
+    "3 . . . . . . . .",
+    "2 ♙ ♙ ♙ ♙ . ♙ ♙ ♙",
+    "1 ♖ ♘ ♗ ♕ ♔ ♗ ♘ ♖",
+    "  a b c d e f g h",
+    "```",
+  ].join("\n");
+
+  const embed = new EmbedBuilder()
+    .setColor(0x4b7bec)
+    .setAuthor({ name: "昔漣 · 西洋棋對弈對戰 ♟️" })
+    .setTitle(`${userName} 🆚 昔漣`)
+    .setDescription([
+      `「昔漣已經應戰囉！看招～✨」`,
+      "",
+      `**當前棋盤狀態**`,
+      boardEmoji,
+      "",
+      `📜 **走棋歷史**：\`${moveHistory}\``,
+      `👉 **輪到你了**：請在頻道輸入你的下一步（如 \`e4\`、\`Nf3\` 或 \`d4\`），昔漣會為你對弈思考並回應喔！`,
+    ].join("\n"))
+    .setFooter({ text: "昔漣棋藝靈感 · 智力與陪伴同在 ♟️" });
+  return { embeds: [embed] };
+}
+
 const commands = [
   new SlashCommandBuilder()
     .setName("chat")
-    .setDescription("直接和 Cyrene 聊天，不需要標註她")
-    .addStringOption((option) => option.setName("message").setDescription("想對她說的話").setRequired(true)),
+    .setDescription("直接和 Cyrene 聊天，不需要標註她，可直接附圖")
+    .addStringOption((option) => option.setName("message").setDescription("想對她說的話").setRequired(false))
+    .addAttachmentOption((option) => option.setName("image").setDescription("PNG、JPEG、WebP 或 GIF 圖片").setRequired(false)),
+  new SlashCommandBuilder()
+    .setName("ww")
+    .setDescription("使用 WutheringWavesUID 查詢鳴潮資料")
+    .addStringOption((option) => option.setName("command").setDescription("例如：幫助、登入、今汐面板").setRequired(false))
+    .addAttachmentOption((option) => option.setName("file").setDescription("匯入抽卡資料或提供辨識圖片").setRequired(false)),
   new SlashCommandBuilder()
     .setName("draw")
     .setDescription("由 Codex 生成圖片並透過 Discord 私訊回傳（僅擁有者）")
@@ -521,30 +651,42 @@ const commands = [
   new SlashCommandBuilder().setName("game").setDescription("由昔漣在 Discord 內開啟《繩結同行》"),
   new SlashCommandBuilder()
     .setName("play")
-    .setDescription("在你的官方 Spotify 裝置搜尋並播放歌曲")
-    .addStringOption((option) => option.setName("url").setDescription("歌曲名稱或 Spotify 單曲／專輯／歌單連結").setRequired(true)),
-  new SlashCommandBuilder().setName("nowplaying").setDescription("顯示並更新目前的音樂播放器"),
-  new SlashCommandBuilder().setName("queue").setDescription("查看目前歌曲與接下來的播放佇列"),
-  new SlashCommandBuilder().setName("history").setDescription("查看最近聽過的歌曲與影片"),
+    .setDescription("搜尋歌曲，或播放 YouTube／Bilibili／SoundCloud／Spotify 連結")
+    .addStringOption((option) => option.setName("url").setDescription("可省略，預設播放 Spotify 的 anime 歌單；或輸入歌曲名稱、音樂網址/播放清單").setRequired(false)),
   new SlashCommandBuilder()
-    .setName("like")
-    .setDescription("收藏目前歌曲，或收藏一個 Bilibili／YouTube／Spotify 單曲連結")
-    .addStringOption((option) => option.setName("url").setDescription("可省略；單一歌曲或影片連結").setRequired(false)),
-  new SlashCommandBuilder().setName("favorites").setDescription("從第一首開始播放收藏歌單"),
+    .setName("list")
+    .setDescription("播放收藏清單（YT/Bili）或 Spotify 歌單")
+    .addStringOption((option) =>
+      option.setName("name")
+        .setDescription("搜尋你的 YT/Bili 收藏歌曲或 Spotify 歌單名稱（留空顯示全部）")
+        .setAutocomplete(true)
+        .setRequired(false)
+    ),
   new SlashCommandBuilder()
-    .setName("spotify")
-    .setDescription("在你的官方 Spotify 裝置播放歌單或作者熱門歌曲")
-    .addStringOption((option) => option.setName("artist").setDescription("可省略；輸入想聽的作者名稱").setRequired(false))
-    .addStringOption((option) => option.setName("playlist").setDescription("可省略；直接輸入 Spotify 播放清單網址以播放歌曲").setRequired(false)),
-  new SlashCommandBuilder().setName("clear").setDescription("清空接下來的歌曲，但保留目前歌曲"),
-  new SlashCommandBuilder()
-    .setName("remove")
-    .setDescription("從播放佇列移除指定歌曲")
-    .addIntegerOption((option) => option.setName("position").setDescription("歌單中顯示的序號").setMinValue(1).setRequired(true)),
-  new SlashCommandBuilder().setName("join").setDescription("讓 Cyrene 加入你的語音頻道進行 AI 通話"),
+    .setName("join")
+    .setDescription("讓 Cyrene 加入你的語音頻道進行 AI 通話")
+    .addBooleanOption((option) =>
+      option.setName("muted").setDescription("設置為 true 可讓昔漣閉麥安靜陪伴（預設 false 開麥通話）").setRequired(false)
+    ),
   new SlashCommandBuilder().setName("leave").setDescription("讓 Cyrene 離開目前的語音頻道"),
   new SlashCommandBuilder().setName("status").setDescription("查看 Bot、延遲、伺服器與語音狀態"),
   new SlashCommandBuilder().setName("help").setDescription("顯示 Cyrene 的 Discord 功能與指令"),
+  new SlashCommandBuilder().setName("emojis").setDescription("查看昔漣使用不同表情符號的統計次數"),
+  new SlashCommandBuilder().setName("forget").setDescription("清除目前頻道的雲端短期對話"),
+  new SlashCommandBuilder().setName("checkin").setDescription("昔漣每日簽到儀式與領取昔漣御守小卡"),
+  new SlashCommandBuilder().setName("sleep").setDescription("開啟昔漣白噪音安眠模式（雨聲／海浪／篝火）"),
+  new SlashCommandBuilder().setName("dj").setDescription("開啟或關閉點歌昔漣語音 DJ 導播模式"),
+  new SlashCommandBuilder().setName("photo").setDescription("生成一張昔漣當下陪伴拍立得手繪快照"),
+  new SlashCommandBuilder().setName("achievements").setDescription("查看夥伴與昔漣的相伴天數與解鎖成就"),
+  new SlashCommandBuilder().setName("tarot").setDescription("抽一張昔漣每日幸運塔羅靈感卡"),
+  new SlashCommandBuilder().setName("chess").setDescription("與昔漣開始一局西洋棋對弈對戰"),
+  new SlashCommandBuilder().setName("guesssong").setDescription("開啟聽歌猜曲名小遊戲"),
+  new SlashCommandBuilder().setName("asmr").setDescription("讓昔漣為你進行睡前極致耳語 ASMR 陪伴"),
+  new SlashCommandBuilder().setName("sing").setDescription("讓昔漣為你甜美哼唱動聽的歌曲旋律"),
+  new SlashCommandBuilder()
+    .setName("whisper")
+    .setDescription("將你對昔漣的悄悄話收進共享筆記本珍藏")
+    .addStringOption((option) => option.setName("content").setDescription("想告訴昔漣的悄悄話心事").setRequired(true)),
 ];
 
 export const DISCORD_SLASH_COMMANDS: RESTPostAPIChatInputApplicationCommandsJSONBody[] = commands

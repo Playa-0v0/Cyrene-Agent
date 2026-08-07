@@ -1276,3 +1276,14 @@ toolRegistry.register({
 });
 
 toolRegistry.register(createPlayLive2DActionTool({ sendToLive2DWindow }));
+
+import { createNotebookWriteTool, createNotebookSearchTool } from "./tools/notebook-tool";
+import { createMemorySaveUserFactTool } from "./tools/memory-tool";
+import { createWuwaTaskTool } from "./tools/wuwa-tool";
+
+toolRegistry.register(createNotebookWriteTool());
+toolRegistry.register(createNotebookSearchTool());
+toolRegistry.register(createMemorySaveUserFactTool());
+toolRegistry.register(createWuwaTaskTool());
+
+

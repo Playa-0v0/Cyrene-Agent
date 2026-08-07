@@ -81,13 +81,23 @@ function loadResolverModelSettings(): ResolverModelSettings {
   try {
     const filePath = path.join(app.getPath("userData"), "model-settings.json")
     if (!fs.existsSync(filePath)) return DEFAULT_MODEL_SETTINGS
-    const parsed = revealSecrets(JSON.parse(fs.readFileSync(filePath, "utf8"))) as Partial<ResolverModelSettings>
+    const raw = fs.readFileSync(filePath, "utf8")
+    const parsed = revealSecrets(JSON.parse(raw)) as any
+    const provider = typeof parsed.provider === "string" && parsed.provider.trim() ? parsed.provider.trim() : DEFAULT_MODEL_SETTINGS.provider
+    const perProfile = parsed.perProvider && typeof parsed.perProvider === "object" ? parsed.perProvider[provider] : null
+
+    const baseUrl = (perProfile?.baseUrl || parsed.baseUrl || DEFAULT_MODEL_SETTINGS.baseUrl).trim()
+    const model = (perProfile?.model || parsed.model || DEFAULT_MODEL_SETTINGS.model).trim()
+    const apiKey = (perProfile?.apiKey || parsed.apiKey || "").trim()
+    const rawTransport = perProfile?.explicitTransport || parsed.explicitTransport
+    const explicitTransport = rawTransport === "openai" || rawTransport === "anthropic" || rawTransport === "auto" ? rawTransport : undefined
+
     return {
-      provider: typeof parsed.provider === "string" && parsed.provider.trim() ? parsed.provider.trim() : DEFAULT_MODEL_SETTINGS.provider,
-      baseUrl: typeof parsed.baseUrl === "string" && parsed.baseUrl.trim() ? parsed.baseUrl.trim() : DEFAULT_MODEL_SETTINGS.baseUrl,
-      model: typeof parsed.model === "string" && parsed.model.trim() ? parsed.model.trim() : DEFAULT_MODEL_SETTINGS.model,
-      apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey.trim() : "",
-      explicitTransport: parsed.explicitTransport === "openai" || parsed.explicitTransport === "anthropic" || parsed.explicitTransport === "auto" ? parsed.explicitTransport : undefined,
+      provider,
+      baseUrl,
+      model,
+      apiKey,
+      explicitTransport,
     }
   } catch {
     return DEFAULT_MODEL_SETTINGS

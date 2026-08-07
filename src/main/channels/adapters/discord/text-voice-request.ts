@@ -46,19 +46,52 @@ export function extractDiscordExactVoiceText(text: string): string | null {
   return spoken || null;
 }
 
-/** 支援「能傳一段晚安的語音嗎」、「能說句晚安嗎」及「能只說句晚安」。 */
+/** 支援各種自然語言語音請求、指定台詞及能力確認詢問。 */
 export function extractDiscordVoiceRequestTopic(text: string): string | null {
   const cleaned = text
     .replace(/\[附件:\s*.*?\s*\]/gi, "")
     .replace(/<@!?\d+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+
+  // 1. 精確指定台詞
   const exactText = extractDiscordExactVoiceText(cleaned);
   if (exactText !== null) return exactText;
-  const voiceMatch = cleaned.match(/能傳一段(?:(.+?)的)?語音(?:嗎)?[？?]?\s*$/u);
-  if (voiceMatch) return voiceMatch[1]?.trim() || "自由發揮一段自然、親切的內容";
-  const sayMatch = cleaned.match(/能說(?:一)?句\s*(.+?)(?:嗎)?[？?]?\s*$/u);
-  return sayMatch?.[1]?.trim() || null;
+
+  // 2. 詢問是否能傳語音（如「你能傳語音嗎」、「你會發語音嗎」）
+  if (
+    /(?:你能|你會|你可以|你能不能|能不能|可不可以|可否|能不能夠)(?:傳|發|發送|錄|用語音|講|說)(?:音訊|語音|聲音)?(?:嗎|不|麼)?[？?]?\s*$/u.test(cleaned) ||
+    /(?:可以|能)(?:傳|發|發送|錄)(?:語音|聲音)(?:嗎)?[？?]?\s*$/u.test(cleaned)
+  ) {
+    return "親切並確定地告訴夥伴你可以傳語音，並給予溫暖的回應";
+  }
+
+  if (/(?:教學|圖片|相片|短片|影片)/u.test(cleaned)) return null;
+
+  // 3. 任何「想聽...」、「想聽你說...」、「想聽昔漣講...」
+  const wantListenMatch = cleaned.match(/(?:想聽|聽聽|好想聽|想聽聽)(?:你|昔漣)?(?:說|講|唸|唱)?(?:一段|一個|幾句|一句|個|些)?\s*(.+?)\s*(?:嗎|吧|麼|嘛)?[？?]?\s*$/u);
+  if (wantListenMatch) {
+    return wantListenMatch[1]?.trim() || "自由發揮一段溫柔、親切的陪伴語音對話";
+  }
+
+  // 4. 「傳/發/錄/給 (一段/一個/幾句/一句/個/些) (topic) 的語音/語音」
+  const voiceMatch = cleaned.match(/(?:能|可以|能不能|可不可以|請|幫我)?(?:傳|發|錄|給)(?:一段|一個|幾句|一句|個|些)?\s*(?:(.+?)的)?語音(?:嗎|吧|麼|嘛)?[？?]?\s*$/u);
+  if (voiceMatch) {
+    return voiceMatch[1]?.trim() || "自由發揮一段自然、親切的內容";
+  }
+
+  // 5. 「說/講/唸 (幾句/一句/個)...」
+  const sayMatch = cleaned.match(/(?:能|可以|幫我)?(?:說|講|唸)(?:一|幾)?(?:句|個)\s*(.+?)(?:嗎|吧|麼|嘛)?[？?]?\s*$/u);
+  if (sayMatch?.[1]?.trim()) {
+    return sayMatch[1].trim();
+  }
+
+  // 6. 包含「語音」、「聲音」、「用講的」、「ASMR」、「唱歌」、「/sing」、「/asmr」等任何語音/音訊關鍵字
+  if (/(?:語音|聲音|用講的|聽聲音|語音話|asmr|耳語|輕聲|睡前|唱|唱歌|吟唱|\/sing|\/asmr|!sing|!asmr)/iu.test(cleaned)) {
+    return cleaned.replace(/(?:傳|發|錄|用語音|說|講|唸|請|幫我|能|可以|嗎|吧|麼|嘛|？|\?)/gu, "").trim() || "自由發揮一段自然親切的語音對話";
+  }
+
+  return null;
 }
 
 export function isDiscordTextVoiceRequestText(text: string): boolean {

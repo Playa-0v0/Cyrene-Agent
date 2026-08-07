@@ -27,6 +27,11 @@ function loadConfigs(): McpServerConfig[] {
   return [];
 }
 
+/** 查詢持久化設定，不要求 server 已經完成連線。 */
+export function hasMcpServerConfig(serverId: string): boolean {
+  return loadConfigs().some((config) => config.id === serverId);
+}
+
 function saveConfigs(configs: McpServerConfig[]): void {
   try {
     const dir = path.dirname(getConfigPath());
@@ -131,13 +136,14 @@ export async function addMcpServer(config: McpServerConfig): Promise<{
 export async function removeMcpServer(serverId: string): Promise<{ ok: boolean; error?: string }> {
   console.log(LOG_PREFIX, "移除 MCP server:", serverId);
 
+  const configs = loadConfigs();
+  const configured = configs.some((config) => config.id === serverId);
   const disconnected = await disconnectMcpServer(serverId);
-  if (!disconnected) {
+  if (!configured && !disconnected) {
     return { ok: false, error: "未找到 MCP server: " + serverId };
   }
 
-  const configs = loadConfigs().filter(c => c.id !== serverId);
-  saveConfigs(configs);
+  if (configured) saveConfigs(configs.filter((config) => config.id !== serverId));
   return { ok: true };
 }
 

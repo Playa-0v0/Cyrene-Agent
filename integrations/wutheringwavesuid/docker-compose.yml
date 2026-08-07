@@ -1,0 +1,19 @@
+services:
+  gsuid_core:
+    image: docker.cnb.cool/gscore-mirror/gsuid_core:latest
+    container_name: cyrene-gsuid-core
+    restart: unless-stopped
+    ports:
+      # HTTP 模式沒有獨立 API Token，因此只允許同一台主機連線。
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - ./data:/gsuid_core/data
+      - ./plugins:/gsuid_core/gsuid_core/plugins
+      - cyrene_gsuid_venv:/venv
+    environment:
+      PYTHONUNBUFFERED: "1"
+      UV_DEFAULT_INDEX: "${GSCORE_PYTHON_INDEX:-https://pypi.org/simple/}"
+      UV_HTTP_TIMEOUT: "120"
+
+volumes:
+  cyrene_gsuid_venv:

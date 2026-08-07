@@ -202,6 +202,7 @@ export class RelationshipLogStore {
 
     const lines = [
       "【近期關係線索】",
+      "- 以下僅供參考，不覆蓋本輪要求",
       `- 用戶最近狀態：${lastMood}`,
     ]
     if (latestSummary) lines.push(`- 最近日記摘要：${latestSummary}`)

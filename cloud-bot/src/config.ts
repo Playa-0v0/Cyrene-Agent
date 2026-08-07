@@ -48,6 +48,14 @@ function parseIntInRange(value: string | undefined, fallback: number, min: numbe
   return Number.isFinite(parsed) ? Math.max(min, Math.min(max, parsed)) : fallback;
 }
 
+export function formatCloudActivity(activity: string): string {
+  const trimmed = activity.trim();
+  if (trimmed.includes("陪") && !trimmed.includes("在家")) {
+    return trimmed.replace("陪", "在家陪");
+  }
+  return trimmed;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): CloudBotConfig {
   const openRouterKey = env.OPENROUTER_API_KEY?.trim();
   const allowedUserIds = parseIdList(required(env, "DISCORD_ALLOWED_USER_IDS"));
@@ -60,7 +68,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CloudBotConfig
     llmVisionModel: env.LLM_VISION_MODEL?.trim() || env.LLM_MODEL?.trim() || (openRouterKey ? "openrouter/free" : "gpt-4.1-mini"),
     geminiApiKey: env.GEMINI_API_KEY?.trim() || undefined,
     geminiBaseUrl: (env.GEMINI_BASE_URL?.trim() || "https://generativelanguage.googleapis.com/v1beta/openai").replace(/\/+$/, ""),
-    geminiModel: env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite",
+    geminiModel: env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
     spotifyClientId: env.SPOTIFY_CLIENT_ID?.trim() || undefined,
     spotifyClientSecret: env.SPOTIFY_CLIENT_SECRET?.trim() || undefined,
     spotifyRefreshToken: env.SPOTIFY_REFRESH_TOKEN?.trim() || undefined,
@@ -71,9 +79,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CloudBotConfig
     dataDir: env.DATA_DIR?.trim() || "./data",
     port: parseIntInRange(env.PORT, 3000, 1, 65_535),
     historyMessages: parseIntInRange(env.HISTORY_MESSAGES, 8, 4, 20),
-    maxOutputTokens: parseIntInRange(env.MAX_OUTPUT_TOKENS, 500, 64, 1_000),
+    maxOutputTokens: parseIntInRange(env.MAX_OUTPUT_TOKENS, 1000, 64, 2_000),
+
     musicMonthlyMinutes: parseIntInRange(env.CLOUD_MUSIC_MONTHLY_MINUTES, 300, 30, 600),
-    activity: env.BOT_ACTIVITY?.trim() || "在雲端守望永晝花庭",
+    activity: formatCloudActivity(env.BOT_ACTIVITY?.trim() || "在雲端守望永晝花庭"),
     systemPromptFile: env.BOT_SYSTEM_PROMPT_FILE?.trim() || undefined,
   };
 }

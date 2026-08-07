@@ -2,7 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
-import { deleteDiscordMusicFavorite, deleteDiscordMusicFavorites, loadDiscordMusicFavorites, moveDiscordMusicFavorite, saveDiscordMusicFavorite, loadDiscordMusicPlaylists, saveDiscordMusicPlaylist, saveDiscordMusicPlaylistLink, deleteDiscordMusicPlaylist } from "./music-favorites";
+import { deleteDiscordMusicFavorite, deleteDiscordMusicFavorites, loadDiscordMusicFavorites, moveDiscordMusicFavorite, saveDiscordMusicFavorite, loadDiscordMusicPlaylists, saveDiscordMusicPlaylist, saveDiscordMusicPlaylistLink, deleteDiscordMusicPlaylist, updateDiscordMusicPlaylist, migrateDiscordSpotifyPlaylistLinks, hasMigratedDiscordSpotifyPlaylistLinks } from "./music-favorites";
 
 const directory = path.join(os.tmpdir(), `cyrene-music-favorites-${process.pid}`);
 const filePath = path.join(directory, "favorites.json");
@@ -76,7 +76,7 @@ describe("Discord music favorites", () => {
     // 1. Initially only default playlist exists
     const playlists = await loadDiscordMusicPlaylists(filePath);
     expect(playlists).toHaveLength(1);
-    expect(playlists[0].name).toBe("💖 My Favorites");
+    expect(playlists[0].name).toBe("Bili/YT favorites");
 
     // 2. Create custom playlist
     const customList = await saveDiscordMusicPlaylist("My Study List", "https://example.com/playlist", [], filePath);
@@ -111,10 +111,11 @@ describe("Discord music favorites", () => {
 
   it("stores a Spotify playlist as one deduplicated link without copying its tracks", async () => {
     const url = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=test";
-    const first = await saveDiscordMusicPlaylistLink("Today's Top Hits", url, filePath);
+    const first = await saveDiscordMusicPlaylistLink("Today's Top Hits", url, undefined, filePath);
     const duplicate = await saveDiscordMusicPlaylistLink(
       "Duplicate title",
       "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+      undefined,
       filePath,
     );
 
@@ -122,9 +123,37 @@ describe("Discord music favorites", () => {
     expect(first.playlist).toMatchObject({
       name: "Today's Top Hits",
       url: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+      folder: "spotify",
       tracks: [],
     });
     expect(duplicate).toMatchObject({ added: false, playlist: { id: first.playlist.id } });
     expect(await loadDiscordMusicPlaylists(filePath)).toHaveLength(2);
+  });
+
+  it("migrates account playlists into saved links once and never reimports deleted links", async () => {
+    const links = [
+      { name: "Best Wuwa Songs", url: "https://open.spotify.com/playlist/wuwa", total: 68 },
+      { name: "JAPANESE FUNK", url: "https://open.spotify.com/playlist/funk", total: 47 },
+    ];
+    expect(await migrateDiscordSpotifyPlaylistLinks(links, filePath)).toBe(2);
+    expect(await hasMigratedDiscordSpotifyPlaylistLinks(filePath)).toBe(true);
+    const migrated = (await loadDiscordMusicPlaylists(filePath)).filter((playlist) => playlist.folder === "spotify");
+    expect(migrated.map((playlist) => playlist.name)).toEqual(["Best Wuwa Songs", "JAPANESE FUNK"]);
+    expect(await deleteDiscordMusicPlaylist(migrated[0].id, filePath)).toBe(true);
+    expect(await migrateDiscordSpotifyPlaylistLinks(links, filePath)).toBe(0);
+    expect((await loadDiscordMusicPlaylists(filePath)).map((playlist) => playlist.name)).not.toContain("Best Wuwa Songs");
+  });
+
+  it("allows a saved playlist name and link to be edited", async () => {
+    const saved = await saveDiscordMusicPlaylistLink("Old name", "https://open.spotify.com/playlist/old", 12, filePath);
+    const updated = await updateDiscordMusicPlaylist(saved.playlist.id, {
+      name: "Night Drive",
+      url: "https://open.spotify.com/playlist/new?si=ignored",
+    }, filePath);
+    expect(updated).toMatchObject({
+      name: "Night Drive",
+      url: "https://open.spotify.com/playlist/new",
+      folder: "spotify",
+    });
   });
 });

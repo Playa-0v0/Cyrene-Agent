@@ -11,3 +11,5 @@ export function startHealthServer(port: number, status: () => Record<string, unk
     response.end(JSON.stringify({ ok: true, ...status() }));
   }).listen(port, "127.0.0.1");
 }
+
+

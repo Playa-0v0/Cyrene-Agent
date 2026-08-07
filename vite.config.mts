@@ -21,6 +21,7 @@ export default defineConfig({
         notebook: resolve(__dirname, "src/renderer/notebook/index.html"),
         exam: resolve(__dirname, "src/renderer/exam/index.html"),
         gameRoom: resolve(__dirname, "src/renderer/game-room/index.html"),
+        wavesUid: resolve(__dirname, "src/renderer/wavesuid/index.html"),
       },
     },
   },

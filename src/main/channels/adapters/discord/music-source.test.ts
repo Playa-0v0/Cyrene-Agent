@@ -37,10 +37,10 @@ describe("Discord music request parsing", () => {
     });
     const buffered = attachDiscordMusicBuffer(process as never);
     const ready = buffered.waitForBuffer!();
-    stdout.write(Buffer.alloc(384 * 1024));
+    stdout.write(Buffer.alloc(512 * 1024));
 
-    await expect(ready).resolves.toBeGreaterThanOrEqual(384 * 1024);
-    expect((buffered.audio as PassThrough).readableLength).toBeGreaterThanOrEqual(384 * 1024);
+    await expect(ready).resolves.toBeGreaterThanOrEqual(512 * 1024);
+    expect((buffered.audio as PassThrough).readableLength).toBeGreaterThanOrEqual(512 * 1024);
     buffered.audio?.destroy();
     stdout.destroy();
   });
@@ -50,10 +50,13 @@ describe("Discord music request parsing", () => {
       "--no-playlist",
       "--no-warnings",
       "--no-progress",
-      "--retries", "5",
-      "--fragment-retries", "5",
+      "--retries", "10",
+      "--fragment-retries", "10",
       "--retry-sleep", "1",
-      "--socket-timeout", "20",
+      "--socket-timeout", "15",
+      "--buffer-size", "64k",
+      "--http-chunk-size", "10M",
+      "--ffmpeg-location", expect.stringMatching(/ffmpeg-static[\\/]ffmpeg$/),
       "--format", "bestaudio/best",
       "--output", "-",
       "ytsearch1:Song Artist",

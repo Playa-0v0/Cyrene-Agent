@@ -183,7 +183,12 @@ export class CloudMusicPlayer {
     this.advancing = true;
     try {
       this.stopProcesses();
-      const favorite = this.queue.shift();
+      let favorite = this.queue.shift();
+      if (!favorite && this.history.length > 0) {
+        this.queue.push(...this.history);
+        this.history = [];
+        favorite = this.queue.shift();
+      }
       if (!favorite || !this.connection) {
         this.stop();
         return;

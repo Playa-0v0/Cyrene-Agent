@@ -82,6 +82,11 @@ export interface DiscordMusicState {
   elapsed: number;
 }
 
+export function shouldAutoShuffleSpotifyPlaylist(tracks: DiscordMusicTrack[]): boolean {
+  return tracks.length > 1
+    && tracks.some((track) => /^https:\/\/open\.spotify\.com\/playlist\//i.test(track.playlistUrl ?? ""));
+}
+
 type SuspendedMusicSession = Omit<PersistedDiscordMusicSession, "savedAt">;
 
 export interface DiscordMusicControlResult {
@@ -153,6 +158,7 @@ export class DiscordVoiceCall {
   private guildId: string | null = null;
   private textChannelId: string | null = null;
   private activeUserId: string | null = null;
+  sendMusicStatusCallback?: (content: string, userId: string | null) => Promise<boolean>;
   private activeUserName: string | undefined;
   private processing = false;
   private speaking = false;
@@ -183,6 +189,7 @@ export class DiscordVoiceCall {
   private suspendedMusicSession: SuspendedMusicSession | null = null;
   private musicResumeOffsetSeconds = 0;
   private musicTrackOffsetSeconds = 0;
+  private musicPlayingStartedAt: number | null = null;
 
   constructor(
     private readonly client: Client,
@@ -228,7 +235,10 @@ export class DiscordVoiceCall {
       shuffle: active ? this.musicShuffle : suspended?.shuffle ?? this.musicShuffle,
       autoplay: active ? this.musicAutoplay : suspended?.autoplay ?? this.musicAutoplay,
       elapsed: active
-        ? this.musicTrackOffsetSeconds + Math.max(0, Math.round((this.musicResource?.playbackDuration ?? 0) / 1000))
+        ? this.musicTrackOffsetSeconds + Math.max(
+            Math.max(0, Math.round((this.musicResource?.playbackDuration ?? 0) / 1000)),
+            this.musicPlayingStartedAt ? Math.max(0, Math.round((Date.now() - this.musicPlayingStartedAt) / 1000)) : 0,
+          )
         : suspended?.elapsed ?? 0,
     };
   }
@@ -317,13 +327,20 @@ export class DiscordVoiceCall {
       return { ok: true, message: "已回到上一首。" };
     }
     if (command === "pause") {
+      if (this.musicPlayingStartedAt) {
+        this.musicTrackOffsetSeconds += Math.max(0, Math.round((Date.now() - this.musicPlayingStartedAt) / 1000));
+        this.musicPlayingStartedAt = null;
+      }
       const changed = player.pause(true);
       if (changed) this.notifyMusicStateChange();
       return { ok: changed, message: changed ? "已暫停播放。" : "目前沒有正在播放的音樂。" };
     }
     if (command === "resume") {
       const changed = player.unpause();
-      if (changed) this.notifyMusicStateChange();
+      if (changed) {
+        this.musicPlayingStartedAt = Date.now();
+        this.notifyMusicStateChange();
+      }
       return { ok: changed, message: changed ? "已繼續播放。" : "目前沒有暫停中的音樂。" };
     }
     if (command === "skip") {
@@ -391,7 +408,7 @@ export class DiscordVoiceCall {
     return { ok: false, message: "不支援這個播放控制。" };
   }
 
-  async handleMusicRequest(message: Message, request: DiscordMusicRequest): Promise<boolean> {
+  async handleMusicRequest(message: Message, request: DiscordMusicRequest, clearQueue = false): Promise<boolean> {
     if (this.mode === "music" && request.command !== "queue" && !this.canControlMusic(message.author.id)) {
       await message.reply("這個播放工作階段由其他人控制；你不能修改她的音樂。");
       return true;
@@ -427,6 +444,16 @@ export class DiscordVoiceCall {
       if (this.mode !== "music" || this.guildId !== channel.guild.id || !this.connection || !this.player) {
         await this.connectForMusic(message);
       }
+      if (clearQueue) {
+        this.musicQueue = [];
+        this.stopPrefetchedMusic();
+        this.stopMusicProcess();
+        this.currentMusicTrack = null;
+        this.player?.stop(true);
+      }
+      if (shouldAutoShuffleSpotifyPlaylist(tracks)) {
+        this.musicShuffle = true;
+      }
       const queued = tracks.map((track) => ({ ...track, queueOrder: this.musicOrder++ }));
       if (this.musicShuffle) this.shuffleTracks(queued);
       this.musicQueue.push(...queued);
@@ -447,7 +474,7 @@ export class DiscordVoiceCall {
     return true;
   }
 
-  async handleResolvedMusicTracks(message: Message, tracks: DiscordMusicTrack[]): Promise<boolean> {
+  async handleResolvedMusicTracks(message: Message, tracks: DiscordMusicTrack[], clearQueue = false): Promise<boolean> {
     if (this.mode === "music" && !this.canControlMusic(message.author.id)) {
       await message.reply("這個播放工作階段由其他人控制；你不能修改她的音樂。");
       return true;
@@ -473,6 +500,16 @@ export class DiscordVoiceCall {
       if (this.mode !== "music" || this.guildId !== channel.guild.id || !this.connection || !this.player) {
         await this.connectForMusic(message);
       }
+      if (clearQueue) {
+        this.musicQueue = [];
+        this.stopPrefetchedMusic();
+        this.stopMusicProcess();
+        this.currentMusicTrack = null;
+        this.player?.stop(true);
+      }
+      if (shouldAutoShuffleSpotifyPlaylist(tracks)) {
+        this.musicShuffle = true;
+      }
       const queued = tracks.map((track) => ({ ...track, queueOrder: this.musicOrder++ }));
       if (this.musicShuffle) this.shuffleTracks(queued);
       this.musicQueue.push(...queued);
@@ -489,7 +526,7 @@ export class DiscordVoiceCall {
     return true;
   }
 
-  async handleCommand(message: Message, command: DiscordVoiceCommand): Promise<boolean> {
+  async handleCommand(message: Message, command: DiscordVoiceCommand, options?: { muted?: boolean }): Promise<boolean> {
     if (!command) return false;
     if (command === "leave") {
       if (this.mode === "music" && !this.canControlMusic(message.author.id)) {
@@ -520,6 +557,7 @@ export class DiscordVoiceCall {
       return true;
     }
 
+    const isMuted = options?.muted ?? false;
     await this.leave();
     this.mode = "call";
     this.guildId = channel.guild.id;
@@ -532,7 +570,7 @@ export class DiscordVoiceCall {
       guildId: channel.guild.id,
       adapterCreator: channel.guild.voiceAdapterCreator,
       selfDeaf: false,
-      selfMute: false,
+      selfMute: isMuted,
     });
     this.connection.subscribe(this.player);
     this.bindConnection();
@@ -546,7 +584,11 @@ export class DiscordVoiceCall {
     }
     startCallUsage("discord");
     this.setCallPresence();
-    await message.reply("我進來了。你直接說話就好，我會在你停下來後回答。要結束時標註我說「離開通話」。");
+    if (isMuted) {
+      await message.reply("已經加入語音頻道【閉麥安靜陪伴模式】囉～昔漣會在旁邊默默陪著夥伴打遊戲 / 休息～✨");
+    } else {
+      await message.reply("我進來了。你直接說話就好，我會在你停下來後回答。要結束時標註我說「離開通話」。");
+    }
     return true;
   }
 
@@ -581,6 +623,7 @@ export class DiscordVoiceCall {
     this.musicResource = null;
     this.musicResumeOffsetSeconds = 0;
     this.musicTrackOffsetSeconds = 0;
+    this.musicPlayingStartedAt = null;
     this.musicRepeat = "off";
     this.musicShuffle = false;
     this.musicAutoplay = false;
@@ -703,6 +746,7 @@ export class DiscordVoiceCall {
       const finished = this.currentMusicTrack;
       this.currentMusicTrack = null;
       this.musicResource = null;
+      this.musicPlayingStartedAt = null;
       this.stopMusicProcess();
       if (finished && !skipRepeat) {
         if (this.musicRepeat === "track") this.musicQueue.unshift(finished);
@@ -714,6 +758,11 @@ export class DiscordVoiceCall {
       }
 
       let next = this.musicQueue.shift();
+      if (!next && this.musicHistory.length > 0) {
+        this.musicQueue.push(...this.musicHistory);
+        this.musicHistory = [];
+        next = this.musicQueue.shift();
+      }
       if (!next && finished && this.musicAutoplay) {
         const seen = new Set([finished.url, ...this.musicHistory.map((track) => track.url)]);
         const recommendations = await searchDiscordMusicTracks(`${finished.title} music`, 5).catch(() => []);
@@ -725,6 +774,7 @@ export class DiscordVoiceCall {
         return;
       }
       this.currentMusicTrack = next;
+      this.notifyMusicStateChange();
       const resumeOffset = this.musicResumeOffsetSeconds;
       this.musicResumeOffsetSeconds = 0;
       const prepared = resumeOffset > 0 ? null : this.takePrefetchedMusic(next);
@@ -758,6 +808,7 @@ export class DiscordVoiceCall {
       });
       resource.volume?.setVolume(discordMusicVolumeGain(this.musicVolume));
       this.musicResource = resource;
+      this.musicPlayingStartedAt = Date.now();
       this.player.play(resource);
       this.scheduleNextMusicPrefetch();
       this.setMusicPresence(next);
@@ -884,13 +935,20 @@ export class DiscordVoiceCall {
 
   private musicErrorMessage(error: unknown): string {
     const raw = error instanceof Error ? error.message : String(error);
-    const line = raw.split(/\r?\n/).map((item) => item.trim()).filter(Boolean).at(-1) ?? "未知錯誤";
+    const lines = raw.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+    const errorLines = lines.filter((line) => !line.startsWith("["));
+    const line = errorLines.at(-1) ?? lines.at(-1) ?? "未知錯誤";
     if (/sign in|cookies|bot/i.test(raw)) return "YouTube 要求登入驗證，請稍後再試或改用另一個連結。";
     if (/private|permission|login/i.test(raw)) return "內容需要登入或沒有觀看權限。";
     return line.slice(0, 350);
   }
 
   private async sendMusicStatus(content: string): Promise<void> {
+    if (this.sendMusicStatusCallback) {
+      const userId = this.mode === "music" ? this.musicOwnerId : this.activeUserId;
+      const handled = await this.sendMusicStatusCallback(content, userId).catch(() => false);
+      if (handled) return;
+    }
     const channelId = this.textChannelId;
     if (!channelId) return;
     const channel = await this.client.channels.fetch(channelId).catch(() => null);

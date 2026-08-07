@@ -2,7 +2,7 @@
 // Extracted from src/main/index.ts so vitest can import them without
 // pulling in the whole Electron entry-point.
 
-import { addMcpServer, removeMcpServer, listMcpServers } from "./orchestrator/mcp-manager";
+import { addMcpServer, removeMcpServer, listMcpServers, hasMcpServerConfig } from "./orchestrator/mcp-manager";
 
 const LOG_PREFIX = "[Cyrene]";
 
@@ -22,7 +22,10 @@ export const REMOVED_BUILTIN_MCP_IDS: readonly string[] = ["firecrawl-hosted"];
 export async function syncPlaywrightMcp(settings: {
   playwrightMcpEnabled: boolean;
 }): Promise<void> {
-  const exists = listMcpServers().some(s => s.id === PLAYWRIGHT_MCP_ID);
+  // 啟動早期 persisted config 已存在、但 MCP Manager 尚未連線時，
+  // listMcpServers() 仍是空的；兩邊都檢查可避免重複 add。
+  const exists = hasMcpServerConfig(PLAYWRIGHT_MCP_ID)
+    || listMcpServers().some(s => s.id === PLAYWRIGHT_MCP_ID);
 
   if (settings.playwrightMcpEnabled && !exists) {
     console.log(LOG_PREFIX, "註冊 Playwright MCP Server...");

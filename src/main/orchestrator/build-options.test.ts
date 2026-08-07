@@ -52,6 +52,29 @@ describe("build-options", () => {
     expect(system).not.toContain("你正在通過飛書回覆用戶")
   })
 
+  it("keeps the exact latest user text for memory and proactively injects recalled history", async () => {
+    const exact = "請記住：" + "昔漣".repeat(600)
+    const buildProactiveHistoryContext = vi.fn(async (query: string) => `HISTORY:${query}`)
+    const deps = createBuildDeps()
+    deps.normalizeChatMessages = () => [{ role: "user", content: exact.slice(0, 800) }] as never
+    deps.buildMemoryInjection = async () => "L2_MEMORY"
+    deps.buildProactiveHistoryContext = buildProactiveHistoryContext
+
+    const result = await buildAgentRunOptions({
+      messages: [{ role: "user", content: exact }],
+      style: "01_default.md",
+      sessionId: "desktop-session",
+    }, deps)
+
+    expect(result.latestUserText).toBe(exact)
+    expect(buildProactiveHistoryContext).toHaveBeenCalledWith(exact, {
+      sessionId: "desktop-session",
+      topK: 8,
+    })
+    expect(result.options.messages[0].content).toContain("L2_MEMORY")
+    expect(result.options.messages[0].content).toContain(`HISTORY:${exact}`)
+  })
+
   it("has distinct system text for Feishu work chat", () => {
     expect(buildChannelSystem("feishu")).toContain("你正在通過飛書回覆用戶")
     expect(buildChannelSystem("feishu")).toContain("工作上下文")

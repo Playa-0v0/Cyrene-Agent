@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toTraditionalTaiwan } from "./opencc";
+import { toTraditionalTaiwan, toSimplifiedChinese } from "./opencc";
 
 describe("toTraditionalTaiwan", () => {
   it("converts Simplified Chinese and common Taiwan terminology", () => {
@@ -18,3 +18,12 @@ describe("toTraditionalTaiwan", () => {
     expect(toTraditionalTaiwan(converted)).toBe(converted);
   });
 });
+
+describe("toSimplifiedChinese", () => {
+  it("converts Traditional Chinese to Simplified Chinese and fixes polyphones", () => {
+    expect(toSimplifiedChinese("我是昔漣，今天也請多指教囉！陪伴著你看著我，做什麼呢？"))
+      .toBe("我是昔涟，今天也请多指教啰！陪伴着你看着我，做什么呢？");
+  });
+});
+
+

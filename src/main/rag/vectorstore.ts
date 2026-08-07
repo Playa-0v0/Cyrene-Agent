@@ -223,15 +223,17 @@ export class JsonVectorStore {
     provider: EmbeddingProvider,
     metadata?: Record<string, unknown>
   ): Promise<MemoryEntry> {
-    // 去重檢查
-    const existing = await this.search(text, source, provider, 1, 0.95);
-    if (existing.length > 0) {
-      // 更新權重和時間
-      existing[0].entry.weight = Math.min(existing[0].entry.weight + 0.1, 5.0);
-      existing[0].entry.lastRecalledAt = Date.now();
-      this.dirty = true;
-      this.save();
-      return existing[0].entry;
+    // 一般知識可做語義去重；逐字對話歷史不可去重，否則兩次相同的原話會被錯當成同一事件。
+    if (source !== "chat_history") {
+      const existing = await this.search(text, source, provider, 1, 0.95);
+      if (existing.length > 0) {
+        // 更新權重和時間
+        existing[0].entry.weight = Math.min(existing[0].entry.weight + 0.1, 5.0);
+        existing[0].entry.lastRecalledAt = Date.now();
+        this.dirty = true;
+        this.save();
+        return existing[0].entry;
+      }
     }
 
     const embedding = await provider.embed(text);

@@ -2,13 +2,16 @@ import * as fs from "fs";
 import * as path from "path";
 
 // ── Public types ──
-export type AttachmentKind = "text" | "indexed" | "empty" | "unsupported";
+export type AttachmentKind = "text" | "image" | "indexed" | "empty" | "unsupported";
 
 export interface Attachment {
   name: string;
   kind: AttachmentKind;
   /** kind="text" 時的小文件內容 */
   text?: string;
+  /** kind="image" 時只保存本輪選取的路徑，不把圖片內容寫入聊天歷史。 */
+  filePath?: string;
+  mime?: string;
   /** kind="indexed" 時的 chunk 數 */
   chunks?: number;
   /** kind="unsupported" 或 indexed 失敗時的原因 */
@@ -21,6 +24,15 @@ export type ImportFn = (text: string, fileName: string) => Promise<number>;
 // ── Thresholds ──
 /** 小文件 vs 大文件（→RAG）的分界，字符數。 */
 export const SMALL_THRESHOLD = 30_000;
+export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+const IMAGE_MIMES = new Map([
+  [".png", "image/png"],
+  [".jpg", "image/jpeg"],
+  [".jpeg", "image/jpeg"],
+  [".webp", "image/webp"],
+  [".gif", "image/gif"],
+]);
 
 // ── 擴展名路由 ──
 const TEXT_EXTS = new Set([
@@ -37,7 +49,7 @@ const TEXT_EXTS = new Set([
 const UNSUPPORTED_EXTS = new Set([
   ".zip", ".7z", ".rar", ".tar", ".gz",
   ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
-  ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico",
+  ".bmp", ".ico",
   ".mp3", ".mp4", ".wav", ".avi", ".mov",
   ".exe", ".dll", ".so", ".dylib", ".bin",
   ".class", ".jar", ".pyc",
@@ -89,6 +101,14 @@ export async function ingestOneFile(
 
   const name = path.basename(filePath);
   const ext = path.extname(filePath).toLowerCase();
+
+  const imageMime = IMAGE_MIMES.get(ext);
+  if (imageMime) {
+    if (stat.size > MAX_IMAGE_BYTES) {
+      return { name, kind: "unsupported", reason: "圖片超過 10 MB" };
+    }
+    return { name, kind: "image", filePath, mime: imageMime };
+  }
 
   // 顯式不支持的類型
   if (isUnsupportedExt(ext)) {

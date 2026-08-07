@@ -4,7 +4,7 @@ import path from "node:path";
 import { app } from "electron";
 import type { DiscordMusicTrack } from "./music-source";
 
-const MAX_FAVORITE_ITEMS = 500;
+const MAX_FAVORITE_ITEMS = 5000;
 
 export interface DiscordMusicFavoriteEntry {
   id: string;
@@ -20,7 +20,10 @@ export interface DiscordMusicPlaylist {
   id: string;
   name: string;
   url?: string;
+  /** Saved Spotify links live in their own visual folder; tracks are resolved only when played. */
+  folder?: "spotify";
   tracks: DiscordMusicFavoriteEntry[];
+  total?: number;
   createdAt: string;
 }
 
@@ -65,7 +68,7 @@ async function readPlaylistsData(filePath: string): Promise<DiscordMusicPlaylist
       // Old format: flat array of tracks. Migrate to default playlist.
       const defaultPlaylist: DiscordMusicPlaylist = {
         id: "default",
-        name: "💖 My Favorites",
+        name: "Bili/YT favorites",
         tracks: parsed.filter((entry): entry is DiscordMusicFavoriteEntry => {
           const item = entry as Partial<DiscordMusicFavoriteEntry>;
           return typeof item.id === "string" && typeof item.title === "string"
@@ -80,20 +83,24 @@ async function readPlaylistsData(filePath: string): Promise<DiscordMusicPlaylist
         id: String(p.id),
         name: String(p.name),
         url: p.url ? String(p.url) : undefined,
+        folder: p.folder === "spotify" || /^https:\/\/open\.spotify\.com\/playlist\//i.test(String(p.url ?? ""))
+          ? "spotify"
+          : undefined,
         tracks: Array.isArray(p.tracks) ? p.tracks.filter((entry: any): entry is DiscordMusicFavoriteEntry => {
           const item = entry as Partial<DiscordMusicFavoriteEntry>;
           return typeof item.id === "string" && typeof item.title === "string"
             && typeof item.url === "string" && typeof item.savedAt === "string";
         }) : [],
+        total: p.total !== undefined ? Number(p.total) : undefined,
         createdAt: p.createdAt ? String(p.createdAt) : new Date().toISOString(),
       }));
     }
-    return [{ id: "default", name: "💖 My Favorites", tracks: [], createdAt: new Date().toISOString() }];
+    return [{ id: "default", name: "Bili/YT favorites", tracks: [], createdAt: new Date().toISOString() }];
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       console.warn("[DiscordMusicFavorites] 讀取失敗:", error);
     }
-    return [{ id: "default", name: "💖 My Favorites", tracks: [], createdAt: new Date().toISOString() }];
+    return [{ id: "default", name: "Bili/YT favorites", tracks: [], createdAt: new Date().toISOString() }];
   }
 }
 
@@ -158,6 +165,7 @@ export async function saveDiscordMusicPlaylist(
 export async function saveDiscordMusicPlaylistLink(
   name: string,
   url: string,
+  total?: number,
   filePath = getDiscordMusicFavoritesPath(),
 ): Promise<{ added: boolean; playlist: DiscordMusicPlaylist }> {
   let result!: { added: boolean; playlist: DiscordMusicPlaylist };
@@ -166,6 +174,10 @@ export async function saveDiscordMusicPlaylistLink(
     const playlists = await readPlaylistsData(filePath);
     const existing = playlists.find((playlist) => playlist.url?.trim().replace(/[?#].*$/, "").replace(/\/$/, "") === normalizedUrl);
     if (existing) {
+      if (total !== undefined && existing.total !== total) {
+        existing.total = total;
+        await writePlaylistsData(playlists, filePath);
+      }
       result = { added: false, playlist: existing };
       return;
     }
@@ -173,7 +185,9 @@ export async function saveDiscordMusicPlaylistLink(
       id: randomUUID(),
       name: name.trim() || "Spotify Playlist",
       url: normalizedUrl,
+      folder: "spotify",
       tracks: [],
+      total,
       createdAt: new Date().toISOString(),
     };
     playlists.push(playlist);
@@ -185,6 +199,66 @@ export async function saveDiscordMusicPlaylistLink(
   });
   await operation;
   return result;
+}
+
+function spotifyMigrationMarker(filePath: string): string {
+  return `${filePath}.spotify-links-v1`;
+}
+
+/**
+ * One-time migration from the old account-scanned list to Cyrene-owned links.
+ * The marker prevents deleted links from being silently imported again later.
+ */
+export async function migrateDiscordSpotifyPlaylistLinks(
+  links: Array<{ name: string; url?: string; total?: number }>,
+  filePath = getDiscordMusicFavoritesPath(),
+): Promise<number> {
+  try {
+    await fs.access(spotifyMigrationMarker(filePath));
+    return 0;
+  } catch {}
+
+  let addedCount = 0;
+  const operation = playlistsWriteQueue.catch(() => undefined).then(async () => {
+    const playlists = await readPlaylistsData(filePath);
+    const knownUrls = new Set(playlists
+      .map((playlist) => playlist.url?.trim().replace(/[?#].*$/, "").replace(/\/$/, ""))
+      .filter((url): url is string => Boolean(url)));
+    for (const link of links) {
+      if (!link.url || !/^https:\/\/open\.spotify\.com\/playlist\//i.test(link.url)) continue;
+      const normalizedUrl = link.url.trim().replace(/[?#].*$/, "").replace(/\/$/, "");
+      if (knownUrls.has(normalizedUrl)) continue;
+      playlists.push({
+        id: randomUUID(),
+        name: link.name.trim() || "Spotify Playlist",
+        url: normalizedUrl,
+        folder: "spotify",
+        tracks: [],
+        total: link.total,
+        createdAt: new Date().toISOString(),
+      });
+      knownUrls.add(normalizedUrl);
+      addedCount += 1;
+    }
+    await writePlaylistsData(playlists, filePath);
+    await fs.writeFile(spotifyMigrationMarker(filePath), new Date().toISOString(), "utf8");
+  });
+  playlistsWriteQueue = operation.catch((error) => {
+    console.error("[DiscordMusicFavorites] Spotify 歌單連結遷移失敗:", error);
+  });
+  await operation;
+  return addedCount;
+}
+
+export async function hasMigratedDiscordSpotifyPlaylistLinks(
+  filePath = getDiscordMusicFavoritesPath(),
+): Promise<boolean> {
+  try {
+    await fs.access(spotifyMigrationMarker(filePath));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function deleteDiscordMusicPlaylist(
@@ -206,6 +280,31 @@ export async function deleteDiscordMusicPlaylist(
   });
   await operation;
   return deleted;
+}
+
+export async function updateDiscordMusicPlaylist(
+  id: string,
+  input: { name: string; url?: string },
+  filePath = getDiscordMusicFavoritesPath(),
+): Promise<DiscordMusicPlaylist | null> {
+  let updated: DiscordMusicPlaylist | null = null;
+  const operation = playlistsWriteQueue.catch(() => undefined).then(async () => {
+    const playlists = await readPlaylistsData(filePath);
+    const playlist = playlists.find((item) => item.id === id);
+    if (!playlist) return;
+    playlist.name = input.name.trim() || playlist.name;
+    if (input.url?.trim()) {
+      playlist.url = input.url.trim().replace(/[?#].*$/, "").replace(/\/$/, "");
+      playlist.folder = /^https:\/\/open\.spotify\.com\/playlist\//i.test(playlist.url) ? "spotify" : undefined;
+    }
+    await writePlaylistsData(playlists, filePath);
+    updated = { ...playlist, tracks: playlist.tracks.map((track) => ({ ...track })) };
+  });
+  playlistsWriteQueue = operation.catch((error) => {
+    console.error("[DiscordMusicFavorites] 修改歌單失敗:", error);
+  });
+  await operation;
+  return updated;
 }
 
 export async function loadDiscordMusicFavorites(
@@ -234,7 +333,7 @@ export async function saveDiscordMusicFavorite(
       playlist = playlists.find(p => p.id === "default") || playlists[0];
     }
     if (!playlist) {
-      playlist = { id: "default", name: "💖 My Favorites", tracks: [], createdAt: new Date().toISOString() };
+      playlist = { id: "default", name: "Bili/YT favorites", tracks: [], createdAt: new Date().toISOString() };
       playlists.push(playlist);
     }
     const existing = playlist.tracks.find((entry) => entry.url === track.url);
@@ -260,6 +359,50 @@ export async function saveDiscordMusicFavorite(
   });
   await operation;
   return result;
+}
+
+export async function saveDiscordMusicFavorites(
+  tracks: DiscordMusicTrack[],
+  playlistId = "default",
+  filePath?: string,
+): Promise<{ addedCount: number; playlistName: string }> {
+  const args = resolveArgs(playlistId, filePath);
+  let addedCount = 0;
+  let playlistName = "";
+  const operation = playlistsWriteQueue.catch(() => undefined).then(async () => {
+    const playlists = await readPlaylistsData(args.filePath);
+    let playlist = playlists.find(p => p.id === args.playlistId);
+    if (!playlist) {
+      playlist = playlists.find(p => p.id === "default") || playlists[0];
+    }
+    if (!playlist) {
+      playlist = { id: "default", name: "Bili/YT favorites", tracks: [], createdAt: new Date().toISOString() };
+      playlists.push(playlist);
+    }
+    playlistName = playlist.name;
+    for (const track of tracks) {
+      const existing = playlist.tracks.find((entry) => entry.url === track.url);
+      if (existing) continue;
+      playlist.tracks.push({
+        id: randomUUID(),
+        title: track.title,
+        url: track.url,
+        thumbnail: track.thumbnail,
+        playlistTitle: playlist.name,
+        duration: track.duration,
+        savedAt: new Date().toISOString(),
+      });
+      addedCount++;
+    }
+    if (addedCount > 0) {
+      await writePlaylistsData(playlists, args.filePath);
+    }
+  });
+  playlistsWriteQueue = operation.catch((error) => {
+    console.error("[DiscordMusicFavorites] 批次寫入歌曲失敗:", error);
+  });
+  await operation;
+  return { addedCount, playlistName };
 }
 
 export async function deleteDiscordMusicFavorites(

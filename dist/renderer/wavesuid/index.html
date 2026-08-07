@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>昔漣 · 鳴潮工具</title>
+  <script type="module" crossorigin src="../assets/wavesUid-DnILCJdP.js"></script>
+  <link rel="modulepreload" crossorigin href="../assets/base-BiRJewod.js">
+  <link rel="modulepreload" crossorigin href="../assets/theme-ComulTz5.js">
+  <link rel="stylesheet" crossorigin href="../assets/base-DniUa1S7.css">
+  <link rel="stylesheet" crossorigin href="../assets/theme-BCjXO-3u.css">
+  <link rel="stylesheet" crossorigin href="../assets/wavesUid-B8eXR8MB.css">
+</head>
+<body>
+  <main class="waves-shell">
+    <header class="resonance-head">
+      <div class="resonance-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <div>
+        <span class="eyebrow">RESONANCE TERMINAL · LOCAL VISION</span>
+        <h1>鳴潮工具</h1>
+        <p>查詢角色面板、抽卡紀錄與活動資訊；截圖辨識不離開這台 Mac。</p>
+      </div>
+      <div class="service-state" id="service-state"><span></span><b>檢查中</b></div>
+    </header>
+
+    <section class="privacy-loop" aria-label="本機資料保護">
+      <div class="privacy-seal" aria-hidden="true"><span></span><i></i></div>
+      <div class="privacy-copy">
+        <strong>封閉辨識迴路</strong>
+        <small id="privacy-detail">macOS Vision · 零雲端上傳 · 暫存圖片即時清除</small>
+      </div>
+      <label class="stored-data" id="stored-data" hidden>
+        <span>已保存面板</span>
+        <select id="stored-uid" aria-label="選擇要刪除資料的 UID"></select>
+      </label>
+      <button type="button" class="delete-data-btn" id="delete-data-btn" hidden>刪除這個 UID 的資料</button>
+    </section>
+
+    <section class="account-link" aria-label="國際服帳號連結">
+      <div class="account-link__signal" aria-hidden="true"><i></i><i></i></div>
+      <div class="account-link__copy">
+        <span>國際服帳號</span>
+        <strong id="login-status-title">尚未連結</strong>
+        <small id="login-status-detail">連結後可直接查詢體力；密碼不會傳到 Discord，登入 token 只保存在本機 GsCore。</small>
+      </div>
+      <button type="button" class="login-btn" id="login-btn">連結國際服</button>
+    </section>
+
+    <section class="waves-grid">
+      <aside class="command-deck" aria-label="常用功能">
+        <div class="deck-label">常用功能</div>
+        <button class="command-card is-active" data-command="幫助"><span>01</span><b>功能總覽</b><small>查看完整指令表</small></button>
+        <button class="command-card" data-command="體力"><span>02</span><b>結晶波片</b><small>登入後直接查詢</small></button>
+        <button class="command-card" data-command="日曆"><span>03</span><b>活動日曆</b><small>版本活動與卡池時程</small></button>
+        <button class="command-card" data-command="抽卡記錄"><span>04</span><b>抽卡紀錄</b><small>卡池統計與保底</small></button>
+        <button class="command-card" data-command="兌換碼"><span>05</span><b>兌換碼</b><small>目前可用兌換碼</small></button>
+        <button class="command-card" data-command="練度統計"><span>06</span><b>練度統計</b><small>角色養成總覽</small></button>
+        <button class="command-card command-card--private" data-command="分析"><span>07</span><b>角色卡分析</b><small>本機擷取與 Vision OCR</small></button>
+      </aside>
+
+      <section class="console-panel">
+        <div class="console-toolbar">
+          <label class="command-input">
+            <span>WW</span>
+            <input id="command-input" value="幫助" autocomplete="off" spellcheck="false" aria-label="鳴潮指令" />
+          </label>
+          <button type="button" class="capture-btn" id="capture-discord-btn" title="擷取 Discord 中已開啟的官方角色卡">◎ 擷取 Discord</button>
+          <button type="button" class="attach-btn" id="attach-btn" title="選擇本機截圖">＋ 截圖</button>
+          <button type="button" class="run-btn" id="run-btn"><span>執行</span><i aria-hidden="true">↗</i></button>
+        </div>
+        <div class="attachment-chip" id="attachment-chip" hidden>
+          <span id="attachment-name"></span><button id="attachment-remove" aria-label="移除附件">×</button>
+        </div>
+
+        <div class="result-stage" id="result-stage" aria-live="polite">
+          <div class="empty-state" id="empty-state">
+            <div class="echo-orbit" aria-hidden="true"><span></span></div>
+            <strong>等待共鳴訊號</strong>
+            <p>在 Discord 將官方 Bot 的 /create 角色卡點開成大圖，再按「擷取 Discord」；裁切、OCR 與暫存清除都在本機完成。</p>
+            <div class="examples"><button id="capture-discord-empty">擷取 Discord 大圖</button><button data-example="今汐面板">今汐面板</button><button data-example="練度統計">練度統計</button></div>
+          </div>
+          <div class="loading-state" id="loading-state" hidden><div class="signal-line"><i></i><i></i><i></i><i></i><i></i><i></i></div><b>正在同步鳴式資料…</b></div>
+          <div class="result-content" id="result-content" hidden>
+            <div class="result-meta"><span id="result-command">WW 幫助</span><button id="copy-command">複製 Discord 指令</button></div>
+            <div class="result-media" id="result-media"></div>
+            <pre id="result-text"></pre>
+          </div>
+          <div class="error-state" id="error-state" hidden><b>訊號中斷</b><p id="error-message"></p><button id="retry-btn">重新執行</button></div>
+        </div>
+      </section>
+    </section>
+  </main>
+  <dialog class="media-lightbox" id="media-lightbox" aria-label="鳴潮圖片放大檢視">
+    <div class="media-lightbox__bar"><span>點一下圖片以外處可關閉</span><button type="button" id="media-lightbox-close" aria-label="關閉圖片檢視">×</button></div>
+    <img id="media-lightbox-image" alt="鳴潮回傳圖片放大檢視">
+  </dialog>
+</body>
+</html>

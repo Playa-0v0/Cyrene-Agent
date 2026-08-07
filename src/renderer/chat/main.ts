@@ -94,7 +94,12 @@ const COPY_ICON_DONE = `<svg class="msg__copy-icon msg__copy-icon--done" viewBox
 </svg>`;
 
 interface AguiApi {
-  run: (input: { messages: unknown[]; style: string; sessionId?: string; attachments?: { name: string; text: string }[] }) => Promise<{ success: boolean; error?: string }>;
+  run: (input: {
+    messages: unknown[];
+    style: string;
+    sessionId?: string;
+    attachments?: Array<{ name: string; kind: "text" | "image"; text?: string; filePath?: string; mime?: string }>;
+  }) => Promise<{ success: boolean; error?: string }>;
   onEvent: (callback: (event: unknown) => void) => () => void;
   cancel: () => Promise<boolean>;
 }
@@ -128,12 +133,14 @@ interface AguiBaseEvent {
 }
 
 /** 文件攝入結果（與 main 側 file-ingest.ts 的 Attachment 對齊）。 */
-type AttachmentKind = "text" | "indexed" | "empty" | "unsupported";
+type AttachmentKind = "text" | "image" | "indexed" | "empty" | "unsupported";
 
 interface Attachment {
   name: string;
   kind: AttachmentKind;
   text?: string;
+  filePath?: string;
+  mime?: string;
   chunks?: number;
   reason?: string;
 }
@@ -2593,7 +2600,7 @@ async function send(): Promise<void> {
     // Option C（臨時注入）：內容不進 messages 歷史，只附在 agui.run payload 傳給本輪。
     // fullUserText 只放精簡 hint 進 history，不堆內容。
     const hintsByKind: string[] = [];
-    const turnTextAttachments: { name: string; text: string }[] = [];
+    const turnAttachments: Array<{ name: string; kind: "text" | "image"; text?: string; filePath?: string; mime?: string }> = [];
     let budgetUsed = 0;
     const budgetExceeded: string[] = [];
     for (const f of attachedFiles) {
@@ -2602,15 +2609,21 @@ async function send(): Promise<void> {
           if (f.text) {
             const remaining = BUDGET_CHARS - budgetUsed;
             if (f.text.length > remaining) {
-              turnTextAttachments.push({ name: f.name, text: f.text.slice(0, remaining) });
+              turnAttachments.push({ name: f.name, kind: "text", text: f.text.slice(0, remaining) });
               budgetExceeded.push(f.name);
               budgetUsed = BUDGET_CHARS;
             } else {
-              turnTextAttachments.push({ name: f.name, text: f.text });
+              turnAttachments.push({ name: f.name, kind: "text", text: f.text });
               budgetUsed += f.text.length;
             }
           }
           hintsByKind.push(`📝 ${f.name}（附件，內容已注入本輪上下文）`);
+          break;
+        case "image":
+          if (f.filePath) {
+            turnAttachments.push({ name: f.name, kind: "image", filePath: f.filePath, mime: f.mime });
+          }
+          hintsByKind.push(`🖼️ ${f.name}（圖片，昔漣會在本輪查看）`);
           break;
         case "indexed":
           hintsByKind.push(`📚 ${f.name}（已索引 ${f.chunks ?? 0} 段，可用 imported_docs 工具檢索）`);
@@ -2629,7 +2642,9 @@ async function send(): Promise<void> {
     const fileHint = hintsByKind.length > 0
       ? "\n\n【本輪文件】\n" + hintsByKind.join("\n")
       : "";
-    const fullUserText = (text || (attachedFiles.length > 0 ? "請幫我看看這些文件" : "")) + fileHint;
+    const hasImage = attachedFiles.some((attachment) => attachment.kind === "image");
+    const fallbackText = hasImage ? "想和你分享這張照片，請看看吧" : "請幫我看看這些文件";
+    const fullUserText = (text || (attachedFiles.length > 0 ? fallbackText : "")) + fileHint;
 
   sending = true;
   sendBtn.disabled = true;
@@ -2826,7 +2841,7 @@ async function send(): Promise<void> {
       messages: buildModelMessages(),
       style: getCurrentStyle(),
       sessionId: currentSessionId || undefined,
-      attachments: turnTextAttachments,
+      attachments: turnAttachments,
     });
     if (!ack.success) {
       offEvent();
@@ -2954,6 +2969,7 @@ async function ingestDroppedFiles(files: File[]): Promise<void> {
 	  attachBtn?.classList.add("has-file");
 	  const kindLabel: Record<AttachmentKind, string> = {
 	    text: "📝",
+	    image: "🖼️",
 	    indexed: "📚",
 	    empty: "📄",
 	    unsupported: "⚠️",
@@ -2964,6 +2980,7 @@ async function ingestDroppedFiles(files: File[]): Promise<void> {
 	    const label = document.createElement("span");
 	    const icon = kindLabel[f.kind] || "📄";
 	    const detail = f.kind === "text" ? "（附件）" :
+	      f.kind === "image" ? "（圖片）" :
 	      f.kind === "indexed" ? `（${f.chunks ?? 0} 段）` :
 	      f.kind === "empty" ? "（空）" :
 	      "（暫不支持）";

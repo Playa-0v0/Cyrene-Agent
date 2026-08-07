@@ -2,6 +2,7 @@ import "../ui/base.css";
 import "./tasks.css";
 import "../ui/theme";
 import { getSchedulePanelItems, type ScheduledTask } from "./task-filter";
+import { startVisiblePolling } from "../ui/visible-polling";
 
 // ── 類型（後端契約） ──────────────────────────────────────────
 interface TokenDayData {
@@ -259,13 +260,14 @@ function init(): void {
   void refreshAll();
 
   // 輪詢：任務列表每 30s，token 每 60s
-  setInterval(() => void fetchTasks().then(renderTasks), TASK_REFRESH_MS);
-  setInterval(() => {
-    void fetchTokenData().then(data => {
+  startVisiblePolling(async () => {
+    renderTasks(await fetchTasks());
+  }, TASK_REFRESH_MS, { label: "scheduled tasks" });
+  startVisiblePolling(async () => {
+    const data = await fetchTokenData();
       renderTodayUsage(data);
       renderWeeklyBars(data);
-    });
-  }, TOKEN_REFRESH_MS);
+  }, TOKEN_REFRESH_MS, { label: "token usage" });
 
   // 事件驅動：scheduler 觸發後立即刷新（用量和任務都會變）
   window.schedulerEvents?.onEvent((_event) => {

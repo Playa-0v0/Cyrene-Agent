@@ -55,6 +55,14 @@ export interface ChatSessionMeta {
   createdAt: number;
   updatedAt: number;
   messageCount: number;
+  /** 用戶訊息數，用於工作區統計；舊索引缺少時會在啟動時自動補齊。 */
+  userMessageCount?: number;
+}
+
+export interface ChatStats {
+  sessionCount: number;
+  messageCount: number;
+  userMessageCount: number;
 }
 
 export const CHAT_SCHEMA_VERSION = 1 as const;
