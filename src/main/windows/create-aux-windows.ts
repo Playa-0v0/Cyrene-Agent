@@ -26,8 +26,13 @@ import {
  * 创建/复用 React 聊天窗口。
  */
 export function createReactChatWindow(sessionId?: string): void {
-  // 已有窗口 → 复用；dispatcher 决定立即 send 还是等 ready 后 flush
-  if (reactChatWindow && !reactChatWindow.isDestroyed()) {
+  // 清理已销毁的窗口引用（防御 closed 事件未及时触发）
+  if (reactChatWindow?.isDestroyed() || reactChatWindow?.webContents?.isDestroyed()) {
+    setReactChatWindow(null);
+    reactChatSession.reset();
+  }
+  // 已有窗口 → 复用
+  if (reactChatWindow) {
     reactChatWindow.show();
     reactChatWindow.focus();
     if (sessionId) dispatchOrQueueReactSession(sessionId);
@@ -68,7 +73,7 @@ export function createReactChatWindow(sessionId?: string): void {
 
   // search 字段必须含前导 "?"（Electron url.format() 要求）
   const search = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : undefined;
-  const indexPath = path.join(__dirname, "..", "..", "renderer", "react", "index.html");
+  const indexPath = path.join(__dirname, "..", "..", "..", "renderer", "react", "index.html");
 
   if (isDev) {
     void window
@@ -85,7 +90,13 @@ export function createReactChatWindow(sessionId?: string): void {
   });
 
   window.on("closed", () => {
-    // 闭包引用 + 仅当当前全局仍指向自己时才清理，避免旧窗口 closed 误清新窗口
+    if (reactChatWindow === window) {
+      setReactChatWindow(null);
+      reactChatSession.reset();
+    }
+  });
+  // 兜底：部分 Electron 版本 frameless 窗口 closed 可能延迟
+  window.webContents.on("destroyed", () => {
     if (reactChatWindow === window) {
       setReactChatWindow(null);
       reactChatSession.reset();
@@ -141,7 +152,7 @@ export function createSidebarWindow(): void {
     window.loadURL("http://localhost:5173/sidebar/");
   } else {
     window.loadFile(
-      path.join(__dirname, "..", "..", "renderer", "sidebar", "index.html")
+      path.join(__dirname, "..", "..", "..", "renderer", "sidebar", "index.html")
     );
   }
 
@@ -192,7 +203,7 @@ export function createTasksWindow(): void {
     window.loadURL("http://localhost:5173/tasks/");
   } else {
     window.loadFile(
-      path.join(__dirname, "..", "..", "renderer", "tasks", "index.html")
+      path.join(__dirname, "..", "..", "..", "renderer", "tasks", "index.html")
     );
   }
 
@@ -254,7 +265,7 @@ export function createSettingsWindow(section?: string): void {
     window.loadURL("http://localhost:5173/settings/" + hash);
   } else {
     window.loadFile(
-      path.join(__dirname, "..", "..", "renderer", "settings", "index.html"),
+      path.join(__dirname, "..", "..", "..", "renderer", "settings", "index.html"),
       { hash: section || "" }
     );
   }
@@ -317,7 +328,7 @@ export async function createStickerManagerWindow(): Promise<{ ok: boolean; error
       await window.loadURL("http://localhost:5173/sticker-manager/");
     } else {
       await window.loadFile(
-        path.join(__dirname, "..", "..", "renderer", "sticker-manager", "index.html")
+        path.join(__dirname, "..", "..", "..", "renderer", "sticker-manager", "index.html")
       );
     }
   } catch (error) {
@@ -384,7 +395,7 @@ export function createCallWindow(): void {
   if (isDev) {
     window.loadURL("http://localhost:5173/call/");
   } else {
-    window.loadFile(path.join(__dirname, "..", "..", "renderer", "call", "index.html"));
+    window.loadFile(path.join(__dirname, "..", "..", "..", "renderer", "call", "index.html"));
   }
 
   window.once("ready-to-show", () => {

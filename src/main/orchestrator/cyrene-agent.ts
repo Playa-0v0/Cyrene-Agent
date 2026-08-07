@@ -125,7 +125,7 @@ export interface CyreneRunResult {
   reply: string;
   toolResults: ToolCallResult[];
   totalUsage?: { input: number; output: number };
-  soulPhaseReason?: "no_tool" | "max_rounds" | "timeout" | "tool_error";
+  soulPhaseReason?: "no_tool" | "max_rounds" | "timeout" | "tool_error" | "no_progress";
   executionMode?: AgentExecutionMode;
   socialContext?: CyreneRunOptions["socialContext"];
 }

@@ -11,11 +11,21 @@
 import * as fs from "fs";
 import * as path from "path";
 import { WebSocket } from "ws";
+import { app } from "electron";
 import { resolveTimeoutPolicy } from "../runtime-policy";
 import { enhanceMiniMaxText, type MiniMaxVocalEnhanceOptions } from "./minimax-vocal-enhancer";
 
 const BASE_URL = "https://api.minimaxi.com";
 const WS_URL = "wss://api.minimaxi.com/ws/v1/t2a_v2";
+
+// 诊断日志：写入 userdata 目录，便于用户排查 TTS 问题
+function ttsDiag(msg: string): void {
+  try {
+    const diagPath = path.join(app.getPath("userData"), "minimax-tts-diag.log");
+    const line = `[${new Date().toISOString()}] ${msg}\n`;
+    fs.appendFileSync(diagPath, line);
+  } catch { /* ignore */ }
+}
 
 // ── 上传音频文件 ──────────────────────────────────────────────
 
@@ -179,6 +189,8 @@ export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const enhancedText = enhanceMiniMaxText(opts.text, opts.vocalEnhance);
 
+    ttsDiag(`START: voiceId=${opts.voiceId} model=${opts.model ?? "speech-2.8-hd"} textLen=${opts.text.length}`);
+
     const audioChunks: Buffer[] = [];
     const requestId = `tts-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const startedAt = Date.now();
@@ -298,9 +310,14 @@ export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
           return;
         }
 
-        // 收到音频块 → hex 解码拼接。音频内容很大，只记长度，不把 hex 全量写日志。
+        // 收到音频块 → hex 解码拼接
         if (msg.data?.audio) {
           const chunkBuf = Buffer.from(msg.data.audio, "hex");
+          // 诊断：记录前 32 字节用于识别音频格式（MP3 以 0xFF 0xFB 开头，WAV 以 "RIFF" 开头）
+          if (audioChunks.length === 0) {
+            const hex = chunkBuf.subarray(0, Math.min(32, chunkBuf.length)).toString("hex");
+            ttsDiag(`AUDIO_FIRST_CHUNK: bytes=${chunkBuf.length} hex32=${hex}`);
+          }
           audioChunks.push(chunkBuf);
           audioChunkCount += 1;
           audioHexChars += msg.data.audio.length;
@@ -328,6 +345,7 @@ export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
               audioBytes: audioBuffer.length,
             });
             ws.close();
+            ttsDiag(`SUCCESS: audioBytes=${audioBuffer.length} chunks=${audioChunkCount}`);
             resolve(audioBuffer);
           }
           return;
@@ -340,6 +358,9 @@ export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
             clearTimeout(timeout);
             removeAbortListener();
             ws.close();
+            const errDetail = `MiniMax API 返回错误: ${msg.base_resp.status_msg} (code: ${msg.base_resp.status_code})`;
+            console.error("[TTS MiniMax]", errDetail);
+            ttsDiag(`ERROR: ${errDetail}`);
             log({ phase: "error", base_resp: msg.base_resp, durationMs: Date.now() - startedAt });
             reject(new Error(`合成失败: ${msg.base_resp.status_msg} (code: ${msg.base_resp.status_code})`));
           }
@@ -355,8 +376,11 @@ export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
         resolved = true;
         clearTimeout(timeout);
         removeAbortListener();
-        log({ phase: "error", error: `WebSocket 连接失败: ${err.message}`, durationMs: Date.now() - startedAt });
-        reject(new Error(`WebSocket 连接失败: ${err.message}`));
+        const detail = `WebSocket 连接失败: ${err.message}`;
+        console.error("[TTS MiniMax]", detail);
+        ttsDiag(`ERROR: ${detail}`);
+        log({ phase: "error", error: detail, durationMs: Date.now() - startedAt });
+        reject(new Error(detail));
       }
     });
 
@@ -366,13 +390,16 @@ export async function synthesize(opts: SynthesizeOptions): Promise<Buffer> {
         resolved = true;
         clearTimeout(timeout);
         removeAbortListener();
-        // 连接关闭时如果已有音频块，返回；否则报错
         if (audioChunks.length > 0) {
           const audioBuffer = Buffer.concat(audioChunks);
           log({ phase: "response.close_with_audio", audioChunkCount, audioHexChars, audioBytes: audioBuffer.length });
+          ttsDiag(`SUCCESS (close): audioBytes=${audioBuffer.length} chunks=${audioChunkCount}`);
           resolve(audioBuffer);
         } else {
-          log({ phase: "error", error: "连接已关闭，未收到音频数据", durationMs: Date.now() - startedAt });
+          const errDetail = "连接已关闭，未收到音频数据（可能因MiniMax API鉴权失败）";
+          console.error("[TTS MiniMax]", errDetail);
+          ttsDiag(`ERROR: ${errDetail}`);
+          log({ phase: "error", error: errDetail, durationMs: Date.now() - startedAt });
           reject(new Error("连接已关闭，未收到音频数据"));
         }
       }

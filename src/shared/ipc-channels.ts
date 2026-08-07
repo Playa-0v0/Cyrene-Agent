@@ -258,6 +258,7 @@ export const IPC = {
   TTS_SESSION_START: "tts:session-start",
   TTS_SESSION_CANCEL: "tts:session-cancel",
   TTS_SESSION_EVENT: "tts:session-event",
+  TTS_SYSTEM_PLAY: "tts:system-play",   // 系统音频播放器保底（绕过 Electron 音频路由问题）
   TTS_SAVE_SETTINGS: "tts:save-settings",   // 保存 TTS 配置
   TTS_LOAD_SETTINGS: "tts:load-settings",   // 加载 TTS 配置
   TTS_PICK_AUDIO: "tts:pick-audio",         // 选择音频文件（dialog）

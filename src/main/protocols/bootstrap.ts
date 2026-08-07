@@ -9,7 +9,8 @@ import { parseLocalStickerFileFromUrl, resolveLocalStickerPath } from "../sticke
 /**
  * 注册自定义协议的特权。
  *
- * 注意：必须在 app.ready 之前调用，否则 scheme 无法被渲染进程识别。
+ * Electron 43 兼容说明：protocol 对象在模块加载阶段可能不可用，
+ * 调用方应将此函数包裹在 try-catch 中，失败则在 app.whenReady() 后重试。
  */
 export function registerPrivilegedSchemes(): void {
   protocol.registerSchemesAsPrivileged([
@@ -24,9 +25,6 @@ function getUiFontsDir(): string {
 
 /**
  * 注册本地用户资源协议的实际处理器。
- *
- * - local-sticker:// 将请求映射到 userData/stickers/ 下的文件
- * - local-font:// 将请求映射到 userData/ui-fonts/ 下的文件
  */
 export function registerProtocolHandlers(): void {
   protocol.handle("local-sticker", (request) => {

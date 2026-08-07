@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell, dialog, globalShortcut } from "electron";
 import * as path from "path";
+import * as fs from "fs";
 
 import { logger, LogTag } from "./logger";
 import { renderBanner } from "../shared/banner";
@@ -210,7 +211,7 @@ const llmClient = createLlmClient();
 const ttsSynthesisService = createTtsSynthesisService();
 const embeddingIndexService = createEmbeddingIndexService();
 const citaService = createCitaService({ llmClient });
-const socialContextService = createSocialContextService({ llmClient, enqueueLLMTask });
+let socialContextService: SocialContextService;
 
 const proactiveLifecycle = createProactiveLifecycle({ loadGeneralSettings });
 
@@ -252,15 +253,21 @@ function createWindow(manager: WindowManager): void {
 }
 
 
-registerWindowSystemIpc({
-  get windowManager() { return windowManager; },
-});
+// IPC 处理器注册必须在 app.whenReady() 后调用
+// registerWindowSystemIpc 和 registerChatUiIpc 在下面的 initIpcHandlers() 中注册
 
-registerChatUiIpc({
-  live2dWindowLifecycle,
-  get windowManager() { return windowManager; },
-});
+function initIpcHandlers() {
+  registerWindowSystemIpc({
+    get windowManager() { return windowManager; },
+  });
 
+  registerChatUiIpc({
+    live2dWindowLifecycle,
+    get windowManager() { return windowManager; },
+  });
+}
+
+function initSettingsMemoryIpc() {
   registerSettingsIpc({
     get windowManager() { return windowManager; },
     getGeneralSettings: loadGeneralSettings,
@@ -280,23 +287,69 @@ registerChatUiIpc({
     get windowManager() { return windowManager; },
     embeddingIndexService,
   });
+}
 
 
 
 // 注册本地用户资源协议（表情包图片与用户导入的字体）
-// 必须在 app.ready 之前调用
-registerPrivilegedSchemes();
-
-if (loadGeneralSettings().disableGpuElectron) {
-  app.commandLine.appendSwitch("disable-gpu");
-  app.commandLine.appendSwitch("enable-unsafe-swiftshader");
+// 在 app.ready 之前调用以确保 scheme 被渲染进程识别
+// Electron 43 中 electron 模块在模块加载阶段不可用，添加防御
+try {
+  registerPrivilegedSchemes();
+} catch (e) {
+  console.warn("[Cyrene] registerPrivilegedSchemes deferred (electron module not yet available)");
 }
 
+let disableGpuElectron = false as boolean;
+try { disableGpuElectron = loadGeneralSettings().disableGpuElectron ?? false; } catch (_) { /* deferred */ }
+if (disableGpuElectron) {
+  try { app.commandLine.appendSwitch("disable-gpu"); } catch (_) { /* ignore */ }
+  try { app.commandLine.appendSwitch("enable-unsafe-swiftshader"); } catch (_) { /* ignore */ }
+}
+
+// 便携模式检测（延迟到 app.whenReady 后，因为 Electron 43 中 app 模块加载阶段不可用）
+// 在 app.whenReady 内执行
+let portableDataDir: string | null = null;
+
 app.whenReady().then(async () => {
-  // Print the banner once at startup. It is plain text (no color, no log
-  // prefix) so it stands apart from logger output as a brand artifact.
-  process.stdout.write("\n" + renderBanner() + "\n\n");
+  // 便携模式
+  const portableMarker = path.join(__dirname, "..", "..", "..", "PORTABLE");
+  if (fs.existsSync(portableMarker)) {
+    portableDataDir = path.join(path.dirname(portableMarker), "userdata");
+    if (!fs.existsSync(portableDataDir)) fs.mkdirSync(portableDataDir, { recursive: true });
+    app.setPath("userData", portableDataDir);
+    console.log("[Cyrene] 便携模式已激活，数据目录:", portableDataDir);
+  }
+  // 兼容性：使用 app API 禁用 GPU 加速（更优雅，保留音频管线）
+  try { app.disableHardwareAcceleration(); } catch {}
+  // Print the banner once at startup.
+  try { process.stdout.write("\n" + renderBanner() + "\n\n"); } catch (_) { /* EPIPE: running in background */ }
   logger.info(LogTag.Runtime, "starting Cyrene Agent");
+
+  // 便携模式：在 app.whenReady() 后设置 userData 路径
+  if (portableDataDir) {
+    if (!fs.existsSync(portableDataDir)) {
+      fs.mkdirSync(portableDataDir, { recursive: true });
+    }
+    app.setPath("userData", portableDataDir);
+    console.log("[Cyrene] 便携模式已激活，数据目录:", portableDataDir);
+  }
+
+  // 如果协议注册在模块加载时失败，在这里重试
+  try {
+    registerPrivilegedSchemes();
+  } catch (_) {
+    console.warn("[Cyrene] registerPrivilegedSchemes retry also failed, custom protocol schemes may not work");
+  }
+
+  // SocialContext 需要 app.getPath("userData")，必须在 app.whenReady() 后初始化
+  if (!socialContextService) {
+    socialContextService = createSocialContextService({ llmClient, enqueueLLMTask });
+  }
+
+  // IPC handlers must be registered after app is ready
+  initIpcHandlers();
+  initSettingsMemoryIpc();
 
   onGeneralSettingsChanged((before, after) =>
     handleGeneralSettingsChanged(before, after, {

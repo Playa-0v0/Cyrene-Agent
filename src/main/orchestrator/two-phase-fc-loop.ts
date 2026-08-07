@@ -82,7 +82,7 @@ export type TwoPhaseEvent =
   | { type: "task_plan_update"; snapshot: TaskPlanSnapshot }
   | { type: "compressing_context" };
 
-export type SoulPhaseReason = "no_tool" | "max_rounds" | "timeout" | "tool_error";
+export type SoulPhaseReason = "no_tool" | "max_rounds" | "timeout" | "tool_error" | "no_progress";
 
 export interface TwoPhaseFcOptions {
   settings: AgentLoopSettings;
@@ -130,9 +130,10 @@ export interface TwoPhaseFcResult {
 }
 
 const LOG_PREFIX = "[TwoPhaseFcLoop]";
-const DEFAULT_MAX_TOOL_ROUNDS = 20;
+const DEFAULT_MAX_TOOL_ROUNDS = 100;
 const DEFAULT_PER_ROUND_TIMEOUT_MS = 75_000;
 const DEFAULT_MAX_CONSECUTIVE_TIMEOUTS = 2;
+const DEFAULT_NO_PROGRESS_ROUNDS = 10;
 const DEFAULT_FORCE_SUMMARY_TIMEOUT_MS = 90_000;
 
 
@@ -512,6 +513,7 @@ export async function runTwoPhaseFcLoop(options: TwoPhaseFcOptions): Promise<Two
   let accInput = 0;
   let accOutput = 0;
   let consecutiveTimeouts = 0;
+  let consecutiveNoProgressRounds = 0;
   let usedImageCaptionFallback = false;
   let isFirstRound = true;
   let loopExitReason: SoulPhaseReason = "max_rounds";
@@ -595,7 +597,7 @@ export async function runTwoPhaseFcLoop(options: TwoPhaseFcOptions): Promise<Two
       " toolCalls=" + chat.toolCalls.length + " 耗时=" + (Date.now() - startTime) + "ms",
     );
 
-    // 请求成功，重置连续超时计数
+    // 请求成功，重置连续超时和无效轮次计数
     consecutiveTimeouts = 0;
     isFirstRound = false;
 
@@ -668,6 +670,23 @@ export async function runTwoPhaseFcLoop(options: TwoPhaseFcOptions): Promise<Two
       });
 
       onEvent?.({ type: "step_finished", stepName: `tool-round-${round + 1}` });
+
+      // 无进展检测：所有工具输出为空/短/报错 → 无进展
+      const allEmpty = execResults.every(r =>
+        !r.output || r.output.trim().length < 5
+      );
+      if (allEmpty) {
+        consecutiveNoProgressRounds++;
+        console.warn(LOG_PREFIX, `第 ${round + 1} 轮无进展（连续 ${consecutiveNoProgressRounds}/${DEFAULT_NO_PROGRESS_ROUNDS} 轮）`);
+        if (consecutiveNoProgressRounds >= DEFAULT_NO_PROGRESS_ROUNDS) {
+          console.warn(LOG_PREFIX, `连续 ${DEFAULT_NO_PROGRESS_ROUNDS} 轮无进展，切 SOUL_PHASE`);
+          loopExitReason = "no_progress";
+          break;
+        }
+      } else {
+        consecutiveNoProgressRounds = 0;
+      }
+
       continue;
     }
 

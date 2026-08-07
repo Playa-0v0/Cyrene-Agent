@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { dialog, ipcMain } from "electron";
+import { dialog, ipcMain, app } from "electron";
 import { IPC } from "../../shared/ipc-channels";
 import type { StartTtsRequest } from "../../shared/tts-session";
 import { synthesize as customCloudSynthesize } from "./custom-cloud-engine";
@@ -232,8 +232,14 @@ export function registerTtsIpc(deps: RegisterTtsIpcDeps): void {
         });
         if (!sender.isDestroyed()) sender.send(IPC.TTS_STREAM_END, { cacheKey, cached: false, format });
       } catch (err) {
+        const errMsg = `流式TTS失败: ${err instanceof Error ? err.message : String(err)}`;
+        console.error("[TTS Stream]", errMsg);
+        try {
+          const diagPath = require("path").join(require("electron").app.getPath("userData"), "minimax-tts-diag.log");
+          require("fs").appendFileSync(diagPath, `[${new Date().toISOString()}] STREAM ERROR: ${errMsg}\n`);
+        } catch { /* ignore */ }
         if (!sender.isDestroyed()) {
-          sender.send(IPC.TTS_STREAM_ERROR, { message: err instanceof Error ? err.message : String(err) });
+          sender.send(IPC.TTS_STREAM_ERROR, { message: errMsg });
         }
       }
     })();
@@ -614,5 +620,26 @@ export function registerTtsIpc(deps: RegisterTtsIpcDeps): void {
       limit: payload.limit,
     });
     return { voices: result.voices };
+  });
+
+  // 系统音频播放（绕过 Electron 43 的 AudioContext 输出路由问题）
+  ipcMain.handle(IPC.TTS_SYSTEM_PLAY, async (_event, payload: { base64: string; mime: string }) => {
+    const tmpDir = path.join(app.getPath("userData"), "tmp-audio");
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const tmpPath = path.join(tmpDir, `tts-${Date.now()}.mp3`);
+    const buf = Buffer.from(payload.base64, "base64");
+    fs.writeFileSync(tmpPath, buf);
+    // 写入 VBS 脚本播放（控制音量，后台运行）
+    const vbsPath = tmpPath.replace(/\.mp3$/, ".vbs");
+    const vbsContent = `Set o = CreateObject("WMPlayer.OCX.7")\r\no.settings.volume = 100\r\no.URL = "${tmpPath.replace(/\\/g,"\\\\")}"\r\nDo While o.playState <> 1\r\n  WScript.Sleep 200\r\nLoop\r\no.close\r\n`;
+    fs.writeFileSync(vbsPath, vbsContent);
+    console.log("[TTS SystemPlay] playing (VBS):", tmpPath, "bytes:", buf.length);
+
+    const { exec } = await import("child_process");
+    exec(`wscript "${vbsPath}"`, (err) => {
+      if (err) console.error("[TTS SystemPlay] err:", err.message);
+      try { setTimeout(() => { fs.unlinkSync(tmpPath); fs.unlinkSync(vbsPath); }, 15000); } catch {}
+    });
+    return { ok: true };
   });
 }
