@@ -1,7 +1,7 @@
 import type { BrowserWindow } from "electron";
 import { IPC } from "../../shared/ipc-channels";
 import { loadGeneralSettings } from "../settings/settings-facade";
-import { loadModelSettings, loadVisionConfig } from "../settings/model-settings";
+import { loadModelSettings, loadVisionConfig, getDefaultModelProfile } from "../settings/model-settings";
 import { CyreneAgent } from "../orchestrator/cyrene-agent";
 import { toolRegistry } from "../orchestrator/tool-registry";
 import { decideImageSendStrategy } from "../chat/image-send-strategy";
@@ -94,6 +94,9 @@ export function createChannelsSubsystem(deps: ChannelsSubsystemDeps): ChannelsSu
       ],
       style: "01_default.md",
       sessionId,
+      // 讓渠道（Discord/微信/飛書）的 agent 使用「預設已儲存模型設定檔」（例如自定義 opencode API），
+      // 而不是頂層 currentProvider 的不一致 top-level（例：未填 key 的 MiniMax）。
+      modelProfileId: getDefaultModelProfile()?.id,
       attachments: attachmentInputs.attachments,
       imageAttachments: attachmentInputs.imageAttachments,
       channel: msg.channel,
