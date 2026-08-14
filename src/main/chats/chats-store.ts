@@ -467,6 +467,18 @@ export function setSessionModelProfile(id: string, modelProfileId: string | unde
   return session;
 }
 
+/** 設定既有會話的 mode（例如 /mode 切換 work/chat 時同步桌面端 Discord 對話）。 */
+export function setSessionMode(id: string, mode: ConversationMode): ChatSession | null {
+  const session = readSessionFile(id);
+  if (!session || !isConversationMode(mode)) return null;
+  if (session.mode === mode) return session;
+  session.mode = mode;
+  session.updatedAt = Date.now();
+  writeSessionFile(session);
+  upsertMeta(metaFromSession(session));
+  return session;
+}
+
 export function deleteSession(id: string): boolean {
   const filePath = sessionPath(id);
   let fileExisted = false;

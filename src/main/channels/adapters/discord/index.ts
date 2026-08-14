@@ -59,6 +59,7 @@ import {
   appendDiscordReply,
   getLastChannelError,
   getDiscordSessionWorkspace,
+  syncDiscordSessionMode,
 } from "./discord-session";
 import { loadModelSettings } from "../../../settings/model-settings";
 import { getCurrentLevel, ACCESS_LEVEL_LABEL } from "../../../permission";
@@ -454,10 +455,12 @@ export class DiscordAdapter implements ChannelAdapter {
     const targetSandbox = value === "work" ? "all" : "off";
     try {
       saveChannelsSettings({ toolSandbox: targetSandbox });
+      // 同步桌面端 Discord 對話的 mode，讓對話也切到對應的 work/chat。
+      syncDiscordSessionMode();
       const label = value === "work" ? "**Work**（可呼叫工具）" : "**Chat**（純聊天，不呼叫工具）";
       console.log(LOG, `/${SLASH_MODE}: 切換 toolSandbox → ${targetSandbox}`);
       await cmd.editReply(
-        `✅ 已切換執行模式為 ${label}。\n此設定已寫入渠道設定，若 Bot 未立即生效，請在設定面板「連接手機」按「保存并连接」重新連線。`
+        `✅ 已切換執行模式為 ${label}，桌面端 Discord 對話也已同步。\n若 Bot 未立即生效，請在設定面板「連接手機」按「保存并连接」重新連線。`
       ).catch(() => {});
     } catch (err) {
       console.warn(LOG, `/${SLASH_MODE} 切換失敗:`, err instanceof Error ? err.message : err);

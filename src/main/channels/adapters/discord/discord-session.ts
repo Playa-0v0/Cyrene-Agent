@@ -37,6 +37,22 @@ export function getOrCreateDiscordSession(title: string): { id: string } | null 
   }
 }
 
+/** 立即把桌面端 Discord 對話的 mode 對齊目前 toolSandbox（/mode 切換後呼叫），並廣播刷新。 */
+export function syncDiscordSessionMode(): void {
+  try {
+    const sessionId = getDiscordSessionId();
+    if (!sessionId) return;
+    const target = discordSessionMode();
+    const updated = chatsStore.setSessionMode(sessionId, target);
+    if (updated) {
+      broadcastChatsChanged();
+      console.log("[DiscordSession] 對話模式已同步為", target);
+    }
+  } catch (err) {
+    console.warn("[DiscordSession] 同步模式失敗:", err instanceof Error ? err.message : err);
+  }
+}
+
 /** 取得桌面端 Discord 對話的 id（存在才回，不存在 null）。 */
 export function getDiscordSessionId(): string | null {
   try {
