@@ -58,8 +58,10 @@ import {
   appendDiscordUserMessage,
   appendDiscordReply,
   getLastChannelError,
+  getDiscordSessionWorkspace,
 } from "./discord-session";
 import { loadModelSettings } from "../../../settings/model-settings";
+import { getCurrentLevel, ACCESS_LEVEL_LABEL } from "../../../permission";
 import { logger, LogTag } from "../../../logger";
 
 const LOG = "[DiscordAdapter]";
@@ -358,6 +360,18 @@ export class DiscordAdapter implements ChannelAdapter {
     const dsc = loadChannelsSettings().discord;
     lines.push("**📊 Cyrene Agent 狀態**");
     lines.push(`- 綁定頻道：${dsc.boundChannelName ? `#${dsc.boundChannelName}` : "尚未綁定（請用 /startagent）"}`);
+
+    // 工作目錄（與桌面端「指定資料夾」對齊）+ 權限
+    lines.push("");
+    lines.push("**📁 工作目錄 / 權限**");
+    const ws = getDiscordSessionWorkspace();
+    if (ws?.workspaceRoot) {
+      lines.push(`- 工作目錄：\`${ws.workspaceRoot}\``);
+    } else {
+      lines.push("- 工作目錄：未綁定（可在桌面端對話設定「指定資料夾」）");
+    }
+    const permLevelLabel = getCurrentLevel();
+    lines.push(`- 權限檔位：${ACCESS_LEVEL_LABEL[permLevelLabel] ?? permLevelLabel}`);
 
     // 模型/API 設定
     try {

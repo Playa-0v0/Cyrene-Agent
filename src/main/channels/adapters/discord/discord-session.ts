@@ -37,6 +37,30 @@ export function getOrCreateDiscordSession(title: string): { id: string } | null 
   }
 }
 
+/** 取得桌面端 Discord 對話的 id（存在才回，不存在 null）。 */
+export function getDiscordSessionId(): string | null {
+  try {
+    chatsStore.initialize();
+    return chatsStore.getSessionByPurpose(PURPOSES)?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** 取得桌面端 Discord 對話綁定的工作目錄（「指定資料夾」）。未綁定回 null。 */
+export function getDiscordSessionWorkspace(): { workspaceRoot: string; displayName?: string } | null {
+  try {
+    const session = chatsStore.getSession(getDiscordSessionId() ?? "");
+    if (!session?.workspaceBinding?.workspaceRoot) return null;
+    return {
+      workspaceRoot: session.workspaceBinding.workspaceRoot,
+      displayName: session.workspaceBinding.displayName,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** 建立/確保 Discord 對話存在，並要求開啟桌面端聊天窗（若尚未開啟）。返回 sessionId。 */
 export function ensureDiscordSessionAndOpen(title: string): string | null {
   const info = getOrCreateDiscordSession(title);

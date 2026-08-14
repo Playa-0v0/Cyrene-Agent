@@ -23,7 +23,7 @@ import {
   setDispatcherSynthesizeTts,
 } from "./dispatcher";
 import { initChannels, shutdownChannels } from "./init";
-import { recordChannelError } from "./adapters/discord/discord-session";
+import { recordChannelError, getDiscordSessionWorkspace } from "./adapters/discord/discord-session";
 
 export interface ChannelsSubsystem {
   shutdown(): Promise<void>;
@@ -111,6 +111,17 @@ export function createChannelsSubsystem(deps: ChannelsSubsystemDeps): ChannelsSu
       : [];
     options.harnessInteractiveTools = policy.includeInteractiveTools;
     options.permissionMode = policy.permissionMode;
+
+    // 渠道執行與桌面端「指定資料夾」對齊：Discord 頻道訊息觸發時，
+    // 若 /startagent 建立的桌面 Discord 對話有綁定工作目錄，就讓本次執行使用該目錄，
+    // 使工具（read_file/write_file/run_shell 等）以該可信根目錄為準。
+    if (msg.channel === "discord") {
+      const ws = getDiscordSessionWorkspace();
+      if (ws?.workspaceRoot) {
+        options.resolvedWorkspaceRoot = ws.workspaceRoot;
+        console.log("[Channels] discord workspace inherited:", ws.workspaceRoot);
+      }
+    }
 
     const threadId = `thread-${sessionId}-${Date.now()}`;
     const agent = new CyreneAgent({ threadId, description: `bot:${msg.channel}:${msg.senderId}` });
