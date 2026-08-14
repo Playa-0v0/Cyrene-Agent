@@ -58,7 +58,7 @@ function renderDiscordBoundChannel(cfg: {
   if (cfg.boundChannelId) {
     channelsDiscordBoundEl.textContent = `已綁定對話頻道：#${cfg.boundChannelName ?? cfg.boundChannelId}`;
   } else {
-    channelsDiscordBoundEl.textContent = "尚未綁定對話頻道：連上後在頻道輸入 /start 綁定，之後在該頻道 @我 我就能回覆。";
+    channelsDiscordBoundEl.textContent = "尚未綁定對話頻道：連上後在頻道輸入 /startagent（回覆「啟動成功」即完成），之後在該頻道 @我 我就能回覆。";
   }
 }
 

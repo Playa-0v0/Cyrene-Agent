@@ -6,22 +6,23 @@
 //   - 重连 / 心跳 / 鉴权由 discord.js Client 自动处理
 //   - 需要提供一个 Discord Bot Token（在 Discord Developer Portal 创建 Bot 后获取）
 //
-// 数据流：
+// 數據流：
 //   Discord Gateway ←WSS→ discord.js Client
-//       ↓ `messageCreate`
-//   DiscordAdapter.handleMessage → adapter.onMessage (dispatcher)
+//       ↓ `messageCreate` / `interactionCreate`
+//   DiscordAdapter.handleMessage / handleInteraction → adapter.onMessage (dispatcher)
 //       ↓ CyreneAgent runs
 //   DiscordAdapter.send(...) → 回覆至同一頻道或私訊
 //
-// 對話模式（在**伺服器頻道**中對話）：
-//   - 使用者在某文字頻道輸入 `/start` → 該頻道被綁定為唯一「對話頻道」
-//     綁定會透過 settings-store 持久化，重啟後仍保留。
-//   - 之後只要有人**@ 提到 Bot** 就會觸發對話，回覆在同一個頻道。
+// 對話模式（在**伺服器頻道**中對話，用正式 slash command）：
+//   - 連上時自動在 Bot 已加入的每個伺服器註冊 `/startagent`（guild command，立即生效）。
+//   - 使用者在你想要對話的文字頻道輸入 `/startagent` → 該頻道被綁定為唯一「對話頻道」，
+//     綁定會透過 settings-store 持久化，重啟後仍保留，同步收到「啟動成功」回覆。
+//   - 之後只有**綁定頻道**裡有人 **@ 提到 Bot** 才會觸發對話，回覆在同一個頻道。
 //   - 你可以隨時回到該頻道確認完整對話內容（不另建頻道）。
 //   - 私訊(DM) 仍然可用：直接私訊 Bot 即可對話。
 //
 // 設計決策：
-//   - 群聊頻道：僅當被 @ 綁定頻道 + 有人 @Bot 時回應；避免誤觸發 / 刷屏。
+//   - 群聊頻道：僅當被 `/startagent` 綁定頻道 + 有人 @Bot 時回應；避免誤觸發 / 刷屏。
 //   - 入站圖片/文件會下載到 userData/channels/cache/，以 filePath 寫進
 //     IncomingMessage.attachments，buildAgentRunOptions 會把路徑注入 prompt。
 //   - 出站 parts 翻譯：text → 純文本；image/file/audio/video → AttachmentBuilder；
@@ -38,6 +39,7 @@ import {
   GatewayIntentBits,
   Partials,
   type BaseGuildTextChannel,
+  type ChatInputCommandInteraction,
   type Message,
 } from "discord.js";
 import type { ChannelAdapter } from "../base";
@@ -55,8 +57,9 @@ import { logger, LogTag } from "../../../logger";
 
 const LOG = "[DiscordAdapter]";
 
-/** `/start`：把當前頻道綁定為唯一對話頻道。 */
-const START_COMMAND = "/start";
+/** 頻道綁定的正式 slash command 名稱。 */
+const SLASH_STARTAGENT = "startagent";
+const SLASH_STARTAGENT_DESC = "把本頻道設為 Cyrene 的對話頻道（之後在本頻道 @我 就能對話）";
 
 /** Discord capability 声明。Discord 原生支持文本/富文本(markdown)/embed/附件。 */
 const DISCORD_CAPABILITY: ChannelCapability = {
@@ -224,7 +227,7 @@ export class DiscordAdapter implements ChannelAdapter {
     client.once(Events.ClientReady, (c) => {
       console.log(LOG, `ready: 已登录 ${c.user?.username}`);
       this.status = { enabled: true, phase: "running", message: `已连接（${c.user?.tag ?? c.user?.username}）` };
-      // 連上後順便印目前綁定頻道，方便除錯
+      void this.registerSlashCommands(c);
       const cfg = loadChannelsSettings().discord;
       if (cfg.boundChannelId) {
         console.log(LOG, `已綁定對話頻道: ${cfg.boundChannelName ?? cfg.boundChannelId}`);
@@ -241,10 +244,73 @@ export class DiscordAdapter implements ChannelAdapter {
       void this.handleMessage(msg);
     });
 
+    client.on(Events.InteractionCreate, (interaction) => {
+      void this.handleInteraction(interaction);
+    });
+
     return client;
   }
 
-  /** 入口：處理所有消息，決定是否觸發對話。 */
+  /** 連上後，在每個已加入的伺服器註冊 /startagent（guild command，立即生效；重複註冊用 set 覆蓋）。 */
+  private async registerSlashCommands(client: Client): Promise<void> {
+    const commandData = { name: SLASH_STARTAGENT, description: SLASH_STARTAGENT_DESC };
+    try {
+      const app = client.application;
+      if (!app?.id) {
+        console.warn(LOG, "application 資訊尚不可用，跳過註冊指令");
+        return;
+      }
+      for (const guild of client.guilds.cache.values()) {
+        try {
+          await guild.commands.set([commandData]);
+          console.log(LOG, `已註冊 /${SLASH_STARTAGENT} 到 ${guild.name} (${guild.id})`);
+        } catch (err) {
+          console.warn(LOG, `註冊 /${SLASH_STARTAGENT} 到 ${guild.id} 失敗:`, err instanceof Error ? err.message : err);
+        }
+      }
+    } catch (err) {
+      console.warn(LOG, "註冊指令失敗（請在 Bot 的 OAuth2 scope 勾選 applications.commands）:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  /** 處理 slash command 互動：/startagent → 綁定頻道 + 回覆「啟動成功」。 */
+  private async handleInteraction(interaction: unknown): Promise<void> {
+    if (!(interaction as { isChatInputCommand?: () => boolean }).isChatInputCommand?.()) return;
+    const cmd = interaction as ChatInputCommandInteraction;
+    if (cmd.commandName !== SLASH_STARTAGENT) return;
+    // 只在伺服器文字頻道中使用
+    if (!cmd.inGuild() || !cmd.channel || !isGuildTextChannel(cmd.channel)) {
+      await replyToInteraction(cmd, "請在伺服器的文字頻道中使用 /startagent。");
+      return;
+    }
+    try {
+      const channel = cmd.channel as BaseGuildTextChannel;
+      const channelName = channel.name ?? cmd.channelId;
+      const cfg = loadChannelsSettings().discord;
+      const changed = cfg.boundChannelId !== cmd.channelId;
+
+      saveChannelsSettings({
+        discord: {
+          ...cfg,
+          boundChannelId: cmd.channelId,
+          boundChannelName: channelName,
+        },
+      });
+
+      console.log(LOG, `/${SLASH_STARTAGENT}: 綁定頻道 ${channelName} (${cmd.channelId})`);
+      await replyToInteraction(
+        cmd,
+        changed
+          ? `✅ 啟動成功！已把本頻道 #${channelName} 設為 Cyrene 的對話頻道。之後在頻道裡 **@我** 就能跟我對話，我也會在這裡回覆。`
+          : `✅ 啟動成功！本頻道 (#${channelName}) 已是指定的對話頻道，直接在頻道裡 **@我** 就能開始對話。`,
+      );
+    } catch (err) {
+      console.warn(LOG, `/${SLASH_STARTAGENT} 綁定失敗:`, err instanceof Error ? err.message : err);
+      await replyToInteraction(cmd, "❌ 啟動失敗，請確認我有權限在此頻道發言。");
+    }
+  }
+
+  /** 入口：處理所有普通訊息，決定是否觸發對話。 */
   private async handleMessage(msg: Message): Promise<void> {
     // 忽略自己發的消息與其他 bot
     if (msg.author?.id === this.client?.user?.id) return;
@@ -257,14 +323,7 @@ export class DiscordAdapter implements ChannelAdapter {
     const isGuildChannel = msg.guildId != null;
     const isDM = msg.channel?.type === ChannelType.DM;
 
-    // 1) `/start` 指令：綁定當前伺服器文字頻道
-    const content = (msg.content ?? "").trim();
-    if (isGuildChannel && content === START_COMMAND) {
-      await this.handleStartCommand(msg);
-      return;
-    }
-
-    // 2) 伺服器頻道：只有「綁定頻道 + @ 提到 Bot」才觸發
+    // 1) 伺服器頻道：只有「/startagent 綁定頻道 + @ 提到 Bot」才觸發
     if (isGuildChannel) {
       if (!await this.isBoundChannel(msg.channelId)) {
         return;
@@ -273,51 +332,21 @@ export class DiscordAdapter implements ChannelAdapter {
       if (!mentionedBot) {
         return; // 沒 @Bot 就不回應，避免刷屏
       }
-      // 去掉 @Bot，讓 agent 收到純內容
-      const clean = stripBotMention(content, this.client!.user!.id);
+      const clean = stripBotMention((msg.content ?? "").trim(), this.client!.user!.id);
       await this.dispatchIncoming(msg, clean);
       return;
     }
 
-    // 3) 私訊：直接觸發
+    // 2) 私訊：直接觸發
     if (isDM) {
-      await this.dispatchIncoming(msg, content);
+      await this.dispatchIncoming(msg, (msg.content ?? "").trim());
       return;
     }
 
     // 其他類型（話題/公告等）忽略
   }
 
-  /** 綁定頻道：把當前頻道設為唯一對話頻道並持久化。 */
-  private async handleStartCommand(msg: Message): Promise<void> {
-    try {
-      const channel = msg.channel as BaseGuildTextChannel;
-      const channelName = channel.name ?? msg.channelId;
-      const cfg = loadChannelsSettings().discord;
-      const changed = cfg.boundChannelId !== msg.channelId;
-
-      saveChannelsSettings({
-        discord: {
-          ...cfg,
-          boundChannelId: msg.channelId,
-          boundChannelName: channelName,
-        },
-      });
-
-      console.log(LOG, `/start: 綁定頻道 ${channelName} (${msg.channelId})`);
-      const reply = changed
-        ? `已把本頻道 #${channelName} 設為 Cyrene 的對話頻道。之後在頻道裡 **@我** 就能跟我對話，我也會在這裡回覆，方便你確認對話內容。`
-        : `本頻道 (#${channelName}) 已經是對話頻道了，直接在頻道裡 **@我** 就能開始對話。`;
-      await safeChannelReply(channel, reply);
-    } catch (err) {
-      console.warn(LOG, `/start 綁定失敗:`, err instanceof Error ? err.message : err);
-      try {
-        await (msg.channel as BaseGuildTextChannel).send("綁定頻道失敗，請確認我有權限在此頻道發言。");
-      } catch { /* ignore */ }
-    }
-  }
-
-  /** 綁定頻道是否存在且是當前頻道。 */
+  /** 綁定頻道存在與否（由 /startagent 寫入 settings-store）。 */
   private async isBoundChannel(channelId?: string): Promise<boolean> {
     if (!channelId) return false;
     const cfg = loadChannelsSettings().discord;
@@ -336,7 +365,6 @@ export class DiscordAdapter implements ChannelAdapter {
       await this.onMessage!(incoming);
     } catch (err) {
       console.error(LOG, "處理入站消息失敗:", err instanceof Error ? err.message : err);
-      // 主動通知使用者（避免靜默無回應）
       try {
         await this.sendDirectAck(msg);
       } catch { /* ignore */ }
@@ -383,7 +411,7 @@ export class DiscordAdapter implements ChannelAdapter {
     };
   }
 
-  /** 觸發訊息不帶圖片但於附件下載失敗等情況，給一個簡短澄清回覆。 */
+  /** 觸發訊息處理失敗時的簡短澄清回覆。 */
   private async sendDirectAck(msg: Message): Promise<void> {
     const text = "我處理你的訊息時出了點問題，請稍後重試。";
     const target = msg.guildId ? (msg.channel as BaseGuildTextChannel) : null;
@@ -507,26 +535,39 @@ export class DiscordAdapter implements ChannelAdapter {
   }
 }
 
+/** 判斷某 channel 是否為伺服器文字頻道（非 DM）。 */
+function isGuildTextChannel(channel: unknown): boolean {
+  const c = channel as { type?: number; isTextBased?: () => boolean; isDMBased?: () => boolean };
+  const isText = c?.isTextBased;
+  const isDm = c?.isDMBased;
+  return c != null && typeof isText === "function" && isText() && !(typeof isDm === "function" && isDm());
+}
+
+/** 以 defer+editReply 方式安全回覆 slash command 互動。 */
+async function replyToInteraction(
+  interaction: ChatInputCommandInteraction,
+  text: string,
+): Promise<void> {
+  try {
+    await interaction.deferReply({ ephemeral: false });
+    await interaction.editReply(text);
+  } catch (err) {
+    // 若 deferReply 已成功但 editReply 失敗，就試 catch 的 fallback
+    try {
+      await interaction.reply(text);
+    } catch {
+      console.warn(LOG, "回覆互動失敗:", err instanceof Error ? err.message : err);
+    }
+  }
+}
+
 /** 從訊息中移除對 Bot 的 @ 提及，只保留純文字內容。 */
 function stripBotMention(content: string, botId: string): string {
   // Discord 的提及格式：<@123>（一般）或 <@!123>（舊式 / nickname）
   const mentionRegex = new RegExp(`<@!?${escapeRegex(botId)}>`, "g");
-  const cleaned = content.replace(mentionRegex, " ").replace(/\s+/g, " ").trim();
-  return cleaned;
+  return content.replace(mentionRegex, " ").replace(/\s+/g, " ").trim();
 }
 
 function escapeRegex(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** 嘗試把回復送到指定頻道；若無權限則忽略（已 try/catch）。 */
-async function safeChannelReply(
-  channel: BaseGuildTextChannel,
-  text: string,
-): Promise<void> {
-  try {
-    await channel.send(text);
-  } catch (err) {
-    console.warn(LOG, `回覆 ${channel.name} 失敗:`, err instanceof Error ? err.message : err);
-  }
 }
