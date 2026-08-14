@@ -360,6 +360,8 @@ export class DiscordAdapter implements ChannelAdapter {
     const dsc = loadChannelsSettings().discord;
     lines.push("**📊 Cyrene Agent 狀態**");
     lines.push(`- 綁定頻道：${dsc.boundChannelName ? `#${dsc.boundChannelName}` : "尚未綁定（請用 /startagent）"}`);
+    const modeLabel = (loadChannelsSettings().toolSandbox === "all") ? "**Work**（可呼叫工具）" : "**Chat**（純聊天，不呼叫工具）";
+    lines.push(`- 執行模式：${modeLabel}`);
 
     // 工作目錄（與桌面端「指定資料夾」對齊）+ 權限
     lines.push("");

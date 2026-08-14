@@ -1109,6 +1109,14 @@
                 </div>
               </div>
 
+              <div class="form-row form-row--inline">
+                <span class="switch"><input id="channels-discord-token-plain" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
+                <span class="form-row__label">以<b>明文</b>儲存 Token（不加密）</span>
+              </div>
+              <p class="channels-card__hint" id="channels-discord-token-plain-hint">
+                ⚠️ 勾選後 Token 會以<b>明文</b>寫入 <code>channels-settings.json</code>（不依賴系統鑰匙圈，重啟較可靠，但任何能讀到該檔案的人都能看到 Token）。請自行斟酌資安風險。
+              </p>
+
               <div class="channels-card__actions">
                 <button type="button" class="btn-secondary" id="channels-discord-save">保存并连接</button>
               </div>
