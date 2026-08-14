@@ -2,7 +2,7 @@ import * as fs from "fs"
 import * as path from "path"
 import { app } from "electron"
 
-export type RelationshipChannel = "desktop" | "wechat" | "feishu"
+export type RelationshipChannel = "desktop" | "wechat" | "feishu" | "discord"
 
 export interface RelationshipTurnInput {
   userText: string

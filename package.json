@@ -73,6 +73,7 @@
     "antd": "^6.5.2",
     "chart.js": "^4.5.1",
     "chokidar": "^4.0.3",
+    "discord.js": "^14.27.0",
     "docx": "^9.7.1",
     "dompurify": "^3.4.12",
     "exceljs": "^4.4.0",

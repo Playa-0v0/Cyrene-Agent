@@ -605,6 +605,11 @@ body {
   display: none;
 }
 
+/* 主动投递目标：4 个按钮（本地/微信/飞书/Discord）用 4 列排布，避免换行。 */
+#proactive-delivery-select {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .setting-row strong {
   display: block;
   margin-bottom: 4px;

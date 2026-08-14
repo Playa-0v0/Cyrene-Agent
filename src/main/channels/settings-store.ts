@@ -148,9 +148,12 @@ export interface FeishuChannelConfig extends ChannelRuntimeConfig {
   appSecret?: string;
 }
 
-/** 给上层用的明文 AppSecret 读取器 */
-export function decryptFeishuSecret(cfg: FeishuChannelConfig | undefined): string {
-  return decryptField(cfg?.appSecret ?? "");
+export interface DiscordChannelConfig extends ChannelRuntimeConfig {
+  /**
+   * Discord Bot Token。**已用 safeStorage 加密**。
+   * loadChannelsSettings 返回时已解密成明文；save 时 UI 传入明文会被 encryptField() 包裹。
+   */
+  token?: string;
 }
 
 export type ChannelToolSandbox = "off" | "all";
@@ -158,6 +161,7 @@ export type ChannelToolSandbox = "off" | "all";
 export interface ChannelsSettings {
   wechat: WechatChannelConfig;
   feishu: FeishuChannelConfig;
+  discord: DiscordChannelConfig;
   /** 入站 HTTP server 绑定的端口。0 = 随机空闲。 */
   inboundPort: number;
   /** HMAC 共享密钥。启动时若为空则自动生成。 */
@@ -179,6 +183,7 @@ export interface ChannelsSettings {
 const DEFAULT_SETTINGS: ChannelsSettings = {
   wechat: { enabled: false },
   feishu: { enabled: false },
+  discord: { enabled: false },
   inboundPort: 0,
   sharedSecret: "",
   rateLimitPerUser: 10,
@@ -211,6 +216,7 @@ function normalize(input: Partial<ChannelsSettings> | null | undefined): Channel
 
   const w: Partial<WechatChannelConfig> | undefined = input?.wechat;
   const f: Partial<FeishuChannelConfig> | undefined = input?.feishu;
+  const d: Partial<DiscordChannelConfig> | undefined = input?.discord;
 
   return {
     wechat: {
@@ -234,6 +240,12 @@ feishu: {
       // load 函数会先 decrypt 再返回；save 函数会自动 encrypt。
       appSecret: typeof f?.appSecret === "string" ? f?.appSecret : undefined,
     },
+    discord: {
+      enabled: safeBool(d?.enabled, false),
+      manualCliPath: typeof d?.manualCliPath === "string" ? d?.manualCliPath : undefined,
+      publicWebhookUrl: typeof d?.publicWebhookUrl === "string" ? d?.publicWebhookUrl : undefined,
+      token: typeof d?.token === "string" ? d?.token : undefined,
+    },
     inboundPort: safeNum(input?.inboundPort, 0, 0, 65535),
     sharedSecret: typeof input?.sharedSecret === "string" ? input.sharedSecret : "",
     rateLimitPerUser: safeNum(input?.rateLimitPerUser, 10, 1, 1000),
@@ -255,6 +267,9 @@ export function loadChannelsSettings(): ChannelsSettings {
     if (loaded.feishu.appSecret) {
       loaded.feishu.appSecret = decryptField(loaded.feishu.appSecret);
     }
+    if (loaded.discord.token) {
+      loaded.discord.token = decryptField(loaded.discord.token);
+    }
     return loaded;
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -266,6 +281,7 @@ export function saveChannelsSettings(patch: Partial<ChannelsSettings>): Channels
   const merged: Partial<ChannelsSettings> = { ...existing, ...patch };
   if (patch.wechat) merged.wechat = { ...existing.wechat, ...patch.wechat };
   if (patch.feishu) merged.feishu = { ...existing.feishu, ...patch.feishu };
+  if (patch.discord) merged.discord = { ...existing.discord, ...patch.discord };
 
   // 私密字段加密边界：UI 传来的是明文，写盘前要 wrap
   // 避开"密文回传"场景：检测 enc:/obf:/plain: 前缀，避免重复加密。
@@ -275,9 +291,15 @@ export function saveChannelsSettings(patch: Partial<ChannelsSettings>): Channels
       merged.feishu.appSecret = encryptField(v);
     }
   }
+  if (typeof merged.discord?.token === "string" && merged.discord.token) {
+    const v = merged.discord.token;
+    if (!v.startsWith(ENC_PREFIX) && !v.startsWith(OBF_PREFIX) && !v.startsWith(PLAIN_PREFIX)) {
+      merged.discord.token = encryptField(v);
+    }
+  }
 
   const final = normalize(merged);
-  // 写盘时 final.appSecret / final.encryptKey 已经是密文形态（带 enc: 前缀）
+  // 写盘时私密字段已经是密文形态（带 enc: 前缀）
   // load 时解密，运行时给上层看到明文。
   fs.mkdirSync(path.dirname(filePath()), { recursive: true });
   fs.writeFileSync(filePath(), JSON.stringify(final, null, 2), "utf8");
@@ -289,6 +311,10 @@ export function saveChannelsSettings(patch: Partial<ChannelsSettings>): Channels
       ...final.feishu,
       appSecret: decryptField(final.feishu.appSecret ?? ""),
     },
+    discord: {
+      ...final.discord,
+      token: decryptField(final.discord.token ?? ""),
+    },
   };
   return out;
 }
@@ -297,6 +323,7 @@ export function saveChannelsSettings(patch: Partial<ChannelsSettings>): Channels
 export type ChannelConfigPatch = Partial<{
   wechat: Partial<WechatChannelConfig>;
   feishu: Partial<FeishuChannelConfig>;
+  discord: Partial<DiscordChannelConfig>;
   inboundPort: number;
   sharedSecret: string;
   rateLimitPerUser: number;
@@ -308,11 +335,11 @@ export type ChannelConfigPatch = Partial<{
 }>;
 
 /** 给定 channelId 返回对应的配置子集（用于 adapter 内部读取自己的开关）。 */
-export function getChannelConfig<K extends ChannelId>(
-  settings: ChannelsSettings,
-  channel: K,
-): K extends "wechat" ? WechatChannelConfig : FeishuChannelConfig {
-  return (settings[channel] as unknown) as K extends "wechat"
-    ? WechatChannelConfig
-    : FeishuChannelConfig;
+export type ChannelSessionConfig =
+  | WechatChannelConfig
+  | FeishuChannelConfig
+  | DiscordChannelConfig;
+
+export function getChannelConfig(settings: ChannelsSettings, channel: ChannelId): ChannelSessionConfig {
+  return settings[channel] as ChannelSessionConfig;
 }

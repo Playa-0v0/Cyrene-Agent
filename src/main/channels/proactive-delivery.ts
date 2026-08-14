@@ -5,7 +5,7 @@ import { appendHistory as appendChannelHistory } from "./history-log";
 import { appendLog as appendChannelLog, type LogEntry } from "./message-log";
 import type { ChannelId, IncomingMessage, OutgoingMessage } from "./types";
 
-export type ProactiveMobileChannel = Extract<ChannelId, "wechat" | "feishu">;
+export type ProactiveMobileChannel = Extract<ChannelId, "wechat" | "feishu" | "discord">;
 
 export interface RecentProactiveChannelRecipient {
   targetId: string;

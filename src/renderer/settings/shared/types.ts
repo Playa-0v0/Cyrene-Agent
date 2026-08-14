@@ -277,8 +277,33 @@ export interface SettingsApi {
   testVision?: (config: { baseUrl: string; apiKey: string; model: string }) => Promise<{ ok: boolean; latency: number; sample?: string; error?: string }>;
   // main → settings：要求切到指定标签（窗口已打开时由 main 发这个事件）
   onSwitchSection?: (callback: (section: string) => void) => (() => void) | void;
+  channelsGetConfig: () => Promise<ChannelsConfig>;
+  channelsSaveConfig: (patch: unknown) => Promise<ChannelsConfig>;
+  channelsRestart: () => Promise<{ ok: boolean; error?: string }>;
   channelsGetStatus: () => Promise<Record<string, { phase?: string; message?: string }>>;
+  channelsLogGet: (limit?: number) => Promise<unknown[]>;
+  channelsLogClear: () => Promise<{ ok: boolean }>;
+  channelsDiscordTestConnection: () => Promise<{ ok: boolean; message?: string; error?: string }>;
+  onChannelsInstallProgress: (callback: (p: { channel: string; phase: string; pct: number }) => void) => (() => void) | void;
   onChannelsStatusChanged: (callback: (status: unknown) => void) => (() => void) | void;
+  onChannelsWechatQrcode: (callback: (dataUrl: string) => void) => (() => void) | void;
+  onChannelsWechatLoginDone: (callback: (payload: { ok: boolean; botId?: string; error?: string }) => void) => (() => void) | void;
+  channelsWechatLoginStart: () => Promise<{ ok: boolean; error?: string; hint?: string }>;
   beginScreenshotHotkeyCapture: () => Promise<boolean>;
   endScreenshotHotkeyCapture: () => Promise<boolean>;
+}
+
+/** 对应 main 端 loadChannelsSettings() 返回的渠道配置形状（renderer 只读）。 */
+export interface ChannelsConfig {
+  wechat: { enabled: boolean };
+  feishu: { enabled: boolean; appId?: string; appSecret?: string };
+  discord: { enabled: boolean; token?: string };
+  inboundPort: number;
+  sharedSecret: string;
+  rateLimitPerUser: number;
+  rateLimitPerChannel: number;
+  ttsEnabled: boolean;
+  stickerEnabled: boolean;
+  mirrorToDesktop: boolean;
+  toolSandbox: "off" | "all";
 }
