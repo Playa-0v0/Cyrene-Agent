@@ -154,6 +154,13 @@ export interface DiscordChannelConfig extends ChannelRuntimeConfig {
    * loadChannelsSettings 返回时已解密成明文；save 时 UI 传入明文会被 encryptField() 包裹。
    */
   token?: string;
+  /**
+   * `/start` 綁定的伺服器文字頻道 ID（讓 Bot 在這個頻道 @ 即觸發對話）。
+   * 空白 = 未綁定，需要在某頻道輸入 `/start` 綁定。
+   */
+  boundChannelId?: string;
+  /** 綁定頻道的顯示名稱，僅供 UI/日誌展示。 */
+  boundChannelName?: string;
 }
 
 export type ChannelToolSandbox = "off" | "all";
@@ -245,6 +252,8 @@ feishu: {
       manualCliPath: typeof d?.manualCliPath === "string" ? d?.manualCliPath : undefined,
       publicWebhookUrl: typeof d?.publicWebhookUrl === "string" ? d?.publicWebhookUrl : undefined,
       token: typeof d?.token === "string" ? d?.token : undefined,
+      boundChannelId: typeof d?.boundChannelId === "string" ? d?.boundChannelId : undefined,
+      boundChannelName: typeof d?.boundChannelName === "string" ? d?.boundChannelName : undefined,
     },
     inboundPort: safeNum(input?.inboundPort, 0, 0, 65535),
     sharedSecret: typeof input?.sharedSecret === "string" ? input.sharedSecret : "",

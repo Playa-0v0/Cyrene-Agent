@@ -11,6 +11,7 @@ import {
   channelsFeishuAppIdEl, channelsFeishuAppSecretEl, channelsFeishuAppSecretRevealBtn,
   channelsFeishuSaveBtn, channelsFeishuFeedbackEl,
   channelsDiscordTokenEl, channelsDiscordTokenRevealBtn, channelsDiscordSaveBtn, channelsDiscordFeedbackEl,
+  channelsDiscordBoundEl,
   channelsWechatStatusEl, channelsFeishuStatusEl, channelsDiscordStatusEl,
   channelsWechatLoginBtn, channelsWechatRestartBtn, channelsWechatFeedbackEl,
   channelsLogListEl, channelsLogRefreshBtn, channelsLogClearBtn,
@@ -42,6 +43,23 @@ function renderChannelStatus(el: HTMLElement | null, phase: string, message?: st
     else dot.classList.add("channels-status__dot--offline");
   }
   if (text) text.textContent = message ?? (phase === "running" ? "运行中" : phase === "starting" ? "启动中" : phase === "config_missing" ? "配置缺失" : phase === "error" ? "错误" : "未启用");
+}
+
+function renderDiscordBoundChannel(cfg: {
+  enabled: boolean;
+  boundChannelId?: string;
+  boundChannelName?: string;
+}): void {
+  if (!channelsDiscordBoundEl) return;
+  if (!cfg.enabled) {
+    channelsDiscordBoundEl.textContent = "";
+    return;
+  }
+  if (cfg.boundChannelId) {
+    channelsDiscordBoundEl.textContent = `已綁定對話頻道：#${cfg.boundChannelName ?? cfg.boundChannelId}`;
+  } else {
+    channelsDiscordBoundEl.textContent = "尚未綁定對話頻道：連上後在頻道輸入 /start 綁定，之後在該頻道 @我 我就能回覆。";
+  }
 }
 
 function setFeishuFeedback(kind: "info" | "ok" | "err", msg: string): void {
@@ -131,6 +149,7 @@ export async function loadChannelsPanel(): Promise<void> {
         ? "已保存（输入新值会覆盖）"
         : "点击保存配置时加密保存";
     }
+    renderDiscordBoundChannel(cfg.discord);
 
     // 拉一次渠道状态
     const status = (await window.settings.channelsGetStatus()) as Record<string, { phase: string; message?: string }>;
@@ -268,6 +287,9 @@ export async function loadChannelsPanel(): Promise<void> {
         channelsDiscordTokenEl.value = "";
         channelsDiscordTokenEl.placeholder = "已保存（输入新值会覆盖）";
       }
+      // 重新读取配置以更新綁定頻道顯示
+      const fresh = await window.settings.channelsGetConfig();
+      renderDiscordBoundChannel(fresh.discord);
     } catch (err) {
       setDiscordFeedback("err", err instanceof Error ? err.message : String(err));
     }

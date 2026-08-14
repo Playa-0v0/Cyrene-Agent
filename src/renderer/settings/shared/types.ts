@@ -297,7 +297,7 @@ export interface SettingsApi {
 export interface ChannelsConfig {
   wechat: { enabled: boolean };
   feishu: { enabled: boolean; appId?: string; appSecret?: string };
-  discord: { enabled: boolean; token?: string };
+  discord: { enabled: boolean; token?: string; boundChannelId?: string; boundChannelName?: string };
   inboundPort: number;
   sharedSecret: string;
   rateLimitPerUser: number;

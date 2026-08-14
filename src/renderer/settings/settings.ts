@@ -214,7 +214,7 @@ if (!window.settings) {
     channelsGetConfig: () => Promise.resolve({
       wechat: { enabled: false },
       feishu: { enabled: false },
-      discord: { enabled: false },
+      discord: { enabled: false, boundChannelId: undefined, boundChannelName: undefined },
       inboundPort: 0,
       sharedSecret: "",
       rateLimitPerUser: 10,
@@ -227,7 +227,7 @@ if (!window.settings) {
     channelsSaveConfig: () => Promise.resolve({
       wechat: { enabled: false },
       feishu: { enabled: false },
-      discord: { enabled: false },
+      discord: { enabled: false, boundChannelId: undefined, boundChannelName: undefined },
       inboundPort: 0,
       sharedSecret: "",
       rateLimitPerUser: 10,

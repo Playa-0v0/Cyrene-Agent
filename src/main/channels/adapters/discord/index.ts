@@ -8,17 +8,24 @@
 //
 // 数据流：
 //   Discord Gateway ←WSS→ discord.js Client
-//       ↓ `messageCreate` (DM message)
+//       ↓ `messageCreate`
 //   DiscordAdapter.handleMessage → adapter.onMessage (dispatcher)
 //       ↓ CyreneAgent runs
-//   DiscordAdapter.send(...) → channel.send(...) → Discord 用户私信
+//   DiscordAdapter.send(...) → 回覆至同一頻道或私訊
 //
-// 设计决策：
-//   - 只处理**私聊(用户 DM)**。群聊 / 串音频道（@mention）暂不处理，跟飞书 p2p-only 一致。
-//   - 入站图片/文件会先下载到 userData/channels/cache/，再以本地 filePath 写入
-//     IncomingMessage.attachments，buildAgentRunOptions 会把路径注入 prompt。
-//   - 出站 parts 翻译：text → 纯文本；image/file/audio/video → AttachmentBuilder；
-//     card → EmbedBuilder；sticker → 当作图片附件。
+// 對話模式（在**伺服器頻道**中對話）：
+//   - 使用者在某文字頻道輸入 `/start` → 該頻道被綁定為唯一「對話頻道」
+//     綁定會透過 settings-store 持久化，重啟後仍保留。
+//   - 之後只要有人**@ 提到 Bot** 就會觸發對話，回覆在同一個頻道。
+//   - 你可以隨時回到該頻道確認完整對話內容（不另建頻道）。
+//   - 私訊(DM) 仍然可用：直接私訊 Bot 即可對話。
+//
+// 設計決策：
+//   - 群聊頻道：僅當被 @ 綁定頻道 + 有人 @Bot 時回應；避免誤觸發 / 刷屏。
+//   - 入站圖片/文件會下載到 userData/channels/cache/，以 filePath 寫進
+//     IncomingMessage.attachments，buildAgentRunOptions 會把路徑注入 prompt。
+//   - 出站 parts 翻譯：text → 純文本；image/file/audio/video → AttachmentBuilder；
+//     card → EmbedBuilder；sticker → 當作圖片附件。
 import * as fs from "fs";
 import * as path from "path";
 import { app } from "electron";
@@ -30,6 +37,7 @@ import {
   Events,
   GatewayIntentBits,
   Partials,
+  type BaseGuildTextChannel,
   type Message,
 } from "discord.js";
 import type { ChannelAdapter } from "../base";
@@ -42,10 +50,13 @@ import type {
   OutgoingMessage,
   OutgoingPart,
 } from "../../types";
-import { loadChannelsSettings } from "../../settings-store";
+import { loadChannelsSettings, saveChannelsSettings } from "../../settings-store";
 import { logger, LogTag } from "../../../logger";
 
 const LOG = "[DiscordAdapter]";
+
+/** `/start`：把當前頻道綁定為唯一對話頻道。 */
+const START_COMMAND = "/start";
 
 /** Discord capability 声明。Discord 原生支持文本/富文本(markdown)/embed/附件。 */
 const DISCORD_CAPABILITY: ChannelCapability = {
@@ -104,7 +115,6 @@ async function downloadDiscordAttachment(
     const cacheDir = path.join(app.getPath("userData"), "channels", "cache");
     fs.mkdirSync(cacheDir, { recursive: true });
     const ext = fileName ? path.extname(fileName).toLowerCase() || extFromUrl(url) : extFromUrl(url);
-    // 命名: discord-<timestamp>-<名字 或 kind>.<ext>
     const baseName = fileName
       ? fileName.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").slice(0, 80)
       : fallbackKind;
@@ -140,9 +150,7 @@ function buildDiscordSendPayload(parts: OutgoingPart[]): {
       case "card": {
         const embed = new EmbedBuilder().setTitle(part.title);
         if (part.markdown) {
-          // Discord embed description 支持 markdown 语法
-          const desc = part.markdown.slice(0, 4000);
-          embed.setDescription(desc);
+          embed.setDescription(part.markdown.slice(0, 4000));
         }
         if (part.fields && part.fields.length > 0) {
           embed.addFields(
@@ -162,7 +170,6 @@ function buildDiscordSendPayload(parts: OutgoingPart[]): {
         break;
       }
       case "sticker": {
-        // Discord 无法发内置表情；改为图片附件
         if (part.imagePath) {
           attachments.push(
             new AttachmentBuilder(part.imagePath, { name: `${part.stickerId}.png` }),
@@ -189,48 +196,6 @@ function buildDiscordSendPayload(parts: OutgoingPart[]): {
   return { text: textParts.join("\n").slice(0, 2000), attachments, embeds };
 }
 
-/** 把 Discord Message 归一化成 IncomingMessage（异步，会下载附件）。 */
-async function normalizeDiscordMessage(msg: Message): Promise<IncomingMessage> {
-  const attachments: IncomingMessage["attachments"] = [];
-  let text = msg.content ?? "";
-
-  // 下载附件到本地，供 LLM 使用
-  for (const att of msg.attachments.values()) {
-    // stiker / emoji 之外都可当作 file/image/audio/video
-    const kind: ChannelAttachment["kind"] = att.contentType?.startsWith("image/")
-      ? "image"
-      : att.contentType?.startsWith("audio/")
-        ? "audio"
-        : att.contentType?.startsWith("video/")
-          ? "video"
-          : "file";
-    const downloaded = await downloadDiscordAttachment(att.url, att.name, kind);
-    if (downloaded) {
-      attachments.push({
-        kind,
-        filePath: downloaded.filePath,
-        mime: downloaded.mime,
-        caption: att.name,
-      });
-    }
-  }
-  // 把附件路径嵌进 text，让 LLM 一眼看到
-  for (const a of attachments) {
-    if (a.filePath) text = (text ? text + "\n" : "") + `[附件: ${a.filePath}]`;
-  }
-
-  return {
-    channel: "discord",
-    senderId: msg.author.id,
-    senderName: msg.author.username,
-    chatId: msg.author.id, // DM：chatId = 用户 id
-    text: text || "[空消息]",
-    attachments: attachments.length > 0 ? attachments : undefined,
-    at: msg.createdAt,
-    _raw: { id: msg.id, content: msg.content },
-  };
-}
-
 export class DiscordAdapter implements ChannelAdapter {
   readonly id = "discord" as const;
   readonly displayName = "Discord";
@@ -240,19 +205,30 @@ export class DiscordAdapter implements ChannelAdapter {
   private client: Client | null = null;
   private status: ChannelStatus = { enabled: false, phase: "config_missing" };
   private started = false;
+  #seenMessageIds = new Set<string>();
 
   constructor() {}
 
   /** 生成一个新的 discord.js Client（token 变化后 rebuild 用）。 */
   private createClient(): Client {
     const client = new Client({
-      intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent, GatewayIntentBits.DirectMessages],
+      intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.DirectMessages,
+      ],
       partials: [Partials.Channel, Partials.Message],
     });
 
     client.once(Events.ClientReady, (c) => {
       console.log(LOG, `ready: 已登录 ${c.user?.username}`);
       this.status = { enabled: true, phase: "running", message: `已连接（${c.user?.tag ?? c.user?.username}）` };
+      // 連上後順便印目前綁定頻道，方便除錯
+      const cfg = loadChannelsSettings().discord;
+      if (cfg.boundChannelId) {
+        console.log(LOG, `已綁定對話頻道: ${cfg.boundChannelName ?? cfg.boundChannelId}`);
+      }
     });
 
     client.on(Events.Error, (err) => {
@@ -268,46 +244,162 @@ export class DiscordAdapter implements ChannelAdapter {
     return client;
   }
 
+  /** 入口：處理所有消息，決定是否觸發對話。 */
   private async handleMessage(msg: Message): Promise<void> {
-    // 忽略自己发的消息
+    // 忽略自己發的消息與其他 bot
     if (msg.author?.id === this.client?.user?.id) return;
-    // 只处理私聊（用户 DM）。跳过群聊。
-    if (msg.channel?.type !== ChannelType.DM) {
-      // console.log(LOG, `忽略 ${msg.channel?.type} 消息 (私聊优先)`);
-      return;
-    }
-    // 忽略 bot 账号（避免 Bot 之间死循环）
     if (msg.author?.bot) return;
-
     if (!this.onMessage) {
-      console.warn(LOG, "onMessage 未注入，跳过消息");
+      console.warn(LOG, "onMessage 未注入，跳過消息");
       return;
     }
 
-    // 去重：Discord 偶尔会重复投递同一事件
-    if (msg.id && this.#seenMessageIds.has(msg.id)) return;
-    if (msg.id) this.#seenMessageIds.add(msg.id);
-    // 简单上限，防止 set 无限膨胀
-    if (this.#seenMessageIds.size > 1000) {
-      this.#seenMessageIds.clear();
+    const isGuildChannel = msg.guildId != null;
+    const isDM = msg.channel?.type === ChannelType.DM;
+
+    // 1) `/start` 指令：綁定當前伺服器文字頻道
+    const content = (msg.content ?? "").trim();
+    if (isGuildChannel && content === START_COMMAND) {
+      await this.handleStartCommand(msg);
+      return;
     }
 
+    // 2) 伺服器頻道：只有「綁定頻道 + @ 提到 Bot」才觸發
+    if (isGuildChannel) {
+      if (!await this.isBoundChannel(msg.channelId)) {
+        return;
+      }
+      const mentionedBot = Boolean(this.client?.user) && msg.mentions.has(this.client!.user!.id);
+      if (!mentionedBot) {
+        return; // 沒 @Bot 就不回應，避免刷屏
+      }
+      // 去掉 @Bot，讓 agent 收到純內容
+      const clean = stripBotMention(content, this.client!.user!.id);
+      await this.dispatchIncoming(msg, clean);
+      return;
+    }
+
+    // 3) 私訊：直接觸發
+    if (isDM) {
+      await this.dispatchIncoming(msg, content);
+      return;
+    }
+
+    // 其他類型（話題/公告等）忽略
+  }
+
+  /** 綁定頻道：把當前頻道設為唯一對話頻道並持久化。 */
+  private async handleStartCommand(msg: Message): Promise<void> {
     try {
-      const incoming = await normalizeDiscordMessage(msg);
-      await this.onMessage(incoming);
+      const channel = msg.channel as BaseGuildTextChannel;
+      const channelName = channel.name ?? msg.channelId;
+      const cfg = loadChannelsSettings().discord;
+      const changed = cfg.boundChannelId !== msg.channelId;
+
+      saveChannelsSettings({
+        discord: {
+          ...cfg,
+          boundChannelId: msg.channelId,
+          boundChannelName: channelName,
+        },
+      });
+
+      console.log(LOG, `/start: 綁定頻道 ${channelName} (${msg.channelId})`);
+      const reply = changed
+        ? `已把本頻道 #${channelName} 設為 Cyrene 的對話頻道。之後在頻道裡 **@我** 就能跟我對話，我也會在這裡回覆，方便你確認對話內容。`
+        : `本頻道 (#${channelName}) 已經是對話頻道了，直接在頻道裡 **@我** 就能開始對話。`;
+      await safeChannelReply(channel, reply);
     } catch (err) {
-      console.error(LOG, "处理入站消息失败:", err instanceof Error ? err.message : err);
+      console.warn(LOG, `/start 綁定失敗:`, err instanceof Error ? err.message : err);
+      try {
+        await (msg.channel as BaseGuildTextChannel).send("綁定頻道失敗，請確認我有權限在此頻道發言。");
+      } catch { /* ignore */ }
     }
   }
 
-  #seenMessageIds = new Set<string>();
+  /** 綁定頻道是否存在且是當前頻道。 */
+  private async isBoundChannel(channelId?: string): Promise<boolean> {
+    if (!channelId) return false;
+    const cfg = loadChannelsSettings().discord;
+    return cfg.boundChannelId === channelId;
+  }
+
+  /** 去重 + 下載附件 + 轉成 IncomingMessage 並交給 dispatcher。 */
+  private async dispatchIncoming(msg: Message, text: string): Promise<void> {
+    // 去重
+    if (msg.id && this.#seenMessageIds.has(msg.id)) return;
+    if (msg.id) this.#seenMessageIds.add(msg.id);
+    if (this.#seenMessageIds.size > 1000) this.#seenMessageIds.clear();
+
+    try {
+      const incoming = await this.normalizeDiscordMessage(msg, text);
+      await this.onMessage!(incoming);
+    } catch (err) {
+      console.error(LOG, "處理入站消息失敗:", err instanceof Error ? err.message : err);
+      // 主動通知使用者（避免靜默無回應）
+      try {
+        await this.sendDirectAck(msg);
+      } catch { /* ignore */ }
+    }
+  }
+
+  /** 把 Discord Message 歸一化成 IncomingMessage（含附件下載）。 */
+  private async normalizeDiscordMessage(msg: Message, text: string): Promise<IncomingMessage> {
+    const attachments: IncomingMessage["attachments"] = [];
+    const fromGuild = msg.guildId != null;
+
+    for (const att of msg.attachments.values()) {
+      const kind: ChannelAttachment["kind"] = att.contentType?.startsWith("image/")
+        ? "image"
+        : att.contentType?.startsWith("audio/")
+          ? "audio"
+          : att.contentType?.startsWith("video/")
+            ? "video"
+            : "file";
+      const downloaded = await downloadDiscordAttachment(att.url, att.name, kind);
+      if (downloaded) {
+        attachments.push({
+          kind,
+          filePath: downloaded.filePath,
+          mime: downloaded.mime,
+          caption: att.name,
+        });
+      }
+    }
+    for (const a of attachments) {
+      if (a.filePath) text = (text ? text + "\n" : "") + `[附件: ${a.filePath}]`;
+    }
+
+    return {
+      channel: "discord",
+      senderId: msg.author.id,
+      senderName: msg.author.username,
+      // 頻道模式：chatId = 頻道 id，replies 回到同一頻道；DM：chatId = 使用者 id
+      chatId: fromGuild ? msg.channelId : msg.author.id,
+      text: (text || "").trim() || "[空消息]",
+      attachments: attachments.length > 0 ? attachments : undefined,
+      at: msg.createdAt,
+      _raw: { id: msg.id, content: msg.content, channelId: msg.channelId, guildId: msg.guildId },
+    };
+  }
+
+  /** 觸發訊息不帶圖片但於附件下載失敗等情況，給一個簡短澄清回覆。 */
+  private async sendDirectAck(msg: Message): Promise<void> {
+    const text = "我處理你的訊息時出了點問題，請稍後重試。";
+    const target = msg.guildId ? (msg.channel as BaseGuildTextChannel) : null;
+    if (target) {
+      await target.send(text);
+    } else if (msg.channel && msg.channel.isDMBased()) {
+      await msg.author.send(text);
+    }
+  }
 
   async start(): Promise<void> {
     if (this.started) return;
 
     const settings = loadChannelsSettings().discord;
     if (!settings.enabled) {
-      this.status = { enabled: false, phase: "offline", message: "未启用" };
+      this.status = { enabled: false, phase: "offline", message: "未啟用" };
       return;
     }
     const token = (settings.token ?? "").trim();
@@ -317,7 +409,7 @@ export class DiscordAdapter implements ChannelAdapter {
     }
 
     try {
-      this.status = { enabled: true, phase: "starting", message: "连接 Discord Gateway…" };
+      this.status = { enabled: true, phase: "starting", message: "連接 Discord Gateway…" };
       this.client = this.createClient();
       this.started = true;
       await this.client.login(token);
@@ -336,7 +428,7 @@ export class DiscordAdapter implements ChannelAdapter {
       try {
         this.client.destroy();
       } catch (err) {
-        console.warn(LOG, "destroy 失败:", err);
+        console.warn(LOG, "destroy 失敗:", err);
       }
       this.client = null;
     }
@@ -345,36 +437,62 @@ export class DiscordAdapter implements ChannelAdapter {
   }
 
   async send(msg: OutgoingMessage): Promise<{ ok: boolean; error?: string }> {
-    if (!this.client || !this.client?.user) {
-      console.warn(LOG, "send 失败: Discord 未连接");
-      return { ok: false, error: "Discord 未连接" };
+    if (!this.client) {
+      console.warn(LOG, "send 失敗: Discord 未連接");
+      return { ok: false, error: "Discord 未連接" };
     }
     if (!msg.parts || msg.parts.length === 0) {
-      return { ok: false, error: "没有可发送的内容" };
+      return { ok: false, error: "沒有可發送的內容" };
     }
 
-    // DM 场景：targetId = 用户 id。通过 client.users.fetch 或直接发 DM。
     const { text, attachments, embeds } = buildDiscordSendPayload(msg.parts);
     if (!text && attachments.length === 0 && embeds.length === 0) {
-      return { ok: false, error: "没有可发送的内容（capability 全部被降级）" };
+      return { ok: false, error: "沒有可發送的內容（capability 全部被降級）" };
     }
 
+    // targetId 可能是頻道 id（頻道模式）或使用者 id（DM）。先嘗試當頻道解析。
+    try {
+      const channel = await this.tryResolveTextChannel(msg.targetId);
+      if (channel) {
+        await channel.send({ content: text || undefined, files: attachments, embeds });
+        console.log(LOG, `send ok: channel=${channel.id} parts=${msg.parts.length}`);
+        return { ok: true };
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn(LOG, `頻道發送失敗 [${msg.targetId}]，改走 DM:`, reason);
+    }
+
+    // 非頻道 → 視為 DM
     try {
       const user = await this.client.users.fetch(msg.targetId);
       await user.send({ content: text || undefined, files: attachments, embeds });
-      console.log(LOG, `send ok: target=${msg.targetId} parts=${msg.parts.length}`);
+      console.log(LOG, `send ok (DM): target=${msg.targetId} parts=${msg.parts.length}`);
       return { ok: true };
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      console.error(LOG, `send 失败 [${msg.targetId}]:`, reason);
+      console.error(LOG, `send 失敗 [${msg.targetId}]:`, reason);
       return { ok: false, error: reason };
+    }
+  }
+
+  /** 嘗試把 targetId 當作伺服器文字頻道解析；解析失敗返回 null。 */
+  private async tryResolveTextChannel(targetId: string): Promise<BaseGuildTextChannel | null> {
+    try {
+      const fetched = await this.client!.channels.fetch(targetId);
+      if (fetched && (fetched.isTextBased() && !fetched.isDMBased())) {
+        return fetched as BaseGuildTextChannel;
+      }
+      return null;
+    } catch {
+      return null;
     }
   }
 
   getStatus(): ChannelStatus {
     const settings = loadChannelsSettings().discord;
     if (!settings.enabled) {
-      return { enabled: false, phase: "offline", message: "未启用" };
+      return { enabled: false, phase: "offline", message: "未啟用" };
     }
     if (!settings.token) {
       return { enabled: true, phase: "config_missing", message: "Bot Token 缺失" };
@@ -382,9 +500,33 @@ export class DiscordAdapter implements ChannelAdapter {
     return this.status;
   }
 
-  /** 给外部：触发重建（用户改了 token 后调用）。 */
+  /** 給外部：觸發重建（用戶改了 token 後調用）。 */
   public async rebuild(): Promise<void> {
     await this.stop();
     await this.start();
+  }
+}
+
+/** 從訊息中移除對 Bot 的 @ 提及，只保留純文字內容。 */
+function stripBotMention(content: string, botId: string): string {
+  // Discord 的提及格式：<@123>（一般）或 <@!123>（舊式 / nickname）
+  const mentionRegex = new RegExp(`<@!?${escapeRegex(botId)}>`, "g");
+  const cleaned = content.replace(mentionRegex, " ").replace(/\s+/g, " ").trim();
+  return cleaned;
+}
+
+function escapeRegex(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** 嘗試把回復送到指定頻道；若無權限則忽略（已 try/catch）。 */
+async function safeChannelReply(
+  channel: BaseGuildTextChannel,
+  text: string,
+): Promise<void> {
+  try {
+    await channel.send(text);
+  } catch (err) {
+    console.warn(LOG, `回覆 ${channel.name} 失敗:`, err instanceof Error ? err.message : err);
   }
 }
