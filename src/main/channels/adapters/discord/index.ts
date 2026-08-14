@@ -278,13 +278,29 @@ export class DiscordAdapter implements ChannelAdapter {
     if (!(interaction as { isChatInputCommand?: () => boolean }).isChatInputCommand?.()) return;
     const cmd = interaction as ChatInputCommandInteraction;
     if (cmd.commandName !== SLASH_STARTAGENT) return;
-    // 只在伺服器文字頻道中使用
-    if (!cmd.inGuild() || !cmd.channel || !isGuildTextChannel(cmd.channel)) {
-      await replyToInteraction(cmd, "請在伺服器的文字頻道中使用 /startagent。");
+
+    // 先 defer，避免後續 fetch / 綁定超過 3 秒的互動時限
+    try {
+      await cmd.deferReply({ ephemeral: false });
+    } catch (err) {
+      console.warn(LOG, `/${SLASH_STARTAGENT} deferReply 失敗:`, err instanceof Error ? err.message : err);
       return;
     }
+
+    // 只在伺服器文字頻道中使用
+    if (!cmd.inGuild() || !cmd.channelId) {
+      await cmd.editReply("請在伺服器的文字頻道中使用 /startagent。").catch(() => {});
+      return;
+    }
+
     try {
-      const channel = cmd.channel as BaseGuildTextChannel;
+      // fetch 真實頻道，避免對 partial channel 呼叫 isTextBased() 而 crash
+      const fetched = await cmd.channel?.fetch();
+      if (!fetched || fetched.type !== ChannelType.GuildText) {
+        await cmd.editReply("請在一般文字頻道中使用 /startagent。").catch(() => {});
+        return;
+      }
+      const channel = fetched as BaseGuildTextChannel;
       const channelName = channel.name ?? cmd.channelId;
       const cfg = loadChannelsSettings().discord;
       const changed = cfg.boundChannelId !== cmd.channelId;
@@ -298,15 +314,14 @@ export class DiscordAdapter implements ChannelAdapter {
       });
 
       console.log(LOG, `/${SLASH_STARTAGENT}: 綁定頻道 ${channelName} (${cmd.channelId})`);
-      await replyToInteraction(
-        cmd,
+      await cmd.editReply(
         changed
           ? `✅ 啟動成功！已把本頻道 #${channelName} 設為 Cyrene 的對話頻道。之後在頻道裡 **@我** 就能跟我對話，我也會在這裡回覆。`
           : `✅ 啟動成功！本頻道 (#${channelName}) 已是指定的對話頻道，直接在頻道裡 **@我** 就能開始對話。`,
-      );
+      ).catch(() => {});
     } catch (err) {
       console.warn(LOG, `/${SLASH_STARTAGENT} 綁定失敗:`, err instanceof Error ? err.message : err);
-      await replyToInteraction(cmd, "❌ 啟動失敗，請確認我有權限在此頻道發言。");
+      await cmd.editReply("❌ 啟動失敗，請確認我有權限在此頻道發言。").catch(() => {});
     }
   }
 
@@ -508,7 +523,8 @@ export class DiscordAdapter implements ChannelAdapter {
   private async tryResolveTextChannel(targetId: string): Promise<BaseGuildTextChannel | null> {
     try {
       const fetched = await this.client!.channels.fetch(targetId);
-      if (fetched && (fetched.isTextBased() && !fetched.isDMBased())) {
+      // 用 enum 型別判斷（GuildText），避免對 partial channel 呼叫 isTextBased() crash
+      if (fetched && fetched.type === ChannelType.GuildText) {
         return fetched as BaseGuildTextChannel;
       }
       return null;
@@ -532,32 +548,6 @@ export class DiscordAdapter implements ChannelAdapter {
   public async rebuild(): Promise<void> {
     await this.stop();
     await this.start();
-  }
-}
-
-/** 判斷某 channel 是否為伺服器文字頻道（非 DM）。 */
-function isGuildTextChannel(channel: unknown): boolean {
-  const c = channel as { type?: number; isTextBased?: () => boolean; isDMBased?: () => boolean };
-  const isText = c?.isTextBased;
-  const isDm = c?.isDMBased;
-  return c != null && typeof isText === "function" && isText() && !(typeof isDm === "function" && isDm());
-}
-
-/** 以 defer+editReply 方式安全回覆 slash command 互動。 */
-async function replyToInteraction(
-  interaction: ChatInputCommandInteraction,
-  text: string,
-): Promise<void> {
-  try {
-    await interaction.deferReply({ ephemeral: false });
-    await interaction.editReply(text);
-  } catch (err) {
-    // 若 deferReply 已成功但 editReply 失敗，就試 catch 的 fallback
-    try {
-      await interaction.reply(text);
-    } catch {
-      console.warn(LOG, "回覆互動失敗:", err instanceof Error ? err.message : err);
-    }
   }
 }
 
