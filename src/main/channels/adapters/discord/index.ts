@@ -57,7 +57,9 @@ import {
   ensureDiscordSessionAndOpen,
   appendDiscordUserMessage,
   appendDiscordReply,
+  getLastChannelError,
 } from "./discord-session";
+import { loadModelSettings } from "../../../settings/model-settings";
 import { logger, LogTag } from "../../../logger";
 
 const LOG = "[DiscordAdapter]";
@@ -65,6 +67,8 @@ const LOG = "[DiscordAdapter]";
 /** 頻道綁定的正式 slash command 名稱。 */
 const SLASH_STARTAGENT = "startagent";
 const SLASH_STARTAGENT_DESC = "把本頻道設為 Cyrene 的對話頻道（之後在本頻道 @我 就能對話）";
+const SLASH_STATUS = "status";
+const SLASH_STATUS_DESC = "顯示目前使用的模型/API 設定與最近一次的錯誤訊息";
 
 /** Discord capability 声明。Discord 原生支持文本/富文本(markdown)/embed/附件。 */
 const DISCORD_CAPABILITY: ChannelCapability = {
@@ -256,9 +260,12 @@ export class DiscordAdapter implements ChannelAdapter {
     return client;
   }
 
-  /** 連上後，在每個已加入的伺服器註冊 /startagent（guild command，立即生效；重複註冊用 set 覆蓋）。 */
+  /** 連上後，在每個已加入的伺服器註冊 /startagent /status（guild command，立即生效；重複註冊用 set 覆蓋）。 */
   private async registerSlashCommands(client: Client): Promise<void> {
-    const commandData = { name: SLASH_STARTAGENT, description: SLASH_STARTAGENT_DESC };
+    const commandData = [
+      { name: SLASH_STARTAGENT, description: SLASH_STARTAGENT_DESC },
+      { name: SLASH_STATUS, description: SLASH_STATUS_DESC },
+    ];
     try {
       const app = client.application;
       if (!app?.id) {
@@ -267,10 +274,10 @@ export class DiscordAdapter implements ChannelAdapter {
       }
       for (const guild of client.guilds.cache.values()) {
         try {
-          await guild.commands.set([commandData]);
-          console.log(LOG, `已註冊 /${SLASH_STARTAGENT} 到 ${guild.name} (${guild.id})`);
+          await guild.commands.set(commandData);
+          console.log(LOG, `已註冊 /${SLASH_STARTAGENT} /${SLASH_STATUS} 到 ${guild.name} (${guild.id})`);
         } catch (err) {
-          console.warn(LOG, `註冊 /${SLASH_STARTAGENT} 到 ${guild.id} 失敗:`, err instanceof Error ? err.message : err);
+          console.warn(LOG, `註冊指令到 ${guild.id} 失敗:`, err instanceof Error ? err.message : err);
         }
       }
     } catch (err) {
@@ -278,10 +285,16 @@ export class DiscordAdapter implements ChannelAdapter {
     }
   }
 
-  /** 處理 slash command 互動：/startagent → 綁定頻道 + 回覆「啟動成功」。 */
+  /** 處理 slash command 互動：/startagent → 綁定頻道；/status → 回報模型與錯誤。 */
   private async handleInteraction(interaction: unknown): Promise<void> {
     if (!(interaction as { isChatInputCommand?: () => boolean }).isChatInputCommand?.()) return;
     const cmd = interaction as ChatInputCommandInteraction;
+
+    // /status：回報模型/API 設定與最近一次錯誤（可在任意頻道或私訊使用）
+    if (cmd.commandName === SLASH_STATUS) {
+      await this.handleStatusCommand(cmd);
+      return;
+    }
     if (cmd.commandName !== SLASH_STARTAGENT) return;
 
     // 先 defer，避免後續 fetch / 綁定超過 3 秒的互動時限
@@ -330,6 +343,60 @@ export class DiscordAdapter implements ChannelAdapter {
       console.warn(LOG, `/${SLASH_STARTAGENT} 綁定失敗:`, err instanceof Error ? err.message : err);
       await cmd.editReply("❌ 啟動失敗，請確認我有權限在此頻道發言。").catch(() => {});
     }
+  }
+
+  /** 處理 /status：回報目前模型/API 設定與最近一次錯誤（供除錯，無需綁定頻道）。 */
+  private async handleStatusCommand(cmd: ChatInputCommandInteraction): Promise<void> {
+    try {
+      await cmd.deferReply({ ephemeral: false });
+    } catch (err) {
+      console.warn(LOG, `/status deferReply 失敗:`, err instanceof Error ? err.message : err);
+      return;
+    }
+
+    const lines: string[] = [];
+    const dsc = loadChannelsSettings().discord;
+    lines.push("**📊 Cyrene Agent 狀態**");
+    lines.push(`- 綁定頻道：${dsc.boundChannelName ? `#${dsc.boundChannelName}` : "尚未綁定（請用 /startagent）"}`);
+
+    // 模型/API 設定
+    try {
+      const ms = loadModelSettings();
+      lines.push("");
+      lines.push("**🤖 模型 / API**");
+      lines.push(`- provider：${ms.provider || "(空)"}`);
+      lines.push(`- model：${ms.model || "(空)"}`);
+      lines.push(`- baseUrl：${ms.baseUrl || "(空)"}`);
+      lines.push(`- API Key：${ms.apiKey ? `已填（${maskKey(ms.apiKey)}）` : "❌ 未填"}`);
+      lines.push(`- transport：${ms.explicitTransport ?? "auto"}`);
+      if (ms.modelProfiles?.length) {
+        lines.push(`- 已存模型設定檔：${ms.modelProfiles.map((p) => p.model ?? p.provider).join("、")}`);
+      }
+    } catch (err) {
+      lines.push("", "- 讀取模型設定失敗：" + (err instanceof Error ? err.message : String(err)));
+    }
+
+    // 最近一次錯誤
+    const last = getLastChannelError();
+    lines.push("");
+    lines.push("**⚠️ 最近一次錯誤**");
+    if (!last) {
+      lines.push("- 尚無錯誤紀錄。");
+    } else {
+      const t = new Date(last.at);
+      lines.push(`- 時間：${t.toLocaleString()}`);
+      if (last.channel) lines.push(`- 來源 session：\`${last.channel}\``);
+      if (last.errorName) lines.push(`- 錯誤型別：${last.errorName}`);
+      if (last.errorCode) lines.push(`- 錯誤代碼：${last.errorCode}`);
+      lines.push(`- 訊息：${last.errorMessage || "(無)"}`);
+    }
+
+    // 操作提示
+    lines.push("");
+    lines.push("> 若 API Key 未填或錯誤，請到 Cyrene 設定 → 模型，確認 provider/Key/模型名。");
+
+    const text = lines.join("\n").slice(0, 2000);
+    await cmd.editReply(text).catch(() => {});
   }
 
   /** 入口：處理所有普通訊息，決定是否觸發對話。 */
@@ -588,4 +655,11 @@ function stripBotMention(content: string, botId: string): string {
 
 function escapeRegex(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** 遮罩 API Key：顯示前 4 + 尾 4，中間以 * 取代，避免洩漏完整機密。 */
+function maskKey(key: string): string {
+  const k = key.trim();
+  if (k.length <= 8) return "****";
+  return `${k.slice(0, 4)}****${k.slice(-4)}`;
 }

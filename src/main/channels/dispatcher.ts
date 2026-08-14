@@ -302,8 +302,17 @@ export class ChannelDispatcher {
         replyText = result.text;
         sticker = result.sticker;
       } catch (err) {
+        // agent 調用失敗：不再靜默無回覆，把具體錯誤訊息回給用戶，方便在 Discord 上直接看到。
+        // 詳細錯誤名稱/代碼已由 bootstrap 透過 recordChannelError 記錄（可用 /status 查）。
         console.error(LOG, "agent 调用失败:", err instanceof Error ? err.message : err);
-        return null;
+        const detail =
+          (err && typeof err === "object" && "code" in err && typeof (err as { code?: unknown }).code === "string"
+            ? (err as { code?: unknown }).code
+            : undefined);
+        replyText = `⚠️ Agent 處理失敗${detail ? `（${detail}）` : ""}：` +
+          (err instanceof Error ? err.message : String(err)) +
+          "\n你可以輸入 `/status` 查看目前模型/API 設定與詳細錯誤。";
+        sticker = null;
       }
     } else {
       replyText = `[echo][${msg.channel}][${msg.senderId}] ${msg.text}`;

@@ -23,6 +23,7 @@ import {
   setDispatcherSynthesizeTts,
 } from "./dispatcher";
 import { initChannels, shutdownChannels } from "./init";
+import { recordChannelError } from "./adapters/discord/discord-session";
 
 export interface ChannelsSubsystem {
   shutdown(): Promise<void>;
@@ -110,14 +111,21 @@ export function createChannelsSubsystem(deps: ChannelsSubsystemDeps): ChannelsSu
 
     const threadId = `thread-${sessionId}-${Date.now()}`;
     const agent = new CyreneAgent({ threadId, description: `bot:${msg.channel}:${msg.senderId}` });
-    const reply = await new Promise<string>((resolve, reject) => {
-      agent.runWithEvents(options).subscribe({
-        complete: () => {
-          resolve(agent.lastResult?.reply ?? "");
-        },
-        error: (err) => reject(err instanceof Error ? err : new Error(String(err))),
+    let reply: string;
+    try {
+      reply = await new Promise<string>((resolve, reject) => {
+        agent.runWithEvents(options).subscribe({
+          complete: () => {
+            resolve(agent.lastResult?.reply ?? "");
+          },
+          error: (err) => reject(err instanceof Error ? err : new Error(String(err))),
+        });
       });
-    });
+    } catch (err) {
+      // 記錄具體錯誤（供 /status 除錯）；再往上拋，讓 dispatcher 回覆不會卡住
+      recordChannelError(err, `${msg.channel}:${msg.senderId}`);
+      throw err;
+    }
     channelResult.text = reply;
     if (agent.lastResult) {
       const finished = await deps.agentRuntime.onRunFinished(agent.lastResult, msg.text, msg.channel, sessionId);

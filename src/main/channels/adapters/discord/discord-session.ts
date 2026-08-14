@@ -69,3 +69,36 @@ export function appendDiscordReply(title: string, text: string, at = Date.now())
     console.warn("[DiscordSession] 寫入 Discord 回覆失敗:", err instanceof Error ? err.message : err);
   }
 }
+
+// ── 最近一次渠道錯誤（供 /status 除錯） ─────────────────────────────
+
+export interface LastChannelError {
+  at: number;
+  channel: string;
+  errorName?: string;
+  errorCode?: string;
+  errorMessage: string;
+}
+
+let lastChannelError: LastChannelError | null = null;
+
+/** bootstrap 在 agent 調用失敗時記錄（不限 Discord，非 Discord 也會被記但僅用於 /status 展示）。 */
+export function recordChannelError(err: unknown, channelHex?: string): void {
+  const e = err as { name?: unknown; code?: unknown; message?: unknown } | null | undefined;
+  lastChannelError = {
+    at: Date.now(),
+    channel: channelHex ?? "",
+    errorName: typeof e?.name === "string" ? e.name : undefined,
+    errorCode: typeof e?.code === "string" ? e.code : undefined,
+    errorMessage:
+      typeof e?.message === "string" && e.message.trim()
+        ? e.message
+        : err instanceof Error
+          ? err.message
+          : String(err),
+  };
+}
+
+export function getLastChannelError(): LastChannelError | null {
+  return lastChannelError;
+}
