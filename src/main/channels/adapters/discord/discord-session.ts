@@ -7,9 +7,15 @@
 import { randomUUID } from "crypto";
 import * as chatsStore from "../../../chats/chats-store";
 import { broadcastChatsChanged } from "../../../chats/chats-ipc";
-import type { ChatMessage } from "../../../../shared/chat-types";
+import { loadChannelsSettings } from "../../settings-store";
+import type { ChatMessage, ConversationMode } from "../../../../shared/chat-types";
 
 const PURPOSES = "discord-channel" as const;
+
+/** 依目前「工具权限(toolSandbox)」決定 Discord 桌面端對話的模式：all→work，off→chat。 */
+function discordSessionMode(): ConversationMode {
+  return loadChannelsSettings().toolSandbox === "all" ? "work" : "chat";
+}
 
 /** /startagent 成功後，由 bootstrap 注入「開啟桌面端聊天窗並切到指定 session」的回調。 */
 let openSessionHandler: ((sessionId: string) => void) | null = null;
@@ -18,11 +24,12 @@ export function setDiscordSessionOpenHandler(fn: ((sessionId: string) => void) |
   openSessionHandler = fn;
 }
 
-/** 取得（或建立）Discord 對話。title 只用於首次建立；後續沿用。 */
+/** 取得（或建立）Discord 對話。title 只用於首次建立；後續沿用。
+ *  mode 依目前 toolSandbox：all→work / off→chat；既有對話若 mode 不符會同步更新。 */
 export function getOrCreateDiscordSession(title: string): { id: string } | null {
   try {
     chatsStore.initialize();
-    const session = chatsStore.getOrCreateSessionByPurpose(PURPOSES, { title });
+    const session = chatsStore.getOrCreateSessionByPurpose(PURPOSES, { title }, discordSessionMode());
     return session ? { id: session.id } : null;
   } catch (err) {
     console.warn("[DiscordSession] 建立 Discord 對話失敗:", err instanceof Error ? err.message : err);

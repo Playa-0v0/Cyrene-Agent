@@ -343,13 +343,23 @@ export function getSessionByPurpose(purpose: ChatSessionPurpose): ChatSession | 
 export function getOrCreateSessionByPurpose(
   purpose: ChatSessionPurpose,
   opts?: { title?: string; identityId?: string | null },
+  mode?: ConversationMode,
 ): ChatSession {
   const existing = getSessionByPurpose(purpose);
-  if (existing) return existing;
+  if (existing) {
+    // 若呼叫方指定了模式且與現有不同，則同步更新（例如 Discord 對話隨 toolSandbox 切 chat/work）。
+    if (mode && existing.mode !== mode) {
+      existing.mode = mode;
+      writeSessionFile(existing);
+      upsertMeta(metaFromSession(existing));
+    }
+    return existing;
+  }
   return createSession({
     title: opts?.title,
     identityId: opts?.identityId ?? null,
     purpose,
+    mode,
   });
 }
 
