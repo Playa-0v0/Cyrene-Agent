@@ -59,7 +59,6 @@ import {
   appendDiscordReply,
   getLastChannelError,
   getDiscordSessionWorkspace,
-  syncDiscordSessionMode,
 } from "./discord-session";
 import { loadModelSettings } from "../../../settings/model-settings";
 import { getCurrentLevel, ACCESS_LEVEL_LABEL } from "../../../permission";
@@ -358,8 +357,8 @@ export class DiscordAdapter implements ChannelAdapter {
       });
 
       console.log(LOG, `/${SLASH_STARTAGENT}: 綁定頻道 ${channelName} (${cmd.channelId})`);
-      // 建立或取得桌面端 Discord 對話（chat 模式），並嘗試開啟聊天窗
-      ensureDiscordSessionAndOpen(`Discord 對話 - #${channelName}`);
+      // 建立或取得目前 mode 對應的桌面端 Discord 對話（work/chat），並嘗試開啟聊天窗
+      ensureDiscordSessionAndOpen();
       await cmd.editReply(
         changed
           ? `✅ 啟動成功！已把本頻道 #${channelName} 設為 Cyrene 的對話頻道。之後在頻道裡 **@我** 就能跟我對話，我也會在這裡回覆。`
@@ -385,7 +384,9 @@ export class DiscordAdapter implements ChannelAdapter {
     lines.push("**📊 Cyrene Agent 狀態**");
     lines.push(`- 綁定頻道：${dsc.boundChannelName ? `#${dsc.boundChannelName}` : "尚未綁定（請用 /startagent）"}`);
     const modeLabel = (loadChannelsSettings().toolSandbox === "all") ? "**Work**（可呼叫工具）" : "**Chat**（純聊天，不呼叫工具）";
+    const modeConv = (loadChannelsSettings().toolSandbox === "all") ? "Discord 對話 (Work)" : "Discord 對話 (Chat)";
     lines.push(`- 執行模式：${modeLabel}`);
+    lines.push(`- 對話：${modeConv}`);
 
     // 工作目錄（與桌面端「指定資料夾」對齊）+ 權限
     lines.push("");
@@ -455,12 +456,12 @@ export class DiscordAdapter implements ChannelAdapter {
     const targetSandbox = value === "work" ? "all" : "off";
     try {
       saveChannelsSettings({ toolSandbox: targetSandbox });
-      // 同步桌面端 Discord 對話的 mode，讓對話也切到對應的 work/chat。
-      syncDiscordSessionMode();
+      // 切換後，目前 mode 對應的工作/聊天對話隨之切換；開啟對應對話視窗。
+      ensureDiscordSessionAndOpen();
       const label = value === "work" ? "**Work**（可呼叫工具）" : "**Chat**（純聊天，不呼叫工具）";
       console.log(LOG, `/${SLASH_MODE}: 切換 toolSandbox → ${targetSandbox}`);
       await cmd.editReply(
-        `✅ 已切換執行模式為 ${label}，桌面端 Discord 對話也已同步。\n若 Bot 未立即生效，請在設定面板「連接手機」按「保存并连接」重新連線。`
+        `✅ 已切換執行模式為 ${label}，已切到 ${value === "work" ? "Discord 對話 (Work)" : "Discord 對話 (Chat)"}。\n之後頻道訊息會進到這個 ${value === "work" ? "Work" : "Chat"} 對話。`
       ).catch(() => {});
     } catch (err) {
       console.warn(LOG, `/${SLASH_MODE} 切換失敗:`, err instanceof Error ? err.message : err);
@@ -519,22 +520,21 @@ export class DiscordAdapter implements ChannelAdapter {
     if (msg.id) this.#seenMessageIds.add(msg.id);
     if (this.#seenMessageIds.size > 1000) this.#seenMessageIds.clear();
 
-    const sessionTitle = this.discordSessionTitle();
     if (fromGuild && text.trim()) {
-      appendDiscordUserMessage(sessionTitle, text);
+      appendDiscordUserMessage(text);
     }
 
     try {
       const incoming = await this.normalizeDiscordMessage(msg, text);
       const outgoing = await this.onMessage!(incoming);
-      // 鏡像 Bot 回覆到桌面端 Discord 對話
+      // 鏡像 Bot 回覆到桌面端對應（work/chat）的 Discord 對話
       if (fromGuild && outgoing?.parts) {
         const replyText = outgoing.parts
           .filter((p) => p.kind === "text")
           .map((p) => (p as { text: string }).text)
           .join("\n")
           .trim();
-        if (replyText) appendDiscordReply(sessionTitle, replyText);
+        if (replyText) appendDiscordReply(replyText);
       }
     } catch (err) {
       console.error(LOG, "處理入站消息失敗:", err instanceof Error ? err.message : err);
@@ -542,12 +542,6 @@ export class DiscordAdapter implements ChannelAdapter {
         await this.sendDirectAck(msg);
       } catch { /* ignore */ }
     }
-  }
-
-  /** 桌面端 Discord 對話的顯示標題。 */
-  private discordSessionTitle(): string {
-    const cfg = loadChannelsSettings().discord;
-    return cfg.boundChannelName ? `Discord 對話 - #${cfg.boundChannelName}` : "Discord 對話";
   }
 
   /** 把 Discord Message 歸一化成 IncomingMessage（含附件下載）。 */

@@ -210,7 +210,7 @@ export function registerAgUiIpc(
       lifecycle?.onConversationEnded();
       throw new Error(`AGUI_RUN 会话不存在: ${sessionId}`);
     }
-    const mode = session.mode ?? (session.purpose === "proactive-chat" || session.purpose === "discord-channel" ? "chat" : "work");
+    const mode = session.mode ?? (session.purpose === "proactive-chat" || session.purpose === "discord-chat" ? "chat" : "work");
     if ((mode === "work" || mode === "code" || mode === "learn") && !session.workspaceBinding?.workspaceRoot) {
       lifecycle?.onConversationEnded();
       throw new Error(`${mode} 模式需要先绑定项目工作区`);

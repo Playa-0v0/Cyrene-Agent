@@ -11,7 +11,7 @@ export interface ChatSessionMetaUI {
   createdAt: number;
   updatedAt: number;
   messageCount: number;
-  purpose?: "proactive-chat" | "discord-channel";
+  purpose?: "proactive-chat" | "discord-work" | "discord-chat";
   mode: "chat" | "work" | "code" | "learn";
 }
 
