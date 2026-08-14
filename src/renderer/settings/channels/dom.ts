@@ -20,7 +20,6 @@ export const channelsFeishuAppSecretRevealBtn = document.getElementById("channel
 export const channelsFeishuSaveBtn = document.getElementById("channels-feishu-save");
 export const channelsDiscordTokenEl = document.getElementById("channels-discord-token") as HTMLInputElement | null;
 export const channelsDiscordTokenRevealBtn = document.getElementById("channels-discord-token-reveal");
-export const channelsDiscordTokenPlainEl = document.getElementById("channels-discord-token-plain") as HTMLInputElement | null;
 export const channelsDiscordSaveBtn = document.getElementById("channels-discord-save");
 export const channelsDiscordBoundEl = document.getElementById("channels-discord-bound");
 export const channelsWechatLoginBtn = document.getElementById("channels-wechat-login");

@@ -150,17 +150,10 @@ export interface FeishuChannelConfig extends ChannelRuntimeConfig {
 
 export interface DiscordChannelConfig extends ChannelRuntimeConfig {
   /**
-   * Discord Bot Token。預設用 safeStorage(enc:) 或機器指紋(obf:) 加密保存；
-   * 若 storeTokenPlain=true，則以 **明文**（plain: 前綴）落盤。
-   * loadChannelsSettings 一律回傳明文；save 時依 storeTokenPlain 決定如何寫盤。
+   * Discord Bot Token。**以明文（plain: 前綴）儲存**，不依賴 safeStorage / 機器指紋，
+   * 確保在各種啟動方式/環境下都能可靠讀回。load/save 一律以明文 round-trip。
    */
   token?: string;
-  /**
-   * 是否以**明文**儲存 token（不依賴 safeStorage / 機器指紋）。
-   * true = token 用 plain: 前綴明文落盤（可在不同啟動方式/環境下可靠讀回，但有資安考量）。
-   * false = 走 safeStorage → 機器指紋混淆。
-   */
-  storeTokenPlain?: boolean;
   /**
    * `/start` 綁定的伺服器文字頻道 ID（讓 Bot 在這個頻道 @ 即觸發對話）。
    * 空白 = 未綁定，需要在某頻道輸入 `/start` 綁定。
@@ -259,7 +252,6 @@ feishu: {
       manualCliPath: typeof d?.manualCliPath === "string" ? d?.manualCliPath : undefined,
       publicWebhookUrl: typeof d?.publicWebhookUrl === "string" ? d?.publicWebhookUrl : undefined,
       token: typeof d?.token === "string" ? d?.token : undefined,
-      storeTokenPlain: safeBool(d?.storeTokenPlain, false),
       boundChannelId: typeof d?.boundChannelId === "string" ? d?.boundChannelId : undefined,
       boundChannelName: typeof d?.boundChannelName === "string" ? d?.boundChannelName : undefined,
     },
@@ -309,13 +301,10 @@ export function saveChannelsSettings(patch: Partial<ChannelsSettings>): Channels
     }
   }
   if (typeof merged.discord?.token === "string" && merged.discord.token) {
-    const v = merged.discord.token;
-    // 明文儲存開關：token 用 plain: 前綴明文落盤（不依賴 safeStorage / 機器指紋）。
-    if (merged.discord.storeTokenPlain) {
-      if (!v.startsWith(PLAIN_PREFIX)) merged.discord.token = PLAIN_PREFIX + v;
-    } else if (!v.startsWith(ENC_PREFIX) && !v.startsWith(OBF_PREFIX) && !v.startsWith(PLAIN_PREFIX)) {
-      merged.discord.token = encryptField(v);
-    }
+    // Discord token 一律以明文（plain: 前綴）儲存，不依賴 safeStorage / 機器指紋，
+    // 確保各種啟動方式/環境都能可靠讀回。已帶 plain: 前綴則原樣保留。
+    const v = merged.discord.token.trim();
+    if (!v.startsWith(PLAIN_PREFIX)) merged.discord.token = PLAIN_PREFIX + v;
   }
 
   const final = normalize(merged);

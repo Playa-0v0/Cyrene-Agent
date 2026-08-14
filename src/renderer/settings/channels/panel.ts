@@ -10,7 +10,7 @@ import {
   channelsToolSandboxOffEl, channelsToolSandboxAllEl,
   channelsFeishuAppIdEl, channelsFeishuAppSecretEl, channelsFeishuAppSecretRevealBtn,
   channelsFeishuSaveBtn, channelsFeishuFeedbackEl,
-  channelsDiscordTokenEl, channelsDiscordTokenRevealBtn, channelsDiscordTokenPlainEl, channelsDiscordSaveBtn, channelsDiscordFeedbackEl,
+  channelsDiscordTokenEl, channelsDiscordTokenRevealBtn, channelsDiscordSaveBtn, channelsDiscordFeedbackEl,
   channelsDiscordBoundEl,
   channelsWechatStatusEl, channelsFeishuStatusEl, channelsDiscordStatusEl,
   channelsWechatLoginBtn, channelsWechatRestartBtn, channelsWechatFeedbackEl,
@@ -147,9 +147,8 @@ export async function loadChannelsPanel(): Promise<void> {
       channelsDiscordTokenEl.value = "";
       channelsDiscordTokenEl.placeholder = cfg.discord.token
         ? "已保存（输入新值会覆盖）"
-        : "点击保存配置时加密保存";
+        : "点击保存配置时保存";
     }
-    if (channelsDiscordTokenPlainEl) channelsDiscordTokenPlainEl.checked = cfg.discord.storeTokenPlain === true;
     renderDiscordBoundChannel(cfg.discord);
 
     // 拉一次渠道状态
@@ -272,7 +271,6 @@ export async function loadChannelsPanel(): Promise<void> {
     const patch: Record<string, unknown> = {
       discord: {
         enabled: channelsDiscordEnabledEl?.checked ?? false,
-        storeTokenPlain: channelsDiscordTokenPlainEl?.checked ?? false,
       },
     };
     // 仅在用户输入了新值时才覆盖 token（避免误清空）

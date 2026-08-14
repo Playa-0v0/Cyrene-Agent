@@ -71,6 +71,8 @@ const SLASH_STARTAGENT = "startagent";
 const SLASH_STARTAGENT_DESC = "把本頻道設為 Cyrene 的對話頻道（之後在本頻道 @我 就能對話）";
 const SLASH_STATUS = "status";
 const SLASH_STATUS_DESC = "顯示目前使用的模型/API 設定與最近一次的錯誤訊息";
+const SLASH_MODE = "mode";
+const SLASH_MODE_DESC = "切換執行模式：/mode work = 可呼叫工具，/mode chat = 純聊天";
 
 /** Discord capability 声明。Discord 原生支持文本/富文本(markdown)/embed/附件。 */
 const DISCORD_CAPABILITY: ChannelCapability = {
@@ -262,11 +264,27 @@ export class DiscordAdapter implements ChannelAdapter {
     return client;
   }
 
-  /** 連上後，在每個已加入的伺服器註冊 /startagent /status（guild command，立即生效；重複註冊用 set 覆蓋）。 */
+  /** 連上後，在每個已加入的伺服器註冊 /startagent /status /mode（guild command，立即生效；重複註冊用 set 覆蓋）。 */
   private async registerSlashCommands(client: Client): Promise<void> {
     const commandData = [
       { name: SLASH_STARTAGENT, description: SLASH_STARTAGENT_DESC },
       { name: SLASH_STATUS, description: SLASH_STATUS_DESC },
+      {
+        name: SLASH_MODE,
+        description: SLASH_MODE_DESC,
+        options: [
+          {
+            name: "mode",
+            description: "work = 可呼叫工具；chat = 純聊天",
+            type: 3, // STRING
+            required: true,
+            choices: [
+              { name: "work", value: "work" },
+              { name: "chat", value: "chat" },
+            ],
+          },
+        ],
+      },
     ];
     try {
       const app = client.application;
@@ -277,7 +295,7 @@ export class DiscordAdapter implements ChannelAdapter {
       for (const guild of client.guilds.cache.values()) {
         try {
           await guild.commands.set(commandData);
-          console.log(LOG, `已註冊 /${SLASH_STARTAGENT} /${SLASH_STATUS} 到 ${guild.name} (${guild.id})`);
+          console.log(LOG, `已註冊 /${SLASH_STARTAGENT} /${SLASH_STATUS} /${SLASH_MODE} 到 ${guild.name} (${guild.id})`);
         } catch (err) {
           console.warn(LOG, `註冊指令到 ${guild.id} 失敗:`, err instanceof Error ? err.message : err);
         }
@@ -295,6 +313,11 @@ export class DiscordAdapter implements ChannelAdapter {
     // /status：回報模型/API 設定與最近一次錯誤（可在任意頻道或私訊使用）
     if (cmd.commandName === SLASH_STATUS) {
       await this.handleStatusCommand(cmd);
+      return;
+    }
+    // /mode：切換執行模式（work=可呼叫工具 / chat=純聊天）
+    if (cmd.commandName === SLASH_MODE) {
+      await this.handleModeCommand(cmd);
       return;
     }
     if (cmd.commandName !== SLASH_STARTAGENT) return;
@@ -413,6 +436,33 @@ export class DiscordAdapter implements ChannelAdapter {
 
     const text = lines.join("\n").slice(0, 2000);
     await cmd.editReply(text).catch(() => {});
+  }
+
+  /** 處理 /mode：切換執行模式（work=工具權限全部開啟 / chat=工具權限關閉）。 */
+  private async handleModeCommand(cmd: ChatInputCommandInteraction): Promise<void> {
+    try {
+      await cmd.deferReply({ ephemeral: false });
+    } catch (err) {
+      console.warn(LOG, `/mode deferReply 失敗:`, err instanceof Error ? err.message : err);
+      return;
+    }
+    const value = cmd.options.getString("mode", true);
+    if (value !== "work" && value !== "chat") {
+      await cmd.editReply("`/mode` 需要 `work` 或 `chat`。").catch(() => {});
+      return;
+    }
+    const targetSandbox = value === "work" ? "all" : "off";
+    try {
+      saveChannelsSettings({ toolSandbox: targetSandbox });
+      const label = value === "work" ? "**Work**（可呼叫工具）" : "**Chat**（純聊天，不呼叫工具）";
+      console.log(LOG, `/${SLASH_MODE}: 切換 toolSandbox → ${targetSandbox}`);
+      await cmd.editReply(
+        `✅ 已切換執行模式為 ${label}。\n此設定已寫入渠道設定，若 Bot 未立即生效，請在設定面板「連接手機」按「保存并连接」重新連線。`
+      ).catch(() => {});
+    } catch (err) {
+      console.warn(LOG, `/${SLASH_MODE} 切換失敗:`, err instanceof Error ? err.message : err);
+      await cmd.editReply("❌ 切換執行模式失敗，請稍後重試。").catch(() => {});
+    }
   }
 
   /** 入口：處理所有普通訊息，決定是否觸發對話。 */
