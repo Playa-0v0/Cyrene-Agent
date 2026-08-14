@@ -53,6 +53,11 @@ import type {
   OutgoingPart,
 } from "../../types";
 import { loadChannelsSettings, saveChannelsSettings } from "../../settings-store";
+import {
+  ensureDiscordSessionAndOpen,
+  appendDiscordUserMessage,
+  appendDiscordReply,
+} from "./discord-session";
 import { logger, LogTag } from "../../../logger";
 
 const LOG = "[DiscordAdapter]";
@@ -314,6 +319,8 @@ export class DiscordAdapter implements ChannelAdapter {
       });
 
       console.log(LOG, `/${SLASH_STARTAGENT}: 綁定頻道 ${channelName} (${cmd.channelId})`);
+      // 建立或取得桌面端 Discord 對話（chat 模式），並嘗試開啟聊天窗
+      ensureDiscordSessionAndOpen(`Discord 對話 - #${channelName}`);
       await cmd.editReply(
         changed
           ? `✅ 啟動成功！已把本頻道 #${channelName} 設為 Cyrene 的對話頻道。之後在頻道裡 **@我** 就能跟我對話，我也會在這裡回覆。`
@@ -348,13 +355,13 @@ export class DiscordAdapter implements ChannelAdapter {
         return; // 沒 @Bot 就不回應，避免刷屏
       }
       const clean = stripBotMention((msg.content ?? "").trim(), this.client!.user!.id);
-      await this.dispatchIncoming(msg, clean);
+      await this.dispatchIncoming(msg, clean, true);
       return;
     }
 
     // 2) 私訊：直接觸發
     if (isDM) {
-      await this.dispatchIncoming(msg, (msg.content ?? "").trim());
+      await this.dispatchIncoming(msg, (msg.content ?? "").trim(), false);
       return;
     }
 
@@ -368,22 +375,43 @@ export class DiscordAdapter implements ChannelAdapter {
     return cfg.boundChannelId === channelId;
   }
 
-  /** 去重 + 下載附件 + 轉成 IncomingMessage 並交給 dispatcher。 */
-  private async dispatchIncoming(msg: Message, text: string): Promise<void> {
+  /** 去重 + 下載附件 + 轉成 IncomingMessage 並交給 dispatcher。
+   *  fromGuild=true 時，把「給 agent 處理的那則用戶訊息」與「Bot 回覆」鏡像到桌面端 Discord 對話。 */
+  private async dispatchIncoming(msg: Message, text: string, fromGuild: boolean): Promise<void> {
     // 去重
     if (msg.id && this.#seenMessageIds.has(msg.id)) return;
     if (msg.id) this.#seenMessageIds.add(msg.id);
     if (this.#seenMessageIds.size > 1000) this.#seenMessageIds.clear();
 
+    const sessionTitle = this.discordSessionTitle();
+    if (fromGuild && text.trim()) {
+      appendDiscordUserMessage(sessionTitle, text);
+    }
+
     try {
       const incoming = await this.normalizeDiscordMessage(msg, text);
-      await this.onMessage!(incoming);
+      const outgoing = await this.onMessage!(incoming);
+      // 鏡像 Bot 回覆到桌面端 Discord 對話
+      if (fromGuild && outgoing?.parts) {
+        const replyText = outgoing.parts
+          .filter((p) => p.kind === "text")
+          .map((p) => (p as { text: string }).text)
+          .join("\n")
+          .trim();
+        if (replyText) appendDiscordReply(sessionTitle, replyText);
+      }
     } catch (err) {
       console.error(LOG, "處理入站消息失敗:", err instanceof Error ? err.message : err);
       try {
         await this.sendDirectAck(msg);
       } catch { /* ignore */ }
     }
+  }
+
+  /** 桌面端 Discord 對話的顯示標題。 */
+  private discordSessionTitle(): string {
+    const cfg = loadChannelsSettings().discord;
+    return cfg.boundChannelName ? `Discord 對話 - #${cfg.boundChannelName}` : "Discord 對話";
   }
 
   /** 把 Discord Message 歸一化成 IncomingMessage（含附件下載）。 */

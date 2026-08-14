@@ -46,7 +46,8 @@ function normalizePersistedMode(value: unknown, purpose: ChatSessionPurpose | un
 }
 
 function inferLegacyMode(purpose: ChatSessionPurpose | undefined): ConversationMode {
-  return purpose === "proactive-chat" ? "chat" : "work";
+  if (purpose === "proactive-chat" || purpose === "discord-channel") return "chat";
+  return "work";
 }
 
 function legacyMigrationBinding(): ConversationWorkspaceBinding {
@@ -87,7 +88,7 @@ function readIndexFromDisk(): ChatSessionMeta[] {
         typeof meta.createdAt === "number" &&
         typeof meta.updatedAt === "number" &&
         typeof meta.messageCount === "number" &&
-        (meta.purpose === undefined || meta.purpose === "proactive-chat")
+        (meta.purpose === undefined || meta.purpose === "proactive-chat" || meta.purpose === "discord-channel")
       );
       if (!valid) continue;
       const session = readSessionFile(meta.id!);
@@ -176,7 +177,7 @@ function migrateLegacySessions(): void {
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
       const meta = item as Partial<ChatSessionMeta>;
-      if (typeof meta.id !== "string" || meta.purpose === "proactive-chat") continue;
+      if (typeof meta.id !== "string" || meta.purpose === "proactive-chat" || meta.purpose === "discord-channel") continue;
       const filePath = sessionPath(meta.id);
       if (!fs.existsSync(filePath)) continue;
       let session: ChatSession;
@@ -311,7 +312,7 @@ export function createSession(opts?: {
 }): ChatSession {
   const now = Date.now();
   const messages = opts?.initialMessages ?? [];
-  const mode = opts?.mode ?? (opts?.purpose === "proactive-chat" ? "chat" : "work");
+  const mode = opts?.mode ?? (opts?.purpose === "proactive-chat" || opts?.purpose === "discord-channel" ? "chat" : "work");
   const session: ChatSession = {
     id: randomUUID(),
     title: opts?.title?.trim() || (messages.length > 0 ? deriveTitle(messages) : "新对话"),
