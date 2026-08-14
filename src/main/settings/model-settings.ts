@@ -8,7 +8,7 @@ import { getSettingsPath } from "../settings-store";
 import type { VisionConfig } from "../orchestrator/vision-captioner";
 import { migrateLegacyMinimaxDefaults } from "../orchestrator/vendors/minimax-defaults";
 import { getCapabilityOrOpenAI } from "../orchestrator/vendors/capabilities";
-import { addModelProfile, resolveDefaultModelProfile, type SavedModelProfile } from "./model-catalog";
+import { sameModelCredential, resolveDefaultModelProfile, type SavedModelProfile } from "./model-catalog";
 
 /**
  * 统一模型配置入口：所有模块（包括 Code 模式）必须通过此函数读取。
@@ -342,10 +342,42 @@ export function resolveModelSettingsProfile(settings: ModelSettings, id?: string
 export function saveModelProfile(input: Omit<SavedModelProfile, "id"> & { id?: string }): { settings: ModelSettings; added: boolean } {
   const existing = loadModelSettings();
   const profile: SavedModelProfile = { ...normalizeProviderProfile(input, input.provider), id: input.id ?? randomUUID(), provider: input.provider };
-  const result = addModelProfile(listSavedModelProfiles(existing), profile);
-  if (!result.added) return { settings: existing, added: false };
-  const settings = saveModelSettings({ modelProfiles: result.profiles, defaultModelProfileId: existing.defaultModelProfileId ?? profile.id });
-  return { settings: existing.defaultModelProfileId ? settings : setDefaultModelProfile(profile.id), added: true };
+  const profiles = listSavedModelProfiles(existing);
+
+  // 找到要更新/覆盖的目標：
+  //   - 若有傳 id：更新該 id 的設定
+  //   - 否則若已存在「相同 Key + 模型名」：覆蓋那一項（不再拒絕，讓使用者能重新保存）
+  //   - 否則：新增
+  let targetIndex = -1;
+  if (input.id) {
+    targetIndex = profiles.findIndex((p) => p.id === input.id);
+  } else {
+    targetIndex = profiles.findIndex((p) => sameModelCredential(p, profile));
+  }
+
+  let nextProfiles: SavedModelProfile[];
+  let added: boolean;
+  if (targetIndex >= 0) {
+    // 更新既有項，保留原 id
+    const keepId = profiles[targetIndex].id;
+    nextProfiles = profiles.map((p) => (p.id === keepId ? { ...profile, id: keepId } : p));
+    added = false;
+  } else {
+    nextProfiles = [...profiles, profile];
+    added = true;
+  }
+
+  // 設為預設 → saveModelSettings({ ...profile, defaultModelProfileId }) 會把 top-level
+  // provider/baseUrl/model/apiKey 也切到這個 profile，讓當前在用 provider 一起切過去。
+  const defaultId = nextProfiles[targetIndex >= 0 ? targetIndex : nextProfiles.length - 1].id;
+  const settings = saveModelSettings({ modelProfiles: nextProfiles, defaultModelProfileId: defaultId });
+  return { settings: setDefaultModelProfile(defaultId), added };
+}
+
+/** 清空已保存的自定義 API 設定檔（modelProfiles）。保留當前 top-level provider 不動。 */
+export function clearModelProfiles(): ModelSettings {
+  const existing = loadModelSettings();
+  return saveModelSettings({ modelProfiles: [], defaultModelProfileId: undefined });
 }
 
 export function setDefaultModelProfile(id: string): ModelSettings {

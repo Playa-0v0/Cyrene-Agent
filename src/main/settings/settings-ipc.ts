@@ -22,7 +22,7 @@ import { downloadEmbeddingModel, deleteEmbeddingModel } from "../embedding-manag
 import * as os from "os";
 import { testVendorConnection } from "../orchestrator/vendors/test-connection";
 import type { VendorConfig } from "../orchestrator/vendors";
-import { normalizeModelSettings, getPublicModelConfig, listSavedModelProfiles, saveModelProfile, setDefaultModelProfile, saveModelSettings } from "../settings/model-settings";
+import { normalizeModelSettings, getPublicModelConfig, listSavedModelProfiles, saveModelProfile, setDefaultModelProfile, saveModelSettings, clearModelProfiles } from "../settings/model-settings";
 import type { ModelSettings } from "../settings/model-settings";
 import { getTimeoutSettings, saveTimeoutSettings } from "../timeout-manager";
 import type { syncVolcanoSearchMcp } from "./general-settings-lifecycle";
@@ -112,6 +112,13 @@ export function registerSettingsIpc(deps: SettingsIpcDependencies): void {
   ipcMain.handle(IPC.SETTINGS_MODEL_PROFILE_SET_DEFAULT, (_event, id: unknown) => {
     if (typeof id !== "string") return null;
     const saved = setDefaultModelProfile(id);
+    broadcastModelConfigChanged(saved);
+    return { profiles: listSavedModelProfiles(saved), defaultModelProfileId: saved.defaultModelProfileId };
+  });
+
+  // 清空所有已保存的自定義 API 設定檔（modelProfiles）。保留當前 top-level provider 不動。
+  ipcMain.handle(IPC.SETTINGS_MODEL_PROFILES_CLEAR, () => {
+    const saved = clearModelProfiles();
     broadcastModelConfigChanged(saved);
     return { profiles: listSavedModelProfiles(saved), defaultModelProfileId: saved.defaultModelProfileId };
   });
