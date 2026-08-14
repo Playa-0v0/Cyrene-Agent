@@ -8,7 +8,7 @@
 import { randomUUID } from "crypto";
 import * as chatsStore from "../../../chats/chats-store";
 import { broadcastChatsChanged } from "../../../chats/chats-ipc";
-import { loadChannelsSettings } from "../../settings-store";
+import { loadChannelsSettings, saveChannelsSettings } from "../../settings-store";
 import type { ChatMessage, ChatSessionPurpose, ConversationMode } from "../../../../shared/chat-types";
 
 /** 依目前 toolSandbox 選對話 purpose：all→discord-work、off→discord-chat。 */
@@ -39,6 +39,23 @@ export function getCurrentDiscordSession(): { id: string; purpose: ChatSessionPu
   } catch (err) {
     console.warn("[DiscordSession] 建立 Discord 對話失敗:", err instanceof Error ? err.message : err);
     return null;
+  }
+}
+
+/** 把目前 mode 的桌面對話 session id 記到 Discord 設定（workSessionId/chatSessionId），純供對應定位。 */
+export function recordCurrentDiscordSessionId(): void {
+  try {
+    const info = getCurrentDiscordSession();
+    const mode = currentDiscordMode();
+    if (!info) return;
+    const cfg = loadChannelsSettings().discord;
+    const patch: { workSessionId?: string; chatSessionId?: string } =
+      mode === "work"
+        ? { workSessionId: info.id }
+        : { chatSessionId: info.id };
+    saveChannelsSettings({ discord: { ...cfg, ...patch } });
+  } catch (err) {
+    console.warn("[DiscordSession] 記錄 session id 失敗:", err instanceof Error ? err.message : err);
   }
 }
 

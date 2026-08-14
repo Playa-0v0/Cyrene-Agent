@@ -161,6 +161,10 @@ export interface DiscordChannelConfig extends ChannelRuntimeConfig {
   boundChannelId?: string;
   /** 綁定頻道的顯示名稱，僅供 UI/日誌展示。 */
   boundChannelName?: string;
+  /** work 模式（toolSandbox=all）的對話 session id。供對應/定位用。 */
+  workSessionId?: string;
+  /** chat 模式（toolSandbox=off）的對話 session id。供對應/定位用。 */
+  chatSessionId?: string;
 }
 
 export type ChannelToolSandbox = "off" | "all";
@@ -254,6 +258,8 @@ feishu: {
       token: typeof d?.token === "string" ? d?.token : undefined,
       boundChannelId: typeof d?.boundChannelId === "string" ? d?.boundChannelId : undefined,
       boundChannelName: typeof d?.boundChannelName === "string" ? d?.boundChannelName : undefined,
+      workSessionId: typeof d?.workSessionId === "string" ? d?.workSessionId : undefined,
+      chatSessionId: typeof d?.chatSessionId === "string" ? d?.chatSessionId : undefined,
     },
     inboundPort: safeNum(input?.inboundPort, 0, 0, 65535),
     sharedSecret: typeof input?.sharedSecret === "string" ? input.sharedSecret : "",

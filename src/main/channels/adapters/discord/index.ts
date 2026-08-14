@@ -59,6 +59,7 @@ import {
   appendDiscordReply,
   getLastChannelError,
   getDiscordSessionWorkspace,
+  recordCurrentDiscordSessionId,
 } from "./discord-session";
 import { loadModelSettings } from "../../../settings/model-settings";
 import { getCurrentLevel, ACCESS_LEVEL_LABEL } from "../../../permission";
@@ -359,6 +360,7 @@ export class DiscordAdapter implements ChannelAdapter {
       console.log(LOG, `/${SLASH_STARTAGENT}: 綁定頻道 ${channelName} (${cmd.channelId})`);
       // 建立或取得目前 mode 對應的桌面端 Discord 對話（work/chat），並嘗試開啟聊天窗
       ensureDiscordSessionAndOpen();
+      recordCurrentDiscordSessionId();
       await cmd.editReply(
         changed
           ? `✅ 啟動成功！已把本頻道 #${channelName} 設為 Cyrene 的對話頻道。之後在頻道裡 **@我** 就能跟我對話，我也會在這裡回覆。`
@@ -456,8 +458,9 @@ export class DiscordAdapter implements ChannelAdapter {
     const targetSandbox = value === "work" ? "all" : "off";
     try {
       saveChannelsSettings({ toolSandbox: targetSandbox });
-      // 切換後，目前 mode 對應的工作/聊天對話隨之切換；開啟對應對話視窗。
+      // 切換後，目前 mode 對應的工作/聊天對話隨之切換；開啟對應對話視窗並記錄其 session id。
       ensureDiscordSessionAndOpen();
+      recordCurrentDiscordSessionId();
       const label = value === "work" ? "**Work**（可呼叫工具）" : "**Chat**（純聊天，不呼叫工具）";
       console.log(LOG, `/${SLASH_MODE}: 切換 toolSandbox → ${targetSandbox}`);
       await cmd.editReply(
