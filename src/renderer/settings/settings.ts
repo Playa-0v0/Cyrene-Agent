@@ -1731,7 +1731,7 @@ musicReturnBtn?.addEventListener("click", () => {
 
 // ── 清空聊天历史 ─────────────────────────────────────────────
 clearChatHistoryBtn.addEventListener("click", async () => {
-  if (!window.confirm("清空所有聊天会话？\n此操作会删除全部历史对话，无法恢复。")) return;
+  if (!window.confirm("清空所有聊天会话与渠道历史？\n此操作会删除全部历史对话（含桌面对话与各渠道滑窗历史），无法恢复。RAG/记忆索引保留。")) return;
   try {
     const sessions = await window.chatStore?.list();
     if (sessions && sessions.length > 0) {
@@ -1740,7 +1740,9 @@ clearChatHistoryBtn.addEventListener("click", async () => {
         await window.chatStore?.delete(s.id);
       }
     }
-    setGeneralSaveStatus("所有聊天会话已清空", "is-ok");
+    // 一併清空渠道滑窗歷史（channels/history/*.jsonl，含 discord work/chat）
+    await window.settings?.clearChannelHistory?.();
+    setGeneralSaveStatus("聊天会话与渠道历史已清空", "is-ok");
   } catch (err) {
     console.warn("[settings] 清空聊天会话失败:", err);
     setGeneralSaveStatus("清空失败，请查看终端日志", "is-error");

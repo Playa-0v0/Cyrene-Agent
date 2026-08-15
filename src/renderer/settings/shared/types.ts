@@ -284,6 +284,7 @@ export interface SettingsApi {
   channelsGetStatus: () => Promise<Record<string, { phase?: string; message?: string }>>;
   channelsLogGet: (limit?: number) => Promise<unknown[]>;
   channelsLogClear: () => Promise<{ ok: boolean }>;
+  clearChannelHistory: () => Promise<{ ok: boolean }>;
   channelsDiscordTestConnection: () => Promise<{ ok: boolean; message?: string; error?: string }>;
   onChannelsInstallProgress: (callback: (p: { channel: string; phase: string; pct: number }) => void) => (() => void) | void;
   onChannelsStatusChanged: (callback: (status: unknown) => void) => (() => void) | void;

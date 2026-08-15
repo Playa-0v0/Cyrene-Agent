@@ -107,3 +107,20 @@ export function reloadAllHistory(): Map<string, HistoryEntry[]> {
   }
   return out;
 }
+
+/** 清空所有渠道滑窗歷史（channels/history/*.jsonl）。供「聊天记录管理→清空记录」呼叫。 */
+export function clearAllHistory(): void {
+  try {
+    const d = dir();
+    if (!fs.existsSync(d)) return;
+    for (const name of fs.readdirSync(d)) {
+      if (name.endsWith(".jsonl")) {
+        try {
+          fs.unlinkSync(path.join(d, name));
+        } catch { /* ignore per-file */ }
+      }
+    }
+  } catch (err) {
+    console.warn(LOG, "clearAllHistory 失败:", err instanceof Error ? err.message : err);
+  }
+}

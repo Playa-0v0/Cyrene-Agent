@@ -18,6 +18,7 @@ import { FeishuAdapter } from "./adapters/feishu";
 import { ILinkBotAdapter, loadCredentials } from "./adapters/wechat/ilink-bot-adapter";
 import { DiscordAdapter } from "./adapters/discord";
 import { getRecentLog, clearLog } from "./message-log";
+import { clearAllHistory } from "./history-log";
 import { logger, LogTag } from "../logger";
 
 const LOG = "[ChannelsInit]";
@@ -251,6 +252,10 @@ function registerChannelsIpc(): void {
   });
   ipcMain.handle(IPC.CHANNELS_LOG_CLEAR, () => {
     clearLog();
+    return { ok: true };
+  });
+  ipcMain.handle(IPC.CHANNELS_HISTORY_CLEAR, () => {
+    clearAllHistory();
     return { ok: true };
   });
 }

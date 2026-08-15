@@ -358,6 +358,7 @@ const settingsApi = {
   // Phase 3.4：消息日志
   channelsLogGet: (limit?: number) => ipcRenderer.invoke(IPC.CHANNELS_LOG_GET, limit ?? 100),
   channelsLogClear: () => ipcRenderer.invoke(IPC.CHANNELS_LOG_CLEAR),
+  clearChannelHistory: () => ipcRenderer.invoke(IPC.CHANNELS_HISTORY_CLEAR),
   onChannelsInstallProgress: (callback: (p: { channel: string; phase: string; pct: number }) => void) => {
     const listener = (_e: unknown, progress: { channel: string; phase: string; pct: number }) => callback(progress);
     ipcRenderer.on(IPC.CHANNELS_INSTALL_PROGRESS, listener);

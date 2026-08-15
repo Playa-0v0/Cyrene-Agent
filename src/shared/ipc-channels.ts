@@ -344,6 +344,8 @@ export const IPC = {
   // Phase 3.4：消息日志
   CHANNELS_LOG_GET: "channels:log:get",
   CHANNELS_LOG_CLEAR: "channels:log:clear",
+  // 清空渠道滑窗歷史（channels/history/*.jsonl）
+  CHANNELS_HISTORY_CLEAR: "channels:history:clear",
 
   // Music
   MUSIC_GET_STATUS: "music:get-status",
