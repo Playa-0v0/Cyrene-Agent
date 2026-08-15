@@ -1260,24 +1260,6 @@ if (testConnectionBtn) {
   });
 }
 
-// 清空自定義 API 設定檔（modelProfiles）：用於清掉多餘/重複的已存模型設定。
-const clearModelProfilesBtn = document.getElementById("clear-model-profiles-btn");
-if (clearModelProfilesBtn) {
-  clearModelProfilesBtn.addEventListener("click", async () => {
-    if (!confirm("确定要清空所有已保存的自定义 API 设置吗？当前在用的 API 会保留，但已保存的模型列表会全部移除。")) return;
-    setSaveStatus("清除中…");
-    try {
-      const result = await window.settings?.clearModelProfiles?.();
-      setSaveStatus(
-        result ? `已清空自定义 API 设置（剩余 ${result.profiles?.length ?? 0} 项）` : "已清空自定义 API 设置",
-        "is-ok",
-      );
-    } catch (err) {
-      setSaveStatus("清除失败：" + (err instanceof Error ? err.message : String(err)), "is-error");
-    }
-  });
-}
-
 // ── 视觉模型配置事件 ──────────────────────────────────────
 // 多模态开关：ON 隐藏视觉配置区，OFF 显示
 multimodalToggle.addEventListener("change", () => {
@@ -1436,7 +1418,7 @@ apiForm.addEventListener("submit", async (e) => {
       disableMaxToken: toggleDisableMaxToken.checked,
       contextWindowTokens: Math.max(4096, parseInt(contextWindowInput.value, 10) || 256000),
     });
-    setSaveStatus(result.added ? "已加入模型列表并切换为当前 API" : "已更新现有模型设置并切换为当前 API", "is-ok");
+    setSaveStatus(result.added ? "已加入模型列表" : "相同 Key 与模型名已存在", result.added ? "is-ok" : "is-error");
   } catch {
     setSaveStatus("保存失败", "is-error");
   }

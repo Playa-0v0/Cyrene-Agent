@@ -450,14 +450,6 @@ body {
   background: rgba(255, 110, 199, 0.10);
   box-shadow: 0 0 12px var(--rb-border-soft);
 }
-.save-btn--danger {
-  color: rgba(255, 120, 120, 0.92);
-  border-color: rgba(255, 120, 120, 0.32);
-}
-.save-btn--danger:hover:not(:disabled) {
-  background: rgba(255, 80, 80, 0.12);
-  box-shadow: 0 0 12px rgba(255, 80, 80, 0.2);
-}
 
 
 /* ── 模型参数 ── */
