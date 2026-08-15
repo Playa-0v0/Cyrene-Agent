@@ -743,7 +743,7 @@ export async function onAgentRunFinished(
   result: CyreneRunResult,
   latestUserText: string,
   deps: OnRunFinishedDeps,
-  channel?: "wechat" | "feishu",
+  channel?: "wechat" | "feishu" | "discord",
   conversationId?: string,
 ): Promise<{ sticker: string | null }> {
   const chatContent = result.reply;

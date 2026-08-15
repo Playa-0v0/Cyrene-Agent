@@ -152,6 +152,7 @@ import {
 import { createWindowLifecycleTracker } from "./electron-window-lifecycle";
 import { createSchedulerSubsystem, type SchedulerSubsystem } from "./scheduler/bootstrap";
 import { createChannelsSubsystem, type ChannelsSubsystem } from "./channels/bootstrap";
+import { setDiscordSessionOpenHandler } from "./channels/adapters/discord/discord-session";
 import { createAgentRuntime, type AgentRuntime } from "./orchestrator/agent-runtime";
 import { createRuntimeStateService } from "./orchestrator/runtime-state-service";
 import {
@@ -462,6 +463,15 @@ app.whenReady().then(async () => {
     persistMainWindowPosition: ({ x, y }) => saveGeneralSettings({ petWindowX: x, petWindowY: y }),
   });
   windowManager = manager;
+
+  // /startagent 建立 Discord 桌面對話後，開啟/切到該對話的聊天窗。
+  setDiscordSessionOpenHandler((sessionId) => {
+    try {
+      manager.createReactChatWindow(sessionId);
+    } catch (err) {
+      console.warn("[DiscordSession] 開啟聊天窗失敗:", err instanceof Error ? err.message : err);
+    }
+  });
 
   createWindow(manager);
   setLive2dWindowSender((channel, payload) => manager.sendToMainWindow(channel, payload));

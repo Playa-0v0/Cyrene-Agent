@@ -16,7 +16,9 @@ import { channelDispatcher } from "./dispatcher";
 import { startInboundServer, stopInboundServer } from "./inbound-server";
 import { FeishuAdapter } from "./adapters/feishu";
 import { ILinkBotAdapter, loadCredentials } from "./adapters/wechat/ilink-bot-adapter";
+import { DiscordAdapter } from "./adapters/discord";
 import { getRecentLog, clearLog } from "./message-log";
+import { clearAllHistory } from "./history-log";
 import { logger, LogTag } from "../logger";
 
 const LOG = "[ChannelsInit]";
@@ -69,6 +71,9 @@ export async function initChannels(): Promise<void> {
   // 改为 module-level handle，UI 登录按钮也能拿到
   wxAdapter = new ILinkBotAdapter();
   channelManager.register(wxAdapter);
+
+  // 注册 Discord adapter（discord.js Gateway 长连接）
+  channelManager.register(new DiscordAdapter());
 
   // 启动所有已注册 adapter
   await channelManager.startAll();
@@ -218,6 +223,28 @@ function registerChannelsIpc(): void {
     };
   });
 
+  // ── Discord ──────────────────────────────────────────────────────────────────────────
+  // 测试连接：重建 DiscordAdapter（discord.js Gateway 握手）。
+  ipcMain.handle(IPC.CHANNELS_DISCORD_TEST_CONNECTION, async () => {
+    const adapter = channelManager.getAdapter("discord") as DiscordAdapter | undefined;
+    if (!adapter) return { ok: false, error: "Discord adapter 未注册" };
+    const status = adapter.getStatus();
+    if (!status.enabled) return { ok: false, error: "Discord 渠道未启用" };
+    if (!loadChannelsSettings().discord.token) {
+      return { ok: false, error: "Bot Token 未配置" };
+    }
+    try {
+      await adapter.rebuild();
+      const s = adapter.getStatus();
+      if (s.phase === "running") {
+        return { ok: true, message: s.message ?? "Gateway 已连接" };
+      }
+      return { ok: false, error: s.message ?? "握手未完成" };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
   // Phase 3.4：消息日志
   ipcMain.handle(IPC.CHANNELS_LOG_GET, (_e, limit: unknown) => {
     const n = typeof limit === "number" && limit > 0 ? limit : 100;
@@ -225,6 +252,10 @@ function registerChannelsIpc(): void {
   });
   ipcMain.handle(IPC.CHANNELS_LOG_CLEAR, () => {
     clearLog();
+    return { ok: true };
+  });
+  ipcMain.handle(IPC.CHANNELS_HISTORY_CLEAR, () => {
+    clearAllHistory();
     return { ok: true };
   });
 }

@@ -3,8 +3,10 @@
 
 export const channelsWechatEnabledEl = document.getElementById("channels-wechat-enabled") as HTMLInputElement | null;
 export const channelsFeishuEnabledEl = document.getElementById("channels-feishu-enabled") as HTMLInputElement | null;
+export const channelsDiscordEnabledEl = document.getElementById("channels-discord-enabled") as HTMLInputElement | null;
 export const channelsWechatStatusEl = document.getElementById("channels-wechat-status");
 export const channelsFeishuStatusEl = document.getElementById("channels-feishu-status");
+export const channelsDiscordStatusEl = document.getElementById("channels-discord-status");
 export const channelsRateUserEl = document.getElementById("channels-rate-user") as HTMLInputElement | null;
 export const channelsRateChannelEl = document.getElementById("channels-rate-channel") as HTMLInputElement | null;
 export const channelsTtsEl = document.getElementById("channels-tts-enabled") as HTMLInputElement | null;
@@ -16,10 +18,15 @@ export const channelsFeishuAppIdEl = document.getElementById("channels-feishu-ap
 export const channelsFeishuAppSecretEl = document.getElementById("channels-feishu-app-secret") as HTMLInputElement | null;
 export const channelsFeishuAppSecretRevealBtn = document.getElementById("channels-feishu-app-secret-reveal");
 export const channelsFeishuSaveBtn = document.getElementById("channels-feishu-save");
+export const channelsDiscordTokenEl = document.getElementById("channels-discord-token") as HTMLInputElement | null;
+export const channelsDiscordTokenRevealBtn = document.getElementById("channels-discord-token-reveal");
+export const channelsDiscordSaveBtn = document.getElementById("channels-discord-save");
+export const channelsDiscordBoundEl = document.getElementById("channels-discord-bound");
 export const channelsWechatLoginBtn = document.getElementById("channels-wechat-login");
 export const channelsWechatRestartBtn = document.getElementById("channels-wechat-restart");
 export const channelsWechatFeedbackEl = document.getElementById("channels-wechat-feedback");
 export const channelsFeishuFeedbackEl = document.getElementById("channels-feishu-feedback");
+export const channelsDiscordFeedbackEl = document.getElementById("channels-discord-feedback");
 export const channelsLogListEl = document.getElementById("channels-log-list");
 export const channelsLogRefreshBtn = document.getElementById("channels-log-refresh");
 export const channelsLogClearBtn = document.getElementById("channels-log-clear");

@@ -27,6 +27,16 @@ describe("channels/dispatcher", () => {
     expect(a).not.toBe(b);
   });
 
+  it("makeSessionId: discord work/chat 歷史分開", () => {
+    const w = makeSessionId("discord", "user-1", "work");
+    const w2 = makeSessionId("discord", "user-1", "work");
+    const c = makeSessionId("discord", "user-1", "chat");
+    expect(w).toBe(w2);
+    expect(w).not.toBe(c);
+    expect(c).toMatch(/^channel:discord:chat:[0-9a-f]{16}$/);
+    expect(w).toMatch(/^channel:discord:work:[0-9a-f]{16}$/);
+  });
+
   it("lookupOriginalSender: 未知 sessionId 返回 null", () => {
     expect(lookupOriginalSender("channel:feishu:0000000000000000")).toBeNull();
   });

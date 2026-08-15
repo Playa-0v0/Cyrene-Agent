@@ -53,6 +53,7 @@ function channelName(channel: IncomingMessage["channel"]): string {
   switch (channel) {
     case "wechat": return "微信";
     case "feishu": return "飞书";
+    case "discord": return "Discord";
     default: return channel;
   }
 }

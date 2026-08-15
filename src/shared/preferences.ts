@@ -2,7 +2,7 @@ export type DefaultChatMode = "work" | "chat" | "code";
 export type SegmentedOutputMode = "all" | "chat" | "off";
 export type MobileMessageSegmentationMode = "on" | "off";
 export type ProactiveChatMode = "on" | "off";
-export type ProactiveDeliveryTarget = "local" | "wechat" | "feishu";
+export type ProactiveDeliveryTarget = "local" | "wechat" | "feishu" | "discord";
 
 export type { CustomStyleConfig, StyleId } from "./style-sampling";
 
@@ -31,5 +31,5 @@ export function normalizeProactiveChatMode(value: unknown): ProactiveChatMode {
 }
 
 export function normalizeProactiveDeliveryTarget(value: unknown): ProactiveDeliveryTarget {
-  return value === "wechat" || value === "feishu" ? value : "local";
+  return value === "wechat" || value === "feishu" || value === "discord" ? value : "local";
 }

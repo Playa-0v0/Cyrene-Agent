@@ -42,7 +42,7 @@ export interface TtsSynthesisService {
   synthesizeChannelTts(
     text: string,
     cfg: GeneralSettings,
-    channel: "wechat" | "feishu",
+    channel: "wechat" | "feishu" | "discord",
   ): Promise<{
     audio: Buffer;
     format: TtsAudioFormat;
@@ -248,7 +248,7 @@ export function createTtsSynthesisService(): TtsSynthesisService {
   async function synthesizeChannelTts(
     text: string,
     cfg: GeneralSettings,
-    channel: "wechat" | "feishu",
+    channel: "wechat" | "feishu" | "discord",
   ): Promise<{
     audio: Buffer;
     format: TtsAudioFormat;

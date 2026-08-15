@@ -4,13 +4,15 @@
 
 import { channelsState } from "./state";
 import {
-  channelsWechatEnabledEl, channelsFeishuEnabledEl,
+  channelsWechatEnabledEl, channelsFeishuEnabledEl, channelsDiscordEnabledEl,
   channelsRateUserEl, channelsRateChannelEl,
   channelsTtsEl, channelsStickerEl, channelsMirrorEl,
   channelsToolSandboxOffEl, channelsToolSandboxAllEl,
   channelsFeishuAppIdEl, channelsFeishuAppSecretEl, channelsFeishuAppSecretRevealBtn,
   channelsFeishuSaveBtn, channelsFeishuFeedbackEl,
-  channelsWechatStatusEl, channelsFeishuStatusEl,
+  channelsDiscordTokenEl, channelsDiscordTokenRevealBtn, channelsDiscordSaveBtn, channelsDiscordFeedbackEl,
+  channelsDiscordBoundEl,
+  channelsWechatStatusEl, channelsFeishuStatusEl, channelsDiscordStatusEl,
   channelsWechatLoginBtn, channelsWechatRestartBtn, channelsWechatFeedbackEl,
   channelsLogListEl, channelsLogRefreshBtn, channelsLogClearBtn,
 } from "./dom";
@@ -41,6 +43,23 @@ function renderChannelStatus(el: HTMLElement | null, phase: string, message?: st
     else dot.classList.add("channels-status__dot--offline");
   }
   if (text) text.textContent = message ?? (phase === "running" ? "运行中" : phase === "starting" ? "启动中" : phase === "config_missing" ? "配置缺失" : phase === "error" ? "错误" : "未启用");
+}
+
+function renderDiscordBoundChannel(cfg: {
+  enabled: boolean;
+  boundChannelId?: string;
+  boundChannelName?: string;
+}): void {
+  if (!channelsDiscordBoundEl) return;
+  if (!cfg.enabled) {
+    channelsDiscordBoundEl.textContent = "";
+    return;
+  }
+  if (cfg.boundChannelId) {
+    channelsDiscordBoundEl.textContent = `已綁定對話頻道：#${cfg.boundChannelName ?? cfg.boundChannelId}`;
+  } else {
+    channelsDiscordBoundEl.textContent = "尚未綁定對話頻道：連上後在頻道輸入 /startagent（回覆「啟動成功」即完成），之後在該頻道 @我 我就能回覆。";
+  }
 }
 
 function setFeishuFeedback(kind: "info" | "ok" | "err", msg: string): void {
@@ -105,6 +124,7 @@ export async function loadChannelsPanel(): Promise<void> {
     const cfg = await window.settings.channelsGetConfig();
     if (channelsWechatEnabledEl) channelsWechatEnabledEl.checked = !!cfg.wechat.enabled;
     if (channelsFeishuEnabledEl) channelsFeishuEnabledEl.checked = !!cfg.feishu.enabled;
+    if (channelsDiscordEnabledEl) channelsDiscordEnabledEl.checked = !!cfg.discord.enabled;
     if (channelsRateUserEl) channelsRateUserEl.value = String(cfg.rateLimitPerUser ?? 10);
     if (channelsRateChannelEl) channelsRateChannelEl.value = String(cfg.rateLimitPerChannel ?? 100);
     if (channelsTtsEl) channelsTtsEl.checked = cfg.ttsEnabled !== false;
@@ -122,11 +142,21 @@ export async function loadChannelsPanel(): Promise<void> {
         : "点击保存配置时加密保存";
     }
 
+    // Discord 字段填充（token 加密存盘，UI 不回填明文）
+    if (channelsDiscordTokenEl) {
+      channelsDiscordTokenEl.value = "";
+      channelsDiscordTokenEl.placeholder = cfg.discord.token
+        ? "已保存（输入新值会覆盖）"
+        : "点击保存配置时保存";
+    }
+    renderDiscordBoundChannel(cfg.discord);
+
     // 拉一次渠道状态
     const status = (await window.settings.channelsGetStatus()) as Record<string, { phase: string; message?: string }>;
     renderProactiveDeliveryAvailability(status);
     renderChannelStatus(channelsWechatStatusEl, status.wechat?.phase ?? "offline", status.wechat?.message);
     renderChannelStatus(channelsFeishuStatusEl, status.feishu?.phase ?? "offline", status.feishu?.message);
+    renderChannelStatus(channelsDiscordStatusEl, status.discord?.phase ?? "offline", status.discord?.message);
     // Phase 3.4：拉一次消息日志
     void refreshChannelsLog();
   } catch (err) {
@@ -140,6 +170,7 @@ export async function loadChannelsPanel(): Promise<void> {
       void window.settings.channelsSaveConfig({
         wechat: { enabled: channelsWechatEnabledEl?.checked ?? false },
         feishu: { enabled: channelsFeishuEnabledEl?.checked ?? false },
+        discord: { enabled: channelsDiscordEnabledEl?.checked ?? false },
         rateLimitPerUser: Number(channelsRateUserEl?.value) || 10,
         rateLimitPerChannel: Number(channelsRateChannelEl?.value) || 100,
         ttsEnabled: channelsTtsEl?.checked ?? true,
@@ -154,6 +185,7 @@ export async function loadChannelsPanel(): Promise<void> {
   for (const el of [
     channelsWechatEnabledEl,
     channelsFeishuEnabledEl,
+    channelsDiscordEnabledEl,
     channelsRateUserEl,
     channelsRateChannelEl,
     channelsTtsEl,
@@ -167,7 +199,7 @@ export async function loadChannelsPanel(): Promise<void> {
 
   // 监听安装进度（Phase 1+ 才会收到）
   window.settings.onChannelsInstallProgress((progress) => {
-    const target = progress.channel === "wechat" ? channelsWechatStatusEl : progress.channel === "feishu" ? channelsFeishuStatusEl : null;
+    const target = progress.channel === "wechat" ? channelsWechatStatusEl : progress.channel === "feishu" ? channelsFeishuStatusEl : progress.channel === "discord" ? channelsDiscordStatusEl : null;
     if (target) renderChannelStatus(target, "starting", `${progress.phase} ${progress.pct}%`);
   });
   window.settings.onChannelsStatusChanged((status) => {
@@ -175,6 +207,7 @@ export async function loadChannelsPanel(): Promise<void> {
     renderProactiveDeliveryAvailability(s);
     renderChannelStatus(channelsWechatStatusEl, s.wechat?.phase ?? "offline", s.wechat?.message);
     renderChannelStatus(channelsFeishuStatusEl, s.feishu?.phase ?? "offline", s.feishu?.message);
+    renderChannelStatus(channelsDiscordStatusEl, s.discord?.phase ?? "offline", s.discord?.message);
   });
 
   // ===== 飞书交互（Phase 2 长连接版） =====
@@ -211,6 +244,54 @@ export async function loadChannelsPanel(): Promise<void> {
       }
     } catch (err) {
       setFeishuFeedback("err", err instanceof Error ? err.message : String(err));
+    }
+  });
+
+  // ===== Discord 交互（discord.js Gateway 长连接） =====
+
+  // 显示/隐藏 Bot Token
+  channelsDiscordTokenRevealBtn?.addEventListener("click", () => {
+    if (!channelsDiscordTokenEl) return;
+    channelsDiscordTokenEl.type =
+      channelsDiscordTokenEl.type === "password" ? "text" : "password";
+  });
+
+  function setDiscordFeedback(kind: "info" | "ok" | "err", msg: string): void {
+    if (!channelsDiscordFeedbackEl) return;
+    channelsDiscordFeedbackEl.textContent = msg;
+    channelsDiscordFeedbackEl.className = "channels-feedback";
+    if (kind === "ok") channelsDiscordFeedbackEl.classList.add("channels-feedback--ok");
+    else if (kind === "err") channelsDiscordFeedbackEl.classList.add("channels-feedback--err");
+    else channelsDiscordFeedbackEl.classList.add("channels-feedback--info");
+  }
+
+  // 保存配置（token 用 safeStorage 加密后落盘 + 触发 adapter 重建）
+  channelsDiscordSaveBtn?.addEventListener("click", async () => {
+    setDiscordFeedback("info", "保存并连接中...");
+    const patch: Record<string, unknown> = {
+      discord: {
+        enabled: channelsDiscordEnabledEl?.checked ?? false,
+      },
+    };
+    // 仅在用户输入了新值时才覆盖 token（避免误清空）
+    if (channelsDiscordTokenEl?.value) {
+      (patch.discord as Record<string, unknown>).token = channelsDiscordTokenEl.value;
+    }
+    try {
+      await window.settings.channelsSaveConfig(patch);
+      // 保存后立即触发 Discord adapter 重建 + 重新连接 Gateway
+      await window.settings.channelsRestart();
+      setDiscordFeedback("ok", "已保存，Discord 连接中…");
+      // 清空输入框（已落盘），并把 placeholder 切到"已保存"
+      if (channelsDiscordTokenEl) {
+        channelsDiscordTokenEl.value = "";
+        channelsDiscordTokenEl.placeholder = "已保存（输入新值会覆盖）";
+      }
+      // 重新读取配置以更新綁定頻道顯示
+      const fresh = await window.settings.channelsGetConfig();
+      renderDiscordBoundChannel(fresh.discord);
+    } catch (err) {
+      setDiscordFeedback("err", err instanceof Error ? err.message : String(err));
     }
   });
 

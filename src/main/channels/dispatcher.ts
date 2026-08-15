@@ -101,13 +101,15 @@ class RateLimiter {
   }
 }
 
-/** 计算一个稳定、匿名的 sessionId。 */
-export function makeSessionId(channel: ChannelId, senderId: string): string {
+/** 计算一个稳定、匿名的 sessionId。
+ *  Discord 額外納入 mode（work/chat），讓 work 與 chat 的對話歷史各自獨立。 */
+export function makeSessionId(channel: ChannelId, senderId: string, mode?: "work" | "chat"): string {
+  const label = (channel === "discord" && mode) ? `:${mode}` : "";
   const hash = createHash("sha256")
-    .update(`${channel}:${senderId}`)
+    .update(`${channel}:${senderId}${label}`)
     .digest("hex")
     .slice(0, 16);
-  return `channel:${channel}:${hash}`;
+  return `channel:${channel}${label}:${hash}`;
 }
 
 /** 记录 sessionId → 原始 senderId（用于调试 / 反查；不影响正常运行） */
@@ -239,7 +241,10 @@ export class ChannelDispatcher {
       return null;
     }
 
-    const sessionId = makeSessionId(msg.channel, msg.senderId);
+    // Discord 依目前執行模式拆分 sessionId，使 work/chat 對話歷史分開。
+    const sessionId = msg.channel === "discord"
+      ? makeSessionId(msg.channel, msg.senderId, this.settings.toolSandbox === "all" ? "work" : "chat")
+      : makeSessionId(msg.channel, msg.senderId);
     recordSession(msg.channel, msg.senderId, sessionId);
     rememberProactiveChannelRecipient(msg, sessionId);
 
@@ -302,8 +307,17 @@ export class ChannelDispatcher {
         replyText = result.text;
         sticker = result.sticker;
       } catch (err) {
+        // agent 調用失敗：不再靜默無回覆，把具體錯誤訊息回給用戶，方便在 Discord 上直接看到。
+        // 詳細錯誤名稱/代碼已由 bootstrap 透過 recordChannelError 記錄（可用 /status 查）。
         console.error(LOG, "agent 调用失败:", err instanceof Error ? err.message : err);
-        return null;
+        const detail =
+          (err && typeof err === "object" && "code" in err && typeof (err as { code?: unknown }).code === "string"
+            ? (err as { code?: unknown }).code
+            : undefined);
+        replyText = `⚠️ Agent 處理失敗${detail ? `（${detail}）` : ""}：` +
+          (err instanceof Error ? err.message : String(err)) +
+          "\n你可以輸入 `/status` 查看目前模型/API 設定與詳細錯誤。";
+        sticker = null;
       }
     } else {
       replyText = `[echo][${msg.channel}][${msg.senderId}] ${msg.text}`;

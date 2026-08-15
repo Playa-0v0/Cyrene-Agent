@@ -605,6 +605,11 @@ body {
   display: none;
 }
 
+/* 主动投递目标：4 个按钮（本地/微信/飞书/Discord）用 4 列排布，避免换行。 */
+#proactive-delivery-select {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .setting-row strong {
   display: block;
   margin-bottom: 4px;
@@ -3721,6 +3726,11 @@ body {
   margin: 6px 0 12px 0;
   font-size: 12px;
   color: rgba(254, 247, 255, 0.5);
+}
+.channels-card__meta {
+  margin: -4px 0 10px 0;
+  font-size: 12px;
+  color: rgba(250, 204, 21, 0.85);
 }
 .channels-card__actions {
   display: flex;

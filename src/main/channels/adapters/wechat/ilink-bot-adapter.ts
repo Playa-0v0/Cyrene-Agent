@@ -49,6 +49,7 @@ import type {
   OutgoingMessage,
 } from "../../types";
 import type { ChannelAdapter } from "../base";
+import { loadChannelsSettings } from "../../settings-store";
 import { logger, LogTag } from "../../../logger";
 
 const LOG_PREFIX = "[WechatBot]";
@@ -111,18 +112,24 @@ export class ILinkBotAdapter implements ChannelAdapter {
   // ── ChannelAdapter ────────────────────────────────────────────────────────
 
   async start(): Promise<void> {
+    // 渠道獨立：未啟用就不啟動（與 Discord/飛書一致），避免在未啟用時也被 startAll 拉起。
+    if (!loadChannelsSettings().wechat.enabled) {
+      this.status = { enabled: false, phase: "offline", message: "未启用" };
+      return;
+    }
+
     this.status = { enabled: true, phase: "starting" };
     logger.info(LogTag.Wechat, "Starting...");
 
     // 1. 加载已存凭证
     const creds = await loadCredentials();
     if (!creds) {
+      // 未登录：静默待命（config_missing），不打印噪音日志，等待用户在 UI 扫码。
       this.status = {
         enabled: true,
         phase: "config_missing",
         message: "未登录，请先扫码",
       };
-      console.log(LOG_PREFIX, "No credentials, please run /wechat login");
       return;
     }
 
@@ -139,7 +146,10 @@ export class ILinkBotAdapter implements ChannelAdapter {
   }
 
   async stop(): Promise<void> {
-    console.log(LOG_PREFIX, "Stopping...");
+    // 只有真正有在跑（有 client / 長輪詢）才打印 Stopping，避免未登入/未启用時刷噪音。
+    if (this.client || this.pollLoopPromise) {
+      console.log(LOG_PREFIX, "Stopping...");
+    }
     this.pollAbort?.abort();
     if (this.pollLoopPromise) {
       try {

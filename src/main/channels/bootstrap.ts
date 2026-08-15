@@ -1,7 +1,7 @@
 import type { BrowserWindow } from "electron";
 import { IPC } from "../../shared/ipc-channels";
 import { loadGeneralSettings } from "../settings/settings-facade";
-import { loadModelSettings, loadVisionConfig } from "../settings/model-settings";
+import { loadModelSettings, loadVisionConfig, getDefaultModelProfile } from "../settings/model-settings";
 import { CyreneAgent } from "../orchestrator/cyrene-agent";
 import { toolRegistry } from "../orchestrator/tool-registry";
 import { decideImageSendStrategy } from "../chat/image-send-strategy";
@@ -23,6 +23,7 @@ import {
   setDispatcherSynthesizeTts,
 } from "./dispatcher";
 import { initChannels, shutdownChannels } from "./init";
+import { recordChannelError, getDiscordSessionWorkspace } from "./adapters/discord/discord-session";
 
 export interface ChannelsSubsystem {
   shutdown(): Promise<void>;
@@ -93,6 +94,9 @@ export function createChannelsSubsystem(deps: ChannelsSubsystemDeps): ChannelsSu
       ],
       style: "01_default.md",
       sessionId,
+      // 讓渠道（Discord/微信/飛書）的 agent 使用「預設已儲存模型設定檔」（例如自定義 opencode API），
+      // 而不是頂層 currentProvider 的不一致 top-level（例：未填 key 的 MiniMax）。
+      modelProfileId: getDefaultModelProfile()?.id,
       attachments: attachmentInputs.attachments,
       imageAttachments: attachmentInputs.imageAttachments,
       channel: msg.channel,
@@ -108,16 +112,34 @@ export function createChannelsSubsystem(deps: ChannelsSubsystemDeps): ChannelsSu
     options.harnessInteractiveTools = policy.includeInteractiveTools;
     options.permissionMode = policy.permissionMode;
 
+    // 渠道執行與桌面端「指定資料夾」對齊：Discord 頻道訊息觸發時，
+    // 若 /startagent 建立的桌面 Discord 對話有綁定工作目錄，就讓本次執行使用該目錄，
+    // 使工具（read_file/write_file/run_shell 等）以該可信根目錄為準。
+    if (msg.channel === "discord") {
+      const ws = getDiscordSessionWorkspace();
+      if (ws?.workspaceRoot) {
+        options.resolvedWorkspaceRoot = ws.workspaceRoot;
+        console.log("[Channels] discord workspace inherited:", ws.workspaceRoot);
+      }
+    }
+
     const threadId = `thread-${sessionId}-${Date.now()}`;
     const agent = new CyreneAgent({ threadId, description: `bot:${msg.channel}:${msg.senderId}` });
-    const reply = await new Promise<string>((resolve, reject) => {
-      agent.runWithEvents(options).subscribe({
-        complete: () => {
-          resolve(agent.lastResult?.reply ?? "");
-        },
-        error: (err) => reject(err instanceof Error ? err : new Error(String(err))),
+    let reply: string;
+    try {
+      reply = await new Promise<string>((resolve, reject) => {
+        agent.runWithEvents(options).subscribe({
+          complete: () => {
+            resolve(agent.lastResult?.reply ?? "");
+          },
+          error: (err) => reject(err instanceof Error ? err : new Error(String(err))),
+        });
       });
-    });
+    } catch (err) {
+      // 記錄具體錯誤（供 /status 除錯）；再往上拋，讓 dispatcher 回覆不會卡住
+      recordChannelError(err, `${msg.channel}:${msg.senderId}`);
+      throw err;
+    }
     channelResult.text = reply;
     if (agent.lastResult) {
       const finished = await deps.agentRuntime.onRunFinished(agent.lastResult, msg.text, msg.channel, sessionId);
