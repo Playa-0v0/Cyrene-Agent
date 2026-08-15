@@ -712,11 +712,17 @@ export class DiscordAdapter implements ChannelAdapter {
   }
 }
 
-/** 從訊息中移除對 Bot 的 @ 提及，只保留純文字內容。 */
+/** 從訊息中移除 Discord 的 @ 提及（含群組角色 <@&...>），只保留純文字內容。 */
 function stripBotMention(content: string, botId: string): string {
-  // Discord 的提及格式：<@123>（一般）或 <@!123>（舊式 / nickname）
-  const mentionRegex = new RegExp(`<@!?${escapeRegex(botId)}>`, "g");
-  return content.replace(mentionRegex, " ").replace(/\s+/g, " ").trim();
+  // 1) 移除特定 Bot 提及：<@123>（一般）或 <@!123>（舊式 / nickname）
+  const botMentionRegex = new RegExp(`<@!?${escapeRegex(botId)}>`, "g");
+  let cleaned = content.replace(botMentionRegex, " ");
+  // 2) 移除其餘 Discord 提及/標記 token：<@&> 群組角色、<@> 使用者、<#> 頻道、
+  //    <:emojiname:id> 及 <a:animated...:id> 自訂表情
+  cleaned = cleaned.replace(/<@&?\d+>/g, " ");                   // <@...>, <@!...>, <@&...>
+  cleaned = cleaned.replace(/<#\d+>/g, " ");                     // channel
+  cleaned = cleaned.replace(/<(a?):[A-Za-z0-9_]+:\d+>/g, " ");  // custom emoji
+  return cleaned.replace(/\s+/g, " ").trim();
 }
 
 function escapeRegex(input: string): string {
