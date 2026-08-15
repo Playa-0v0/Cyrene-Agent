@@ -8,7 +8,7 @@ import { getSettingsPath } from "../settings-store";
 import type { VisionConfig } from "../orchestrator/vision-captioner";
 import { migrateLegacyMinimaxDefaults } from "../orchestrator/vendors/minimax-defaults";
 import { getCapabilityOrOpenAI } from "../orchestrator/vendors/capabilities";
-import { resolveDefaultModelProfile, type SavedModelProfile } from "./model-catalog";
+import { sameModelCredential, resolveDefaultModelProfile, type SavedModelProfile } from "./model-catalog";
 
 /**
  * 统一模型配置入口：所有模块（包括 Code 模式）必须通过此函数读取。
@@ -344,20 +344,15 @@ export function saveModelProfile(input: Omit<SavedModelProfile, "id"> & { id?: s
   const profile: SavedModelProfile = { ...normalizeProviderProfile(input, input.provider), id: input.id ?? randomUUID(), provider: input.provider };
   const profiles = listSavedModelProfiles(existing);
 
-  // 判斷某筆 profile 的「暱稱鍵」：優先自訂顯示名(displayName)，空則退回 provider 名稱。
-  const profileKey = (p: SavedModelProfile): string =>
-    String(p.displayName && p.displayName.trim() ? p.displayName : p.provider).trim().toLowerCase();
-
   // 找到要更新/覆盖的目標：
   //   - 若有傳 id：更新該 id 的設定
-  //   - 否則若已存在「相同暱稱（displayName，空時用 provider）」：覆蓋那一項
-  //   - 否則：新增一筆新設定
+  //   - 否則若已存在「相同 Key + 模型名」：覆蓋那一項（不再拒絕，讓使用者能重新保存）
+  //   - 否則：新增
   let targetIndex = -1;
   if (input.id) {
     targetIndex = profiles.findIndex((p) => p.id === input.id);
   } else {
-    const key = profileKey(profile);
-    targetIndex = profiles.findIndex((p) => profileKey(p) === key);
+    targetIndex = profiles.findIndex((p) => sameModelCredential(p, profile));
   }
 
   let nextProfiles: SavedModelProfile[];

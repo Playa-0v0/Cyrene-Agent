@@ -401,11 +401,6 @@ body {
   color: rgba(235, 229, 245, 0.54);
 }
 
-/* 預設（等待保存等無狀態文字）隱藏，避免佔位擠壓按鈕排版；只在有 is-ok / is-error 時顯示 */
-.save-status:not(.is-ok):not(.is-error) {
-  display: none;
-}
-
 .save-status.is-ok {
   color: #86efac;
 }
