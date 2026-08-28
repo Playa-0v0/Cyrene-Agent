@@ -164,8 +164,11 @@ export class MemoryJudge {
       const filtered = postFilterCandidates(result.candidates)
 
       // 注入来源会话 ID，供 L2 回溯使用（LLM 不负责输出此字段）
+      const sourceMessageIds = turns.flatMap((turn) => [turn.userMessageId, turn.assistantMessageId])
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
       for (const candidate of filtered) {
         candidate.sourceConversationId = conversationId
+        candidate.sourceMessageIds = sourceMessageIds
       }
 
       console.log(`[PMRS/Judge] 提取候选: ${filtered.length} 条（过滤后），实体: ${result.entities.length} 个`)

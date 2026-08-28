@@ -1,5 +1,5 @@
 // Orchestrator — unified entry point
-// 只负责构建 always-on 上下文（世界书 + L0/L1）；工具的选择和执行由 CyreneHarness 处理
+// 只负责构建 always-on 世界书上下文；用户记忆由 MemoryContextBuilder 统一处理。
 import { updateWorldbookActivation, getPermanentWorldbookEntries, getActiveWorldbookEntries, getCascadeWorldbookEntries, searchMemory, INJECTION_HEADER, INJECTION_PREAMBLE } from "../rag";
 import { memoryStore } from "../memory/memory-store";
 import { entityGraph } from "../memory/entity-graph";
@@ -131,39 +131,6 @@ export async function buildAlwaysOnContext(
     }
   } catch (err) {
     console.warn("[Orchestrator] worldbook dmae failed:", err);
-  }
-
-  // ── L0/L1 画像 — 永远跑 ──────────────────────────────
-  try {
-    const l0 = await memoryStore.getL0();
-    const l1 = await memoryStore.getL1();
-
-    const l0Lines = [
-      l0.preferredName && `称呼：${l0.preferredName}`,
-      l0.occupation && `职业：${l0.occupation}`,
-      l0.longTermInterests && `长期兴趣：${l0.longTermInterests}`,
-      l0.language && `常用语言：${l0.language}`,
-      l0.permanentNote && `备注：${l0.permanentNote}`,
-    ].filter(Boolean);
-
-    const l1Lines = [
-      l1.recentGoals && `最近目标：${l1.recentGoals}`,
-      l1.recentPreferences && `近期偏好：${l1.recentPreferences}`,
-      l1.currentProject && `当前项目：${l1.currentProject}`,
-    ].filter(Boolean);
-
-    if (l0Lines.length > 0 || l1Lines.length > 0) {
-      let memoryContext = "";
-      if (l0Lines.length > 0) {
-        memoryContext += `[用户画像]\n${l0Lines.join("\n")}\n\n`;
-      }
-      if (l1Lines.length > 0) {
-        memoryContext += `[近期状态]\n${l1Lines.join("\n")}\n\n`;
-      }
-      parts.push(memoryContext.trim());
-    }
-  } catch (err) {
-    console.warn("[Orchestrator] memory load failed:", err);
   }
 
   // ── 日志 ──────────────────────────────────────────────

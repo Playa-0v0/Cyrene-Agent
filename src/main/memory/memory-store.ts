@@ -491,6 +491,72 @@ class MemoryStoreManager {
     return (store.evidence ?? []).filter((evidence) => evidence.memoryId === memoryId)
   }
 
+  /**
+   * 删除某会话贡献的证据，并重绑仍有其他来源的 L2。
+   * 返回失去全部证据的 L2 向量 ID，交给 RAG 层做物理清理。
+   */
+  async deleteConversationEvidence(conversationId: string): Promise<{
+    deletedEvidenceCount: number
+    deletedL2Ids: string[]
+    deletedRagIds: string[]
+    reboundL2Ids: string[]
+  }> {
+    const store = await this.load()
+    const allEvidence = store.evidence ?? []
+    const removedEvidence = allEvidence.filter((evidence) => evidence.conversationId === conversationId)
+    if (removedEvidence.length === 0) {
+      return { deletedEvidenceCount: 0, deletedL2Ids: [], deletedRagIds: [], reboundL2Ids: [] }
+    }
+
+    const removedIds = new Set(removedEvidence.map((evidence) => evidence.id))
+    store.evidence = allEvidence.filter((evidence) => !removedIds.has(evidence.id))
+    const deletedL2Ids: string[] = []
+    const deletedRagIds: string[] = []
+    const reboundL2Ids: string[] = []
+
+    for (const memory of store.l2) {
+      const hadRemovedEvidence = (memory.evidenceIds ?? []).some((id) => removedIds.has(id))
+        || memory.sourceConversationId === conversationId
+      if (!hadRemovedEvidence) continue
+      const remaining = store.evidence.filter((evidence) => evidence.memoryId === memory.id)
+      if (remaining.length === 0) {
+        deletedL2Ids.push(memory.id)
+        if (memory.ragId) deletedRagIds.push(memory.ragId)
+        continue
+      }
+      memory.evidenceIds = remaining.map((evidence) => evidence.id)
+      const primary = remaining.find((evidence) => evidence.sourceStatus === "active") ?? remaining[0]
+      memory.sourceConversationId = primary.conversationId ?? ""
+      memory.sourceMessageIds = primary.messageIds
+      reboundL2Ids.push(memory.id)
+    }
+
+    const deletedSet = new Set(deletedL2Ids)
+    store.l2 = store.l2.filter((memory) => !deletedSet.has(memory.id))
+    store.l2DmaeStates = (store.l2DmaeStates ?? []).filter((state) => !deletedSet.has(state.l2Id))
+    store.conflictLogs = (store.conflictLogs ?? []).filter((log) => (
+      !deletedSet.has(log.sourceL2Id) && !deletedSet.has(log.targetL2Id)
+    ))
+    await this.save(store)
+    appendMemoryTrace({
+      op: "conversation.evidence.delete",
+      layer: "L2",
+      status: "ok",
+      details: {
+        conversationId,
+        deletedEvidenceCount: removedEvidence.length,
+        deletedL2Ids,
+        reboundL2Ids,
+      },
+    })
+    return {
+      deletedEvidenceCount: removedEvidence.length,
+      deletedL2Ids,
+      deletedRagIds,
+      reboundL2Ids,
+    }
+  }
+
   async appendReflectionLog(log: Omit<ReflectionLog, "id" | "createdAt">): Promise<void> {
     const store = await this.load()
     const entry: ReflectionLog = {

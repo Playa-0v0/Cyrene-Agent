@@ -161,6 +161,15 @@ function writeSessionFile(session: ChatSession): void {
   atomicWriteJson(sessionPath(session.id), session);
 }
 
+function schedulePersistedConversationSummary(session: ChatSession): void {
+  const last = session.messages.at(-1);
+  if (!last || last.role !== "model" || !last.content.trim()) return;
+  if (last.runSnapshot?.terminalStatus && last.runSnapshot.terminalStatus !== "success") return;
+  void import("../memory/conversation-memory-runtime")
+    .then(({ scheduleConversationSummary }) => scheduleConversationSummary(session.id))
+    .catch((error) => console.warn("[chats-store] 摘要调度失败，不影响会话持久化:", error));
+}
+
 /**
  * 旧版会话没有 mode，也没有项目路径。升级时统一归入 Work，并绑定到
  * userData/迁移文件夹。旧版本曾把无模式会话回填成未绑定路径的 Work，
@@ -328,6 +337,7 @@ export function createSession(opts?: {
   };
   writeSessionFile(session);
   upsertMeta(metaFromSession(session));
+  schedulePersistedConversationSummary(session);
   return session;
 }
 
@@ -364,6 +374,7 @@ export function appendMessage(id: string, message: ChatMessage): ChatSession | n
   }
   writeSessionFile(session);
   upsertMeta(metaFromSession(session));
+  schedulePersistedConversationSummary(session);
   return session;
 }
 
@@ -377,6 +388,7 @@ export function upsertMessage(id: string, message: ChatMessage): ChatSession | n
   if (!session.titleIsCustom) session.title = deriveTitle(session.messages);
   writeSessionFile(session);
   upsertMeta(metaFromSession(session));
+  schedulePersistedConversationSummary(session);
   return session;
 }
 
@@ -411,6 +423,7 @@ export function replaceMessages(id: string, messages: ChatMessage[]): ChatSessio
   }
   writeSessionFile(session);
   upsertMeta(metaFromSession(session));
+  schedulePersistedConversationSummary(session);
   return session;
 }
 
@@ -422,6 +435,7 @@ export function replaceMessagesTail(id: string, startIndex: number, messages: Ch
   if (!session.titleIsCustom) session.title = deriveTitle(session.messages);
   writeSessionFile(session);
   upsertMeta(metaFromSession(session));
+  schedulePersistedConversationSummary(session);
   return session;
 }
 

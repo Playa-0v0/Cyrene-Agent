@@ -379,6 +379,56 @@ export class JsonVectorStore {
     return this.addPreparedBatch([{ text, source, embedding, metadata }])[0];
   }
 
+  /**
+   * 按业务稳定键覆盖写入。语义相近不代表同一来源，不能用于幂等判断。
+   * 同一 source/sourceKey 若因旧版本产生重复，只保留本次写入的一个有效条目。
+   */
+  async upsertBySourceKey(
+    text: string,
+    source: string,
+    sourceKey: string,
+    provider: EmbeddingProvider,
+    metadata?: Record<string, unknown>,
+  ): Promise<MemoryEntry> {
+    const normalizedKey = sourceKey.trim();
+    if (!normalizedKey) throw new Error("sourceKey is required");
+    this.validateDimensionsForProvider(provider);
+    const embedding = await provider.embed(text);
+    this.ensureIndexMeta(provider, embedding.length);
+
+    const matches = this.entries.filter((entry) => (
+      entry.source === source && entry.metadata?.sourceKey === normalizedKey
+    ));
+    const now = Date.now();
+    const entry: MemoryEntry = matches[0]
+      ? {
+          ...matches[0],
+          text,
+          embedding,
+          lastRecalledAt: now,
+          metadata: { ...metadata, sourceKey: normalizedKey },
+        }
+      : {
+          id: `${source}_${now}_${Math.random().toString(36).slice(2, 8)}`,
+          text,
+          embedding,
+          source,
+          weight: 1,
+          createdAt: now,
+          lastRecalledAt: now,
+          metadata: { ...metadata, sourceKey: normalizedKey },
+        };
+
+    this.entries = this.entries.filter((candidate) => !(
+      candidate.source === source && candidate.metadata?.sourceKey === normalizedKey
+    ));
+    this.entries.push(entry);
+    this.dirty = true;
+    this.markIndexDirty();
+    this.save();
+    return entry;
+  }
+
   // 批量添加（用于导入文档 chunk）
   async addBatch(
     items: Array<{ text: string; source: string; metadata?: Record<string, unknown> }>,
@@ -537,6 +587,27 @@ export class JsonVectorStore {
     if (idSet.size === 0) return 0;
     const before = this.entries.length;
     this.entries = this.entries.filter((entry) => !idSet.has(entry.id) || (source !== undefined && entry.source !== source));
+    const deleted = before - this.entries.length;
+    if (deleted > 0) {
+      this.dirty = true;
+      this.markIndexDirty();
+      this.save();
+    }
+    return deleted;
+  }
+
+  deleteEntriesBySourceKey(source: string, sourceKey: string): number {
+    return this.deleteEntriesByMetadata(source, { sourceKey });
+  }
+
+  deleteEntriesByMetadata(source: string, metadata: Record<string, unknown>): number {
+    const pairs = Object.entries(metadata);
+    if (pairs.length === 0) return 0;
+    const before = this.entries.length;
+    this.entries = this.entries.filter((entry) => {
+      if (entry.source !== source) return true;
+      return !pairs.every(([key, value]) => entry.metadata?.[key] === value);
+    });
     const deleted = before - this.entries.length;
     if (deleted > 0) {
       this.dirty = true;

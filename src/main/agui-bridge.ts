@@ -704,6 +704,7 @@ export function registerAgUiIpc(
               input.sessionId || "default",
               latestUserText,
               lastResult.reply,
+              lastResult.turnSource,
             );
 
             // Learn 模式：静默更新学习进度（异步，不阻塞，失败不影响主流程）

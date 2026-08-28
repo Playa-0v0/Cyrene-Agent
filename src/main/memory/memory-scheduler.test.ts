@@ -55,7 +55,7 @@ describe("MemoryScheduler", () => {
     const { scheduler, deps, enqueueLabels } = createScheduler()
 
     for (let i = 1; i <= 5; i++) {
-      scheduler.scheduleMemoryWrite(`user ${i}`, `assistant ${i}`)
+      scheduler.scheduleMemoryWrite(`user ${i}`, `assistant ${i}`, "chat-a")
     }
     await vi.waitFor(() => expect(deps.replaceL1Field).toHaveBeenCalledWith("roundCount", 5))
 
@@ -90,7 +90,7 @@ describe("MemoryScheduler", () => {
     })
 
     for (let i = 1; i <= 6; i++) {
-      scheduler.scheduleMemoryWrite(`user ${i}`, `assistant ${i}`)
+      scheduler.scheduleMemoryWrite(`user ${i}`, `assistant ${i}`, "chat-a")
     }
     await vi.waitFor(() => expect(deps.writeMemory).toHaveBeenCalledWith([candidate]))
 
@@ -110,7 +110,7 @@ describe("MemoryScheduler", () => {
     const { scheduler, deps } = createScheduler()
 
     for (let i = 1; i <= 12; i++) {
-      scheduler.scheduleMemoryWrite(`user ${i}`, `assistant ${i}`)
+      scheduler.scheduleMemoryWrite(`user ${i}`, `assistant ${i}`, "chat-a")
     }
     await vi.waitFor(() => expect(deps.replaceL1Field).toHaveBeenCalledWith("roundCount", 12))
 
@@ -128,6 +128,32 @@ describe("MemoryScheduler", () => {
     ])
   })
 
+  it("keeps interleaved conversations and their source message ids isolated", async () => {
+    const { scheduler, deps } = createScheduler()
+
+    for (let i = 1; i <= 10; i++) {
+      scheduler.scheduleMemoryWrite(`a-user-${i}`, `a-assistant-${i}`, "chat-a", {
+        userMessageId: `a-u-${i}`,
+        assistantMessageId: `a-a-${i}`,
+      })
+      scheduler.scheduleMemoryWrite(`b-user-${i}`, `b-assistant-${i}`, "chat-b", {
+        userMessageId: `b-u-${i}`,
+        assistantMessageId: `b-a-${i}`,
+      })
+    }
+
+    await vi.waitFor(() => expect(deps.replaceL1Field).toHaveBeenCalledWith("roundCount", 20))
+    expect(deps.judgeMemory).toHaveBeenCalledTimes(2)
+
+    const calls = vi.mocked(deps.judgeMemory).mock.calls
+    const aCall = calls.find(([, conversationId]) => conversationId === "chat-a")
+    const bCall = calls.find(([, conversationId]) => conversationId === "chat-b")
+    expect(aCall?.[0]).toHaveLength(6)
+    expect(bCall?.[0]).toHaveLength(6)
+    expect(aCall?.[0].every((turn) => turn.userInput.startsWith("a-") && turn.userMessageId?.startsWith("a-"))).toBe(true)
+    expect(bCall?.[0].every((turn) => turn.userInput.startsWith("b-") && turn.userMessageId?.startsWith("b-"))).toBe(true)
+  })
+
   it("still increments round count when judging fails", async () => {
     const { scheduler, deps } = createScheduler({
       judgeMemory: vi.fn(async () => {
@@ -135,7 +161,7 @@ describe("MemoryScheduler", () => {
       }),
     })
 
-    scheduler.scheduleMemoryWrite("user", "assistant")
+    scheduler.scheduleMemoryWrite("user", "assistant", "chat-a")
     await vi.waitFor(() => expect(deps.replaceL1Field).toHaveBeenCalledWith("roundCount", 1))
 
     expect(deps.judgeMemory).not.toHaveBeenCalled()
@@ -153,7 +179,7 @@ describe("MemoryScheduler", () => {
       })),
     })
 
-    scheduler.scheduleMemoryWrite("user", "assistant")
+    scheduler.scheduleMemoryWrite("user", "assistant", "chat-a")
     await vi.waitFor(() => expect(deps.runReflectionAndCompression).toHaveBeenCalled())
 
     expect(deps.replaceL1Field).toHaveBeenCalledWith("roundCount", 20)
@@ -170,7 +196,7 @@ describe("MemoryScheduler", () => {
       })),
     })
 
-    scheduler.scheduleMemoryWrite("user", "assistant")
+    scheduler.scheduleMemoryWrite("user", "assistant", "chat-a")
     await vi.waitFor(() => expect(deps.runResolverQueueOnce).toHaveBeenCalled())
 
     expect(deps.replaceL1Field).toHaveBeenCalledWith("roundCount", 5)

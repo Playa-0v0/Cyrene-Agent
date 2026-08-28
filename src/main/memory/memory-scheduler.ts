@@ -26,36 +26,52 @@ export interface MemorySchedulerDeps {
 }
 
 export class MemoryScheduler {
-  private recentTurns: Array<MemoryJudgeTurn & { seq: number }> = []
-  private nextTurnSeq = 0
+  private readonly conversationStates = new Map<string, {
+    nextTurnSeq: number
+    recentTurns: Array<MemoryJudgeTurn & { seq: number }>
+  }>()
 
   constructor(private readonly deps: MemorySchedulerDeps) {}
 
-  scheduleMemoryWrite(userInput: string, assistantReply: string, conversationId?: string): void {
-    const seq = ++this.nextTurnSeq
-    this.recentTurns.push({ seq, userInput, assistantReply })
-    if (this.recentTurns.length > MEMORY_JUDGE_CONTEXT_TURNS * 2) {
-      this.recentTurns = this.recentTurns.slice(-MEMORY_JUDGE_CONTEXT_TURNS * 2)
+  scheduleMemoryWrite(
+    userInput: string,
+    assistantReply: string,
+    conversationId: string,
+    source?: Pick<MemoryJudgeTurn, "userMessageId" | "assistantMessageId">,
+  ): void {
+    if (!conversationId.trim()) {
+      console.warn("[PMRS/Scheduler] 缺少 conversationId，跳过记忆写入")
+      return
     }
-
     this.deps.enqueueTask("MemoryMaintenance", async () => {
-      await this.runQueuedMemoryWrite(seq, conversationId)
+      await this.runQueuedMemoryWrite({ userInput, assistantReply, ...source }, conversationId)
     }).catch((e) => {
       console.error("[PMRS/Scheduler] 记忆写入失败，不影响主流程", e)
     })
   }
 
-  private async runQueuedMemoryWrite(seq: number, conversationId?: string): Promise<void> {
+  private async runQueuedMemoryWrite(turn: MemoryJudgeTurn, conversationId: string): Promise<void> {
+    const state = this.conversationStates.get(conversationId) ?? {
+      nextTurnSeq: 0,
+      recentTurns: [],
+    }
+    const seq = ++state.nextTurnSeq
+    state.recentTurns.push({ seq, ...turn })
+    if (state.recentTurns.length > MEMORY_JUDGE_CONTEXT_TURNS * 2) {
+      state.recentTurns = state.recentTurns.slice(-MEMORY_JUDGE_CONTEXT_TURNS * 2)
+    }
+    this.conversationStates.set(conversationId, state)
+
     const l1 = await this.deps.getL1()
     const newCount = (l1.roundCount || 0) + 1
 
-    if (newCount % MEMORY_JUDGE_INTERVAL === 0) {
+    if (seq % MEMORY_JUDGE_INTERVAL === 0) {
       try {
-        const turns = this.recentTurns
+        const turns = state.recentTurns
           .filter((turn) => turn.seq <= seq)
           .slice(-MEMORY_JUDGE_CONTEXT_TURNS)
-          .map(({ userInput, assistantReply }) => ({ userInput, assistantReply }))
-        const { candidates, entities } = await this.deps.judgeMemory(turns, conversationId ?? "default")
+          .map(({ seq: _seq, ...judgeTurn }) => judgeTurn)
+        const { candidates, entities } = await this.deps.judgeMemory(turns, conversationId)
 
         if (candidates.length > 0) {
           await this.deps.writeMemory(candidates)

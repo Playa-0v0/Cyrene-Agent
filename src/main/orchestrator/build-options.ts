@@ -98,6 +98,14 @@ export interface BuildOptionsDeps {
     userText: string,
     messages: ReadonlyArray<{ role: string; content?: string }>,
   ) => Promise<string>;
+  buildMemoryContext?: (input: {
+    conversationId: string;
+    query: string;
+    recentMessages: Array<{ role: string; text: string; id?: string }>;
+    mode: ConversationMode;
+    tokenBudget?: number;
+    relationshipContext?: string;
+  }) => Promise<{ text: string }>;
   buildRelationshipContext: () => Promise<string>;
   /** 明确按模式构建基础人设，不再通过 style 文件名猜模式。 */
   buildModePrompt?: (mode: ConversationMode) => string;
@@ -158,8 +166,14 @@ export interface BuildOptionsDeps {
 /** onRunFinished 副作用所需的 deps（与 BuildOptionsDeps 部分重叠） */
 export interface OnRunFinishedDeps {
   loadModelSettings: () => ModelSettingsLite;
-  scheduleMemoryWrite: (userText: string, reply: string, conversationId?: string) => void;
+  scheduleMemoryWrite: (
+    userText: string,
+    reply: string,
+    conversationId: string,
+    source?: { userMessageId?: string; assistantMessageId?: string },
+  ) => void;
   scheduleSocialAtomExtraction?: (input: SocialExtractionInput) => void;
+  scheduleConversationSummary?: (conversationId: string) => void;
   inferRuntimeState: (userText: string, reply: string, flag: boolean) => { status: string };
   runtimeState: {
     status: string;
@@ -574,6 +588,27 @@ export async function buildAgentRunOptions(
     }
   }
 
+  let crossSessionMemoryContext = "";
+  if (deps.buildMemoryContext) {
+    try {
+      const built = await perf.track("build_memory_context", () => deps.buildMemoryContext!({
+        conversationId,
+        query: contextualizedQuery,
+        recentMessages: messages.map((message, index) => ({
+          role: message.role,
+          text: contentToText(message.content),
+          id: index === messages.length - 1 ? input.userTurnId : undefined,
+        })),
+        mode: input.mode ?? (isChatMode ? "chat" : "work"),
+        tokenBudget: 2400,
+        relationshipContext,
+      }));
+      crossSessionMemoryContext = built.text;
+    } catch (err) {
+      console.warn("[Cyrene] cross-session memory context build failed:", err);
+    }
+  }
+
   let toneInjection = "";
   if (deps.sceneEmbeddingIndex) {
     try {
@@ -759,7 +794,8 @@ export async function buildAgentRunOptions(
     skillActivation,
     toneInjection,
     alwaysOnContext,
-    relationshipContext,
+    crossSessionMemoryContext,
+    deps.buildMemoryContext ? "" : relationshipContext,
     attachmentContext,
   ].filter((context): context is string => Boolean(context?.trim())).join("\n\n---\n\n");
 
@@ -831,6 +867,12 @@ export async function buildAgentRunOptions(
       soulRuntimeContext,
       ...(planSkillContext ? { planSkillContext } : {}),
       soulSampling,
+      ...((input.userTurnId || input.assistantTurnId) ? {
+        turnSource: {
+          userMessageId: input.userTurnId,
+          assistantMessageId: input.assistantTurnId,
+        },
+      } : {}),
       ...(socialContextEnabled && input.userTurnId && input.assistantTurnId ? {
         socialContext: {
           enabled: true as const,
@@ -890,8 +932,16 @@ export async function onAgentRunFinished(
       retrievedAtoms: socialContext.retrievedAtoms,
       now: socialContext.now,
     });
+  }
+  const memoryConversationId = conversationId ?? socialContext?.conversationId;
+  if (memoryConversationId) {
+    deps.scheduleMemoryWrite(sideEffectUserText, chatContent, memoryConversationId, result.turnSource ?? (socialContext ? {
+      userMessageId: socialContext.userTurnId,
+      assistantMessageId: socialContext.assistantTurnId,
+    } : undefined));
+    deps.scheduleConversationSummary?.(memoryConversationId);
   } else {
-    deps.scheduleMemoryWrite(sideEffectUserText, chatContent, conversationId);
+    console.warn("[Orchestrator] 缺少 conversationId，跳过本轮记忆写入");
   }
 
   const settings = deps.loadModelSettings();

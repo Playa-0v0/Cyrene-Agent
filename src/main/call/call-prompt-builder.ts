@@ -1,5 +1,6 @@
 import type { SceneIndex } from "../scene-embedder";
-import { buildAlwaysOnContext, buildMemoryInjection } from "../orchestrator";
+import { buildAlwaysOnContext } from "../orchestrator";
+import { memoryContextBuilder } from "../memory/memory-context-builder";
 import { getSceneEmbeddingProvider } from "../rag/embedding";
 import { buildToneInjection } from "../orchestrator/tone-injector";
 import { buildSkillCatalog, skillRegistry } from "../skills";
@@ -53,9 +54,17 @@ export async function buildCallSystemPrompt(
     console.warn("[CallPromptBuilder] L2 DMAE update failed:", err);
   }
 
-  // ④ 记忆注入（读取 DMAE active L2）
+  // ④ 统一记忆注入（L0/L1/L2/旧会话摘要/必要原文）
   let memoryInjection = "";
-  try { memoryInjection = await buildMemoryInjection(userText); } catch { /* ignore */ }
+  try {
+    memoryInjection = (await memoryContextBuilder.build({
+      conversationId: "call-runtime",
+      query: userText,
+      recentMessages: messages.map((message) => ({ role: message.role, text: message.content })),
+      mode: "chat",
+      tokenBudget: 1800,
+    })).text;
+  } catch { /* ignore */ }
 
   // ④ 通话专用人设 prompt
   const phoneParts: string[] = [];

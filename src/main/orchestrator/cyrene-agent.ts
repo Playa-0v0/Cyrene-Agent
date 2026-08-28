@@ -160,6 +160,11 @@ export interface CyreneRunOptions {
     signal?: AbortSignal,
   ) => Promise<import("../../shared/ask-clarification").AskUserAnswer>;
   /** 仅 Chat：异步社交原子抽取所需的已校验证据元数据。 */
+  turnSource?: {
+    userMessageId?: string;
+    assistantMessageId?: string;
+  };
+  /** 仅 Chat：异步社交原子抽取所需的已校验证据元数据。 */
   socialContext?: {
     enabled: true;
     conversationId: string;
@@ -195,6 +200,7 @@ export interface CyreneRunResult {
   soulPhaseReason?: "no_tool" | "max_rounds" | "timeout" | "tool_error";
   executionMode?: AgentExecutionMode;
   socialContext?: CyreneRunOptions["socialContext"];
+  turnSource?: CyreneRunOptions["turnSource"];
   /**
    * Canonical 终态结算（Task 2 / C1）。
    * 桥层据此决定是否跑成功收尾副作用、是否走 RUN_ERROR 兜底等。
@@ -479,6 +485,7 @@ export class CyreneAgent extends AbstractAgent {
             soulPhaseReason: result.completionReason,
             executionMode,
             socialContext: options.socialContext,
+            turnSource: options.turnSource,
             // 优先使用 harness-adapter 上报的 terminal；否则按 completionReason 推断
             terminal: result.terminal ?? terminalFromCompletionReason(result.completionReason),
           };

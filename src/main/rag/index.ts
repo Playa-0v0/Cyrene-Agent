@@ -171,6 +171,17 @@ export async function addL2MemoryVector(
   return entry.id;
 }
 
+export async function upsertMemoryBySourceKey(
+  text: string,
+  source: string,
+  sourceKey: string,
+  metadata?: Record<string, unknown>,
+): Promise<string> {
+  if (!store || !provider) throw new Error("RAG not initialized");
+  const entry = await store.upsertBySourceKey(text, source, sourceKey, provider, metadata);
+  return entry.id;
+}
+
 // ── Memory search ──
 export async function searchMemory(
   query: string,
@@ -433,6 +444,16 @@ export function getEntriesBySource(source: string): Array<{ id: string; text: st
 export function deleteUserMemoryVectors(ragIds: string[]): number {
   if (!store) throw new Error("RAG not initialized");
   return store.deleteEntriesByIds(ragIds, "user_memory");
+}
+
+export function deleteMemoryBySourceKey(source: string, sourceKey: string): number {
+  if (!store) return 0;
+  return store.deleteEntriesBySourceKey(source, sourceKey);
+}
+
+export function deleteMemoryByMetadata(source: string, metadata: Record<string, unknown>): number {
+  if (!store) return 0;
+  return store.deleteEntriesByMetadata(source, metadata);
 }
 
 export function deleteImportedDoc(importId: string, fileName?: string): number {

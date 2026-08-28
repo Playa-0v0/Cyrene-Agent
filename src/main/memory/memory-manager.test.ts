@@ -100,6 +100,35 @@ describe("MemoryManager L2 sync", () => {
     expect(traceEvents[failureIndex].error).toBe("RAG down")
   })
 
+  it("redacts secrets before writing L2 and skips explicit forget requests", async () => {
+    ragMock.addL2MemoryVector.mockResolvedValue("rag_safe")
+    const { memoryManager } = await import("./memory-manager")
+    const { memoryStore } = await import("./memory-store")
+
+    await memoryManager.writeMemory([{
+      layer: "L2",
+      content: "部署凭据 apiKey=abc123",
+      confidence: 0.9,
+      triggerText: "部署凭据 token=secret-token",
+    }, {
+      layer: "L2",
+      content: "不应保存",
+      confidence: 0.9,
+      triggerText: "不要记住这条信息",
+    }])
+
+    const allL2 = await memoryStore.getAllL2()
+    expect(allL2).toHaveLength(1)
+    expect(allL2[0].content).toContain("[REDACTED_SECRET]")
+    expect(JSON.stringify(allL2)).not.toContain("abc123")
+    expect(JSON.stringify(allL2)).not.toContain("secret-token")
+    expect(ragMock.addL2MemoryVector).toHaveBeenCalledWith(
+      expect.stringContaining("[REDACTED_SECRET]"),
+      expect.any(String),
+      expect.any(Object),
+    )
+  })
+
   it("does not write inferred L0 candidates into core profile", async () => {
     const { memoryManager } = await import("./memory-manager")
     const { memoryStore } = await import("./memory-store")

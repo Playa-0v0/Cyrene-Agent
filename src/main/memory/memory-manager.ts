@@ -5,6 +5,7 @@ import { findPossibleConflictCandidate } from "./memory-conflict"
 import { scoreMemoryConflict, type ConflictEvidenceLevel } from "./memory-conflict-score"
 import { wasRecentlyInjectedMemory } from "./recent-injected-memory"
 import { addL2MemoryVector, searchMemoryEntries } from "../rag/index"
+import { isForgetRequest, sanitizeText } from "./conversation-summary-service"
 
 type L1Field = "recentGoals" | "recentPreferences" | "currentProject"
 
@@ -54,7 +55,13 @@ export class MemoryManager {
   }
 
   async writeMemory(candidates: MemoryCandidate[]): Promise<void> {
-    for (const candidate of candidates) {
+    for (const rawCandidate of candidates) {
+      if (isForgetRequest(rawCandidate.triggerText)) {
+        console.log("[PMRS/Manager] 用户要求不记住该内容，跳过写入")
+        continue
+      }
+      const candidate = sanitizeMemoryCandidate(rawCandidate)
+      if (!candidate.content) continue
       if (shouldSkipCandidate(candidate)) {
         console.log("[PMRS/Manager] 候选标记为不写入或存在过度概括，跳过")
         continue
@@ -106,6 +113,7 @@ export class MemoryManager {
       content: candidate.content,
       triggerText: candidate.triggerText,
       sourceConversationId: candidate.sourceConversationId ?? "",
+      sourceMessageIds: candidate.sourceMessageIds,
       embedding: [],
       isPinned: false,
       syncStatus: "pending_sync",
@@ -122,6 +130,8 @@ export class MemoryManager {
       ragId = await addL2MemoryVector(candidate.content, l2.id, {
         triggerText: candidate.triggerText,
         confidence: candidate.confidence,
+        sourceConversationId: candidate.sourceConversationId,
+        sourceMessageIds: candidate.sourceMessageIds,
       })
       await memoryStore.markL2SyncStatus(l2.id, "synced", ragId)
     } catch (err) {
@@ -218,6 +228,18 @@ export class MemoryManager {
   async runDecay(): Promise<void> {
     const changed = await memoryStore.decayL2Weights()
     console.log(`[PMRS/Manager] L2 权重衰减完成，更新 ${changed} 条`)
+  }
+}
+
+function sanitizeMemoryCandidate(candidate: MemoryCandidate): MemoryCandidate {
+  return {
+    ...candidate,
+    content: sanitizeText(candidate.content),
+    triggerText: sanitizeText(candidate.triggerText),
+    summary: candidate.summary ? sanitizeText(candidate.summary) : undefined,
+    sourceQuote: candidate.sourceQuote ? sanitizeText(candidate.sourceQuote) : undefined,
+    evidenceQuotes: candidate.evidenceQuotes?.map(sanitizeText).filter(Boolean),
+    contextSummary: candidate.contextSummary ? sanitizeText(candidate.contextSummary) : undefined,
   }
 }
 

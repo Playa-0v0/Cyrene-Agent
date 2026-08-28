@@ -14,6 +14,8 @@ import { validateCaptionImagePath, IMAGE_CAPTION_PROMPT } from "../chat/image-ca
 import { buildEnvironmentContext } from "./environment";
 import { buildToneInjection } from "./tone-injector";
 import { buildAlwaysOnContext, scheduleMemoryWrite } from "./index";
+import { scheduleConversationSummary } from "../memory/conversation-memory-runtime";
+import { memoryContextBuilder } from "../memory/memory-context-builder";
 import { matchSticker } from "../sticker-embedder";
 import { buildRelationshipContext, recordRelationshipTurn } from "../relationship/relationship-log";
 import { compileSocialContextBlock } from "../social-context/context";
@@ -165,6 +167,7 @@ export function createAgentRuntime(rawDeps: AgentRuntimeDeps): AgentRuntime {
         rawDeps.getSceneEmbeddingProvider() as unknown) as BuildOptionsDeps["getSceneEmbeddingProvider"],
       buildAlwaysOnContext: ((userText, messages) =>
         buildAlwaysOnContext(userText, messages as any)) as BuildOptionsDeps["buildAlwaysOnContext"],
+      buildMemoryContext: (input) => memoryContextBuilder.build(input),
       buildRelationshipContext,
       buildModePrompt,
       buildToolSystemPrompt: ((mode, enabledTools) =>
@@ -223,6 +226,7 @@ export function createAgentRuntime(rawDeps: AgentRuntimeDeps): AgentRuntime {
     return {
       loadModelSettings: () => rawDeps.loadModelSettings(),
       scheduleMemoryWrite,
+      scheduleConversationSummary,
       scheduleSocialAtomExtraction: (input) => rawDeps.socialContextScheduler.schedule(input),
       inferRuntimeState: ((userText, reply, flag) =>
         runtimeStateService.inferFromText(userText, reply, flag)) as OnRunFinishedDeps["inferRuntimeState"],
@@ -270,6 +274,13 @@ export function createAgentRuntime(rawDeps: AgentRuntimeDeps): AgentRuntime {
         buildEnvironmentContext({ provider: settings.provider, model: settings.model }, profile),
         buildSkillCatalog(scheduledSkills),
         await buildAlwaysOnContext(task.prompt, messages),
+        (await memoryContextBuilder.build({
+          conversationId: "scheduler-runtime",
+          query: task.prompt,
+          recentMessages: messages.map((message) => ({ role: message.role, text: message.content })),
+          mode: "work",
+          tokenBudget: 1600,
+        })).text,
       ].join("\n\n---\n\n");
       return {
         settings: {

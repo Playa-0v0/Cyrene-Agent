@@ -61,6 +61,8 @@ import {
   syncVolcanoSearchMcp,
 } from "./settings/general-settings-lifecycle";
 import { registerMemoryUserToolIpc } from "./memory/memory-user-ipc";
+import { startConversationMemoryBackfill } from "./memory/conversation-memory-backfill";
+import { retryPendingConversationMemoryCleanups } from "./memory/conversation-memory-runtime";
 
 import { getAdapterForConfig } from "./orchestrator/vendors";
 import {
@@ -523,6 +525,8 @@ if (isPrimaryCyreneProcess) app.whenReady().then(async () => {
     } catch (err) {
       console.warn("[Memory/RAG] startup reconciliation failed:", err);
     }
+    await retryPendingConversationMemoryCleanups();
+    startConversationMemoryBackfill();
     // 初始化 MCP Manager；scheduler 启动前等待一次，避免近即时任务早于 MCP 工具恢复。
     await initMcpManager();
     logger.info(LogTag.RAG, "RAG initialized OK");

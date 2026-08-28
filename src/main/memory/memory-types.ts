@@ -188,11 +188,17 @@ export interface MemoryCandidate {
   forbiddenOverclaims?: string[]
   /** 来源会话 ID，由调度层注入（非 LLM 输出），用于 L2 回溯 */
   sourceConversationId?: string
+  /** 本次 Judge 窗口中的可信消息 ID，由调度层注入。 */
+  sourceMessageIds?: string[]
 }
 
 export interface MemoryJudgeTurn {
   userInput: string
   assistantReply: string
+  /** 原始用户消息 ID。仅由可信会话存储层提供，LLM 不得生成。 */
+  userMessageId?: string
+  /** 原始助手消息 ID。仅由可信会话存储层提供，LLM 不得生成。 */
+  assistantMessageId?: string
 }
 
 /**

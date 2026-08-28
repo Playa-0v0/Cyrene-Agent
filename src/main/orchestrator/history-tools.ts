@@ -7,7 +7,7 @@
 //
 // 复用现有 RAG 引擎（addMemory / searchHistoryEntries），不另建存储层。
 
-import { addMemory, searchHistoryEntries } from "../rag";
+import { searchHistoryEntries, upsertMemoryBySourceKey } from "../rag";
 import { toolRegistry } from "./tool-registry";
 import { currentUserTimezone } from "./built-in-tools";
 import { getDateLocale } from "../locale-context";
@@ -23,14 +23,21 @@ export async function indexConversationTurn(
   sessionId: string,
   userText: string,
   assistantText: string,
+  source?: { userMessageId?: string; assistantMessageId?: string },
 ): Promise<void> {
   const ts = Date.now();
   try {
     if (userText) {
-      await addMemory(userText, "chat_history", { sessionId, role: "user", ts });
+      const messageId = source?.userMessageId ?? `legacy-user-${ts}`;
+      await upsertMemoryBySourceKey(userText, "chat_history", `${sessionId}:${messageId}`, {
+        sessionId, messageId, role: "user", ts,
+      });
     }
     if (assistantText) {
-      await addMemory(assistantText, "chat_history", { sessionId, role: "assistant", ts });
+      const messageId = source?.assistantMessageId ?? `legacy-assistant-${ts}`;
+      await upsertMemoryBySourceKey(assistantText, "chat_history", `${sessionId}:${messageId}`, {
+        sessionId, messageId, role: "assistant", ts,
+      });
     }
   } catch (e) {
     console.warn(LOG_PREFIX, "索引对话失败:", e);

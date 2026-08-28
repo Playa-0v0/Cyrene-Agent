@@ -534,6 +534,53 @@ describe("memoryStore", () => {
     expect(traceEvents.some((event) => event.op === "conflict.log.add")).toBe(true)
   })
 
+  it("deletes conversation evidence, removes orphan L2, and rebinds shared L2", async () => {
+    const { memoryStore } = await import("./memory-store")
+    const orphan = await memoryStore.addL2Memory({
+      content: "仅来自会话 A",
+      triggerText: "A 原话",
+      sourceConversationId: "chat-a",
+      sourceMessageIds: ["a-1"],
+      ragId: "rag-orphan",
+      isPinned: false,
+    })
+    const shared = await memoryStore.addL2Memory({
+      content: "来自多个会话",
+      triggerText: "A 证据",
+      sourceConversationId: "chat-a",
+      sourceMessageIds: ["a-2"],
+      ragId: "rag-shared",
+      isPinned: false,
+    })
+    const persisted = await memoryStore.load()
+    const extraEvidenceId = "ev-chat-b"
+    persisted.evidence?.push({
+      id: extraEvidenceId,
+      memoryId: shared.id,
+      quoteSnippet: "B 证据",
+      conversationId: "chat-b",
+      messageIds: ["b-1"],
+      createdAt: 2,
+      sourceStatus: "active",
+    })
+    const sharedMemory = persisted.l2.find((memory) => memory.id === shared.id)!
+    sharedMemory.evidenceIds = [...(sharedMemory.evidenceIds ?? []), extraEvidenceId]
+    await memoryStore.save(persisted)
+
+    const result = await memoryStore.deleteConversationEvidence("chat-a")
+
+    expect(result.deletedL2Ids).toEqual([orphan.id])
+    expect(result.deletedRagIds).toEqual(["rag-orphan"])
+    expect(result.reboundL2Ids).toEqual([shared.id])
+    const remaining = await memoryStore.getAllL2()
+    expect(remaining.map((memory) => memory.id)).not.toContain(orphan.id)
+    expect(remaining.find((memory) => memory.id === shared.id)).toMatchObject({
+      sourceConversationId: "chat-b",
+      sourceMessageIds: ["b-1"],
+      evidenceIds: [extraEvidenceId],
+    })
+  })
+
   it("migrates legacy memory files with a backup", async () => {
     const memoryPath = path.join(electronMock.userDataDir, "memory.json")
     fs.writeFileSync(

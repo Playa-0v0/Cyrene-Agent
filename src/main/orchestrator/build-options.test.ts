@@ -470,6 +470,7 @@ describe("build-options", () => {
 
   it("injects CITA as a separate tool-phase block and preserves the original user message", async () => {
     const deps = createBuildDeps()
+    deps.buildMemoryContext = vi.fn(async () => ({ text: "<memory_context>OLD_SESSION</memory_context>" }))
     deps.prepareCitaTurn = vi.fn(async () => ({
       contextBlock: "[CITA_CONTEXT]\n{\"focusedContexts\":[{\"contextRef\":\"music-candidate-1\"}]}\n[/CITA_CONTEXT]",
       contextPackage: {
@@ -494,6 +495,14 @@ describe("build-options", () => {
     expect(result.options.citaContextBlock).toContain("music-candidate-1")
     expect(result.options.originalQuery).toBe("第二首")
     expect(result.options.contextualizedQuery).toBe("播放当前网易云日推第二首")
+    expect(deps.buildMemoryContext).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: "conversation-1",
+      query: "播放当前网易云日推第二首",
+      tokenBudget: 2400,
+      relationshipContext: "RELATIONSHIP",
+    }))
+    expect(result.options.soulRuntimeContext).toContain("OLD_SESSION")
+    expect(result.options.soulRuntimeContext).not.toContain("RELATIONSHIP")
     expect(result.options.citaContextBlock).toContain("music-candidate-1")
     expect(result.options).not.toHaveProperty("requiredToolName")
     expect(result.options).not.toHaveProperty("requiredToolArgs")
@@ -765,9 +774,9 @@ describe("build-options", () => {
       recordRelationshipTurn: async () => {},
     }
 
-    await onAgentRunFinished({ reply: "总结好了", toolResults: [] }, latestUserText, deps)
+    await onAgentRunFinished({ reply: "总结好了", toolResults: [] }, latestUserText, deps, undefined, "chat-doc")
 
-    expect(scheduleMemoryWrite).toHaveBeenCalledWith("帮我总结这个 md", "总结好了", undefined)
+    expect(scheduleMemoryWrite).toHaveBeenCalledWith("帮我总结这个 md", "总结好了", "chat-doc", undefined)
     expect(matchSticker).toHaveBeenCalledWith(
       "总结好了\n帮我总结这个 md",
       expect.anything(),
@@ -804,7 +813,7 @@ describe("build-options", () => {
     expect(effects).toEqual({ sticker: null })
   })
 
-  it("schedules one social extraction instead of legacy memory for an enabled Chat result", async () => {
+  it("schedules social extraction and legacy memory independently for an enabled Chat result", async () => {
     const scheduleMemoryWrite = vi.fn()
     const scheduleSocialAtomExtraction = vi.fn()
     const observeRuntimeState = vi.fn(async () => {})
@@ -840,7 +849,10 @@ describe("build-options", () => {
       },
     }, "我喜欢海边。", deps)
 
-    expect(scheduleMemoryWrite).not.toHaveBeenCalled()
+    expect(scheduleMemoryWrite).toHaveBeenCalledWith("我喜欢海边。", "海风确实很舒服。", "chat-a", {
+      userMessageId: "user-1",
+      assistantMessageId: "assistant-1",
+    })
     expect(observeRuntimeState).not.toHaveBeenCalled()
     expect(scheduleSocialAtomExtraction).toHaveBeenCalledWith({
       conversationId: "chat-a",

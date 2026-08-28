@@ -28,6 +28,10 @@ import { getRunReviewTracker } from "../orchestrator/review/run-review-tracker";
 import { getAdapterForConfig } from "../orchestrator/vendors";
 import { callSummarizeModel } from "../orchestrator/context-manager";
 import { buildContextUsageSnapshot } from "../orchestrator/context-usage";
+import {
+  deleteConversationMemoryArtifacts,
+  scheduleConversationSummary,
+} from "../memory/conversation-memory-runtime";
 
 function broadcastChanged(senderWebContents?: WebContents | null): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -235,6 +239,7 @@ export function registerChatsIpc(): void {
           snapshot.totalTokens = snapshot.categories.reduce((sum, category) => sum + category.tokens, 0);
         }
         chatsStore.setSessionContextUsage(sessionId, snapshot);
+        scheduleConversationSummary(sessionId, { force: true });
 
         // 压缩结果由主进程改写，发起窗口并不知情；必须广播给所有窗口
         // （含 sender）触发聊天窗口重载，不能走跳过 sender 的来源隔离。
@@ -272,6 +277,12 @@ export function registerChatsIpc(): void {
         getHarnessRunStore(app.getPath("userData")).deleteConversation(id);
       } catch (error) {
         console.error("[ChatsIpc] failed to delete persisted harness runs", error);
+      }
+      try {
+        await deleteConversationMemoryArtifacts(id);
+      } catch (error) {
+        // 会话本体已删除，记忆清理失败只能进入诊断/重试，不能让 UI 误以为会话仍存在。
+        console.error("[ChatsIpc] failed to delete conversation memory artifacts", error);
       }
       broadcastChanged(event.sender);
     }

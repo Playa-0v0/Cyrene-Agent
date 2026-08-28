@@ -9,7 +9,8 @@ import {
   sendProactiveChannelMessage,
 } from "../channels/proactive-delivery";
 import { resolveChatContextTimezone } from "../chat-time-context";
-import { buildAlwaysOnContext, buildMemoryInjection } from "../orchestrator";
+import { buildAlwaysOnContext } from "../orchestrator";
+import { memoryContextBuilder } from "../memory/memory-context-builder";
 import { loadPromptFile } from "../prompts/prompt-loader";
 import type { GeneralSettings } from "../settings/general-settings";
 import { loadModelSettings } from "../settings/model-settings";
@@ -107,7 +108,13 @@ export function createProactiveLifecycle(options: ProactiveLifecycleOptions): Pr
     const retrievalQuery = `${candidate.sceneId}\n${recentTopic}`.trim();
     const [profileContext, memoryContext] = await Promise.all([
       buildAlwaysOnContext(retrievalQuery, histories.ordinary.map((turn) => ({ role: turn.role, content: turn.content }))).catch(() => ""),
-      buildMemoryInjection(retrievalQuery).catch(() => ""),
+      memoryContextBuilder.build({
+        conversationId: "proactive-runtime",
+        query: retrievalQuery,
+        recentMessages: histories.ordinary.map((turn) => ({ role: turn.role, text: turn.content })),
+        mode: "chat",
+        tokenBudget: 1800,
+      }).then((result) => result.text).catch(() => ""),
     ]);
     const state = loadProactiveState();
     const snapshot = getProactiveRuntimeSnapshot();
