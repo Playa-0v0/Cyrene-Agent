@@ -198,7 +198,19 @@ export async function searchMemoryEntries(
   source?: string,
   topK = 5,
   options?: { recordRecall?: boolean }
-): Promise<Array<{ id: string; text: string; createdAt: number; score: number; metadata?: Record<string, unknown> }>> {
+): Promise<Array<{
+  id: string;
+  text: string;
+  createdAt: number;
+  score: number;
+  scoreDetails?: {
+    vectorScore: number;
+    bm25Score: number;
+    hybridScore: number;
+    rerankerScore?: number;
+  };
+  metadata?: Record<string, unknown>;
+}>> {
   if (!retriever) return [];
   let allowedEntryIds: string[] | undefined;
   if (source === "user_memory") {
@@ -229,6 +241,7 @@ export async function searchMemoryEntries(
     text: r.entry.text,
     createdAt: r.entry.createdAt,
     score: r.score,
+    scoreDetails: r.scoreDetails,
     metadata: r.entry.metadata,
   }));
 }

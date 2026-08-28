@@ -5,6 +5,9 @@ import * as path from "path";
 import { HybridRetriever } from "./retriever";
 import { JsonVectorStore } from "./vectorstore";
 import type { EmbeddingProvider } from "./embedding";
+import { getReranker } from "./reranker";
+
+vi.mock("./reranker", () => ({ getReranker: vi.fn(() => null) }));
 
 const provider: EmbeddingProvider = {
   name: "deterministic",
@@ -27,6 +30,7 @@ function createStore(): JsonVectorStore {
 
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+  vi.mocked(getReranker).mockReset().mockReturnValue(null);
 });
 
 describe("HybridRetriever", () => {
@@ -99,5 +103,28 @@ describe("HybridRetriever", () => {
     });
 
     expect(results.map((result) => result.entry.id).sort()).toEqual(entries.map((entry) => entry.id).sort());
+  });
+
+  it("reranks a wider hybrid candidate pool before applying topK", async () => {
+    const store = createStore();
+    store.addPreparedBatch([
+      { text: "alpha first", source: "conversation_summary", embedding: [1, 0] },
+      { text: "alpha second", source: "conversation_summary", embedding: [0.95, 0.05] },
+      { text: "alpha semantic winner", source: "conversation_summary", embedding: [0.9, 0.1] },
+    ]);
+    vi.mocked(getReranker).mockReturnValue({
+      name: "test-reranker",
+      rerank: vi.fn(async (_query: string, documents: string[]) => documents.map((text) => ({
+        text,
+        score: text.includes("winner") ? 0.99 : 0.1,
+      }))),
+    });
+
+    const results = await new HybridRetriever(store, provider).retrieve("alpha", "conversation_summary", 1);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].entry.text).toBe("alpha semantic winner");
+    expect(results[0].scoreDetails).toMatchObject({ rerankerScore: 0.99 });
+    expect(results[0].scoreDetails?.hybridScore).toBeGreaterThan(0);
   });
 });

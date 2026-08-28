@@ -246,18 +246,26 @@ export class HybridRetriever {
     const maxV = Math.max(...all.map((m) => m.vectorScore), 1);
     const maxB = Math.max(...all.map((m) => m.bm25Score), 1);
 
-    const scored = all.map((m) => ({
-      ...m.result,
-      score: (m.vectorScore / maxV) * vectorWeight + (m.bm25Score / maxB) * bm25Weight,
-    }));
+    const scored: SearchResult[] = all.map((m) => {
+      const vectorScore = m.vectorScore / maxV;
+      const bm25Score = m.bm25Score / maxB;
+      const hybridScore = vectorScore * vectorWeight + bm25Score * bm25Weight;
+      return {
+        ...m.result,
+        score: hybridScore,
+        scoreDetails: { vectorScore, bm25Score, hybridScore },
+      };
+    });
 
     scored.sort((a, b) => b.score - a.score);
-    const candidates = scored.slice(0, topK);
 
     // ── Reranker 精排 ──
-    // 如果 reranker 可用，用 cross-encoder 对候选结果做精排
+    // 如果 reranker 可用，先保留更宽的候选池供 cross-encoder 精排，再截取 topK。
+    // 旧实现先截成 topK 再 rerank，BM25 / vector 合并后排名稍低但语义更准的条目
+    // 永远没有机会进入精排。
     const reranker = getReranker();
-    if (reranker && candidates.length > 1) {
+    if (reranker && scored.length > 1) {
+      const candidates = scored.slice(0, Math.min(scored.length, Math.max(topK, topK * 3)));
       try {
         const docs = candidates.map((c) => c.entry.text);
         const reranked = await reranker.rerank(query, docs);
@@ -267,16 +275,19 @@ export class HybridRetriever {
         for (const c of candidates) {
           const rerankScore = scoreMap.get(c.entry.text);
           if (rerankScore !== undefined) {
+            const details = c.scoreDetails ?? { vectorScore: 0, bm25Score: 0, hybridScore: c.score };
             c.score = rerankScore;
+            c.scoreDetails = { ...details, rerankerScore: rerankScore };
           }
         }
         candidates.sort((a, b) => b.score - a.score);
+        return candidates.slice(0, topK);
       } catch (err) {
         console.warn("[HybridRetriever] reranker failed, using hybrid scores:", err);
       }
     }
 
-    return candidates;
+    return scored.slice(0, topK);
   }
 
   private bm25Search(query: string, source?: string, topK = 15, options: RetrieveOptions = {}): SearchResult[] {

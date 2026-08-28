@@ -19,6 +19,19 @@ export interface MemoryEntry {
 export interface SearchResult {
   entry: MemoryEntry;
   score: number;        // 加权后的综合分数（余弦 × weight × 衰减）
+  /**
+   * HybridRetriever 提供的可解释评分分量。
+   *
+   * 该字段是可选的，以保持 JsonVectorStore 直接检索结果及旧调用方兼容。
+   * vectorScore / bm25Score 是进入融合前的归一化分数，hybridScore 是融合结果；
+   * rerankerScore 仅在本地 cross-encoder 可用且执行成功时存在。
+   */
+  scoreDetails?: {
+    vectorScore: number;
+    bm25Score: number;
+    hybridScore: number;
+    rerankerScore?: number;
+  };
 }
 
 export interface VectorSearchOptions {
