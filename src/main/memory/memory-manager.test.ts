@@ -62,6 +62,12 @@ describe("MemoryManager L2 sync", () => {
     expect(allL2).toHaveLength(1)
     expect(allL2[0].syncStatus).toBe("synced")
     expect(allL2[0].ragId).toBe("rag_synced")
+    expect(allL2[0]).toMatchObject({
+      memoryType: "fact",
+      importance: "medium",
+      confidence: candidate.confidence,
+      mentionCount: 1,
+    })
     expect(addIndex).toBeGreaterThanOrEqual(0)
     expect(syncIndex).toBeGreaterThan(addIndex)
     expect(traceEvents[syncIndex].ragId).toBe("rag_synced")

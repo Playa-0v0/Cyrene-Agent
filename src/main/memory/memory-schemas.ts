@@ -50,6 +50,7 @@ function stringArray(value: unknown, label: string): string[] {
 
 const VALID_LAYERS = new Set(["L0", "L1", "L2"]);
 const VALID_IMPORTANCE = new Set(["low", "medium", "high"]);
+const VALID_MEMORY_TYPES = new Set(["fact", "preference", "event", "goal", "project", "decision", "relationship"]);
 const VALID_STABILITY = new Set(["one_off", "situational", "stable"]);
 const VALID_CERTAINTY = new Set(["explicit", "inferred", "uncertain"]);
 const VALID_ATTRIBUTION = new Set(["user_explicit", "assistant_inferred", "mixed"]);
@@ -116,6 +117,7 @@ export const MEMORY_JUDGE_JSON_SCHEMA: Record<string, unknown> = {
           confidence: { type: "number" },
           triggerText: { type: "string" },
           importance: { type: "string", enum: ["low", "medium", "high"] },
+          memoryType: { type: "string", enum: ["fact", "preference", "event", "goal", "project", "decision", "relationship"] },
           stability: { type: "string", enum: ["one_off", "situational", "stable"] },
           certainty: { type: "string", enum: ["explicit", "inferred", "uncertain"] },
           attribution: { type: "string", enum: ["user_explicit", "assistant_inferred", "mixed"] },
@@ -230,6 +232,9 @@ function parseMemoryCandidate(value: unknown): MemoryCandidate {
     result.sourceQuote = (obj.sourceQuote as string).trim();
   }
   if (VALID_IMPORTANCE.has(obj.importance as string)) result.importance = obj.importance as MemoryCandidate["importance"];
+  if (layer === "L2" && VALID_MEMORY_TYPES.has(obj.memoryType as string)) {
+    result.memoryType = obj.memoryType as MemoryCandidate["memoryType"];
+  }
   if (VALID_STABILITY.has(obj.stability as string)) result.stability = obj.stability as MemoryCandidate["stability"];
   if (VALID_CERTAINTY.has(obj.certainty as string)) result.certainty = obj.certainty as MemoryCandidate["certainty"];
   if (VALID_ATTRIBUTION.has(obj.attribution as string)) result.attribution = obj.attribution as MemoryCandidate["attribution"];

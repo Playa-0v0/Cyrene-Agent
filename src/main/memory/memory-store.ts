@@ -283,6 +283,10 @@ class MemoryStoreManager {
       syncStatus: input.syncStatus ?? (input.ragId ? "synced" : "pending_sync"),
       evidenceIds: Array.isArray(input.evidenceIds) ? input.evidenceIds : [],
       keywords: extractKeywords(`${input.content} ${input.triggerText}`),
+      memoryType: input.memoryType ?? "fact",
+      importance: input.importance ?? "medium",
+      confidence: typeof input.confidence === "number" ? Math.max(0, Math.min(1, input.confidence)) : 0.7,
+      mentionCount: Math.max(1, input.mentionCount ?? 1),
     }
     const evidence = this.createEvidence(memory, input)
     memory.evidenceIds = [...(memory.evidenceIds ?? []), evidence.id]
@@ -728,6 +732,11 @@ class MemoryStoreManager {
         weight: 0,
         status: "active",
         keywords: extractKeywords(`${resolvedSummary} ${resolution.reason}`),
+        memoryType: newMemory.memoryType ?? oldMemory.memoryType ?? "fact",
+        importance: newMemory.importance ?? oldMemory.importance ?? "medium",
+        confidence: Math.max(0, Math.min(1, resolution.confidence)),
+        lastConfirmedAt: Math.max(newMemory.lastConfirmedAt ?? 0, oldMemory.lastConfirmedAt ?? 0) || undefined,
+        mentionCount: Math.max(1, newMemory.mentionCount ?? 1) + Math.max(1, oldMemory.mentionCount ?? 1),
       }
       store.l2.push(resolved)
       resolutionMemoryId = resolved.id
@@ -855,6 +864,10 @@ class MemoryStoreManager {
         syncStatus: input.syncStatus ?? (input.ragId ? "synced" : "pending_sync"),
         evidenceIds: Array.isArray(input.evidenceIds) ? input.evidenceIds : [],
         keywords: extractKeywords(`${input.content} ${input.triggerText}`),
+        memoryType: input.memoryType ?? "fact",
+        importance: input.importance ?? "medium",
+        confidence: typeof input.confidence === "number" ? Math.max(0, Math.min(1, input.confidence)) : 0.7,
+        mentionCount: Math.max(1, input.mentionCount ?? 1),
       }
       const evidence = this.createEvidence(memory, input)
       memory.evidenceIds = [...(memory.evidenceIds ?? []), evidence.id]

@@ -117,6 +117,11 @@ export class MemoryManager {
       embedding: [],
       isPinned: false,
       syncStatus: "pending_sync",
+      memoryType: candidate.memoryType ?? "fact",
+      importance: candidate.importance ?? "medium",
+      confidence: Math.max(0, Math.min(1, candidate.confidence)),
+      lastConfirmedAt: candidate.certainty === "explicit" ? Date.now() : undefined,
+      mentionCount: 1,
     }
     // LLM 生成的精炼标题，缺失时 obsidian-exporter 会回退到内部 id 作为文件名
     if (candidate.slug) l2Input.slug = candidate.slug
@@ -130,6 +135,10 @@ export class MemoryManager {
       ragId = await addL2MemoryVector(candidate.content, l2.id, {
         triggerText: candidate.triggerText,
         confidence: candidate.confidence,
+        importance: candidate.importance ?? "medium",
+        memoryType: candidate.memoryType ?? "fact",
+        lastConfirmedAt: l2Input.lastConfirmedAt,
+        mentionCount: l2Input.mentionCount,
         sourceConversationId: candidate.sourceConversationId,
         sourceMessageIds: candidate.sourceMessageIds,
       })

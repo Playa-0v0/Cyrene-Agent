@@ -63,11 +63,13 @@ describe("Memory Judge structured output schema", () => {
         confidence: 0.9,
         triggerText: "我喜欢香菇",
         slug: "  喜欢香菇  ",
+        memoryType: "preference",
       }],
       entities: [],
     });
 
     expect(result.candidates[0].slug).toBe("喜欢香菇");
+    expect(result.candidates[0].memoryType).toBe("preference");
   });
 
   test("drops invalid slug silently instead of failing the whole candidate", () => {

@@ -5,7 +5,7 @@ import { app } from "electron"
 export interface MemoryTraceEvent {
   ts?: number
   op: string
-  layer?: "L0" | "L1" | "L2" | "store" | "reflection" | "migration"
+  layer?: "L0" | "L1" | "L2" | "store" | "reflection" | "migration" | "retrieval"
   status: "ok" | "error" | "skip"
   l2Id?: string
   ragId?: string
@@ -28,6 +28,7 @@ export function appendMemoryTrace(event: MemoryTraceEvent): void {
     if (!filePath) return
     const dir = path.dirname(filePath)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    rotateTraceIfNeeded(filePath)
     const entry = {
       ts: event.ts ?? Date.now(),
       ...event,
@@ -37,4 +38,18 @@ export function appendMemoryTrace(event: MemoryTraceEvent): void {
   } catch (err) {
     console.warn("[PMRS/Trace] 写入失败:", err)
   }
+}
+
+const MAX_TRACE_BYTES = 4 * 1024 * 1024
+const RETAIN_TRACE_BYTES = 2 * 1024 * 1024
+
+function rotateTraceIfNeeded(filePath: string): void {
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).size < MAX_TRACE_BYTES) return
+  const content = fs.readFileSync(filePath)
+  const start = Math.max(0, content.length - RETAIN_TRACE_BYTES)
+  const firstLineBreak = content.indexOf(0x0a, start)
+  const retained = firstLineBreak >= 0 ? content.subarray(firstLineBreak + 1) : content.subarray(start)
+  const tmpPath = `${filePath}.tmp`
+  fs.writeFileSync(tmpPath, retained)
+  fs.renameSync(tmpPath, filePath)
 }

@@ -27,6 +27,7 @@ export interface L1Profile {
 }
 
 export type L2SyncStatus = "pending_sync" | "synced" | "sync_failed"
+export type L2MemoryType = "fact" | "preference" | "event" | "goal" | "project" | "decision" | "relationship"
 
 export interface L2Memory {
   id: string
@@ -69,6 +70,16 @@ export interface L2Memory {
    * 由 content 分词 + evidence 实体在写入时提取；缺失时 memory-store 会自动补充。
    */
   keywords?: string[]
+  /** Judge 给出的业务类型；旧条目缺失时按 fact 兼容。 */
+  memoryType?: L2MemoryType
+  /** Judge 给出的重要度，供跨会话统一排序使用。 */
+  importance?: "low" | "medium" | "high"
+  /** 写入时的判断置信度，范围 0~1。 */
+  confidence?: number
+  /** 用户最后一次明确确认该事实的时间。 */
+  lastConfirmedAt?: number
+  /** 该事实被确认或合并的累计次数。 */
+  mentionCount?: number
 }
 
 export type L2MemoryStatus = "active" | "aging" | "archived" | "superseded" | "merged"
@@ -178,6 +189,7 @@ export interface MemoryCandidate {
   confidence: number
   triggerText: string
   importance?: "low" | "medium" | "high"
+  memoryType?: L2MemoryType
   stability?: "one_off" | "situational" | "stable"
   certainty?: "explicit" | "inferred" | "uncertain"
   attribution?: "user_explicit" | "assistant_inferred" | "mixed"
