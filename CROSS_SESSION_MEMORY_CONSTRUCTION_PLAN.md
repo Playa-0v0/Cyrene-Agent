@@ -640,3 +640,144 @@ Prompt 中使用明确边界：
 - Token 预算和去重测试通过；
 - 完整构建、全量测试和关键人工场景验收通过；
 - 已建立只含记忆系统的上游 PR；之后再根据审查结果决定是否合并 `liyi-Cyrene-v2`。
+
+## 18. PR #43 追加施工：召回质量增强
+
+本节记录在首版跨会话基础设施完成后，根据实际代码审查追加的召回质量施工。追加改动仍然只属于
+跨会话记忆系统，不包含插件系统、NovelAI 绘图插件或 `liyi-Cyrene-v2` 的其他定制。
+
+### 18.1 Hybrid Retrieval 评分可解释性
+
+施工前：
+
+- 主检索链已经具备 Vector + BM25 + reranker，并非只有关键词匹配；
+- `SearchResult` 只向上暴露一个 `score`；
+- reranker 执行后会覆盖 Hybrid 分数，Builder 无法知道各信号分别贡献多少；
+- 候选在 reranker 之前已经截断为 `topK`，排名稍低但 cross-encoder 更相关的条目无法翻盘。
+
+施工后：
+
+- `SearchResult.scoreDetails` 分别保留 `vectorScore`、`bm25Score`、`hybridScore` 和可选
+  `rerankerScore`；
+- reranker 对最多 `topK * 3` 的融合候选池精排，完成后才截断为 `topK`；
+- reranker 不再抹掉 Hybrid 来源信息；
+- 没有 Embedding 时继续使用原有 BM25 降级，RAG 尚未初始化时保留本地关键词兜底。
+
+### 18.2 Chat memoryQuery 改写
+
+Work/Code/Learn 已经使用 CITA 的 `contextualizedQuery`。Chat 为保持轻量、无工具的执行语义，仍不启用完整
+CITA，而是在 `MemoryContextBuilder` 内增加仅用于检索的轻量改写：
+
+- 明确查询保持原样；
+- 只有“上次、之前、继续、接着、那个方案”等模糊指代触发改写；
+- 改写上下文只取 L1 的当前项目/最近目标和最近 5 条用户/助手对话；
+- 当前用户问题仍保持原文，不修改发给 Soul 的消息；
+- 检索查询设置长度上限，避免旧对话无限扩张。
+
+例如：
+
+```text
+原查询：继续上次那个方案
+
+检索查询：
+继续上次那个方案
+记忆检索上下文：当前项目：Cyrene 跨会话记忆；最近目标：补统一召回评分；……
+```
+
+### 18.3 统一 finalScore
+
+Builder 不再只对单一 `entry.score` 排序，而是按可用信号动态归一化：
+
+```text
+semantic/vector   0.40
+BM25              0.15
+reranker          0.20
+recency           0.10
+continuity        0.10
+importance        0.05
+```
+
+如果某个运行环境没有 Embedding 或 reranker，对应权重不会被当作零分硬扣，而是只在现有信号之间重新归一。
+随后再应用：
+
+- confidence 调整；
+- conflict penalty；
+- current-session L2 penalty。
+
+L2 新写入条目同时持久化：
+
+- `memoryType`；
+- `importance`；
+- `confidence`；
+- `lastConfirmedAt`；
+- `mentionCount`。
+
+旧 L2 不要求一次性迁移，缺失字段会使用保守默认值；冲突合并产生的新条目会累计 mentionCount，并继承类型和
+重要度。
+
+### 18.4 跨来源事实去重与候选补位
+
+施工前，各来源先截断再做完全相同/长字符串包含去重，可能出现：
+
+```text
+L2      用户正在开发 Cyrene 跨会话记忆
+Summary 本会话讨论了 Cyrene 跨会话记忆开发
+History 我正在开发 Cyrene 跨会话记忆
+```
+
+三条同时进入 Prompt，或者去重后留下不足上限的候选。
+
+施工后：
+
+- L2、Conversation Summary、Raw History 先扩大候选池；
+- 使用规范化文本、包含关系和事实关键词重叠做规则化事实去重；
+- 相同事实固定采用 `L2 > Summary > Raw History`；
+- 去重完成后再应用每来源数量上限，因此后续不同事实可以自动补位；
+- Raw History 只在用户明确询问原话/具体说法，或没有可用旧会话摘要时检索；
+- 当前会话摘要、当前窗口原文、已删除会话来源继续立即排除。
+
+### 18.5 Conversation Summary v2
+
+摘要增加：
+
+```ts
+currentState: string[]
+nextSteps: string[]
+```
+
+语义边界：
+
+- `currentState`：已经完成或当前真实存在的状态；
+- `nextSteps`：顺序明确、可以直接继续执行的动作；
+- `openLoops`：仍未关闭的问题或约束。
+
+新摘要按 schema v2 生成并索引这两个字段。已有 schema v1 文件读取时会在内存中升级为 v2，并为新字段填入
+空数组，不要求用户删除旧摘要或重新创建聊天。
+
+### 18.6 Recall Trace
+
+每次自动召回会追加一条 `recall.build` 事件，记录：
+
+- 原查询和改写后查询的脱敏截断预览；
+- 各候选的 source/id/sessionId；
+- semantic、BM25、reranker、recency、continuity、importance、confidence；
+- conflict/current-session penalty 和最终 `finalScore`；
+- 是否注入以及 `dropReason`；
+- Token 预算、实际注入 Token、选中数和丢弃数。
+
+候选正文不重复写入 Trace，查询预览继续经过密钥过滤。`memory-trace.log` 达到 4 MiB 后保留最近约 2 MiB，
+避免长期运行无限增长。开发者 UI 可在后续 PR 读取该结构，本次先完成稳定的后端诊断数据。
+
+### 18.7 新增验收覆盖
+
+- Chat 模糊指代会结合 L1 与最近窗口改写；
+- Chat 明确查询保持原样；
+- Work 已经由 CITA 改写的查询不会重复扩写；
+- 统一评分包含召回、时间、连续性、重要度、置信度和冲突惩罚；
+- 同一事实跨 L2/Summary/History 只保留 L2；
+- 去重后仍能补足 4 条不同 L2；
+- 有旧摘要的普通“继续”不会无故注入 Raw History；
+- 没有旧摘要时 Raw History 继续作为降级来源；
+- schema v1 摘要可以无损读取为 v2；
+- Recall Trace 包含评分、选择和丢弃原因；
+- reranker 可以从扩大后的 Hybrid 候选池提升原本不在 topK 的结果。

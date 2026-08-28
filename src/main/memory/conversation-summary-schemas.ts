@@ -38,6 +38,8 @@ export function parseConversationSummaryDraft(value: unknown): ConversationSumma
     topics: boundedStringArray(object.topics, "topics"),
     decisions: boundedStringArray(object.decisions, "decisions"),
     openLoops: boundedStringArray(object.openLoops, "openLoops"),
+    currentState: boundedStringArray(object.currentState, "currentState"),
+    nextSteps: boundedStringArray(object.nextSteps, "nextSteps"),
     entities: boundedStringArray(object.entities, "entities"),
     keywords: boundedStringArray(object.keywords, "keywords"),
   }
@@ -66,9 +68,11 @@ export const CONVERSATION_SUMMARY_JSON_SCHEMA: Record<string, unknown> = {
     topics: { type: "array", items: { type: "string" } },
     decisions: { type: "array", items: { type: "string" } },
     openLoops: { type: "array", items: { type: "string" } },
+    currentState: { type: "array", items: { type: "string" } },
+    nextSteps: { type: "array", items: { type: "string" } },
     entities: { type: "array", items: { type: "string" } },
     keywords: { type: "array", items: { type: "string" } },
   },
-  required: ["overview", "topics", "decisions", "openLoops", "entities", "keywords"],
+  required: ["overview", "topics", "decisions", "openLoops", "currentState", "nextSteps", "entities", "keywords"],
   additionalProperties: false,
 }

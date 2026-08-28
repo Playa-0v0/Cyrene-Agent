@@ -15,9 +15,18 @@ export class ConversationSummaryStore {
     const filePath = this.summaryPath(sessionId)
     if (!fs.existsSync(filePath)) return null
     try {
-      const value = JSON.parse(fs.readFileSync(filePath, "utf8")) as ConversationMemorySummary
-      if (value?.schemaVersion !== 1 || value.sessionId !== sessionId) return null
-      return value
+      const value = JSON.parse(fs.readFileSync(filePath, "utf8")) as Omit<ConversationMemorySummary, "schemaVersion"> & {
+        schemaVersion: number
+        currentState?: string[]
+        nextSteps?: string[]
+      }
+      if ((value?.schemaVersion !== 1 && value?.schemaVersion !== 2) || value.sessionId !== sessionId) return null
+      return {
+        ...value,
+        schemaVersion: 2,
+        currentState: stringArray(value.currentState),
+        nextSteps: stringArray(value.nextSteps),
+      }
     } catch (error) {
       console.warn("[ConversationSummaryStore] 摘要文件解析失败:", sessionId, error)
       return null
@@ -61,4 +70,8 @@ export class ConversationSummaryStore {
     }
     return path.join(this.summariesDir, `${sessionId}.json`)
   }
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : []
 }

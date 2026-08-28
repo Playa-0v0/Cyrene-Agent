@@ -40,6 +40,8 @@ function setup(initialMessages = messages(8)) {
     topics: ["memory"],
     decisions: [],
     openLoops: ["continue"],
+    currentState: ["summary store ready"],
+    nextSteps: ["continue"],
     entities: ["Cyrene"],
     keywords: ["memory"],
   }))
@@ -71,6 +73,8 @@ describe("ConversationSummaryService", () => {
     expect(store.get("chat-a")).toMatchObject({
       revision: 1,
       coveredMessageCount: 8,
+      currentState: ["summary store ready"],
+      nextSteps: ["continue"],
       ragId: "rag-summary",
       indexStatus: "synced",
     })

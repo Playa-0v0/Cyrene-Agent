@@ -90,7 +90,7 @@ const OPERATION_REPAIR_FORMAT: Record<MemoryLlmOperation, string> = {
   compress: '顶层必须是 JSON 对象，格式为 {"groups":[...]}。',
   reflect: '顶层必须是 JSON 对象，格式为 {"updates":[...]}；没有更新时返回 {"updates":[]}。',
   resolve: "顶层必须是一个符合原始字段要求的 JSON 对象。",
-  summarize: '顶层必须是 JSON 对象，格式为 {"overview":"...","topics":[],"decisions":[],"openLoops":[],"entities":[],"keywords":[]}。',
+  summarize: '顶层必须是 JSON 对象，格式为 {"overview":"...","topics":[],"decisions":[],"openLoops":[],"currentState":[],"nextSteps":[],"entities":[],"keywords":[]}。',
 };
 
 function buildRepairMessage(

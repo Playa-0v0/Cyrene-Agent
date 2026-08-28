@@ -22,6 +22,8 @@ function summaryIndexText(summary: ConversationMemorySummary): string {
     summary.topics.length ? `主题：${summary.topics.join("、")}` : "",
     summary.decisions.length ? `决定：${summary.decisions.join("；")}` : "",
     summary.openLoops.length ? `待办：${summary.openLoops.join("；")}` : "",
+    summary.currentState.length ? `当前状态：${summary.currentState.join("；")}` : "",
+    summary.nextSteps.length ? `下一步：${summary.nextSteps.join("；")}` : "",
     summary.keywords.length ? `关键词：${summary.keywords.join("、")}` : "",
   ].filter(Boolean).join("\n")
 }

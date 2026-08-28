@@ -7,12 +7,14 @@ export interface ConversationSummaryDraft {
   topics: string[]
   decisions: string[]
   openLoops: string[]
+  currentState: string[]
+  nextSteps: string[]
   entities: string[]
   keywords: string[]
 }
 
 export interface ConversationMemorySummary extends ConversationSummaryDraft {
-  schemaVersion: 1
+  schemaVersion: 2
   sessionId: string
   mode: ConversationMode
   revision: number

@@ -15,7 +15,7 @@ function createStore() {
 
 function summary(sessionId: string, revision = 1): ConversationMemorySummary {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     sessionId,
     mode: "work",
     revision,
@@ -23,6 +23,8 @@ function summary(sessionId: string, revision = 1): ConversationMemorySummary {
     topics: ["记忆"],
     decisions: [],
     openLoops: ["继续施工"],
+    currentState: ["摘要存储已完成"],
+    nextSteps: ["继续施工"],
     entities: ["Cyrene"],
     keywords: ["memory"],
     coveredMessageCount: 8,
@@ -53,6 +55,23 @@ describe("ConversationSummaryStore", () => {
     store.put(summary("chat-a"))
     expect(store.delete("chat-a")).toBe(true)
     expect(store.get("chat-a")).toBeNull()
+  })
+
+  it("loads schema v1 summaries with empty continuation fields", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "cyrene-summary-store-legacy-"))
+    roots.push(root)
+    const dir = path.join(root, "summaries")
+    fs.mkdirSync(dir, { recursive: true })
+    const legacy = { ...summary("chat-old"), schemaVersion: 1 }
+    delete (legacy as Partial<typeof legacy>).currentState
+    delete (legacy as Partial<typeof legacy>).nextSteps
+    fs.writeFileSync(path.join(dir, "chat-old.json"), JSON.stringify(legacy), "utf8")
+
+    expect(new ConversationSummaryStore(root).get("chat-old")).toMatchObject({
+      schemaVersion: 2,
+      currentState: [],
+      nextSteps: [],
+    })
   })
 
   it("rejects path traversal session ids", () => {
