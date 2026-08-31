@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cyrene · 提醒</title>
+  <link rel="stylesheet" href="../ui/tokens.css" />
+  <link rel="stylesheet" href="../ui/fonts.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: transparent;
+      user-select: none;
+      font-family: var(--rb-font-sans);
+    }
+    #reminder-card {
+      position: relative;
+      width: 100%; height: 100%;
+      padding: 14px 16px;
+      border-radius: var(--rb-radius-xl);
+      background: linear-gradient(135deg, rgba(24, 20, 50, 0.97), rgba(8, 7, 15, 0.97));
+      border: 1px solid var(--rb-border-strong);
+      box-shadow: var(--rb-shadow-elevated);
+      color: var(--rb-text-default);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow: hidden;
+    }
+    /* 顶部品牌细线 */
+    #reminder-card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--rb-grad-pink);
+    }
+    .reminder-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--rb-text-strong);
+      letter-spacing: var(--rb-letter-spacing);
+    }
+    .reminder-body {
+      flex: 1;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--rb-text-default);
+      letter-spacing: var(--rb-letter-spacing);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .reminder-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .reminder-btn {
+      padding: 6px 14px;
+      border: 1px solid var(--rb-border-soft);
+      border-radius: var(--rb-radius-full);
+      background: transparent;
+      color: var(--rb-text-default);
+      font-family: var(--rb-font-sans);
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: var(--rb-letter-spacing);
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+    }
+    .reminder-btn:hover {
+      background: var(--rb-hover-light);
+      border-color: var(--rb-border-strong);
+    }
+    .reminder-btn-primary {
+      background: var(--rb-grad-pink);
+      border-color: transparent;
+      color: var(--rb-text-on-pink);
+    }
+    .reminder-btn-primary:hover {
+      filter: brightness(1.08);
+    }
+  </style>
+</head>
+<body>
+  <div id="reminder-card">
+    <div id="reminder-title" class="reminder-title">Cyrene</div>
+    <div id="reminder-body" class="reminder-body"></div>
+    <div class="reminder-actions">
+      <button id="reminder-view" class="reminder-btn reminder-btn-primary">立即查看</button>
+      <button id="reminder-later" class="reminder-btn">稍后</button>
+    </div>
+  </div>
+  <script type="module" src="./reminder.ts"></script>
+</body>
+</html>

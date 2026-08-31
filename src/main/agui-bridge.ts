@@ -208,6 +208,9 @@ let getChatWindowFn: GetChatWindowFn = () => null;
  *    由渲染端作为用户消息发出，模型改计划后再次 write_plan 重新走审批
  * 5. 第二段卡超时 / 空文本 → 拉回 PLAN_DISCUSSING，等用户下一条消息
  */
+// 计划审批卡等待超时：5 分钟（长阅读场景），超时发 dismiss 关闭失效卡片
+const PLAN_REVIEW_TIMEOUT_MS = 300000;
+
 function startPlanReviewFlow(params: {
   sessionId: string;
   threadId: string;
@@ -244,6 +247,18 @@ function startPlanReviewFlow(params: {
       }),
       undefined,
       { runId, revision: 1 },
+      {
+        reminderKind: "plan",
+        timeoutMs: PLAN_REVIEW_TIMEOUT_MS,
+        // 超时后通知渲染端关闭审批卡，避免用户点击已失效的按钮
+        onTimeout: (id) => send({
+          type: "CUSTOM",
+          name: "cyrene.choice.dismiss",
+          value: { id, runId, revision: 1 },
+          threadId,
+          runId,
+        }),
+      },
     ) as AskUserAnswer;
     const decision = answer.answers.find((a) => a.field === "plan_decision");
     if (decision?.selectedValues?.includes("approve") && approvePlan(sessionId)) {
@@ -268,6 +283,18 @@ function startPlanReviewFlow(params: {
       }),
       undefined,
       { runId, revision: 2 },
+      {
+        reminderKind: "plan",
+        timeoutMs: PLAN_REVIEW_TIMEOUT_MS,
+        // 超时后通知渲染端关闭补充卡
+        onTimeout: (id) => send({
+          type: "CUSTOM",
+          name: "cyrene.choice.dismiss",
+          value: { id, runId, revision: 2 },
+          threadId,
+          runId,
+        }),
+      },
     ) as AskUserAnswer;
     const supplementText = supplementAnswer.answers
       .find((a) => a.field === "plan_supplement")?.customText?.trim();

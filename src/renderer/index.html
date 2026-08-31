@@ -16,6 +16,40 @@
       display: block;
       width: 100%; height: 100%;
     }
+    /* 卡片提醒头顶气泡（通道 D） */
+    #live2d-bubble {
+      position: absolute;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 220px;
+      padding: 10px 14px;
+      border-radius: var(--rb-radius-lg);
+      background: rgba(24, 20, 50, 0.92);
+      border: 1px solid var(--rb-border-strong);
+      box-shadow: var(--rb-shadow-pink);
+      color: var(--rb-text-default);
+      font-family: var(--rb-font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+      text-align: center;
+      z-index: 10;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    #live2d-bubble.visible { opacity: 1; }
+    /* 气泡小尾巴 */
+    #live2d-bubble::after {
+      content: "";
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 8px solid transparent;
+      border-top-color: rgba(24, 20, 50, 0.92);
+      border-bottom: 0;
+    }
   </style>
   <link rel="stylesheet" href="./ui/tokens.css" />
   <link rel="stylesheet" href="./ui/fonts.css" />
@@ -26,6 +60,7 @@
 </head>
 <body>
   <canvas id="live2d-canvas"></canvas>
+  <div id="live2d-bubble"></div>
   <script type="module" src="./main.ts"></script>
 </body>
 </html>

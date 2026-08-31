@@ -61,6 +61,7 @@ dist/renderer/context-usage/
 dist/renderer-old-*/
 # music 播放器是本地构建产物（hash 文件名每次构建变化），不进 git
 dist/renderer/music/
+dist/renderer/reminder/
 
 # build/installer/ui/src/ 下的同名源图（setup/setup-loading/succeed/failed/ch）被安装 UI 引用，
 # 打包时由 vite/webpack 复制到 src/renderer/react/assets/ 作为产物副本。

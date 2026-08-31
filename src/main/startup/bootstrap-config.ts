@@ -1,4 +1,4 @@
-import type { BrowserWindow } from "electron";
+import { Notification, app, type BrowserWindow, type Tray } from "electron";
 import { IPC } from "../../shared/ipc-channels";
 import type { GeneralSettings } from "../settings/general-settings";
 import { loadModelSettings, resolveModelSettingsProfile } from "../settings/model-settings";
@@ -12,17 +12,26 @@ import { setEmailConfig } from "../orchestrator/email-tools";
 import { setTravelConfig } from "../orchestrator/travel-tools";
 import { toolRegistry } from "../orchestrator/tool-registry";
 import { resolveVendorRuntimeSettings, setVendorRuntimeSettingsGetter } from "../orchestrator/vendors/runtime-settings";
-import { setChoiceCardSender } from "../user-choice";
+import { setChoiceCardSender, setCardReminderNotifier } from "../user-choice";
+import { createCardReminder } from "../card-reminder";
 import { setAsrConfig } from "../asr/asr-config";
 import { setCallSettings } from "../call/call-manager";
 import { buildCallSystemPrompt } from "../call/call-prompt-builder";
 import type { SceneIndex } from "../scene-embedder";
 import { reactChatWindow } from "../windows/window-state";
+import type { WindowManager } from "../windows/window-manager";
+import type { ReminderPopupManager } from "../reminder/reminder-popup";
 
 export interface BootstrapConfigContext {
   loadGeneralSettings: () => GeneralSettings;
   /** 场景嵌入索引 getter，用于通话语气注入。 */
   getSceneEmbeddingIndex: () => SceneIndex | null;
+  /** 系统托盘实例（可能尚未创建，运行时动态读取）。 */
+  getTray: () => Tray | null;
+  /** 窗口管理器（桌宠动作/气泡/可见性查询）。 */
+  getWindowManager: () => WindowManager | null;
+  /** 卡片提醒浮窗管理器（右下角置顶浮窗）。 */
+  getReminderPopup: () => ReminderPopupManager | null;
 }
 
 function getReactChatWindow(): BrowserWindow | null {
@@ -78,6 +87,80 @@ export function bootstrapConfigGetters(ctx: BootstrapConfigContext): void {
       });
     }
   });
+
+  // 注入卡片提醒多通道通知器：提问卡片/计划书审批卡提交时按聚焦状态选通道提醒。
+  // 通道设计（本版无 TTS 语音链路）：
+  //   - 聊天窗口聚焦/全屏 → 仅应用内提示（卡片本身在聊天窗口内展示）
+  //   - 未聚焦（其他应用）→ C 置顶浮窗 + B 托盘气泡 + D 桌宠气泡 + 通知兜底
+  setCardReminderNotifier(
+    createCardReminder({
+      getChatWindow: getReactChatWindow,
+      // 桌宠可见时才走 D 通道
+      isPetVisible: () => ctx.getWindowManager()?.isMainWindowVisible() ?? false,
+      // ── 任务八：C 置顶浮窗 ──
+      showReminderPopup: (payload) => {
+        ctx.getReminderPopup()?.show(payload);
+      },
+      hideReminderPopup: () => {
+        ctx.getReminderPopup()?.hide();
+      },
+      // ── 任务八：B 托盘气泡（Windows 专属 API；dev/打包都可靠）──
+      showTrayBalloon: (title, body) => {
+        // displayBalloon 是 Windows 专属，非 Windows 静默跳过
+        if (process.platform !== "win32") return;
+        const tray = ctx.getTray();
+        if (!tray) return;
+        try {
+          tray.displayBalloon({ title, content: body, iconType: "info" });
+        } catch (err) {
+          console.warn("[CardReminder] 托盘气泡显示失败:", err);
+        }
+      },
+      // ── 任务八：D 桌宠头顶气泡 ──
+      showPetBubble: (text) => {
+        ctx.getWindowManager()?.sendToMainWindow(IPC.LIVE2D_BUBBLE_SHOW, text);
+      },
+      // 弹出应用外原生通知（Windows toast），点击后把聊天窗口带回前台
+      notify: (title, body) => {
+        const win = getReactChatWindow();
+        // dev 模式（未打包）下 Windows toast 常因缺少已注册 AUMID 而静默失败，
+        // 降级为任务栏闪烁 + 日志，保证开发环境也能注意到提醒。
+        const flashFallback = (): void => {
+          if (win && !win.isDestroyed()) {
+            win.flashFrame(true);
+            // 5 秒后停止闪烁，避免持续打扰
+            setTimeout(() => {
+              if (!win.isDestroyed()) win.flashFrame(false);
+            }, 5000);
+          }
+        };
+        if (!app.isPackaged) {
+          console.log("[CardReminder] dev 模式：未打包无 AUMID 注册，跳过 toast 改用任务栏闪烁");
+          flashFallback();
+          return;
+        }
+        if (!Notification.isSupported()) {
+          console.warn("[CardReminder] 系统不支持 Notification，改用任务栏闪烁");
+          flashFallback();
+          return;
+        }
+        try {
+          const notification = new Notification({ title, body });
+          notification.on("click", () => {
+            if (win && !win.isDestroyed()) {
+              if (win.isMinimized()) win.restore();
+              win.show();
+              win.focus();
+            }
+          });
+          notification.show();
+        } catch (err) {
+          console.warn("[CardReminder] 原生通知弹出失败，改用任务栏闪烁:", err);
+          flashFallback();
+        }
+      },
+    }),
+  );
 
   // 注入搜索配置获取器
   setSearchConfig(

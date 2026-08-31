@@ -8,6 +8,19 @@ export interface ScreenshotInsertPayload {
   hasAnnotations: boolean;
 }
 
+// 卡片提醒浮窗：主进程 → reminder 渲染窗口展示内容
+export interface ReminderPopupPayload {
+  kind: "question" | "plan";
+  title: string;
+  message: string;
+}
+
+// 桌宠头顶气泡：主进程 → 桌宠窗口展示气泡文本
+export interface Live2dBubblePayload {
+  text: string;
+  timeoutMs?: number;
+}
+
 export const IPC = {
   // pet window
   WINDOW_MINIMIZE: "window:minimize",
@@ -312,6 +325,15 @@ export const IPC = {
   // 卡片展示走 AGUI_EVENT 的 CUSTOM 事件（与天气卡片同通道）
   // renderer → main：回传用户选择
   CHOICE_RESOLVE: "choice:resolve",
+
+  // 卡片提醒多通道（main → reminder 渲染窗口）
+  REMINDER_POPUP_SHOW: "reminder:popup-show",
+  REMINDER_POPUP_HIDE: "reminder:popup-hide",
+  // renderer → main：浮窗按钮动作（view=立即查看 / later=稍后）
+  REMINDER_POPUP_ACTION: "reminder:popup-action",
+  // main → 桌宠窗口：头顶气泡
+  LIVE2D_BUBBLE_SHOW: "live2d:bubble-show",
+  LIVE2D_BUBBLE_HIDE: "live2d:bubble-hide",
 
   // call window (voice call)
   CALL_OPEN: "call:open",                 // sidebar → main：打开通话窗口

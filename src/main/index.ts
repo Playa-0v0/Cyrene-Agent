@@ -128,6 +128,7 @@ import {
 } from "./settings/model-settings";
 import type { GeneralSettings } from "./settings/general-settings";
 import { bootstrapConfigGetters } from "./startup/bootstrap-config";
+import { createReminderPopupManager, type ReminderPopupManager } from "./reminder/reminder-popup";
 import { type RuntimeState } from "./runtime-state";
 import { getAppIconPath } from "./app-icon";
 import type { StartTtsRequest } from "../shared/tts-session";
@@ -194,6 +195,7 @@ async function reconcileUserMemoryIndex(): Promise<void> {
 }
 
 let tray: Tray | null = null;
+let reminderPopup: ReminderPopupManager | null = null;
 let schedulerSubsystem: SchedulerSubsystem | null = null;
 let channelsSubsystem: ChannelsSubsystem | null = null;
 let screenshotService: ScreenshotService | null = null;
@@ -258,6 +260,9 @@ function createWindow(manager: WindowManager, showOnReady = true): BrowserWindow
   bootstrapConfigGetters({
     loadGeneralSettings,
     getSceneEmbeddingIndex: () => embeddingIndexService.getSceneEmbeddingIndex(),
+    getTray: () => tray,
+    getWindowManager: () => windowManager,
+    getReminderPopup: () => reminderPopup,
   });
 
   return win;
@@ -298,6 +303,10 @@ registerChatUiIpc({
 // 注册本地用户资源协议（表情包图片与用户导入的字体）
 // 必须在 app.ready 之前调用
 registerPrivilegedSchemes();
+
+// Windows 原生通知（toast）需要 AppUserModelID 才能正常显示，与 electron-builder 的 appId 保持一致。
+// 必须在 app ready 前设置，否则 dev 模式下 Windows 不识别 toast 归属应用、静默失败。
+app.setAppUserModelId("com.cyrene.live2d");
 
 if (loadGeneralSettings().disableGpuElectron) {
   app.commandLine.appendSwitch("disable-gpu");
@@ -509,6 +518,12 @@ if (isPrimaryCyreneProcess) app.whenReady().then(async () => {
   // 先创建主窗口但不显示，等闪屏关闭后再一起显示。
   const mainWindow = createWindow(manager, false);
 
+  // 卡片提醒浮窗管理器（任务八 · 通道 C）：右下角置顶小窗。
+  // 「立即查看」→ 聚焦聊天窗口；bootstrap-config 通过 getter 惰性取用。
+  reminderPopup = createReminderPopupManager({
+    focusChatWindow: () => manager.createReactChatWindow(),
+  });
+
   setLive2dWindowSender((channel, payload) => manager.sendToMainWindow(channel, payload));
   manager.createReactChatWindow();
   scheduleStartupUpdateCheck(appUpdateService);
@@ -579,6 +594,8 @@ app.on("window-all-closed", () => {});
 // 应用退出前把 token 用量缓存落盘（防抖未触发的最后一次写）
 app.on("before-quit", () => {
   windowManager?.dispose();
+  reminderPopup?.dispose();
+  reminderPopup = null;
   schedulerSubsystem?.engine.stop();
   proactiveLifecycle.stopProactiveTrigger();
   flushTokenUsage();

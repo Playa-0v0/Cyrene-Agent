@@ -550,6 +550,42 @@ const live2dActionApi = {
 };
 contextBridge.exposeInMainWorld("live2dAction", live2dActionApi);
 
+// 卡片提醒浮窗（通道 C）：浮窗渲染页专用
+const reminderApi = {
+  // 主进程 → 浮窗：显示提醒内容
+  onShow: (callback: (payload: import("../shared/ipc-channels").ReminderPopupPayload) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: import("../shared/ipc-channels").ReminderPopupPayload) => callback(payload);
+    ipcRenderer.on(IPC.REMINDER_POPUP_SHOW, listener);
+    return () => ipcRenderer.removeListener(IPC.REMINDER_POPUP_SHOW, listener);
+  },
+  // 主进程 → 浮窗：主动关闭
+  onHide: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on(IPC.REMINDER_POPUP_HIDE, listener);
+    return () => ipcRenderer.removeListener(IPC.REMINDER_POPUP_HIDE, listener);
+  },
+  // 浮窗 → 主进程：用户点击「立即查看/稍后」
+  action: (action: "view" | "later") => ipcRenderer.send(IPC.REMINDER_POPUP_ACTION, action),
+};
+contextBridge.exposeInMainWorld("reminder", reminderApi);
+
+// 桌宠头顶气泡（通道 D）：桌宠窗口专用
+const live2dBubbleApi = {
+  // 主进程 → 桌宠：显示气泡（提醒文本）
+  onShow: (callback: (text: string) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, text: string) => callback(text);
+    ipcRenderer.on(IPC.LIVE2D_BUBBLE_SHOW, listener);
+    return () => ipcRenderer.removeListener(IPC.LIVE2D_BUBBLE_SHOW, listener);
+  },
+  // 主进程 → 桌宠：隐藏气泡
+  onHide: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on(IPC.LIVE2D_BUBBLE_HIDE, listener);
+    return () => ipcRenderer.removeListener(IPC.LIVE2D_BUBBLE_HIDE, listener);
+  },
+};
+contextBridge.exposeInMainWorld("live2dBubble", live2dBubbleApi);
+
 const live2dDiagnosticsApi = {
   getMain: () => ipcRenderer.invoke(IPC.LIVE2D_GET_MAIN_DIAGNOSTICS),
   getIpcListenerCounts: () => getLive2DIpcListenerCounts(ipcRenderer),

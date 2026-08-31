@@ -59,6 +59,8 @@ export function createReactChatWindow(sessionId?: string): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // 聊天窗口保持后台渲染：卡片提醒 IPC 在窗口未聚焦时也要可靠送达
+      backgroundThrottling: false,
     },
   });
   setReactChatWindow(window);

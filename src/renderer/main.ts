@@ -39,6 +39,10 @@ declare global {
     live2dAction?: {
       onPlayAction: (callback: (target: import("../shared/live2d-actions").Live2DTarget) => void) => () => void;
     };
+    live2dBubble?: {
+      onShow: (callback: (text: string) => void) => () => void;
+      onHide: (callback: () => void) => () => void;
+    };
   }
 }
 
@@ -52,6 +56,7 @@ let petZoomOff: (() => void) | null = null;
 let petVisibilityOff: (() => void) | null = null;
 let petVisible = true;
 let live2dSpeechOffs: Array<() => void> = [];
+let live2dBubbleOffs: Array<() => void> = [];
 const live2dLifecycle = new Live2DRendererLifecycleTracker();
 
 function trackSubscription(label: string, off: () => void): () => void {
@@ -176,6 +181,34 @@ const manager = new Live2DManager({
 
 manager.init();
 
+// ── 卡片提醒头顶气泡（通道 D）──
+// 主进程在桌宠可见时先发 LIVE2D_PLAY_ACTION（如「问号」表情）再发气泡显示事件；
+// 气泡 8 秒后自动隐藏，避免常驻遮挡。
+const bubbleEl = document.getElementById("live2d-bubble") as HTMLElement | null;
+let bubbleTimer: number | null = null;
+
+function hideBubble(): void {
+  if (bubbleEl) bubbleEl.classList.remove("visible");
+  if (bubbleTimer !== null) {
+    window.clearTimeout(bubbleTimer);
+    bubbleTimer = null;
+  }
+}
+
+function showBubble(text: string): void {
+  if (!bubbleEl) return;
+  bubbleEl.textContent = text;
+  bubbleEl.classList.add("visible");
+  if (bubbleTimer !== null) window.clearTimeout(bubbleTimer);
+  // 8 秒后自动隐藏，避免长期遮挡
+  bubbleTimer = window.setTimeout(() => hideBubble(), 8000);
+}
+
+live2dBubbleOffs.push(
+  trackSubscription("live2dBubble:onShow", window.live2dBubble?.onShow((text) => showBubble(text)) ?? (() => {})),
+  trackSubscription("live2dBubble:onHide", window.live2dBubble?.onHide(() => hideBubble()) ?? (() => {})),
+);
+
 addTrackedEventListener(window, "window:resize", "resize", () => {
   manager.resize(window.innerWidth, window.innerHeight);
   focus?.focusCenter(true);
@@ -186,6 +219,8 @@ window.addEventListener("beforeunload", () => {
   expressionReset = null;
   for (const off of live2dSpeechOffs) off();
   live2dSpeechOffs = [];
+  for (const off of live2dBubbleOffs) off();
+  live2dBubbleOffs = [];
   mouthSync?.dispose();
   mouthSync = null;
   speakingMotion?.dispose();

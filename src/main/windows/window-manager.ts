@@ -33,6 +33,7 @@ export interface WindowManager {
   showMainWindow(): void;
   hideMainWindow(): void;
   toggleMainWindow(): void;
+  isMainWindowVisible(): boolean;
   minimizeMainWindow(): void;
   setMainWindowAlwaysOnTop(alwaysOnTop: boolean): void;
   setMainWindowInteractive(interactive: boolean): void;
@@ -137,6 +138,10 @@ export function createWindowManager(options: WindowManagerOptions): WindowManage
       const win = getUsableMainWindow();
       if (!win) return;
       win.isVisible() ? win.hide() : win.show();
+    },
+    isMainWindowVisible(): boolean {
+      const win = getUsableMainWindow();
+      return !!win && win.isVisible();
     },
     minimizeMainWindow(): void {
       getUsableMainWindow()?.minimize();

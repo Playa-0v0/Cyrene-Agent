@@ -25,6 +25,7 @@ import {
 } from "./orchestrator/ask-card";
 import { getTimeoutSettings } from "./timeout-manager";
 import { createAbortError } from "./abort-utils";
+import type { CardReminderKind } from "./card-reminder";
 
 const LOG_PREFIX = "[UserChoice]";
 // 卡片等待超时统一取 timeout-settings 的 userChoiceTimeout（设置页「询问等待时间」可调，默认 60s）。
@@ -72,9 +73,17 @@ let choiceCounter = 0;
 /** 注入的卡片回调：由 index.ts 启动时设置，把 ChoiceCardData 包成 CUSTOM 事件发给渲染端。 */
 let choiceCardSender: ((card: ChoiceCardData) => void) | null = null;
 
+/** 注入的卡片提醒器：由 bootstrap 启动时设置，卡片实际发送后触发多通道提醒。 */
+let cardReminderNotifier: ((kind: CardReminderKind) => void) | null = null;
+
 /** index.ts 启动时调用，注入卡片发送回调。 */
 export function setChoiceCardSender(sender: (card: ChoiceCardData) => void): void {
   choiceCardSender = sender;
+}
+
+/** bootstrap 启动时调用，注入卡片提醒器。 */
+export function setCardReminderNotifier(notifier: (kind: CardReminderKind) => void): void {
+  cardReminderNotifier = notifier;
 }
 
 /**
@@ -111,6 +120,7 @@ export function requestUserChoice(
 
     if (choiceCardSender) {
       choiceCardSender(payload);
+      cardReminderNotifier?.("question");
     } else {
       // 没注入回调（理论上不会发生），直接返回默认值
       clearTimeout(timer);
@@ -121,16 +131,27 @@ export function requestUserChoice(
   });
 }
 
+/** requestUserClarification 的可选扩展参数（向后兼容：不传保持原行为）。 */
+export interface UserClarificationOptions {
+  /** 卡片提醒类型；传了则在卡片实际发送后触发提醒器（默认不触发）。 */
+  reminderKind?: CardReminderKind;
+  /** 覆盖默认超时（默认取 timeout-settings 的 userChoiceTimeout）。 */
+  timeoutMs?: number;
+  /** 超时回调（超时后执行，如计划审批超时兜底发 dismiss；携带卡片 id）。 */
+  onTimeout?: (id: string) => void;
+}
+
 export function requestUserClarification(
   card: AskClarificationCard,
   sender?: (card: ChoiceCardData) => void,
   onSettled?: (settlement: ChoiceSettlement) => void,
   identity: { runId: string; revision: number } = { runId: "legacy", revision: 1 },
+  options: UserClarificationOptions = {},
 ): Promise<AskUserAnswer> {
   return new Promise<AskUserAnswer>((resolve, reject) => {
     const id = "choice-" + (++choiceCounter) + "-" + Date.now();
     const emptyAnswer: AskUserAnswer = { requestId: id, answers: [] };
-    const timeout = getTimeoutSettings().userChoiceTimeout;
+    const timeout = options.timeoutMs ?? getTimeoutSettings().userChoiceTimeout;
     const publication = publishAskCard(card, { interactionId: id, ...identity });
     const timer = setTimeout(() => {
       const pending = pendingChoices.get(id);
@@ -138,6 +159,7 @@ export function requestUserClarification(
       pendingChoices.delete(id);
       console.warn(LOG_PREFIX, "澄清超时（" + timeout + "ms）");
       onSettled?.({ id, ...identity, reason: "timeout" });
+      options.onTimeout?.(id);
       resolve(emptyAnswer);
     }, timeout);
     pendingChoices.set(id, {
@@ -165,6 +187,7 @@ export function requestUserClarification(
     const cardSender = sender ?? choiceCardSender;
     if (cardSender) {
       cardSender(publication.payload);
+      if (options.reminderKind) cardReminderNotifier?.(options.reminderKind);
     } else {
       clearTimeout(timer);
       pendingChoices.delete(id);

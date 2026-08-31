@@ -13,6 +13,8 @@ import {
   cancelPendingChoicesForRun,
   registerChoiceIpc,
   requestUserClarification,
+  requestUserChoice,
+  setCardReminderNotifier,
   setChoiceCardSender,
 } from "./user-choice";
 import type { AskCardPayload, AskCardSubmission } from "../shared/ask-clarification";
@@ -245,5 +247,85 @@ describe("requestUserClarification", () => {
     expect(secondSettled).not.toHaveBeenCalled();
 
     cancelPendingChoicesForRun("run-second");
+  });
+});
+
+describe("card reminder notifier", () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("requestUserChoice 发送后触发 question 提醒", async () => {
+    vi.useFakeTimers();
+    const notifier = vi.fn();
+    setCardReminderNotifier(notifier);
+    setChoiceCardSender(() => undefined);
+    const pending = requestUserChoice("问题？", [{ label: "是", value: "yes" }], "yes");
+    expect(notifier).toHaveBeenCalledWith("question");
+    await vi.advanceTimersByTimeAsync(120_000);
+    await expect(pending).resolves.toBe("yes");
+  });
+
+  it("requestUserClarification 传 reminderKind plan 时触发 plan 提醒", async () => {
+    const notifier = vi.fn();
+    setCardReminderNotifier(notifier);
+    const runSender = vi.fn();
+    void requestUserClarification(
+      { intro: "审批计划", questions: [], deferredFields: [] },
+      runSender,
+      undefined,
+      { runId: "run-1", revision: 1 },
+      { reminderKind: "plan" },
+    );
+    expect(runSender).toHaveBeenCalledOnce();
+    expect(notifier).toHaveBeenCalledWith("plan");
+  });
+
+  it("未传 reminderKind 时不触发提醒", async () => {
+    const notifier = vi.fn();
+    setCardReminderNotifier(notifier);
+    const runSender = vi.fn();
+    void requestUserClarification(
+      { intro: "普通澄清", questions: [], deferredFields: [] },
+      runSender,
+    );
+    expect(runSender).toHaveBeenCalledOnce();
+    expect(notifier).not.toHaveBeenCalled();
+  });
+
+  it("自定义 timeoutMs + onTimeout 生效", async () => {
+    vi.useFakeTimers();
+    const runSender = vi.fn();
+    const onTimeout = vi.fn();
+    const pending = requestUserClarification(
+      { intro: "计划审批", questions: [], deferredFields: [] },
+      runSender,
+      undefined,
+      { runId: "run-t", revision: 1 },
+      { timeoutMs: 300_000, onTimeout },
+    );
+    expect(runSender).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(299_999);
+    expect(onTimeout).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(onTimeout).toHaveBeenCalledOnce();
+    await expect(pending).resolves.toEqual({ requestId: expect.any(String), answers: [] });
+  });
+
+  it("无 sender 时不触发提醒", async () => {
+    // 重置模块以清空全局 choiceCardSender（避免前序用例注入残留）
+    vi.resetModules();
+    const fresh = await import("./user-choice");
+    const notifier = vi.fn();
+    fresh.setCardReminderNotifier(notifier);
+    const pending = fresh.requestUserClarification(
+      { intro: "无 sender", questions: [], deferredFields: [] },
+      undefined,
+      undefined,
+      { runId: "run-none", revision: 1 },
+      { reminderKind: "question" },
+    );
+    await expect(pending).resolves.toEqual({ requestId: expect.any(String), answers: [] });
+    expect(notifier).not.toHaveBeenCalled();
   });
 });
