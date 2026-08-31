@@ -94,6 +94,7 @@ export function createTtsSynthesisService(
         (message) => message.id === request.messageId && message.role === "model",
       );
     if (
+      !request.bypassMessageCache &&
       historicalMessage?.ttsCacheKey &&
       historicalMessage.ttsCacheVersion === request.converterVersion
     ) {

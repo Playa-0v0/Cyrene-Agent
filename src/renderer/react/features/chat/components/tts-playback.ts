@@ -359,6 +359,7 @@ export async function startTtsPlayback(request: TtsPlaybackRequest): Promise<voi
       converterVersion: speech.converterVersion,
       automatic: request.automatic,
       supportsStreamingPlayback: supportsStreamingPlayback(),
+      bypassMessageCache: request.bypassMessageCache,
     });
     if (generation !== requestGeneration || currentRequestId !== requestId || result.requestId !== requestId) return;
     if (result.status === "streaming") {
@@ -421,6 +422,62 @@ export async function playTtsToCompletion(request: TtsPlaybackRequest): Promise<
   });
 }
 
+/**
+ * 启动手动分段朗读：按句/段切分后逐段合成播放。
+ * 每段请求携带 bypassMessageCache（跳过消息级历史缓存，避免误播旧整段语音）
+ * 且不携带 onCacheKey（不把子段缓存写回原消息，避免后续段误命中首段缓存）。
+ */
+async function startManualSegmentedPlayback(request: TtsPlaybackRequest): Promise<void> {
+  const speech = markdownToSpeechText(request.text, {
+    mode: request.speechMode,
+    preferredAddress: request.preferredAddress,
+  });
+  if (!speech.text) {
+    if (!request.automatic) publish({ messageId: request.messageId, status: "error", error: "这条消息没有可朗读的内容" });
+    return;
+  }
+  const probe = new StreamingMarkdownSegmenter(4, request.segmentationGranularity ?? "sentence");
+  const segments = probe.finish(speech.text);
+  if (segments.length <= 1) {
+    await startTtsPlayback(request);
+    return;
+  }
+  stopTtsPlayback();
+  const generation = ++manualSegmentedGeneration;
+  manualSegmentedActive = true;
+  const queue = new EarlyTtsPlaybackQueue(
+    (segment) => playTtsToCompletion({
+      ...request,
+      text: segment,
+      segmented: false,
+      // 跳过消息级历史缓存：段文本与原消息缓存身份不一致
+      bypassMessageCache: true,
+      // 不把子段缓存写回原消息
+      onCacheKey: undefined,
+    }),
+    () => {
+      if (generation === manualSegmentedGeneration) {
+        manualSegmentedQueue = null;
+        manualSegmentedActive = false;
+      }
+    },
+    { segmented: true, granularity: request.segmentationGranularity ?? "sentence" },
+  );
+  manualSegmentedQueue = queue;
+  publish({ messageId: request.messageId, status: "synthesizing" });
+  void queue.finish(speech.text).finally(() => {
+    if (generation !== manualSegmentedGeneration) return;
+    manualSegmentedQueue = null;
+    manualSegmentedActive = false;
+    const playback = getTtsPlaybackSnapshot();
+    if (playback.messageId === request.messageId && playback.status === "completed") {
+      publish({ messageId: request.messageId, status: "completed" });
+    } else {
+      publish({ messageId: null, status: "idle" });
+    }
+  });
+}
+
 export async function toggleTtsPlayback(request: TtsPlaybackRequest): Promise<void> {
   // 手动分段队列播放中再次点击同一消息 = 停止整段队列
   if (manualSegmentedActive && snapshot.messageId === request.messageId && snapshot.status !== "idle") {
@@ -443,6 +500,11 @@ export async function toggleTtsPlayback(request: TtsPlaybackRequest): Promise<vo
     return;
   }
   if (isCurrent && snapshot.status === "completed" && currentAudio) {
+    // 分段朗读完成后再次点击：重建完整分段队列，而不是重播最后一段
+    if (request.segmented) {
+      await startManualSegmentedPlayback(request);
+      return;
+    }
     currentAudio.currentTime = 0;
     try {
       await playAudio(currentAudio, request.messageId, currentStream?.estimatedDurationMs);
@@ -453,43 +515,8 @@ export async function toggleTtsPlayback(request: TtsPlaybackRequest): Promise<vo
   }
   // 手动朗读启用切分且文本可切成多段 → 逐段播放；否则回退整段一次合成
   if (request.segmented) {
-    const speech = markdownToSpeechText(request.text, {
-      mode: request.speechMode,
-      preferredAddress: request.preferredAddress,
-    });
-    if (speech.text) {
-      const probe = new StreamingMarkdownSegmenter(4, request.segmentationGranularity ?? "sentence");
-      const segments = probe.finish(speech.text);
-      if (segments.length > 1) {
-        stopTtsPlayback();
-        const generation = ++manualSegmentedGeneration;
-        manualSegmentedActive = true;
-        const queue = new EarlyTtsPlaybackQueue(
-          (segment) => playTtsToCompletion({ ...request, text: segment, segmented: false }),
-          () => {
-            if (generation === manualSegmentedGeneration) {
-              manualSegmentedQueue = null;
-              manualSegmentedActive = false;
-            }
-          },
-          { segmented: true, granularity: request.segmentationGranularity ?? "sentence" },
-        );
-        manualSegmentedQueue = queue;
-        publish({ messageId: request.messageId, status: "synthesizing" });
-        void queue.finish(speech.text).finally(() => {
-          if (generation !== manualSegmentedGeneration) return;
-          manualSegmentedQueue = null;
-          manualSegmentedActive = false;
-          const playback = getTtsPlaybackSnapshot();
-          if (playback.messageId === request.messageId && playback.status === "completed") {
-            publish({ messageId: request.messageId, status: "completed" });
-          } else {
-            publish({ messageId: null, status: "idle" });
-          }
-        });
-        return;
-      }
-    }
+    await startManualSegmentedPlayback(request);
+    return;
   }
   await startTtsPlayback(request);
 }

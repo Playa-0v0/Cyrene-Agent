@@ -8,6 +8,8 @@ export interface StartTtsRequest {
   converterVersion: string;
   automatic?: boolean;
   supportsStreamingPlayback?: boolean;
+  /** 跳过按消息记录读取的历史缓存（分段朗读等文本与消息缓存身份不一致的场景使用）。 */
+  bypassMessageCache?: boolean;
 }
 
 export type TtsStartResult =
