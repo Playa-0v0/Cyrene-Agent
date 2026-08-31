@@ -1,0 +1,308 @@
+.cy-conversation-sidebar {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+  color: var(--cy-text);
+  font-family: var(--rb-font-sans, sans-serif);
+}
+
+.cy-conversation-sidebar .ant-conversations {
+  font: inherit;
+}
+
+.cy-conversation-sidebar .ant-conversations-item {
+  font: inherit;
+}
+
+.cy-conversation-sidebar .ant-conversations-label {
+  font: inherit;
+}
+
+.cy-conversation-sidebar__title {
+  padding: 2px 10px 4px;
+  color: #8b8b8b;
+  font: 600 10.5px/1.15 var(--rb-font-sans, sans-serif);
+  letter-spacing: .12em;
+}
+
+.cy-conversation-sidebar__empty {
+  padding: 8px;
+  color: var(--cy-text-muted);
+  font: 400 11px/1.45 var(--rb-font-sans, sans-serif);
+}
+
+.cy-conversation-list-wrapper {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: auto;
+}
+
+.cy-conversation-list-wrapper > *,
+.cy-conversation-list-wrapper .ant-conversations-item {
+  app-region: no-drag;
+}
+
+.cy-conversation-list {
+  margin: 0;
+  padding: 0 3px 6px;
+}
+
+.cy-conversation-list .ant-conversations-item {
+  height: auto;
+  min-height: auto;
+  margin-block: 1px;
+  padding: 5px 7px;
+  border-radius: 6px;
+  color: #5f5f5f;
+  font: 500 11.5px/1.25 var(--rb-font-sans, sans-serif);
+}
+
+.cy-conversation-list .ant-conversations-item:hover {
+  background: #f9f3f5;
+}
+
+.cy-conversation-list .ant-conversations-item-active {
+  background: #fff;
+  color: var(--cy-text);
+  box-shadow: 0 1px 5px rgb(46 38 41 / 7%);
+}
+
+.cy-conversation-list .ant-conversations-item-icon,
+.cy-conversation-project svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cy-conversation-list .ant-conversations-group-title {
+  height: auto;
+  min-height: auto;
+  padding: 3px 5px;
+  color: #393939;
+  cursor: pointer;
+}
+
+.cy-conversation-list .ant-conversations-group-collapse-trigger {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  place-items: center;
+}
+
+.cy-conversation-list .ant-conversations-group-collapse-trigger svg {
+  display: none;
+}
+
+.cy-conversation-list .ant-conversations-group-collapse-trigger::before {
+  width: 4.5px;
+  height: 4.5px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  content: "";
+  transform: rotate(-45deg);
+  transition: transform 0.18s ease;
+}
+
+.cy-conversation-list .ant-conversations-group-collapse-trigger-open::before {
+  transform: rotate(45deg);
+}
+
+.cy-conversation-project {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  font: 650 10.5px/1.15 var(--rb-font-sans, sans-serif);
+}
+
+.cy-session-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.cy-session-label__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cy-session-label__pin {
+  flex: none;
+  color: var(--cy-accent, #ff5b8a);
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.cy-conversation-project span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cy-conversation-list-wrapper::-webkit-scrollbar {
+  width: 5px;
+}
+
+.cy-conversation-list-wrapper::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #ddd;
+}
+
+.cy-project-popover .ant-popover-inner {
+  width: 310px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgb(43 34 37 / 8%);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 14px 38px rgb(65 45 52 / 15%);
+}
+
+.cy-project-popover .ant-popover-inner-content {
+  padding: 0;
+}
+
+.cy-project-card {
+  color: var(--cy-text, #292528);
+  font-family: var(--rb-font-sans, sans-serif);
+}
+
+.cy-project-card__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 15px 11px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cy-project-card__name svg,
+.cy-project-card__open svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cy-project-card__details {
+  margin: 0;
+  padding: 0 15px 11px;
+}
+
+.cy-project-card__details > div {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.cy-project-card__details dt {
+  color: #999196;
+}
+
+.cy-project-card__details dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #4b4548;
+}
+
+.cy-project-card__open {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 15px 12px;
+  border: 0;
+  border-top: 1px solid #f0edef;
+  background: #fff;
+  color: #514a4e;
+  cursor: pointer;
+  font: 600 12px/1.2 var(--rb-font-sans, sans-serif);
+  text-align: left;
+}
+
+.cy-project-card__open:hover {
+  background: #fff6f8;
+  color: var(--cy-accent, #ff5b8a);
+}
+
+.cy-project-card__open:disabled {
+  color: #bbb5b8;
+  cursor: default;
+}
+
+.cy-session-rename-input {
+  width: 100%;
+  padding: 1px 6px;
+  border: 1px solid var(--cy-accent, #ff5b8a);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--cy-text);
+  font: 500 11px/1.25 var(--rb-font-sans, sans-serif);
+}
+
+.cy-session-rename-input input {
+  padding: 0;
+  font: inherit;
+}
+
+.cy-session-context-menu {
+  min-width: 120px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 6px 20px rgb(46 38 41 / 12%);
+}
+
+.cy-session-context-menu .ant-menu {
+  border-inline-end: none;
+  border-radius: 8px;
+}
+
+.cy-session-context-menu .ant-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  line-height: 32px;
+  margin: 0;
+  border-radius: 6px;
+  color: var(--cy-text, #292528);
+  font: 500 12px/32px var(--rb-font-sans, sans-serif);
+}
+
+.cy-session-context-menu .ant-menu-item:hover {
+  background: #fff6f8;
+  color: var(--cy-accent, #ff5b8a);
+}
+
+.cy-session-context-menu .ant-menu-item-danger {
+  color: #ff4d4f;
+}
+
+.cy-session-context-menu .ant-menu-item-danger:hover {
+  color: #ff7875;
+  background: #fff1f0;
+}
+

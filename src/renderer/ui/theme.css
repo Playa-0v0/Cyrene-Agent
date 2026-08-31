@@ -1,0 +1,1240 @@
+[data-ui-theme="pearl-white"] {
+  color-scheme: light;
+
+  /* Surfaces — pure white */
+  --rb-bg-0: #ffffff;
+  --rb-bg-1: #f5f5f7;
+  --rb-bg-2: #fafafc;
+  --rb-bg-3: #ffffff;
+  --rb-bg-elevated: #ffffff;
+
+  /* Text — near-black */
+  --rb-text-strong:  #1d1d1f;
+  --rb-text-default: #2c2c2e;
+  --rb-text-muted:   #4f4a57;
+  --rb-text-faint:   #6f6876;
+  --rb-text-on-pink: #ffffff;
+
+  /* Borders / dividers */
+  --rb-border-faint: rgba(0, 0, 0, 0.06);
+  --rb-border-soft:  #e5e5ea;
+  --rb-border-strong:#d2d2d7;
+  --rb-border-grid:  rgba(0, 0, 0, 0.04);
+
+  /* Glows / shadows — soft black, no color cast */
+  --rb-glow-pink:   0 0 12px rgba(255, 91, 138, 0.18);
+  --rb-glow-soft:   0 0 6px  rgba(0, 0, 0, 0.06);
+  --rb-glow-violet: 0 0 10px rgba(0, 0, 0, 0.04);
+  --rb-shadow-card:    0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.04);
+  --rb-shadow-elevated:0 8px 32px rgba(0, 0, 0, 0.10);
+  --rb-shadow-pink:    0 4px 16px rgba(255, 91, 138, 0.20);
+
+  /* Pink accent stays — Cyrene's color */
+  --rb-pink-50:  #fff1f6;
+  --rb-pink-100: #ffd6e4;
+  --rb-pink-200: #ffb1cb;
+  --rb-pink-300: #ff7da8;
+  --rb-pink-400: #ff6b97;
+  --rb-pink-500: #ff5b8a;
+  --rb-pink-600: #e84a78;
+  --rb-pink-700: #c43a64;
+  --rb-pink-glow: #ff6ec7;
+
+  /* Light-mode component primitives */
+  --rb-card-bg:        #ffffff;
+  --rb-divider-light:  rgba(0, 0, 0, 0.08);
+  --rb-hover-light:    rgba(0, 0, 0, 0.04);
+  --rb-active-light:   rgba(0, 0, 0, 0.08);
+  --rb-input-bg:       #ffffff;
+  --rb-input-border:   #d2d2d7;
+  --rb-input-text:     #1d1d1f;
+  --rb-input-placeholder: #6f6876;
+  --rb-slider-track:   rgba(0, 0, 0, 0.08);
+  --rb-slider-fill:    var(--rb-pink-500);
+  --rb-slider-thumb:   #ffffff;
+  --rb-toggle-off:     #e5e5ea;
+  --rb-toggle-on:      var(--rb-pink-500);
+  --rb-scroll-thumb:   rgba(0, 0, 0, 0.18);
+  --rb-scroll-thumb-hover: rgba(0, 0, 0, 0.32);
+
+  /* Weather card: glass-morphism on white UI, dark text for contrast */
+  --rb-weather-bg:          rgba(255, 255, 255, 0.62);
+  --rb-weather-card-border: rgba(255, 255, 255, 0.85);
+  --rb-weather-border:      rgba(157, 139, 171, 0.16);
+  --rb-weather-text-strong: #5c4a66;
+  --rb-weather-text-default: #7a6888;
+  --rb-weather-text-muted:  #9d8bab;
+  --rb-weather-text-faint:  #bdaecf;
+  --rb-weather-accent:      #ff7fa8;
+  --rb-weather-detail-bg:   rgba(255, 255, 255, 0.55);
+  --rb-weather-detail-border: rgba(255, 255, 255, 0.9);
+  --rb-weather-icon-bg:     linear-gradient(135deg, #ffe4ee, #efe6ff);
+  --rb-weather-panel-bg:    rgba(255, 255, 255, 0.38);
+  --rb-weather-panel-border: rgba(255, 255, 255, 0.7);
+  --rb-weather-tag-bg:      linear-gradient(135deg, #ffd9e7, #e6ddff);
+
+  /* Weather illustration overrides for light theme */
+  --rb-weather-sun-core-1:  #ffe08a;
+  --rb-weather-sun-core-2:  #ffb14d;
+  --rb-weather-sun-ray:     #ffc95c;
+  --rb-weather-sun-glow:    rgba(255, 190, 90, 0.35);
+  --rb-weather-cloud:       #ffffff;
+  --rb-weather-cloud-shadow: rgba(160, 150, 190, 0.25);
+  --rb-weather-rain:        #7db4ff;
+  --rb-weather-snow:        #a8c8ff;
+  --rb-weather-bolt-1:      #ffe08a;
+  --rb-weather-bolt-2:      #ff9d4d;
+}
+
+/* NOTE: do NOT paint `body` here. The Live2D pet window keeps its
+   `body { background: transparent }` from src/renderer/index.html so the
+   canvas can show through the transparent BrowserWindow. The 6 UI windows
+   get their white surface from their .chat / .settings-shell / .sidebar /
+   .tasks / .sticker-shell / .call containers, not from `body`. */
+[data-ui-theme="pearl-white"] body {
+  color: var(--rb-text-default);
+}
+
+[data-ui-theme="pearl-white"] .chat,
+[data-ui-theme="pearl-white"] .settings-shell,
+[data-ui-theme="pearl-white"] .sidebar,
+[data-ui-theme="pearl-white"] .tasks {
+  background: var(--rb-card-bg);
+  border-color: var(--rb-border-soft);
+}
+
+/* Subtle ambient gradient layer — keep very faint on white */
+[data-ui-theme="pearl-white"] .chat::before,
+[data-ui-theme="pearl-white"] .settings-shell::before,
+[data-ui-theme="pearl-white"] .sidebar::before,
+[data-ui-theme="pearl-white"] .tasks::before {
+  opacity: 0.06;
+  background: linear-gradient(135deg, var(--rb-pink-100), transparent 60%);
+}
+
+[data-ui-theme="pearl-white"] .chat__particles {
+  opacity: 0.10;
+}
+
+[data-ui-theme="pearl-white"] .chat__titlebar,
+[data-ui-theme="pearl-white"] .settings-titlebar,
+[data-ui-theme="pearl-white"] .sidebar__titlebar,
+[data-ui-theme="pearl-white"] .tasks__titlebar,
+[data-ui-theme="pearl-white"] .sticker-titlebar {
+  background: var(--rb-bg-1);
+  border-bottom-color: var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] .settings-nav {
+  background: var(--rb-bg-1);
+  border-right-color: var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] .settings-nav__sub,
+[data-ui-theme="pearl-white"] .settings-titlebar__hint,
+[data-ui-theme="pearl-white"] .chat__hint,
+[data-ui-theme="pearl-white"] .sidebar__hint,
+[data-ui-theme="pearl-white"] .tasks__hint,
+[data-ui-theme="pearl-white"] .chat__rail-meta,
+[data-ui-theme="pearl-white"] .chat__rail-time,
+
+[data-ui-theme="pearl-white"] .settings-nav__brand,
+[data-ui-theme="pearl-white"] .settings-titlebar__title,
+[data-ui-theme="pearl-white"] .chat__name,
+[data-ui-theme="pearl-white"] .sidebar__name,
+[data-ui-theme="pearl-white"] .sidebar__title,
+[data-ui-theme="pearl-white"] .tasks__title,
+[data-ui-theme="pearl-white"] .sticker-title,
+[data-ui-theme="pearl-white"] .profile__name {
+  color: var(--rb-text-strong);
+  text-shadow: none;
+}
+
+[data-ui-theme="pearl-white"] .chat__name-sep {
+  color: var(--rb-text-faint);
+}
+
+/* Chat titlebar dropdowns (模式 / 风格 / 推理).
+   Dark themes rely on their glass surfaces; pearl-white needs more
+   contrast — bump label + arrow from --rb-text-faint to --rb-text-muted
+   and value from --rb-pink-100 to --rb-pink-600 so the selected value
+   actually reads on a light titlebar. */
+[data-ui-theme="pearl-white"] .dropdown-trigger {
+  background: var(--rb-bg-2);
+  border-color: var(--rb-border-soft);
+}
+[data-ui-theme="pearl-white"] .dropdown-trigger:hover {
+  background: var(--rb-hover-light);
+  border-color: var(--rb-border-strong);
+}
+[data-ui-theme="pearl-white"] .dt-label {
+  color: var(--rb-text-muted);
+}
+[data-ui-theme="pearl-white"] .dt-value {
+  color: var(--rb-pink-600);
+  font-weight: 600;
+}
+[data-ui-theme="pearl-white"] .dt-arrow {
+  border-top-color: var(--rb-text-muted);
+}
+
+[data-ui-theme="pearl-white"] .nav-item,
+[data-ui-theme="pearl-white"] .setting-row span,
+[data-ui-theme="pearl-white"] .panel-heading p,
+[data-ui-theme="pearl-white"] .placeholder-card p,
+[data-ui-theme="pearl-white"] .disclaimer-section p,
+[data-ui-theme="pearl-white"] .disclaimer-section li,
+[data-ui-theme="pearl-white"] .api-note,
+[data-ui-theme="pearl-white"] .save-status,
+[data-ui-theme="pearl-white"] .field-note,
+[data-ui-theme="pearl-white"] .task-empty,
+[data-ui-theme="pearl-white"] .sticker-picker__empty,
+[data-ui-theme="pearl-white"] .msg__time {
+  color: var(--rb-text-muted);
+}
+
+[data-ui-theme="pearl-white"] .plugin-panel-heading p,
+[data-ui-theme="pearl-white"] .plugin-card__body p,
+[data-ui-theme="pearl-white"] .plugin-card--sub .plugin-card__body p,
+[data-ui-theme="pearl-white"] .plugin-config .user-field-hint,
+[data-ui-theme="pearl-white"] .user-field-hint,
+[data-ui-theme="pearl-white"] .settings-nav__footer,
+[data-ui-theme="pearl-white"] .sidebar__version,
+[data-ui-theme="pearl-white"] .schedule-footer__version,
+[data-ui-theme="pearl-white"] .model-params-hint,
+[data-ui-theme="pearl-white"] .model-params-section .field small,
+[data-ui-theme="pearl-white"] .agent-setting-card p,
+[data-ui-theme="pearl-white"] .agent-setting-card__note,
+[data-ui-theme="pearl-white"] .agent-setting-subgroup p,
+[data-ui-theme="pearl-white"] .agent-status-row em,
+[data-ui-theme="pearl-white"] .vision-config-heading p,
+[data-ui-theme="pearl-white"] .vision-hint,
+[data-ui-theme="pearl-white"] .panel-hint,
+[data-ui-theme="pearl-white"] .empty-hint,
+[data-ui-theme="pearl-white"] .skill-row__desc,
+[data-ui-theme="pearl-white"] .skill-group__desc,
+[data-ui-theme="pearl-white"] .scheduler-empty,
+[data-ui-theme="pearl-white"] .scheduler-card__meta,
+[data-ui-theme="pearl-white"] .token-panel__hint,
+[data-ui-theme="pearl-white"] .token-empty__hint,
+[data-ui-theme="pearl-white"] .tts-hint,
+[data-ui-theme="pearl-white"] .tts-clone-hint,
+[data-ui-theme="pearl-white"] .sticker-field label,
+[data-ui-theme="pearl-white"] .sticker-file-name,
+[data-ui-theme="pearl-white"] .channels-card__hint,
+[data-ui-theme="pearl-white"] .todo-panel__count,
+[data-ui-theme="pearl-white"] .todo-progress__label,
+[data-ui-theme="pearl-white"] .choice-card__option-desc {
+  color: var(--rb-text-muted);
+  opacity: 1;
+}
+
+[data-ui-theme="pearl-white"] .plugin-card__body a,
+[data-ui-theme="pearl-white"] .disclaimer-section a,
+[data-ui-theme="pearl-white"] .user-field-hint a,
+[data-ui-theme="pearl-white"] .save-btn--ghost {
+  color: var(--rb-pink-600);
+}
+
+[data-ui-theme="pearl-white"] .disclaimer-section a {
+  border-bottom-color: rgba(232, 74, 120, 0.34);
+}
+
+[data-ui-theme="pearl-white"] .disclaimer-section a:hover {
+  color: var(--rb-pink-700);
+  border-bottom-color: var(--rb-pink-600);
+}
+
+[data-ui-theme="pearl-white"] .plugin-card.is-muted {
+  opacity: 0.72;
+}
+
+[data-ui-theme="pearl-white"] .nav-item span {
+  filter: none;
+}
+
+[data-ui-theme="pearl-white"] .nav-divider {
+  border-top-color: var(--rb-border-strong);
+  margin: 9px 2px;
+}
+
+[data-ui-theme="pearl-white"] .switch__track,
+[data-ui-theme="pearl-white"] .plugin-switch span {
+  background: #f1eef4;
+  border-color: #d8d2dc;
+  box-shadow: inset 0 1px 1px rgba(38, 28, 46, 0.05);
+}
+
+[data-ui-theme="pearl-white"] .switch__thumb,
+[data-ui-theme="pearl-white"] .plugin-switch span::after {
+  background: #ffffff;
+  border: 1px solid #d8d2dc;
+  box-shadow: 0 2px 6px rgba(38, 28, 46, 0.14);
+}
+
+[data-ui-theme="pearl-white"] .switch input:checked + .switch__track,
+[data-ui-theme="pearl-white"] .plugin-switch input:checked + span {
+  background: linear-gradient(135deg, #ffe5ef, #ffd6e4);
+  border-color: #ffb1cb;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.72), 0 0 0 3px rgba(255, 214, 228, 0.42);
+}
+
+[data-ui-theme="pearl-white"] .switch input:checked + .switch__track .switch__thumb,
+[data-ui-theme="pearl-white"] .plugin-switch input:checked + span::after {
+  background: #ffffff;
+  border-color: #ffb1cb;
+  box-shadow: 0 2px 7px rgba(232, 74, 120, 0.18);
+}
+
+[data-ui-theme="pearl-white"] .switch:hover .switch__track,
+[data-ui-theme="pearl-white"] .plugin-switch:hover span {
+  border-color: #ffb1cb;
+}
+
+[data-ui-theme="pearl-white"] input[type="range"] {
+  accent-color: #ffb1cb;
+}
+
+[data-ui-theme="pearl-white"] .range-row input[type="range"],
+[data-ui-theme="pearl-white"] .setting-row input[type="range"],
+[data-ui-theme="pearl-white"] .tts-field input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ffd6e4, #ffeef5);
+  border: 1px solid #f2c4d5;
+  box-shadow: inset 0 1px 2px rgba(116, 80, 96, 0.08);
+  outline: none;
+}
+
+[data-ui-theme="pearl-white"] .range-row input[type="range"]::-webkit-slider-runnable-track,
+[data-ui-theme="pearl-white"] .setting-row input[type="range"]::-webkit-slider-runnable-track,
+[data-ui-theme="pearl-white"] .tts-field input[type="range"]::-webkit-slider-runnable-track {
+  height: 7px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+[data-ui-theme="pearl-white"] .range-row input[type="range"]::-webkit-slider-thumb,
+[data-ui-theme="pearl-white"] .setting-row input[type="range"]::-webkit-slider-thumb,
+[data-ui-theme="pearl-white"] .tts-field input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #ffb1cb;
+  box-shadow: 0 2px 7px rgba(232, 74, 120, 0.18);
+  cursor: pointer;
+}
+
+[data-ui-theme="pearl-white"] .range-row input[type="range"]::-moz-range-track,
+[data-ui-theme="pearl-white"] .setting-row input[type="range"]::-moz-range-track,
+[data-ui-theme="pearl-white"] .tts-field input[type="range"]::-moz-range-track {
+  height: 7px;
+  border-radius: 999px;
+  background: #ffe5ef;
+  border: 1px solid #f2c4d5;
+}
+
+[data-ui-theme="pearl-white"] .range-row input[type="range"]::-moz-range-progress,
+[data-ui-theme="pearl-white"] .setting-row input[type="range"]::-moz-range-progress,
+[data-ui-theme="pearl-white"] .tts-field input[type="range"]::-moz-range-progress {
+  height: 7px;
+  border-radius: 999px;
+  background: #ffb1cb;
+}
+
+[data-ui-theme="pearl-white"] .range-row input[type="range"]::-moz-range-thumb,
+[data-ui-theme="pearl-white"] .setting-row input[type="range"]::-moz-range-thumb,
+[data-ui-theme="pearl-white"] .tts-field input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #ffb1cb;
+  box-shadow: 0 2px 7px rgba(232, 74, 120, 0.18);
+  cursor: pointer;
+}
+
+[data-ui-theme="pearl-white"] .range-val {
+  color: var(--rb-pink-600);
+}
+
+[data-ui-theme="pearl-white"] .nav-item:hover,
+[data-ui-theme="pearl-white"] .nav-item.is-active,
+[data-ui-theme="pearl-white"] .chat__rail-item:hover,
+[data-ui-theme="pearl-white"] .chat__rail-item.is-active,
+[data-ui-theme="pearl-white"] .sidebar__icon-btn.is-active {
+  color: var(--rb-pink-600);
+  background: var(--rb-pink-50);
+  border-color: var(--rb-pink-200);
+}
+
+[data-ui-theme="pearl-white"] .settings-panel,
+[data-ui-theme="pearl-white"] .panel-card,
+[data-ui-theme="pearl-white"] .schedule-usage,
+[data-ui-theme="pearl-white"] .disclaimer-section,
+[data-ui-theme="pearl-white"] .sticker-card,
+[data-ui-theme="pearl-white"] .setting-row,
+[data-ui-theme="pearl-white"] .agent-setting-card,
+[data-ui-theme="pearl-white"] .memory-card,
+[data-ui-theme="pearl-white"] .plugin-card,
+[data-ui-theme="pearl-white"] .tts-section,
+[data-ui-theme="pearl-white"] .token-card,
+[data-ui-theme="pearl-white"] .task-item,
+[data-ui-theme="pearl-white"] .chat__rail,
+[data-ui-theme="pearl-white"] .chat__rail-item,
+[data-ui-theme="pearl-white"] .sticker-picker,
+[data-ui-theme="pearl-white"] .sticker-picker__item {
+  border-color: var(--rb-border-soft);
+  background: var(--rb-card-bg);
+  box-shadow: var(--rb-shadow-card);
+}
+
+[data-ui-theme="pearl-white"] .panel-heading__icon,
+[data-ui-theme="pearl-white"] .placeholder-card__icon,
+[data-ui-theme="pearl-white"] .indicator__emoji,
+[data-ui-theme="pearl-white"] .model-feed__emoji {
+  border-color: var(--rb-pink-200);
+  background: var(--rb-pink-50);
+  filter: none;
+}
+
+[data-ui-theme="pearl-white"] .field input,
+[data-ui-theme="pearl-white"] .field select,
+[data-ui-theme="pearl-white"] .field textarea,
+[data-ui-theme="pearl-white"] .memory-field input,
+[data-ui-theme="pearl-white"] .memory-field textarea,
+[data-ui-theme="pearl-white"] .tts-field input,
+[data-ui-theme="pearl-white"] .tts-field select,
+[data-ui-theme="pearl-white"] .tts-field textarea,
+[data-ui-theme="pearl-white"] #input,
+[data-ui-theme="pearl-white"] .choice-card__custom-input {
+  color: var(--rb-input-text);
+  background: var(--rb-input-bg);
+  border-color: var(--rb-input-border);
+  box-shadow: none;
+}
+
+[data-ui-theme="pearl-white"] .field input::placeholder,
+[data-ui-theme="pearl-white"] .field textarea::placeholder,
+[data-ui-theme="pearl-white"] .tts-field input::placeholder,
+[data-ui-theme="pearl-white"] .tts-field textarea::placeholder,
+[data-ui-theme="pearl-white"] #input::placeholder,
+[data-ui-theme="pearl-white"] .choice-card__custom-input::placeholder {
+  color: var(--rb-input-placeholder);
+}
+
+[data-ui-theme="pearl-white"] .field span,
+[data-ui-theme="pearl-white"] .tts-field label,
+[data-ui-theme="pearl-white"] .memory-field label {
+  color: var(--rb-text-default);
+}
+
+[data-ui-theme="pearl-white"] .option-block,
+[data-ui-theme="pearl-white"] .language-option,
+[data-ui-theme="pearl-white"] .ghost-btn,
+[data-ui-theme="pearl-white"] .win-btn,
+[data-ui-theme="pearl-white"] .sidebar__icon-btn,
+[data-ui-theme="pearl-white"] .sidebar__winbtn,
+[data-ui-theme="pearl-white"] .tasks__winbtn,
+[data-ui-theme="pearl-white"] .chat__icon-btn,
+[data-ui-theme="pearl-white"] .chat__winbtn,
+[data-ui-theme="pearl-white"] .chat__attach,
+[data-ui-theme="pearl-white"] .chat__sticker-btn {
+  color: var(--rb-text-default);
+  background: var(--rb-card-bg);
+  border-color: var(--rb-border-soft);
+  box-shadow: none;
+}
+
+/* .msg__speak 单独处理：默认透明背景，仅在 hover / .is-speaking 时填色。
+   这样在浅色消息气泡上不会多出一块白方块，但播放态仍能明显高亮。 */
+[data-ui-theme="pearl-white"] .msg__speak {
+  color: var(--rb-text-muted);
+  background: transparent;
+  border-color: var(--rb-border-strong);
+  box-shadow: none;
+}
+[data-ui-theme="pearl-white"] .msg__speak:hover {
+  color: var(--rb-pink-600);
+  background: var(--rb-pink-50);
+  border-color: var(--rb-pink-300);
+}
+
+/* .msg__copy 同样：默认透明背景，border 用更强的色让浅色背景上仍可见 */
+[data-ui-theme="pearl-white"] .msg__copy {
+  color: var(--rb-text-muted);
+  background: transparent;
+  border-color: var(--rb-border-strong);
+  box-shadow: none;
+}
+[data-ui-theme="pearl-white"] .msg__copy:hover {
+  color: var(--rb-pink-600);
+  background: var(--rb-pink-50);
+  border-color: var(--rb-pink-300);
+}
+
+[data-ui-theme="pearl-white"] .option-block:hover,
+[data-ui-theme="pearl-white"] .language-option:hover,
+[data-ui-theme="pearl-white"] .ghost-btn:hover,
+[data-ui-theme="pearl-white"] .win-btn:hover,
+[data-ui-theme="pearl-white"] .sidebar__icon-btn:hover,
+[data-ui-theme="pearl-white"] .sidebar__winbtn:hover,
+[data-ui-theme="pearl-white"] .tasks__winbtn:hover,
+[data-ui-theme="pearl-white"] .chat__icon-btn:hover,
+[data-ui-theme="pearl-white"] .chat__winbtn:hover,
+[data-ui-theme="pearl-white"] .accordion-toggle:hover,
+[data-ui-theme="pearl-white"] .base-url-reset:hover,
+[data-ui-theme="pearl-white"] .preset-website-link:hover,
+[data-ui-theme="pearl-white"] .perm-seg:not(.is-active):hover {
+  color: var(--rb-pink-600);
+  background: var(--rb-hover-light);
+  border-color: var(--rb-border-strong);
+}
+
+/* 今日日程：pearl-white 下保留品牌粉作为强调色。
+   dark 主题默认是 strong/default（参见 tasks.css）；这里只覆盖白调。 */
+[data-ui-theme="pearl-white"] .schedule-count__unit {
+  color: var(--rb-pink-600);
+}
+[data-ui-theme="pearl-white"] .usage-number {
+  color: var(--rb-pink-600);
+  text-shadow: var(--rb-shadow-pink);
+}
+[data-ui-theme="pearl-white"] .usage-label {
+  color: var(--rb-text-default);
+  background: var(--rb-bg-2);
+  border-color: var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] .option-block.is-active,
+[data-ui-theme="pearl-white"] .language-option.is-active,
+[data-ui-theme="pearl-white"] .chat__sticker-btn.is-active,
+[data-ui-theme="pearl-white"] .chat__attach.has-file {
+  color: var(--rb-pink-600);
+  background: var(--rb-pink-50);
+  border-color: var(--rb-pink-500);
+  box-shadow: 0 0 0 3px var(--rb-pink-100);
+}
+
+[data-ui-theme="pearl-white"] .save-btn,
+[data-ui-theme="pearl-white"] .btn-primary,
+[data-ui-theme="pearl-white"] .settings-btn,
+[data-ui-theme="pearl-white"] .chat__send,
+[data-ui-theme="pearl-white"] .chat__send-btn,
+[data-ui-theme="pearl-white"] .schedule-settings-btn,
+[data-ui-theme="pearl-white"] .chat__rail-new,
+[data-ui-theme="pearl-white"] .sticker-file-btn {
+  color: var(--rb-text-on-pink);
+  background: var(--rb-pink-500);
+  border-color: var(--rb-pink-500);
+  box-shadow: var(--rb-shadow-pink);
+}
+
+[data-ui-theme="pearl-white"] .save-btn:hover:not(:disabled),
+[data-ui-theme="pearl-white"] .btn-primary:hover:not(:disabled),
+[data-ui-theme="pearl-white"] .settings-btn:hover,
+[data-ui-theme="pearl-white"] .chat__send:hover:not(:disabled),
+[data-ui-theme="pearl-white"] .schedule-settings-btn:hover,
+[data-ui-theme="pearl-white"] .chat__rail-new:hover {
+  background: var(--rb-pink-600);
+  box-shadow: 0 6px 20px rgba(255, 91, 138, 0.28);
+}
+
+[data-ui-theme="pearl-white"] .chat__title-meta,
+[data-ui-theme="pearl-white"] .schedule-date,
+[data-ui-theme="pearl-white"] .profile__online,
+[data-ui-theme="pearl-white"] .chat__file-tag {
+  border-color: var(--rb-pink-200);
+  background: var(--rb-pink-50);
+}
+
+[data-ui-theme="pearl-white"] .profile__online {
+  color: #15803d;
+  background: rgba(220, 252, 231, 0.72);
+  border-color: rgba(34, 197, 94, 0.24);
+}
+
+[data-ui-theme="pearl-white"] .profile__online.is-offline {
+  color: var(--rb-text-muted);
+  background: var(--rb-bg-1);
+  border-color: var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] .msg--model .msg__bubble {
+  color: var(--rb-text-default);
+  background: var(--rb-bg-1);
+  border-color: var(--rb-border-soft);
+  box-shadow: var(--rb-shadow-card);
+}
+
+[data-ui-theme="pearl-white"] .msg--user .msg__bubble {
+  background: var(--rb-pink-500);
+  border-color: var(--rb-pink-500);
+  color: var(--rb-text-on-pink);
+}
+
+[data-ui-theme="pearl-white"] .msg__sticker {
+  background: var(--rb-card-bg);
+  border-color: var(--rb-border-soft);
+  box-shadow: var(--rb-shadow-card);
+}
+
+/* Chat three-band layout — give each band a distinct surface in pearl-white
+   so the titlebar / messages / input regions read as separate layers.
+   Dark themes rely on their own gradients + glass highlights and stay
+   untouched. */
+[data-ui-theme="pearl-white"] .chat__main,
+[data-ui-theme="pearl-white"] .chat__messages {
+  background: var(--rb-card-bg);   /* pure white = main reading surface */
+}
+
+[data-ui-theme="pearl-white"] .chat__input,
+[data-ui-theme="pearl-white"] .chat__file-tags {
+  background: var(--rb-bg-2);      /* soft gray = anchors the composer below */
+  border-top-color: var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] #input:focus {
+  background: var(--rb-card-bg);
+  border-color: var(--rb-pink-500);
+  box-shadow: 0 0 0 4px var(--rb-pink-100);
+}
+
+[data-ui-theme="pearl-white"] .sticker-picker__item:hover,
+[data-ui-theme="pearl-white"] .chat__preset:hover,
+[data-ui-theme="pearl-white"] .chat__attach:hover,
+[data-ui-theme="pearl-white"] .chat__sticker-btn:hover {
+  color: var(--rb-pink-600);
+  background: var(--rb-pink-50);
+  border-color: var(--rb-pink-200);
+}
+/* .msg__speak:hover 在更上面单独定义（border-color 用更深的 pink-300 强化可见） */
+
+[data-ui-theme="pearl-white"] .chat__preset {
+  color: var(--rb-text-default);
+  background: var(--rb-card-bg);
+  border-color: var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] .chat__preset-label,
+[data-ui-theme="pearl-white"] .chat__rail-title {
+  color: var(--rb-text-strong);
+}
+
+[data-ui-theme="pearl-white"] .plugin-add-btn,
+[data-ui-theme="pearl-white"] .perm-seg.is-active,
+[data-ui-theme="pearl-white"] .token-range__btn.is-active,
+[data-ui-theme="pearl-white"] .tts-engine.is-active {
+  color: var(--rb-text-on-pink);
+}
+
+[data-ui-theme="pearl-white"] .plugin-card__icon,
+[data-ui-theme="pearl-white"] .plugin-perm-capsule,
+[data-ui-theme="pearl-white"] .accordion-toggle,
+[data-ui-theme="pearl-white"] .base-url-reset,
+[data-ui-theme="pearl-white"] .preset-website-link,
+[data-ui-theme="pearl-white"] .token-range__btn,
+[data-ui-theme="pearl-white"] .token-hero,
+[data-ui-theme="pearl-white"] .token-stat,
+[data-ui-theme="pearl-white"] .token-trend-wrap,
+[data-ui-theme="pearl-white"] .token-panel__hint,
+[data-ui-theme="pearl-white"] .tts-engine,
+[data-ui-theme="pearl-white"] .tts-hint,
+[data-ui-theme="pearl-white"] .tts-clone-section,
+[data-ui-theme="pearl-white"] .skill-group,
+[data-ui-theme="pearl-white"] .skill-group__header,
+[data-ui-theme="pearl-white"] .scheduler-toolbar,
+[data-ui-theme="pearl-white"] .scheduler-empty {
+  color: var(--rb-text-default);
+  background: var(--rb-bg-2);
+  border-color: var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] .plugin-config,
+[data-ui-theme="pearl-white"] .plugin-accordion-body,
+[data-ui-theme="pearl-white"] .vision-config-section,
+[data-ui-theme="pearl-white"] .tts-section__title,
+[data-ui-theme="pearl-white"] .skill-row,
+[data-ui-theme="pearl-white"] .chat-sessions__footer {
+  border-color: var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] .plugin-config .tts-field input,
+[data-ui-theme="pearl-white"] .tts-field input,
+[data-ui-theme="pearl-white"] .tts-field select {
+  color: var(--rb-input-text);
+  background-color: var(--rb-input-bg);
+  border-color: var(--rb-input-border);
+}
+
+[data-ui-theme="pearl-white"] .tts-field select option {
+  color: var(--rb-input-text);
+  background: var(--rb-card-bg);
+}
+
+/* 通用 select option：在 pearl-white 下默认底是白(--rb-bg-2/#fafafc)，
+   base CSS 里 .field select option 的色是 var(--rb-text-on-pink)
+   (即 white) — 与白底融为一体导致选项看不见。这里统一强制为深色。 */
+[data-ui-theme="pearl-white"] .field select option {
+  color: var(--rb-input-text);
+  background: var(--rb-card-bg);
+}
+
+[data-ui-theme="pearl-white"] .rag-model-card__desc,
+[data-ui-theme="pearl-white"] .token-hero__label,
+[data-ui-theme="pearl-white"] .token-hero__req-label,
+[data-ui-theme="pearl-white"] .token-stat__label,
+[data-ui-theme="pearl-white"] .token-bar__label,
+[data-ui-theme="pearl-white"] .token-section-title,
+[data-ui-theme="pearl-white"] .tts-engine__tag {
+  color: var(--rb-text-muted);
+}
+
+[data-ui-theme="pearl-white"] .rag-model-card em,
+[data-ui-theme="pearl-white"] .token-hero__req-value,
+[data-ui-theme="pearl-white"] .token-stat__value,
+[data-ui-theme="pearl-white"] .tts-section__title,
+[data-ui-theme="pearl-white"] .tts-engine__name,
+[data-ui-theme="pearl-white"] .tts-clone-title,
+[data-ui-theme="pearl-white"] .skill-row__title,
+[data-ui-theme="pearl-white"] .skill-group__title,
+[data-ui-theme="pearl-white"] .scheduler-toolbar__copy strong {
+  color: var(--rb-text-strong);
+}
+
+/* Mossland / 未来新增的「敬请期待」卡（占位）—— pearl-white 下保持可读 */
+[data-ui-theme="pearl-white"] .tts-engine__soon {
+  color: #7a3d0a;
+  background: #fff0d6;
+  border-color: #f5d4a8;
+}
+
+[data-ui-theme="pearl-white"] .save-status.is-ok,
+[data-ui-theme="pearl-white"] .tts-clone-status.is-ok {
+  color: #15803d;
+}
+
+[data-ui-theme="pearl-white"] .save-status.is-error,
+[data-ui-theme="pearl-white"] .tts-clone-status.is-error,
+[data-ui-theme="pearl-white"] .sticker-add-modal__error {
+  color: #b91c1c;
+}
+
+[data-ui-theme="pearl-white"] .token-tooltip {
+  color: var(--rb-text-default);
+  background: var(--rb-card-bg);
+  border-color: var(--rb-border-strong);
+  box-shadow: var(--rb-shadow-elevated);
+}
+
+[data-ui-theme="pearl-white"] .token-tooltip__date,
+[data-ui-theme="pearl-white"] .token-tooltip__row span:first-child {
+  color: var(--rb-text-muted);
+  border-color: var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] .tts-engine.is-active,
+[data-ui-theme="pearl-white"] .rag-model-card.is-active {
+  color: var(--rb-pink-600);
+  background: var(--rb-pink-50);
+  border-color: var(--rb-pink-500);
+  box-shadow: 0 0 0 3px var(--rb-pink-100);
+}
+
+[data-ui-theme="pearl-white"] .tts-engine.is-active .tts-engine__name,
+[data-ui-theme="pearl-white"] .rag-model-card.is-active .rag-model-card__title {
+  color: var(--rb-pink-700);
+}
+
+[data-ui-theme="pearl-white"] .tts-engine.is-active .tts-engine__tag,
+[data-ui-theme="pearl-white"] .rag-model-card.is-active .rag-model-card__desc {
+  color: var(--rb-text-muted);
+}
+
+[data-ui-theme="pearl-white"] .sticker-add-modal,
+[data-ui-theme="pearl-white"] .channels-card,
+[data-ui-theme="pearl-white"] .todo-panel,
+[data-ui-theme="pearl-white"] .choice-card,
+[data-ui-theme="pearl-white"] .choice-card__option {
+  color: var(--rb-text-default);
+  background: var(--rb-card-bg);
+  border-color: var(--rb-border-soft);
+  box-shadow: var(--rb-shadow-card);
+}
+
+[data-ui-theme="pearl-white"] .todo-panel,
+[data-ui-theme="pearl-white"] .choice-card {
+  backdrop-filter: none;
+}
+
+[data-ui-theme="pearl-white"] .sticker-add-modal__title,
+[data-ui-theme="pearl-white"] .channels-card__header h2,
+[data-ui-theme="pearl-white"] .todo-panel__title,
+[data-ui-theme="pearl-white"] .todo-item__text,
+[data-ui-theme="pearl-white"] .choice-card__title,
+[data-ui-theme="pearl-white"] .choice-card__question-title,
+[data-ui-theme="pearl-white"] .choice-card__option-label {
+  color: var(--rb-text-strong);
+}
+
+[data-ui-theme="pearl-white"] .choice-card__question {
+  border-color: var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] .choice-card__question--invalid {
+  border-color: #e11d48;
+}
+
+[data-ui-theme="pearl-white"] .choice-card__question--invalid .choice-card__question-title {
+  color: #be123c;
+}
+
+[data-ui-theme="pearl-white"] .sticker-field input,
+[data-ui-theme="pearl-white"] .sticker-field textarea,
+[data-ui-theme="pearl-white"] .choice-card__custom-input {
+  color: var(--rb-input-text);
+  background: var(--rb-input-bg);
+  border-color: var(--rb-input-border);
+}
+
+[data-ui-theme="pearl-white"] .choice-card__custom-input::placeholder {
+  color: var(--rb-input-placeholder);
+}
+
+[data-ui-theme="pearl-white"] .choice-card__custom-input:focus {
+  border-color: var(--rb-pink-500);
+  box-shadow: 0 0 0 3px var(--rb-pink-100);
+}
+
+[data-ui-theme="pearl-white"] .choice-card__custom-input:disabled {
+  color: var(--rb-text-muted);
+  background: var(--rb-bg-1);
+  border-color: var(--rb-border-soft);
+  opacity: 1;
+}
+
+[data-ui-theme="pearl-white"] .choice-card__option:hover:not(:disabled) {
+  background: var(--rb-pink-50);
+  border-color: var(--rb-pink-200);
+}
+
+[data-ui-theme="pearl-white"] .choice-card__option:disabled {
+  color: var(--rb-text-muted);
+  background: var(--rb-bg-1);
+  border-color: var(--rb-border-soft);
+  opacity: 1;
+}
+
+[data-ui-theme="pearl-white"] .choice-card__option--selected {
+  color: var(--rb-pink-700);
+  background: var(--rb-pink-50);
+  border-color: var(--rb-pink-500);
+  box-shadow: 0 0 0 3px var(--rb-pink-100);
+}
+
+[data-ui-theme="pearl-white"] .todo-panel__toggle,
+[data-ui-theme="pearl-white"] .choice-card__custom-btn {
+  color: var(--rb-text-on-pink);
+  background: var(--rb-pink-500);
+  border-color: var(--rb-pink-500);
+}
+
+[data-ui-theme="pearl-white"] .todo-panel__toggle {
+  box-shadow: none;
+}
+
+[data-ui-theme="pearl-white"] .todo-panel__toggle:hover,
+[data-ui-theme="pearl-white"] .choice-card__custom-btn:hover:not(:disabled) {
+  background: var(--rb-pink-600);
+}
+
+[data-ui-theme="pearl-white"] .choice-card__custom-btn:disabled {
+  color: var(--rb-text-muted);
+  background: var(--rb-bg-1);
+  border-color: var(--rb-border-soft);
+  opacity: 1;
+}
+
+[data-ui-theme="pearl-white"] .todo-progress__track,
+[data-ui-theme="pearl-white"] .todo-panel__divider {
+  background: var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] .todo-progress__fill {
+  background: linear-gradient(90deg, var(--rb-pink-400), var(--rb-pink-500));
+}
+
+[data-ui-theme="pearl-white"] .todo-item__icon {
+  color: var(--rb-text-on-pink);
+  background: var(--rb-pink-500);
+}
+
+[data-ui-theme="pearl-white"] .todo-item.in_progress .todo-item__icon {
+  background: var(--rb-pink-600);
+  box-shadow: 0 0 0 3px var(--rb-pink-100);
+}
+
+[data-ui-theme="pearl-white"] .todo-item.completed .todo-item__icon {
+  background: #22c55e;
+}
+
+[data-ui-theme="pearl-white"] .todo-badge {
+  letter-spacing: 0;
+}
+
+[data-ui-theme="pearl-white"] .todo-badge--high {
+  color: #b91c1c;
+  background: rgba(254, 226, 226, 0.88);
+  border-color: rgba(248, 113, 113, 0.34);
+}
+
+[data-ui-theme="pearl-white"] .todo-badge--medium {
+  color: #92400e;
+  background: rgba(254, 243, 199, 0.88);
+  border-color: rgba(245, 158, 11, 0.34);
+}
+
+[data-ui-theme="pearl-white"] .todo-badge--low {
+  color: #15803d;
+  background: rgba(220, 252, 231, 0.88);
+  border-color: rgba(34, 197, 94, 0.28);
+}
+
+[data-ui-theme="pearl-white"] .todo-item.completed .todo-item__text,
+[data-ui-theme="pearl-white"] .choice-card--resolved {
+  color: var(--rb-text-faint);
+  opacity: 1;
+}
+
+[data-ui-theme="pearl-white"] .choice-card--resolved .choice-card__option:not(.choice-card__option--selected),
+[data-ui-theme="pearl-white"] .choice-card--resolved .choice-card__custom {
+  opacity: 0.74;
+}
+
+[data-ui-theme="pearl-white"] #channels-panel > h1,
+[data-ui-theme="pearl-white"] .channels-card__header h2,
+[data-ui-theme="pearl-white"] .channels-qr-modal__title,
+[data-ui-theme="pearl-white"] .channels-log > summary,
+[data-ui-theme="pearl-white"] .chat-sessions__title {
+  color: var(--rb-text-strong);
+}
+
+[data-ui-theme="pearl-white"] .channels-card,
+[data-ui-theme="pearl-white"] .channels-log,
+[data-ui-theme="pearl-white"] .channels-log__entry,
+[data-ui-theme="pearl-white"] .chat-sessions__item {
+  background: var(--rb-card-bg);
+  border-color: var(--rb-border-strong);
+  box-shadow: none;
+}
+
+[data-ui-theme="pearl-white"] .channels-card--global,
+[data-ui-theme="pearl-white"] .channels-log__entry,
+[data-ui-theme="pearl-white"] .chat-sessions__item:hover {
+  background: var(--rb-bg-2);
+}
+
+[data-ui-theme="pearl-white"] .channels-card__hint,
+[data-ui-theme="pearl-white"] .channels-status,
+[data-ui-theme="pearl-white"] .channels-status__text,
+[data-ui-theme="pearl-white"] .channels-card__body .form-label,
+[data-ui-theme="pearl-white"] .channels-card__body .form-row__label,
+[data-ui-theme="pearl-white"] .channels-card__body .form-hint,
+[data-ui-theme="pearl-white"] .channels-feedback,
+[data-ui-theme="pearl-white"] .channels-log__meta,
+[data-ui-theme="pearl-white"] .chat-sessions__meta,
+[data-ui-theme="pearl-white"] .chat-sessions__time,
+[data-ui-theme="pearl-white"] .chat-sessions__footer-hint,
+[data-ui-theme="pearl-white"] .chat-sessions__empty,
+[data-ui-theme="pearl-white"] .chat-sessions__empty p {
+  color: var(--rb-text-muted);
+  opacity: 1;
+}
+
+[data-ui-theme="pearl-white"] .channels-card__hint strong,
+[data-ui-theme="pearl-white"] .channels-log__text {
+  color: var(--rb-text-default);
+}
+
+[data-ui-theme="pearl-white"] .channels-card__hint a,
+[data-ui-theme="pearl-white"] .channels-card__body .form-hint code {
+  color: var(--rb-pink-600);
+}
+
+[data-ui-theme="pearl-white"] .channels-card__body .form-hint code {
+  background: var(--rb-pink-50);
+  border: 1px solid var(--rb-pink-100);
+}
+
+[data-ui-theme="pearl-white"] .channels-card__body .form-input {
+  color: var(--rb-input-text);
+  background: var(--rb-input-bg);
+  border-color: var(--rb-border-strong);
+}
+
+[data-ui-theme="pearl-white"] .channels-card__body .form-input::placeholder {
+  color: var(--rb-input-placeholder);
+}
+
+[data-ui-theme="pearl-white"] .channels-card__body .form-input:focus {
+  outline: none;
+  border-color: var(--rb-pink-500);
+  box-shadow: 0 0 0 3px var(--rb-pink-100);
+}
+
+[data-ui-theme="pearl-white"] .btn-secondary,
+[data-ui-theme="pearl-white"] .btn-reveal,
+[data-ui-theme="pearl-white"] .chat-sessions__rename,
+[data-ui-theme="pearl-white"] .chat-sessions__delete,
+[data-ui-theme="pearl-white"] .chat-sessions__confirm-rename,
+[data-ui-theme="pearl-white"] .chat-sessions__cancel-rename {
+  color: var(--rb-text-default);
+  background: var(--rb-bg-2);
+  border-color: var(--rb-border-strong);
+  opacity: 1;
+}
+
+[data-ui-theme="pearl-white"] .btn-secondary:hover:not(:disabled),
+[data-ui-theme="pearl-white"] .btn-reveal:hover,
+[data-ui-theme="pearl-white"] .chat-sessions__rename:hover,
+[data-ui-theme="pearl-white"] .chat-sessions__confirm-rename:hover {
+  color: var(--rb-pink-600);
+  background: var(--rb-pink-50);
+  border-color: var(--rb-pink-200);
+}
+
+[data-ui-theme="pearl-white"] .chat-sessions__delete:hover,
+[data-ui-theme="pearl-white"] .chat-sessions__cancel-rename:hover {
+  color: #b91c1c;
+  background: rgba(254, 226, 226, 0.78);
+  border-color: rgba(248, 113, 113, 0.32);
+}
+
+[data-ui-theme="pearl-white"] .channels-feedback--ok {
+  color: #15803d;
+}
+
+[data-ui-theme="pearl-white"] .channels-feedback--err {
+  color: #b91c1c;
+}
+
+[data-ui-theme="pearl-white"] .channels-feedback--info {
+  color: #92400e;
+}
+
+[data-ui-theme="pearl-white"] .channels-qr-modal__card {
+  background: var(--rb-card-bg);
+  border: 1px solid var(--rb-border-strong);
+  box-shadow: var(--rb-shadow-elevated);
+}
+
+[data-ui-theme="pearl-white"] .channels-qr-modal__tip {
+  color: var(--rb-text-muted);
+}
+
+[data-ui-theme="pearl-white"] .channels-qr-modal__img {
+  background: var(--rb-bg-1);
+  border: 1px solid var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] .chat-sessions__new,
+
+[data-ui-theme="pearl-white"] .chat-sessions__new:hover {
+  background: var(--rb-pink-100);
+  border-color: var(--rb-pink-600);
+}
+
+
+[data-ui-theme="pearl-white"] .chat-sessions__footer {
+  border-top-color: var(--rb-border-strong);
+}
+
+[data-ui-theme="pearl-white"] .usage-bar__fill {
+  box-shadow: 0 0 10px rgba(255, 91, 138, 0.25);
+}
+
+[data-ui-theme="pearl-white"] .loader {
+  box-shadow:
+    0 0 16px 0 rgba(255, 91, 138, 0.22),
+    0 14px 28px 0 rgba(0, 0, 0, 0.06);
+}
+
+[data-ui-theme="pearl-white"] .sticker-shell {
+  color: var(--rb-text-default);
+  background: var(--rb-card-bg);
+  border-color: var(--rb-border-soft);
+  box-shadow: var(--rb-shadow-elevated);
+}
+
+[data-ui-theme="pearl-white"] .call {
+  color: var(--rb-text-default);
+  background: var(--rb-card-bg);
+  border-color: var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] .call__title,
+[data-ui-theme="pearl-white"] .call__status,
+[data-ui-theme="pearl-white"] .call__transcript-bot,
+[data-ui-theme="pearl-white"] .call__transcript-user {
+  color: var(--rb-text-default);
+}
+
+[data-ui-theme="pearl-white"] .call__close {
+  color: var(--rb-text-muted);
+}
+
+[data-ui-theme="pearl-white"] .call__close:hover {
+  color: var(--rb-pink-600);
+  background: var(--rb-pink-50);
+}
+
+[data-ui-theme="pearl-white"] .call__avatar {
+  border-color: var(--rb-pink-200);
+  box-shadow: var(--rb-shadow-pink);
+}
+
+[data-ui-theme="pearl-white"] .call__avatar-ring::before,
+[data-ui-theme="pearl-white"] .call__avatar-ring::after,
+[data-ui-theme="pearl-white"] .call__avatar-ring span {
+  border-color: var(--rb-pink-500);
+}
+
+[data-ui-theme="pearl-white"] .scheduler-editor {
+  background: rgba(29, 29, 31, 0.18);
+  backdrop-filter: blur(6px);
+}
+
+[data-ui-theme="pearl-white"] .scheduler-editor__card,
+[data-ui-theme="pearl-white"] .cy-modal {
+  color: var(--rb-text-default);
+  background: var(--rb-card-bg);
+  border-color: var(--rb-border-strong);
+  box-shadow: var(--rb-shadow-elevated);
+}
+
+[data-ui-theme="pearl-white"] .scheduler-card {
+  color: var(--rb-text-default);
+  background: var(--rb-card-bg);
+  border-color: var(--rb-border-strong);
+  box-shadow: none;
+}
+
+[data-ui-theme="pearl-white"] .scheduler-card__title,
+[data-ui-theme="pearl-white"] .scheduler-editor__header h2,
+[data-ui-theme="pearl-white"] .cy-modal__title {
+  color: var(--rb-text-strong);
+}
+
+[data-ui-theme="pearl-white"] .scheduler-card__title span {
+  filter: none;
+}
+
+[data-ui-theme="pearl-white"] .scheduler-toolbar__copy span,
+[data-ui-theme="pearl-white"] .scheduler-empty,
+[data-ui-theme="pearl-white"] .scheduler-card__meta,
+[data-ui-theme="pearl-white"] .scheduler-editor .setting-row span,
+[data-ui-theme="pearl-white"] .scheduler-history,
+[data-ui-theme="pearl-white"] .scheduler-tool-hint,
+[data-ui-theme="pearl-white"] .cy-modal__body {
+  color: var(--rb-text-muted);
+  opacity: 1;
+}
+
+[data-ui-theme="pearl-white"] .scheduler-history,
+[data-ui-theme="pearl-white"] .cy-modal__divider {
+  border-color: var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] .scheduler-badge {
+  color: #15803d;
+  background: rgba(220, 252, 231, 0.78);
+  border-color: rgba(34, 197, 94, 0.24);
+}
+
+[data-ui-theme="pearl-white"] .scheduler-badge.is-disabled {
+  color: var(--rb-text-muted);
+  background: var(--rb-bg-1);
+  border-color: var(--rb-border-strong);
+}
+
+[data-ui-theme="pearl-white"] .scheduler-tool-picker {
+  color: var(--rb-text-default);
+}
+
+[data-ui-theme="pearl-white"] .scheduler-tool-option {
+  color: var(--rb-text-default);
+  background: var(--rb-bg-2);
+  border: 1px solid var(--rb-border-soft);
+}
+
+[data-ui-theme="pearl-white"] .scheduler-tool-option:hover {
+  color: var(--rb-pink-600);
+  background: var(--rb-pink-50);
+  border-color: var(--rb-pink-200);
+}
+
+[data-ui-theme="pearl-white"] .scheduler-tool-option input[type="checkbox"],
+[data-ui-theme="pearl-white"] .switch-input {
+  accent-color: var(--rb-pink-500);
+}
+
+[data-ui-theme="pearl-white"] .scheduler-tool-hint {
+  background: var(--rb-pink-50);
+  border-color: var(--rb-pink-200);
+}
+
+[data-ui-theme="pearl-white"] .scheduler-editor__card::-webkit-scrollbar-thumb {
+  background: var(--rb-scroll-thumb);
+}
+
+[data-ui-theme="pearl-white"] .cy-modal-overlay {
+  background: rgba(29, 29, 31, 0.22);
+}
+
+[data-ui-theme="pearl-white"] .cy-modal__icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--rb-pink-200);
+  border-radius: 9px;
+  background: var(--rb-pink-50);
+}
+
+[data-ui-theme="pearl-white"] #cy-input-field {
+  color: var(--rb-input-text) !important;
+  background: var(--rb-input-bg) !important;
+  border-color: var(--rb-input-border) !important;
+  box-shadow: none !important;
+}
+
+[data-ui-theme="pearl-white"] #cy-input-field::placeholder {
+  color: var(--rb-input-placeholder);
+}
+
+[data-ui-theme="pearl-white"] #cy-input-field:focus {
+  border-color: var(--rb-pink-500) !important;
+  box-shadow: 0 0 0 3px var(--rb-pink-100) !important;
+}
+
+/* ===== Markdown render variables (light theme overrides) ===== */
+[data-ui-theme="pearl-white"] {
+  --md-code-bg:           rgba(0, 0, 0, 0.03);
+  --md-code-border:       var(--rb-pink-200);
+  --md-inline-code-bg:    rgba(236, 72, 153, 0.08);
+  --md-inline-code-text:  #1d1d1f;
+  --md-quote-border:      var(--rb-pink-400);
+  --md-quote-bg:          rgba(236, 72, 153, 0.04);
+  --md-table-border:      var(--rb-pink-200);
+  --md-link-color:        var(--rb-pink-600);
+  --md-link-hover:        var(--rb-pink-700);
+  --md-copy-text:         var(--rb-text-muted);
+  --md-copy-bg:           rgba(0, 0, 0, 0.03);
+  --md-copy-border:       var(--rb-border-soft);
+  --md-katex-text:        var(--rb-text-default);
+}

@@ -1,0 +1,78 @@
+/* 自定义弹窗 */
+.cy-modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(4px);
+  transition: opacity 180ms ease;
+}
+
+.cy-modal-overlay.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cy-modal {
+  width: min(380px, 88vw);
+  padding: 20px 22px 18px;
+  border-radius: 24px;
+  background: radial-gradient(circle at 20% 8%, rgba(255, 110, 199, 0.18), transparent 60%), linear-gradient(145deg, rgba(38, 28, 60, 0.96), rgba(22, 18, 40, 0.94));
+  border: 1px solid rgba(255, 182, 220, 0.18);
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: scale(1);
+  transition: transform 180ms ease;
+}
+
+.cy-modal-overlay.is-hidden .cy-modal {
+  transform: scale(0.92);
+}
+
+.cy-modal__head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+.cy-modal__icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.cy-modal__title {
+  margin: 0;
+  color: var(--rb-text-strong);
+  font: var(--rb-text-em);
+}
+
+.cy-modal__body {
+  margin: 0 0 18px;
+  color: rgba(235, 229, 245, 0.76);
+  font: var(--rb-text);
+  line-height: 1.65;
+}
+
+.cy-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn-primary {
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, rgba(255, 110, 199, 0.85), rgba(168, 85, 247, 0.80));
+  color: #fef2f9;
+  font: var(--rb-text-small);
+  cursor: pointer;
+  transition: background 150ms ease, box-shadow 150ms ease;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, rgba(255, 130, 210, 0.92), rgba(180, 100, 255, 0.88));
+  box-shadow: 0 8px 18px rgba(236, 72, 153, 0.28);
+}

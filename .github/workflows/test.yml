@@ -1,0 +1,90 @@
+name: Test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: windows-latest
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 24 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        run: npm ci --foreground-scripts
+
+      - name: Verify Electron installation
+        run: npx electron --version
+
+      - name: Build
+        run: npm run build
+
+      - name: Test src/main/orchestrator/vendors
+        if: success() || failure()
+        run: npx vitest run --reporter=verbose --maxWorkers=1 src/main/orchestrator/vendors
+
+      - name: Test src/main/orchestrator/structured-output
+        if: success() || failure()
+        run: npx vitest run --reporter=verbose --maxWorkers=1 src/main/orchestrator/structured-output
+
+      - name: Test src/main/orchestrator/tools
+        if: success() || failure()
+        run: npx vitest run --reporter=verbose --maxWorkers=1 src/main/orchestrator/tools
+
+      - name: Test src/main/orchestrator root files
+        if: success() || failure()
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path "src/main/orchestrator" -Filter "*.test.ts" | Select-Object -ExpandProperty FullName
+          if (-not $files) { Write-Host "No root test files found"; exit 0 }
+          npx vitest run --reporter=verbose --maxWorkers=1 $files
+
+      - name: Test src/main/music
+        if: success() || failure()
+        run: npx vitest run --reporter=verbose --maxWorkers=1 src/main/music
+
+      - name: Test src/main/memory
+        if: success() || failure()
+        run: npx vitest run --reporter=verbose --maxWorkers=1 src/main/memory
+
+      - name: Test src/main/channels+chats+chat+cita
+        if: success() || failure()
+        run: npx vitest run --reporter=verbose --maxWorkers=1 src/main/channels src/main/chats src/main/chat src/main/cita
+
+      - name: Test src/main/screenshot+rag+scheduler+proactive
+        if: success() || failure()
+        run: npx vitest run --reporter=verbose --maxWorkers=1 src/main/screenshot src/main/rag src/main/scheduler src/main/proactive
+
+      - name: Test src/main/skills+social+relationship+runtime-policy+game-bot
+        if: success() || failure()
+        run: npx vitest run --reporter=verbose --maxWorkers=1 src/main/skills src/main/social-context src/main/relationship src/main/runtime-policy src/main/game-bot
+
+      - name: Test src/main root files
+        if: success() || failure()
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path "src/main" -Filter "*.test.ts" | Select-Object -ExpandProperty FullName
+          if (-not $files) { Write-Host "No root test files found"; exit 0 }
+          npx vitest run --reporter=verbose --maxWorkers=1 $files
+
+      - name: Test src/renderer
+        if: success() || failure()
+        run: npx vitest run --reporter=verbose --maxWorkers=1 src/renderer
+
+      - name: Test src/shared + src/cli
+        if: success() || failure()
+        run: npx vitest run --reporter=verbose --maxWorkers=1 src/shared src/cli
+
+      - name: Test skills
+        if: success() || failure()
+        run: npx vitest run --reporter=verbose --maxWorkers=1 skills
+

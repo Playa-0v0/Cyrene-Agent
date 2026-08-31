@@ -1,0 +1,262 @@
+/* ===== 工具面板：顶部 tabs（通用/Work/Code/Learn）+ 两列卡片网格 ===== */
+.tool-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  background: var(--cy-bg-workspace, #fff);
+  user-select: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.tool-panel__header {
+  padding: 22px 28px 4px;
+  flex-shrink: 0;
+}
+
+.tool-panel__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--cy-text, #1d1d1f);
+}
+
+.tool-panel__subtitle {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--cy-text-muted, #8e8e93);
+}
+
+/* Chat 模式工具增强总开关行：标题 + 说明 + 复用卡片 pill 开关。 */
+.tool-panel__master {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 14px 28px 0;
+  padding: 12px 16px;
+  border: 1px solid var(--cy-border, #f2f2f2);
+  border-radius: 12px;
+  background: var(--cy-bg-page, #f8f7f6);
+  flex-shrink: 0;
+}
+
+.tool-panel__master-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.tool-panel__master-text strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cy-text, #1d1d1f);
+}
+
+.tool-panel__master-text span {
+  font-size: 11px;
+  color: var(--cy-text-muted, #8e8e93);
+}
+
+.tool-panel__master-pill {
+  flex: none;
+}
+
+.tool-panel__search-row {
+  padding: 14px 28px 0;
+  flex-shrink: 0;
+}
+
+.tool-panel__search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 16px;
+  font-size: 13px;
+  color: var(--cy-text, #1d1d1f);
+  background: var(--cy-bg-page, #f8f7f6);
+  border: 1px solid var(--cy-border, #f2f2f2);
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tool-panel__search:focus {
+  border-color: var(--cy-pill-border, #ff9fbd);
+  box-shadow: 0 0 0 3px rgba(255, 91, 138, 0.1);
+}
+
+.tool-panel__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 14px 28px 10px;
+  flex-shrink: 0;
+}
+
+.tool-panel__tab {
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--cy-text-muted, #8e8e93);
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tool-panel__tab:hover {
+  color: var(--cy-text, #1d1d1f);
+}
+
+.tool-panel__tab.is-active {
+  background: var(--cy-bg-active, #fde0ed);
+  color: var(--cy-accent, #ff5b8a);
+}
+
+.tool-panel__grid {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  align-content: start;
+  padding: 6px 28px 24px;
+}
+
+@media (max-width: 760px) {
+  .tool-panel__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.tool-panel__loading,
+.tool-panel__empty {
+  grid-column: 1 / -1;
+  padding: 40px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--cy-text-muted, #8e8e93);
+}
+
+/* 工具卡片 */
+.tool-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: 12px;
+  transition: background 0.15s ease;
+}
+
+.tool-card:hover {
+  background: var(--cy-bg-page, #f8f7f6);
+}
+
+.tool-card.is-off .tool-card__name {
+  color: var(--cy-text-muted, #8e8e93);
+}
+
+.tool-card__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tool-card__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.tool-card__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--cy-text, #1d1d1f);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tool-card__badge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--cy-text-muted, #8e8e93);
+  background: var(--cy-bg-page, #f8f7f6);
+  border-radius: 999px;
+}
+
+.tool-card__desc {
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--cy-text-muted, #8e8e93);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  word-break: break-word;
+}
+
+/* 胶囊开关 */
+.tool-card__pill {
+  flex-shrink: 0;
+  position: relative;
+  width: 36px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: #e4e4e8;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tool-card__pill:hover {
+  box-shadow: 0 0 0 3px rgba(255, 91, 138, 0.08);
+}
+
+.tool-card__pill.is-on {
+  background: var(--cy-accent, #ff5b8a);
+}
+
+.tool-card__pill-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  transition: transform 0.2s ease;
+}
+
+.tool-card__pill.is-on .tool-card__pill-knob {
+  transform: translateX(16px);
+}
+
+.tool-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tool-panel::-webkit-scrollbar-thumb {
+  background: var(--cy-border, #f2f2f2);
+  border-radius: 3px;
+}

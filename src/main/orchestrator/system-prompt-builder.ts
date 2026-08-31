@@ -1,0 +1,90 @@
+import fs from "node:fs";
+import { loadPromptFile } from "../prompts/prompt-loader";
+import {
+  STYLE_FILE_BY_ID,
+  resolveStylePreference,
+  type CustomStyleConfig,
+  type StyleId,
+} from "../../shared/style-sampling";
+import { ensureCustomStylePrompt } from "../style-prompt";
+import { getCapabilityOrOpenAI } from "./vendors/capabilities";
+import { resolveApprovedStyleSampling } from "./vendors/style-sampling";
+import type { ReasoningPreference } from "../../shared/reasoning";
+import { buildToolCatalog } from "./tool-catalog";
+import type { ToolDefinition } from "./tool-registry";
+import type { ConversationMode } from "../../shared/chat-types";
+import { buildModePrompt } from "./mode-prompt-profile";
+
+export function readStylePrompt(styleId: StyleId): string {
+  if (styleId === "custom") {
+    const filePath = ensureCustomStylePrompt();
+    return fs.readFileSync(filePath, "utf8").trim();
+  }
+  return loadPromptFile("styles/" + STYLE_FILE_BY_ID[styleId]);
+}
+
+export function resolveSoulSamplingForStyle(input: {
+  styleId: StyleId;
+  settings: { provider: string; model: string; reasoning?: ReasoningPreference };
+  customStyle: CustomStyleConfig;
+}) {
+  const capability = getCapabilityOrOpenAI(input.settings.provider);
+  const preference = resolveStylePreference(input.styleId, input.customStyle);
+  return resolveApprovedStyleSampling({
+    providerId: capability.id,
+    model: input.settings.model,
+    reasoning: input.settings.reasoning ?? { mode: "auto" },
+    preference,
+  });
+}
+
+/**
+ * @deprecated 新运行链路必须使用 buildModePrompt(mode)。
+ * 仅供尚未迁移的调用方兼容，绝不再根据 Work 默认拼接 Code 或 soul。
+ */
+export function buildSystemPrompt(styleFile: string, includeStyle = true): string {
+  const mode: ConversationMode = styleFile.startsWith("chat") || styleFile.startsWith("talk")
+    ? "chat"
+    : styleFile.startsWith("learn")
+      ? "learn"
+      : "work";
+  const parts = [buildModePrompt(mode)];
+
+  // 风格采样提示词是历史调用方的可选附加项；生产运行链路在 build-options 单独注入。
+  if (includeStyle && mode === "work") {
+    const style = loadPromptFile("styles/" + styleFile);
+    if (style) parts.push(style);
+  }
+
+  return parts.filter(Boolean).join("\n\n---\n\n");
+}
+
+/**
+ * 工具规则与目录 system prompt（进入 harness stablePrefix）。
+ * 仅含运行时生成的工具目录——
+ * 不放任何人格 / 环境 / 记忆，避免人设污染工具决策。
+ */
+export function buildToolSystemPrompt(
+  _mode: ConversationMode,
+  enabledTools: ReadonlyArray<ToolDefinition>,
+): string {
+  const catalog = buildToolCatalog(enabledTools as ToolDefinition[]);
+  return [
+    "## 当前可用工具",
+    catalog,
+  ].filter(Boolean).join("\n\n");
+}
+
+/**
+ * 人设基础 system prompt（进入 stablePrefix）。
+ * 仅包含按模式选取的人设基础；环境/记忆/关系/附件等动态内容走
+ * soulRuntimeContext，随请求尾部注入。
+ * 注意：工具结果（`role: "tool"` 消息）在单循环 transcript 中已携带，本函数不重复注入。
+ */
+export function buildSoulSystemBasePrompt(styleFile: string): string {
+  return buildSystemPrompt(styleFile, false);
+}
+
+export function loadSoulFeelingContext(): string {
+  return loadPromptFile("soul.md");
+}

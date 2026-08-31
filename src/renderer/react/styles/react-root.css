@@ -1,0 +1,300 @@
+/* ===== 设计变量 ===== */
+:root {
+  /* 背景 */
+  --cy-bg-page: #FAF4F8;
+  --cy-bg-workspace: #FFFBFC;
+  --cy-bg-hover: #fff1f6;
+  --cy-bg-active: #fde0ed;
+  
+  /* 边框 */
+  --cy-border: #F2F2F2;
+  
+  /* 文字 */
+  --cy-text: #1d1d1f;
+  --cy-text-muted: #8e8e93;
+  
+  /* 强调色 */
+  --cy-accent: #FF5B8A;
+  
+  /* 胶囊组件 */
+  --cy-pill-bg: #fff9fb;
+  --cy-pill-border: #ff9fbd;
+  --cy-pill-status: #7d3557;
+
+  /* 投影 */
+  --cy-shadow-workspace: inset 0 2px 8px rgba(31, 35, 48, 0.04), inset 0 0 2px rgba(31, 35, 48, 0.03);
+  --cy-shadow-bubble-neutral: 2px 2px 3px rgba(31, 35, 48, 0.06), 3px 5px 16px rgba(31, 35, 48, 0.055);
+  --cy-shadow-bubble-accent: 2px 2px 4px rgba(255, 91, 138, 0.12), 3px 7px 16px rgba(255, 91, 138, 0.16);
+  --cy-shadow-control-hover: 2px 2px 5px rgba(31, 35, 48, 0.075), 3px 8px 18px rgba(31, 35, 48, 0.065);
+  --cy-shadow-control-focus: 0 0 0 3px rgba(255, 91, 138, 0.10), 2px 6px 16px rgba(31, 35, 48, 0.08);
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+#cyrene-react-root {
+  width: 100%;
+  height: 100%;
+}
+
+.cy-page {
+  height: 100vh;
+  width: 100vw;
+  background: var(--cy-bg-page);
+  box-sizing: border-box;
+  padding: 50px 10px 10px 10px;
+  position: relative;
+  display: flex;
+  gap: 10px;
+  transition: padding 0.25s ease;
+  border: 1px solid var(--cy-border);
+  border-radius: var(--cy-window-radius, 24px);
+  overflow: hidden;
+  user-select: none;
+  app-region: drag;
+}
+
+.cy-page button,
+.cy-page a,
+.cy-page input,
+.cy-page select,
+.cy-page textarea,
+.cy-workspace {
+  app-region: no-drag;
+}
+
+.cy-file-drop-overlay {
+  position: absolute;
+  z-index: 20;
+  inset: 10px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--cy-accent);
+  border-radius: max(8px, calc(var(--cy-window-radius, 12px) - 2px));
+  background: rgb(255 255 255 / 88%);
+  color: var(--cy-accent);
+  font: 600 15px/1.4 var(--rb-font-sans, sans-serif);
+  pointer-events: none;
+  backdrop-filter: blur(3px);
+}
+
+.cy-file-drop-overlay span {
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(255 91 138 / 16%);
+}
+
+.cy-page.is-collapsed {
+  padding-left: 10px;
+}
+
+.cy-page-toggle {
+  position: absolute;
+  top: 10px;
+  left: 8px;
+}
+
+.cy-page-top-center {
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: left 0.25s ease;
+}
+
+.cy-page-windows {
+  position: absolute;
+  top: 10px;
+  right: 20px;
+}
+
+/* 用户头像与设置按钮已移入 .cy-page-sidebar-bottom */
+
+/* 侧边栏父容器：宽度固定、内部纵向 flex，主区占剩余空间，随窗口缩放 */
+.cy-page-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 192px;
+  flex-shrink: 0;
+  min-height: 0;
+  transition: width 0.25s ease, opacity 0.2s ease;
+}
+
+.cy-page.is-collapsed .cy-page-sidebar {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.cy-page-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.cy-page-newtask {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+.cy-page-conversations {
+  flex: 1;
+  min-height: 0;
+  margin-top: 8px;
+  overflow: hidden;
+  app-region: no-drag;
+}
+
+.cy-page-sidebar-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px 4px;
+  flex-shrink: 0;
+}
+
+/* 收起状态：组件向左移 */
+.cy-page.is-collapsed .cy-page-top-center {
+  left: calc(50% - 85px);
+}
+
+.cy-workspace {
+  width: 100%;
+  height: 100%;
+  background: var(--cy-bg-workspace);
+  border-radius: 10px;
+  border: 1px solid var(--cy-border);
+  box-shadow: var(--cy-shadow-workspace);
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 220ms ease;
+}
+
+.cy-workspace::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("../../../../assets/ui/cyrene-surface-pattern.svg");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  opacity: 0.9;
+  pointer-events: none;
+  transition: opacity 220ms ease;
+}
+
+.cy-workspace.has-messages::before {
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cy-workspace::before {
+    transition: none;
+  }
+}
+
+.cy-workspace-composer {
+  position: relative;
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  justify-content: center;
+  padding: 22px 28px;
+  transition: padding 240ms ease;
+}
+
+.cy-workspace-composer__scroll-to-bottom {
+  position: absolute;
+  top: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--cy-surface, rgba(255, 255, 255, 0.92));
+  color: var(--cy-text-primary, #4c3762);
+  box-shadow: 0 4px 14px rgba(76, 55, 98, 0.18);
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  backdrop-filter: blur(6px);
+}
+
+.cy-workspace-composer__scroll-to-bottom:hover {
+  transform: translate(-50%, -2px);
+  opacity: 0.92;
+}
+
+.cy-workspace-composer__scroll-to-bottom:active {
+  transform: translate(-50%, 0);
+}
+
+.cy-workspace-composer__scroll-to-bottom .anticon {
+  font-size: 16px;
+}
+
+.cy-workspace.is-empty .cy-workspace-composer {
+  flex: 1;
+  align-items: center;
+}
+
+.cy-workspace.has-messages .cy-workspace-composer {
+  padding: 22px 24px;
+}
+
+.cy-compressing-context {
+  position: absolute;
+  right: 24px;
+  bottom: 120px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  color: var(--cy-text);
+  font-size: 13px;
+  pointer-events: none;
+  animation: cy-compressing-fade-in 0.25s ease;
+  z-index: 10;
+}
+
+.cy-compressing-context-icon {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  animation: cy-compressing-float 2.4s ease-in-out infinite;
+}
+
+@keyframes cy-compressing-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes cy-compressing-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+

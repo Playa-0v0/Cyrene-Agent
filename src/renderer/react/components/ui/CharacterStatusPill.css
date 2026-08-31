@@ -1,0 +1,40 @@
+.cy-status-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  height: 34px;
+  padding: 0 10px;
+  background: var(--cy-pill-bg);
+  border: 1px solid var(--cy-pill-border);
+  border-radius: 999px;
+  gap: 6px;
+  cursor: default;
+}
+
+.cy-status-avatar {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.cy-status-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cy-text);
+  line-height: 1;
+}
+
+.cy-status-divider {
+  font-size: 14px;
+  color: var(--cy-text-muted);
+  line-height: 1;
+}
+
+.cy-status-text {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--cy-pill-status);
+  line-height: 1;
+}

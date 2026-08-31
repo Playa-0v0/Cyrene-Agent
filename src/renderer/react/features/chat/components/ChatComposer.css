@@ -1,0 +1,438 @@
+.cy-composer-stack {
+  display: flex;
+  width: min(100%, 770px);
+  flex-direction: column;
+  transition: transform 240ms ease, width 320ms ease;
+}
+
+.cy-composer-stack.is-centered {
+  transform: translateY(45px);
+}
+
+.cy-composer-stack.is-docked {
+  width: 100%;
+}
+
+.cy-composer-welcome {
+  display: block;
+  width: min(100%, 520px);
+  height: auto;
+  align-self: center;
+  margin-bottom: 10px;
+  object-fit: contain;
+}
+
+.cy-composer-shell {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 22px;
+  background: #f4f4f4;
+  box-shadow: var(--cy-shadow-bubble-neutral);
+}
+
+.cy-composer-stack.is-centered .cy-composer-shell {
+  transform: translateY(-15px);
+}
+
+.cy-composer.ant-sender {
+  position: relative;
+  z-index: 1;
+  border: 1px solid rgba(31, 35, 48, 0.07);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: var(--cy-shadow-bubble-neutral);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.cy-composer.ant-sender:hover {
+  border-color: rgba(31, 35, 48, 0.11);
+  box-shadow: var(--cy-shadow-control-hover);
+}
+
+.cy-composer.ant-sender:focus-within {
+  border-color: rgba(255, 91, 138, 0.32);
+  box-shadow: var(--cy-shadow-control-focus);
+}
+
+.cy-composer .ant-sender-content {
+  min-height: 100px;
+  padding: 16px 16px 9px;
+  align-items: flex-end;
+}
+
+.cy-composer .ant-sender-input {
+  min-height: 70px;
+  color: var(--cy-text);
+  font: 400 15px/1.6 var(--rb-font-sans, sans-serif);
+  resize: none;
+}
+
+.cy-composer .ant-sender-input::placeholder {
+  color: #969696;
+}
+
+.cy-composer .ant-sender-actions-list {
+  align-self: flex-end;
+}
+
+.cy-composer .ant-sender-actions-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--cy-accent);
+}
+
+.cy-composer .ant-sender-actions-btn:disabled {
+  color: #aaa;
+  background: #e7e7e7;
+}
+
+.cy-composer__queue {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.cy-composer__queue-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.65);
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.cy-composer__queue-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cy-composer__queue-item button {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
+  padding: 0;
+  background: transparent;
+  color: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+.cy-composer__queue-item button:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: rgba(0, 0, 0, 0.75);
+}
+
+.cy-composer__icon-button,
+.cy-composer__footer-button,
+.cy-composer__agent-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #363636;
+  font: 500 13px/1 var(--rb-font-sans, sans-serif);
+  cursor: pointer;
+}
+
+.cy-composer__icon-button {
+  display: grid;
+  width: 28px;
+  height: 38px;
+  place-items: center;
+  padding: 0;
+}
+
+.cy-composer__file-input {
+  display: none;
+}
+
+.cy-composer__prefix-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.cy-composer__icon-button:disabled {
+  color: #aaa;
+  cursor: wait;
+}
+
+.cy-composer__icon-button svg {
+  width: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.cy-composer__icon-button .cy-composer__screenshot-icon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: #333;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cy-composer__sticker-button img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.cy-composer__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px 0;
+}
+
+.cy-composer__attachment {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 240px;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  border: 1px solid var(--cy-border);
+  border-radius: 10px;
+  background: #f7f7f7;
+  color: var(--cy-text);
+  font: 500 12px/1.2 var(--rb-font-sans, sans-serif);
+}
+
+.cy-composer__attachment img {
+  width: 36px;
+  height: 30px;
+  flex: none;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.cy-composer__attachment.is-image {
+  position: relative;
+  display: block;
+  width: 76px;
+  height: 58px;
+  padding: 0;
+  overflow: hidden;
+  background: #eee;
+}
+
+.cy-composer__attachment--sticker {
+  position: relative;
+  display: block;
+  width: 62px;
+  height: 58px;
+  padding: 0;
+  overflow: hidden;
+  background: #fff8fa;
+}
+
+.cy-composer__attachment--sticker img {
+  width: 100%;
+  height: 100%;
+  border-radius: 9px;
+  object-fit: contain;
+}
+
+.cy-composer__attachment--sticker button {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 52%);
+  color: #fff;
+}
+
+.cy-composer__attachment.is-image img {
+  width: 100%;
+  height: 100%;
+  border-radius: 9px;
+}
+
+.cy-composer__attachment.is-image button {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 52%);
+  color: #fff;
+}
+
+.cy-composer__attachment span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cy-composer__attachment button {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #888;
+  font: 500 16px/18px sans-serif;
+  cursor: pointer;
+}
+
+.cy-composer__attachment button:hover {
+  color: var(--cy-accent);
+}
+
+.cy-sticker-popover .ant-popover-inner {
+  padding: 10px;
+  border: 1px solid var(--cy-border);
+  border-radius: 16px;
+}
+
+.cy-sticker-picker {
+  display: grid;
+  width: min(360px, 70vw);
+  max-height: 270px;
+  grid-template-columns: repeat(4, minmax(64px, 1fr));
+  gap: 7px;
+  overflow-y: auto;
+}
+
+.cy-sticker-picker button {
+  display: grid;
+  aspect-ratio: 1;
+  place-items: center;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: #f7f7f7;
+  cursor: pointer;
+}
+
+.cy-sticker-picker button:hover {
+  border-color: #ffc0d2;
+  background: #fff1f5;
+}
+
+.cy-sticker-picker img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
+}
+
+.cy-sticker-picker__empty {
+  grid-column: 1 / -1;
+  padding: 24px;
+  color: var(--cy-text-muted);
+  text-align: center;
+}
+
+.cy-composer__footer {
+  display: flex;
+  position: relative;
+  z-index: 0;
+  min-height: 55px;
+  align-items: center;
+  gap: 8px;
+  margin-top: -14px;
+  padding: 14px 15px 0;
+}
+
+
+.cy-composer__footer-button,
+.cy-composer__agent-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 4px;
+}
+
+.cy-composer__footer-button:hover,
+.cy-composer__agent-button:hover,
+.cy-composer__icon-button:hover {
+  color: var(--cy-accent);
+}
+
+.cy-composer__footer-button:disabled {
+  color: #828282;
+  cursor: default;
+}
+
+.cy-composer__footer-button--placeholder small {
+  padding: 2px 4px;
+  border-radius: 5px;
+  background: #ececec;
+  color: #898989;
+  font: 600 9px/1 var(--rb-font-sans, sans-serif);
+  letter-spacing: .04em;
+}
+
+.cy-composer__footer svg,
+.cy-composer__agent-button svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cy-composer__footer .cy-composer__code-folder-icon,
+.cy-composer__footer .cy-composer__terminal-folder-icon {
+  fill: none;
+  stroke: #333;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cy-composer__footer .cy-composer__obsidian-icon,
+.cy-composer__footer .cy-composer__obsidian-icon path {
+  stroke: none;
+  fill: #A88BFA;
+}
+
+.cy-composer__footer .cy-composer__footer-button svg:last-child,
+.cy-composer__agent-button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.cy-composer__footer-separator {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: #ddd;
+}
+
+/* 弹性空白：把右侧控件组（上下文环/思考控制）推到 footer 最右端。 */
+.cy-composer__footer-spacer {
+  flex: 1;
+}
+
+.cy-model-selector__menu { min-width: 210px; display: grid; gap: 4px; }
+.cy-model-selector__menu button { border: 0; background: transparent; text-align: left; padding: 8px; border-radius: 8px; cursor: pointer; display: grid; gap: 2px; }
+.cy-model-selector__menu button:hover { background: #fff0f5; }
+.cy-model-selector__menu small { color: #8d7c83; }

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cyrene UI Tokens -- Preview</title>
+  <link rel="stylesheet" href="./tokens.css" />
+  <link rel="stylesheet" href="./fonts.css" />
+  <link rel="stylesheet" href="./base.css" />
+  <style>
+    body { padding: 48px 64px; background: var(--rb-grad-bg); background-attachment: fixed; min-height: 100vh; }
+    body.rb-grid::before { z-index: 0; }
+    .stack > * + * { margin-top: 48px; }
+    .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+    .label {
+      font: var(--rb-text-caption);
+      color: var(--rb-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 16px;
+    }
+    .heading {
+      font: var(--rb-text-display);
+      letter-spacing: -1.5px;
+      background: var(--rb-grad-pink-hot);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .subhead {
+      font: var(--rb-text-h3);
+      color: var(--rb-text-default);
+    }
+    .mono {
+      font: var(--rb-text-mono);
+      color: var(--rb-text-muted);
+    }
+
+    /* swatch grid */
+    .swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; }
+    .swatch {
+      height: 64px;
+      border-radius: var(--rb-radius-md);
+      border: 1px solid var(--rb-border-soft);
+      position: relative;
+      overflow: hidden;
+    }
+    .swatch span {
+      position: absolute;
+      bottom: 4px;
+      left: 6px;
+      font: var(--rb-text-micro);
+      color: var(--rb-text-default);
+      text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+    }
+
+    /* radius demo */
+    .radius-row { display: flex; gap: 16px; flex-wrap: wrap; }
+    .radius-tile {
+      width: 96px;
+      height: 96px;
+      background: var(--rb-bg-elevated);
+      border: 1px solid var(--rb-border-soft);
+      display: flex; align-items: end; justify-content: center;
+      padding-bottom: 8px;
+      font: var(--rb-text-mono);
+      color: var(--rb-text-muted);
+    }
+
+    /* button demo */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 11px 24px;
+      font: var(--rb-text-btn);
+      border-radius: var(--rb-radius-full);
+      transition: transform 120ms ease, box-shadow 200ms ease, background 200ms ease;
+      white-space: nowrap;
+    }
+    .btn-pink {
+      background: var(--rb-grad-pink);
+      color: var(--rb-text-on-pink);
+      box-shadow: var(--rb-glow-soft);
+    }
+    .btn-pink:hover { box-shadow: var(--rb-glow-pink); transform: translateY(-1px); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--rb-text-default);
+      border: 1px solid var(--rb-border-strong);
+    }
+    .btn-ghost:hover { background: rgba(236, 72, 153, 0.08); }
+    .btn-outline {
+      background: var(--rb-bg-elevated);
+      color: var(--rb-text-default);
+      border: 1px solid var(--rb-border-soft);
+    }
+
+    /* card demo */
+    .card {
+      background: var(--rb-bg-2);
+      border: 1px solid var(--rb-border-soft);
+      border-radius: var(--rb-radius-xxl);
+      padding: 24px;
+      box-shadow: var(--rb-shadow-card);
+      min-width: 280px;
+    }
+    .card-glow {
+      position: relative;
+      background: var(--rb-bg-2);
+      border-radius: var(--rb-radius-xxl);
+      padding: 24px;
+      min-width: 280px;
+    }
+    .card-glow::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 1px;
+      background: var(--rb-grad-pink-hot);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    /* badge */
+    .badge {
+      display: inline-flex;
+      padding: 4px 10px;
+      font: var(--rb-text-mono-em);
+      color: var(--rb-pink-300);
+      background: rgba(236, 72, 153, 0.10);
+      border: 1px solid var(--rb-border-soft);
+      border-radius: var(--rb-radius-full);
+    }
+  </style>
+</head>
+<body class="rb-grid">
+  <main class="stack" style="max-width: 1100px; margin: 0 auto; position: relative; z-index: 1;">
+
+    <header>
+      <span class="badge">CYRENE / UI v0.1</span>
+      <h1 class="heading" style="margin-top: 16px;">Pink Tech Tokens</h1>
+      <p class="subhead" style="margin-top: 12px; max-width: 640px;">
+        Sci-fi pink on deep purple-black. Rounded everywhere. Built from the MiniMax design language,
+        flipped to a dark canvas.
+      </p>
+    </header>
+
+    <section>
+      <div class="label">01 -- Surfaces</div>
+      <div class="row">
+        <div class="swatch" style="background: var(--rb-bg-0);"><span>bg-0</span></div>
+        <div class="swatch" style="background: var(--rb-bg-1);"><span>bg-1</span></div>
+        <div class="swatch" style="background: var(--rb-bg-2);"><span>bg-2</span></div>
+        <div class="swatch" style="background: var(--rb-bg-3);"><span>bg-3</span></div>
+        <div class="swatch" style="background: var(--rb-bg-elevated);"><span>elevated</span></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="label">02 -- Pink scale</div>
+      <div class="swatches">
+        <div class="swatch" style="background: var(--rb-pink-50);"><span>50</span></div>
+        <div class="swatch" style="background: var(--rb-pink-100);"><span>100</span></div>
+        <div class="swatch" style="background: var(--rb-pink-200);"><span>200</span></div>
+        <div class="swatch" style="background: var(--rb-pink-300);"><span>300</span></div>
+        <div class="swatch" style="background: var(--rb-pink-400);"><span>400</span></div>
+        <div class="swatch" style="background: var(--rb-pink-500);"><span>500</span></div>
+        <div class="swatch" style="background: var(--rb-pink-600);"><span>600</span></div>
+        <div class="swatch" style="background: var(--rb-pink-700);"><span>700</span></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="label">03 -- Radii</div>
+      <div class="radius-row">
+        <div class="radius-tile" style="border-radius: var(--rb-radius-xs);">xs 4</div>
+        <div class="radius-tile" style="border-radius: var(--rb-radius-sm);">sm 6</div>
+        <div class="radius-tile" style="border-radius: var(--rb-radius-md);">md 8</div>
+        <div class="radius-tile" style="border-radius: var(--rb-radius-lg);">lg 12</div>
+        <div class="radius-tile" style="border-radius: var(--rb-radius-xl);">xl 16</div>
+        <div class="radius-tile" style="border-radius: var(--rb-radius-xxl);">xxl 20</div>
+        <div class="radius-tile" style="border-radius: var(--rb-radius-xxxl);">xxxl 24</div>
+        <div class="radius-tile" style="border-radius: var(--rb-radius-hero);">hero 32</div>
+        <div class="radius-tile" style="border-radius: var(--rb-radius-full);">full</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="label">04 -- Buttons (pill shape, per design ref)</div>
+      <div class="row">
+        <button class="btn btn-pink">Primary action</button>
+        <button class="btn btn-ghost">Ghost</button>
+        <button class="btn btn-outline">Tertiary</button>
+        <span class="mono">--rb-radius-full</span>
+      </div>
+    </section>
+
+    <section>
+      <div class="label">05 -- Cards</div>
+      <div class="row" style="align-items: stretch;">
+        <div class="card">
+          <div class="badge" style="margin-bottom: 12px;">flat</div>
+          <h3 class="subhead">Standard surface</h3>
+          <p class="mono" style="margin-top: 8px;">bg-2 + hairline</p>
+        </div>
+        <div class="card-glow">
+          <div class="badge" style="margin-bottom: 12px;">glow</div>
+          <h3 class="subhead">Gradient border</h3>
+          <p class="mono" style="margin-top: 8px;">--rb-grad-pink-hot</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="label">06 -- Typography</div>
+      <div class="stack" style="gap: 12px;">
+        <div style="font: var(--rb-text-display); letter-spacing: -1.5px; background: var(--rb-grad-pink-hot); -webkit-background-clip: text; background-clip: text; color: transparent;">Display 56</div>
+        <h2 style="font: var(--rb-text-h1); margin: 0;">Heading H1 40</h2>
+        <h3 style="font: var(--rb-text-h2); margin: 0;">Heading H2 32</h3>
+        <h4 style="font: var(--rb-text-h3); margin: 0;">Heading H3 24</h4>
+        <p style="font: var(--rb-text-body); margin: 0;">Body 16px -- Noto Sans SC, regular weight.</p>
+        <p style="font: var(--rb-text-small); margin: 0; color: var(--rb-text-muted);">Small 14px muted text.</p>
+        <p class="mono" style="margin: 0;">// mono 13px -- JetBrains Mono / system mono</p>
+      </div>
+    </section>
+
+  </main>
+</body>
+</html>

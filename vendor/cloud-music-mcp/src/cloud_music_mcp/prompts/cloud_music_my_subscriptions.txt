@@ -1,0 +1,3 @@
+获取我收藏的歌手或专辑
+args:
+    category: 类型，'artists'(歌手) 或 'albums'(专辑)，默认为 'artists'

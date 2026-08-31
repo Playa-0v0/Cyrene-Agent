@@ -1,0 +1,68 @@
+.cy-permission-panel {
+  min-width: 156px;
+}
+
+.cy-permission-panel > strong {
+  display: block;
+  margin: 2px 4px 8px;
+  color: var(--cy-text);
+  font: 600 14px/1.35 var(--rb-font-sans, sans-serif);
+}
+
+.cy-permission-panel__options {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cy-permission-panel__option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  cursor: pointer;
+  font: 500 13px/1.25 var(--rb-font-sans, sans-serif);
+  text-align: left;
+}
+
+.cy-permission-panel__option svg,
+.cy-permission-control > svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cy-permission-panel__option.is-project-read-only,
+.cy-permission-control.is-project-read-only,
+.cy-permission-panel__option.is-read-only,
+.cy-permission-control.is-read-only { color: #21a366; }
+.cy-permission-panel__option.is-scoped,
+.cy-permission-control.is-scoped { color: #3b82f6; }
+.cy-permission-panel__option.is-per-action,
+.cy-permission-control.is-per-action { color: #333333; }
+.cy-permission-panel__option.is-full,
+.cy-permission-control.is-full { color: #d49d16; }
+
+.cy-permission-panel__option:hover { background: #f7f7f7; }
+.cy-permission-panel__option.is-project-read-only.is-active,
+.cy-permission-panel__option.is-read-only.is-active { background: #eaf8ef; }
+.cy-permission-panel__option.is-scoped.is-active { background: #eaf2ff; }
+.cy-permission-panel__option.is-per-action.is-active { background: #f1f1f1; }
+.cy-permission-panel__option.is-full.is-active { background: #fff6d7; }
+
+.cy-permission-popover .ant-popover-inner {
+  padding: 9px;
+  border: 1px solid rgba(31, 35, 48, 0.08);
+  border-radius: 14px;
+  background: #F5F5F7;
+  box-shadow: 0 12px 32px rgba(29, 29, 31, 0.12);
+}

@@ -1,0 +1,52 @@
+.hollow-layout {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.hollow-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--top-height);
+  background: var(--frame-color);
+}
+
+.hollow-left {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--left-width);
+  background: var(--frame-color);
+}
+
+.hollow-right {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--right-width);
+  background: var(--frame-color);
+}
+
+.hollow-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--bottom-height);
+  background: var(--frame-color);
+}
+
+.hollow-center {
+  position: absolute;
+  top: var(--top-height);
+  left: var(--left-width);
+  right: var(--right-width);
+  bottom: var(--bottom-height);
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+}

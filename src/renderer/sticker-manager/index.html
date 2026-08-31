@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-ui-theme="pearl-white">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>表情包管理</title>
+  <link rel="stylesheet" href="../ui/tokens.css" />
+  <link rel="stylesheet" href="../ui/fonts.css" />
+  <link rel="stylesheet" href="../ui/base.css" />
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="../ui/theme.css" />
+</head>
+<body>
+  <main class="sticker-shell">
+    <header class="sticker-titlebar">
+      <div class="sticker-title">表情包管理</div>
+      <div class="sticker-actions">
+        <button type="button" class="win-btn" id="min-btn" aria-label="最小化">一</button>
+        <button type="button" class="win-btn win-btn--close" id="close-btn" aria-label="关闭">✕</button>
+      </div>
+    </header>
+    <section class="sticker-grid" id="sticker-grid" aria-label="表情包列表"></section>
+  </main>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

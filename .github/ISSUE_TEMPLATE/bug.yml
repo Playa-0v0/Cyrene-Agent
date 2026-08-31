@@ -1,0 +1,82 @@
+name: Bug Report
+description: 反馈安装或运行问题 / Installation or runtime issue
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+## ⚠️ 请先确认环境
+从源码构建需要 **Node.js 24 LTS**（`npm install` / `npm run build` 依赖此版本）。
+Electron runtime 当前为 **Electron 33**（暂不升级）。
+
+Please first confirm you are using **Node.js 24 LTS** for installation and build.
+Electron runtime is currently **Electron 33**.
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统 / Operating System
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS (unsupported)
+        - Linux (unsupported)
+      validations:
+        required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js 版本 / Node.js version
+      description: 运行 `node --version` 的输出
+      placeholder: "v24.x.x"
+      validations:
+        required: true
+
+  - type: input
+    id: npm-version
+    attributes:
+      label: npm 版本 / npm version
+      description: 运行 `npm --version` 的输出
+      placeholder: "11.x.x"
+      validations:
+        required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Reproduction steps
+      description: 你执行了哪些命令？按顺序列出
+      placeholder: |
+        1. git clone https://github.com/Playa-0v0/Cyrene-Agent.git
+        2. cd Cyrene-Agent
+        3. npm install
+        4. ...
+      validations:
+        required: true
+
+  - type: textarea
+    id: error
+    attributes:
+      label: 错误日志 / Error log
+      description: |
+        完整错误信息。请用 `npm install 2>&1 | tee log.txt` 保存日志，
+        然后粘贴 `log.txt` 最后 ~50 行。
+      validations:
+        required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为 / Expected behavior
+      description: 你期望发生什么？实际发生了什么？
+      validations:
+        required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截图 / Screenshots
+      description: 如果有报错截图，请拖拽上传 / Drag and drop screenshots here
+      validations:
+        required: false

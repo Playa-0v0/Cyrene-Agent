@@ -1,0 +1,38 @@
+/* Minimal CSS reset only.
+   Do NOT set body background here -- the Electron renderer needs body
+   to stay transparent so the canvas's transparent pixels show the
+   desktop through. Pages that want their own background (preview.html,
+   future panels) set it themselves. */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+body { font: var(--rb-text-body); color: var(--rb-text-default); letter-spacing: var(--rb-letter-spacing); }
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+input, textarea, select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+a {
+  color: var(--rb-pink-400);
+  text-decoration: none;
+  transition: color 120ms ease;
+}
+a:hover { color: var(--rb-pink-300); }

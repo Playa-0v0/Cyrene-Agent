@@ -1,0 +1,17 @@
+<svg viewBox="0 0 900 600" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+  <path d="M-50 300 Q 100 200, 150 350 T 300 500" stroke="rgba(233,30,99,0.12)" stroke-width="1.2"/>
+  <path d="M-30 320 Q 120 220, 170 370 T 320 520" stroke="rgba(233,30,99,0.08)" stroke-width="1.2"/>
+  <path d="M950 200 Q 800 150, 750 300 T 600 450" stroke="rgba(233,30,99,0.12)" stroke-width="1.2"/>
+  <path d="M930 180 Q 780 130, 730 280 T 580 430" stroke="rgba(233,30,99,0.08)" stroke-width="1.2"/>
+  <circle cx="200" cy="80" r="2.5" fill="rgba(233,30,99,0.18)"/>
+  <circle cx="700" cy="60" r="2.5" fill="rgba(233,30,99,0.18)"/>
+  <circle cx="450" cy="40" r="2" fill="rgba(233,30,99,0.14)"/>
+  <circle cx="150" cy="520" r="2.5" fill="rgba(233,30,99,0.14)"/>
+  <circle cx="750" cy="550" r="2.5" fill="rgba(233,30,99,0.14)"/>
+  <path d="M180 120 L182 126 L188 128 L182 130 L180 136 L178 130 L172 128 L178 126 Z" fill="rgba(233,30,99,0.2)"/>
+  <path d="M720 100 L722 106 L728 108 L722 110 L720 116 L718 110 L712 108 L718 106 Z" fill="rgba(233,30,99,0.18)"/>
+  <path d="M300 480 L302 486 L308 488 L302 490 L300 496 L298 490 L292 488 L298 486 Z" fill="rgba(233,30,99,0.14)"/>
+  <path d="M650 500 L652 506 L658 508 L652 510 L650 516 L648 510 L642 508 L648 506 Z" fill="rgba(233,30,99,0.14)"/>
+  <circle cx="450" cy="300" r="180" stroke="rgba(233,30,99,0.06)" stroke-width="1" stroke-dasharray="4 8"/>
+  <circle cx="450" cy="300" r="200" stroke="rgba(233,30,99,0.04)" stroke-width="1"/>
+</svg>

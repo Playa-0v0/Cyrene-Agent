@@ -1,0 +1,45 @@
+.cy-app-update-entry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: calc(100% - 8px);
+  margin: 0 4px 2px;
+  min-height: 34px;
+  padding: 7px 10px;
+  overflow: hidden;
+  border: 1px solid rgba(238, 126, 165, 0.24);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(255, 241, 247, 0.92), rgba(249, 244, 255, 0.86));
+  color: #c95d86;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.cy-app-update-entry:hover:not(:disabled) {
+  border-color: rgba(224, 84, 134, 0.44);
+  box-shadow: 0 5px 16px rgba(204, 91, 136, 0.12);
+  transform: translateY(-1px);
+}
+
+.cy-app-update-entry:disabled {
+  cursor: default;
+  opacity: 0.82;
+}
+
+.cy-app-update-entry > svg,
+.cy-app-update-entry > span:not(.cy-app-update-entry__progress) {
+  position: relative;
+  z-index: 1;
+}
+
+.cy-app-update-entry__progress {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 0;
+  background: rgba(236, 126, 166, 0.13);
+  transition: width 180ms ease;
+}

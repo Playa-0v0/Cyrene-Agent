@@ -1,0 +1,191 @@
+node_modules/
+
+# Build outputs (Electron + Vite + tsc)
+dist/main/
+dist/cli/
+dist/preload/
+dist/renderer/assets
+dist/renderer/feeling/
+dist/renderer/status/
+dist/renderer/call/index.html
+dist/renderer/chat/index.html
+dist/renderer/settings/index.html
+dist/renderer/sidebar/index.html
+dist/renderer/sticker-manager/index.html
+dist/renderer/tasks/index.html
+dist/renderer/index.html
+dist/renderer/react/index.html
+dist/renderer/live2dcubismcore.min.js
+dist/sim/
+dist/skills/
+release/
+release-*/
+.build-temp/
+# electron-builder 在仓库根生成的产物（与 release/ 同款，不进 git）
+latest.yml
+*.js.map
+*.tsbuildinfo
+
+# Native screenshot helper is built locally and staged for electron-builder.
+resources/bin/*.exe
+
+# mpv binary is downloaded locally and staged for electron-builder.
+resources/bin/mpv/
+.cache/mpv/
+
+# M0 POC scratch（含早期 token/qr.png 敏感产物，仅本地参考）
+tmp-m0-poc/
+
+# build/ 顶层是 NSIS 安装包的源资源（installer.nsh / installer-sidebar.bmp /
+# cyrene-installer-source.png），被 electron-builder.yml 引用，必须进 Git。
+# build/installer/ui/ 是自研安装器 UI 的整个子项目，源码 + 产物都不进 git。
+# 兜底：未来若在 build/ 下新增其他子目录（除了上方白名单的 3 个文件），默认全部忽略。
+build/*
+!build/installer/
+build/installer/*
+!build/installer/installer.nsh
+!build/installer/installer-sidebar.bmp
+!build/installer/cyrene-installer-source.png
+build/installer/ui/
+build/installer/ui/node_modules/
+build/installer/ui/dist/
+build/installer/ui/dist-electron/
+build/installer/ui/dist-installer/
+build/installer/ui/payload/
+build/installer/ui/dev*.log
+
+# Renderer 构建产物——保留产品资源（audio/avatars/feeling/icons/models/stickers/status），
+# 其他 Vite 产物（assets、各窗口 index.html、live2dcubismcore.min.js 等）已在上方忽略。
+# 额外兜底：未跟踪的 context-usage 预览图与时间戳备份目录
+dist/renderer/context-usage/
+dist/renderer-old-*/
+# music 播放器是本地构建产物（hash 文件名每次构建变化），不进 git
+dist/renderer/music/
+
+# build/installer/ui/src/ 下的同名源图（setup/setup-loading/succeed/failed/ch）被安装 UI 引用，
+# 打包时由 vite/webpack 复制到 src/renderer/react/assets/ 作为产物副本。
+# 真正的源在 build/installer/ui/src/（已在上方 ignore），副本是构建输出，按文件名 ignore 避免误提交。
+src/renderer/react/assets/ch.png
+src/renderer/react/assets/failed.png
+src/renderer/react/assets/setup.png
+src/renderer/react/assets/setup-loading.png
+src/renderer/react/assets/succeed.png
+
+# OpenCode 二进制 distribution（按需本地下载，不进 git）
+resources/opencode/
+resources/mingit/
+.cache/mingit/
+.cache/music-component/
+dist/components/
+
+# NOTE: dist/renderer/audio, dist/renderer/avatars, dist/renderer/models,
+# dist/renderer/stickers are intentionally NOT ignored (product assets).
+# Lines above ignore Vite-bundled artifacts only.
+
+# Test & coverage
+coverage/
+__pycache__/
+*.py[cod]
+
+# Local debug/verification artifacts
+verify-*.js
+verify-*.png
+verify-*.html
+test-output/
+scripts/test-action-gate-anthropic.mjs
+scripts/test-action-gate-contract.mjs
+scripts/test-cita-fc-compare.mjs
+scripts/test-cita-minimax.mjs
+.zcode/
+.worktrees/
+
+# Debug previews / scratch files generated during UI work
+cyrene-*-preview.html
+tmp_*.txt
+tmp/
+tmpr-build.log
+tmprenderer-build.log
+
+# Legacy UI prototype directories (not referenced by production code)
+preview/
+player-demo/
+
+# Playwright CLI scratch
+.playwright-cli/
+
+# Sim result dumps
+sim-result/
+
+# Brainstorming visual companion mockups (local-only artifacts)
+.superpowers/
+
+# Codebuddy IDE scratch（plan 草稿等，会话级缓存）
+.codebuddy/
+
+# Agent / CLI 一次性验证目录（regenerated，每次 worktree 都不一样名字）
+.tmp-*/
+.tmp-builtin-cli-*
+.tmp-opencode-sdk/
+
+# OpenCode CLI 运行留痕
+.opencode*/
+
+# Windows quirk: 'nul' is a reserved device name, ignore if created by accident
+nul
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Sensitive keys and credentials
+*.key
+*.pem
+*.log
+
+# Local env files (keep .env.example tracked)
+.env
+.env.*
+!.env.example
+# Video/preview render projects (not source code)
+videos/
+
+# Local AI model files (用户下载到 models/，二进制不跟踪 — 见 docs/local-models.md)
+# 模型目录约定：
+#   - models/Xenova/<repo>/         Embedding 模型（bge-m3 等）
+#   - models/<reranker>/            Reranker 模型（bge-reranker-base / ms-marco-MiniLM-L-6-v2）
+#   - models/*.zip                  模型权重压缩包（数百 MB，绝不进 git）
+# 规则说明：
+#   - models/Xenova/ 完整目录忽略（用户下载的完整 embedding 模型，含 tokenizer + config + onnx）
+#   - models/*.zip 忽略：权重压缩包按需下载，不进 git
+#   - 已跟踪的 reranker JSON 元数据保持跟踪（config/tokenizer 等小文件）
+#   - 所有 .onnx / onnx_data / .bin / .safetensors 大模型权重永远忽略
+#   - 保留 .gitkeep 占位让目录结构可见
+models/Xenova/
+models/*.zip
+**/onnx/
+**/*.onnx
+**/*.onnx_data
+**/*.bin
+**/*.safetensors
+!models/.gitkeep
+
+# Local opener voice pack files. Keep the directory and installation note tracked.
+opener-pack/*
+!opener-pack/.gitkeep
+!opener-pack/README.md
+
+# Playwright MCP 运行时产物
+.playwright-mcp/
+
+# Private design docs — not published
+docs/
+!docs/
+# superpowers/ 是 superpowers agent 生成的设计/计划草稿，不发布
+docs/superpowers/
+!docs/local-models.md
+!docs/opener-pack.md
+!docs/electron-33-to-43-upgrade-assessment.md
+PRODUCT.md
+sticker-descriptions/

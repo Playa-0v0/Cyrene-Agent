@@ -1,0 +1,18 @@
+.cy-settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  color: #8e8e93;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.cy-settings-btn:hover {
+  background: var(--cy-bg-hover);
+  color: var(--cy-text);
+}

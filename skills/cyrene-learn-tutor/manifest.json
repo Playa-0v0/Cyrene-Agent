@@ -1,0 +1,15 @@
+{
+  "id": "cyrene-learn-tutor",
+  "version": "1.0.0",
+  "defaultEnabled": true,
+  "entry": "index.ts",
+  "autoInject": true,
+  "dependencies": [
+    "obsidian_list_files",
+    "obsidian_search",
+    "obsidian_read_file",
+    "obsidian_read_section",
+    "obsidian_edit",
+    "obsidian_open_note"
+  ]
+}

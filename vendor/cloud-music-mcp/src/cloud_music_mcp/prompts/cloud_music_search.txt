@@ -1,0 +1,4 @@
+搜索歌曲、专辑、歌手或歌单
+args:
+    keyword: 搜索关键词（歌名、歌手名、专辑名等）
+    category: 搜索类型，可选 'song'(歌曲)、'album'(专辑)、'artist'(歌手)、'playlist'(歌单)，默认为 'song'

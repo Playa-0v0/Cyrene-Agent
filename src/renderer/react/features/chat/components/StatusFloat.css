@@ -1,0 +1,31 @@
+.cy-status-float {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.cy-status-float__item {
+  position: absolute;
+  opacity: 0.55;
+  transform-origin: center center;
+  pointer-events: none;
+}
+
+.cy-status-float__item img {
+  display: block;
+  width: 100%;
+  height: auto;
+  animation: cy-status-float ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes cy-status-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}

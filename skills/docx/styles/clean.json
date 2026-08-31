@@ -1,0 +1,11 @@
+{
+  "name": "极简留白",
+  "titleColor": "FF333333",
+  "titleSize": 32,
+  "titleFont": "微软雅黑",
+  "bodyFont": "微软雅黑",
+  "bodySize": 24,
+  "bodyColor": "FF555555",
+  "lineSpacing": 420,
+  "headingColor": "FF666666"
+}

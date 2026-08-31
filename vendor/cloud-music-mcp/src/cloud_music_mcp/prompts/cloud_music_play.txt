@@ -1,0 +1,4 @@
+唤起客户端播放指定歌曲或歌单
+args:
+    id: 歌曲ID 或 歌单ID
+    type: 'song' (单曲) 或 'playlist' (歌单)

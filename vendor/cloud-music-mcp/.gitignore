@@ -1,0 +1,8 @@
+# Vendored cloud-music-mcp
+__pycache__/
+*.pyc
+*.pyo
+storage/
+.venv/
+.pytest_cache/
+src/cloud_music_mcp.egg-info/

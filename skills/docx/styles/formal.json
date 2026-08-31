@@ -1,0 +1,11 @@
+{
+  "name": "正式公文",
+  "titleColor": "FF000000",
+  "titleSize": 32,
+  "titleFont": "黑体",
+  "bodyFont": "仿宋",
+  "bodySize": 28,
+  "bodyColor": "FF000000",
+  "lineSpacing": 360,
+  "headingColor": "FF000000"
+}

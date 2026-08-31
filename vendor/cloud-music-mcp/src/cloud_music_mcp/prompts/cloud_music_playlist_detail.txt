@@ -1,0 +1,3 @@
+获取歌单详情，包括歌单内所有歌曲
+args:
+    playlist_id: 歌单 ID

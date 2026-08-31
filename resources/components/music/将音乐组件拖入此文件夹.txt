@@ -1,0 +1,3 @@
+将音乐组件压缩包解压后，把其中全部文件拖入此文件夹。
+
+保留 manifest.json、cyrene-music.exe、_internal 和 LICENSES 的原始目录结构。

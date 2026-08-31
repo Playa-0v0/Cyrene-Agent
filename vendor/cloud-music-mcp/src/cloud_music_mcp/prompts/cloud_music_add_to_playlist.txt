@@ -1,0 +1,4 @@
+添加歌曲到指定歌单
+args:
+    playlist_id: 目标歌单 ID
+    track_ids: 要添加的歌曲 ID 列表，例如 [123, 456]

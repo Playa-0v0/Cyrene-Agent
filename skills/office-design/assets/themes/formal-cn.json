@@ -1,0 +1,8 @@
+{
+  "id": "formal-cn",
+  "colors": {"primary": "#111111", "secondary": "#4A4A4A", "accent": "#8A1C1C", "background": "#FFFFFF", "surface": "#FFFFFF", "foreground": "#111111", "muted": "#666666", "border": "#B8B8B8"},
+  "fonts": {"cjk": ["FangSong", "SimSun", "Microsoft YaHei"], "latin": ["Times New Roman", "Arial"], "fallback": ["Helvetica"]},
+  "spacing": {"base": 8},
+  "roles": {"table_header": "primary", "input": "#0000FF", "formula": "#000000", "warning": "#9F1239", "success": "#166534"},
+  "chart_colors": ["#8A1C1C", "#4A4A4A", "#777777", "#AAAAAA"]
+}

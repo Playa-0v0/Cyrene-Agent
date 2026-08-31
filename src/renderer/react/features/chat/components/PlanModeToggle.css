@@ -1,0 +1,67 @@
+/* 计划模式 on/off 开关 —— 与 ReasoningControl 同款 Popover + Segmented 风格 */
+.cy-plan-panel {
+  width: max-content;
+  max-width: 320px;
+  padding: 2px;
+}
+
+.cy-plan-control {
+  /* 基础布局由输入框底栏的 cy-composer__agent-button 提供。 */
+}
+
+.cy-plan-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  object-fit: contain;
+}
+
+.cy-plan-panel > strong,
+.cy-plan-panel > span {
+  display: block;
+}
+
+.cy-plan-panel > strong {
+  margin: 3px 4px 4px;
+  color: var(--cy-text);
+  font: 600 14px/1.35 var(--rb-font-sans, sans-serif);
+}
+
+.cy-plan-panel > span {
+  margin: 0 4px 12px;
+  color: var(--cy-text-muted);
+  font: 400 12px/1.35 var(--rb-font-sans, sans-serif);
+}
+
+.cy-plan-popover .ant-popover-inner {
+  border: 1px solid #eeeeee;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(29, 29, 31, 0.12);
+}
+
+.cy-plan-popover .ant-segmented {
+  padding: 3px;
+  border-radius: 10px;
+  background: #f7f7f7;
+}
+
+.cy-plan-popover .ant-segmented-item {
+  min-width: 44px;
+  color: #5d5d5d;
+  font: 500 12px/28px var(--rb-font-sans, sans-serif);
+}
+
+.cy-plan-popover .ant-segmented-item-selected {
+  color: #fff;
+}
+
+.cy-plan-popover .ant-segmented-item-selected::after {
+  border-radius: 8px;
+  background: var(--cy-accent);
+  box-shadow: none;
+}
+
+/* 激活态：按钮文字+图标轻微染色，区别于 thinking 按钮 */
+.cy-plan-control.is-active {
+  color: var(--cy-accent, #ff5b8a);
+}

@@ -1,0 +1,126 @@
+/* RightInspector — 统一右侧挤出式面板（diff / 计划清单 tab 切换） */
+
+.cy-right-inspector {
+  flex-shrink: 0;
+  width: 620px;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #FFFBFC;
+  background-image: url("../../../../../../assets/ui/cyrene-surface-pattern.svg");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  border: 1px solid var(--cy-border, #f2f2f2);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: -4px 0 16px rgb(44 31 38 / 5%);
+  animation: cy-right-inspector-slide-in 0.22s ease;
+  app-region: no-drag;
+}
+
+@keyframes cy-right-inspector-slide-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── 顶部：tab 栏 + 关闭按钮 ── */
+.cy-right-inspector__header {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--cy-border, #f0ebee);
+  background: rgb(255 247 250 / 92%);
+  flex-shrink: 0;
+  min-height: 38px;
+}
+
+.cy-right-inspector__tabs {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 6px;
+  min-width: 0;
+}
+
+.cy-right-inspector__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: var(--cy-text-muted, #99939a);
+  font: 500 12px/1.2 var(--rb-font-sans, sans-serif);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  white-space: nowrap;
+}
+
+.cy-right-inspector__tab:hover {
+  color: var(--cy-text, #2f2d31);
+  background: rgb(0 0 0 / 2%);
+}
+
+.cy-right-inspector__tab.is-active {
+  color: var(--cy-text, #2f2d31);
+  border-bottom-color: var(--cy-accent, #ff5b8a);
+  background: rgb(255 251 252 / 96%);
+}
+
+/* 单 tab 时的标题（退化模式，不显示 tab 切换条） */
+.cy-right-inspector__single-title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  color: var(--cy-text, #2f2d31);
+  font: 600 12px/1.3 var(--rb-font-sans, sans-serif);
+}
+
+/* 阶段色点 */
+.cy-right-inspector__dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 999px;
+  background: var(--cy-text-muted, #a99fa5);
+}
+.cy-right-inspector__dot.is-review { background: var(--cy-accent, #ff5b8a); }
+.cy-right-inspector__dot.is-executing { background: #d98f2b; animation: cy-right-inspector-dot-pulse 1.4s ease-in-out infinite; }
+.cy-right-inspector__dot.is-completed { background: #3e9c63; }
+
+@keyframes cy-right-inspector-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.cy-right-inspector__close {
+  flex-shrink: 0;
+  width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--cy-text-muted, #99939a);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.cy-right-inspector__close:hover {
+  background: var(--cy-bg-hover, #fff1f6);
+  color: var(--cy-text, #2f2d31);
+}
+
+/* ── 主体：tab 内容 ── */
+.cy-right-inspector__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}

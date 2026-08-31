@@ -1,0 +1,43 @@
+.cy-user-avatar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.cy-user-avatar:hover .cy-user-avatar-label {
+  color: var(--cy-text);
+}
+
+.cy-user-avatar-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #ffe8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 8px rgba(76, 55, 98, 0.22));
+}
+
+.cy-user-avatar-circle span {
+  color: #c46a8a;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cy-user-avatar-circle img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.cy-user-avatar-label {
+  font-size: 13px;
+  color: var(--cy-text-muted);
+  transition: color 0.15s;
+}

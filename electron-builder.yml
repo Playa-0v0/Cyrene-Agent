@@ -1,0 +1,57 @@
+appId: com.cyrene.live2d
+productName: Cyrene
+publish:
+  provider: github
+  owner: Playa-0v0
+  repo: Cyrene-Agent
+directories:
+  output: release
+asar: true
+asarUnpack:
+  - "**/vendor/srt-win/**"
+  - "**/node_modules/@ast-grep/**"
+  # Playwright MCP 以 ELECTRON_RUN_AS_NODE 模式运行，读不了 asar 虚拟路径，
+  # 需真实磁盘文件（cli.js + 其依赖的 playwright / playwright-core）
+  - "**/node_modules/@playwright/**"
+  - "**/node_modules/playwright/**"
+  - "**/node_modules/playwright-core/**"
+electronDist: node_modules/electron/dist
+files:
+  - dist/**/*
+  - "!dist/components/**/*"
+  - package.json
+  - assets/**/*
+  - vendor/**/*
+  - "!vendor/cloud-music-mcp/**/*"
+  - "!models/**/*"
+  # prompts / skills 作为安装目录根下的独立文件夹，方便用户修改
+extraFiles:
+  - from: prompts
+    to: prompts
+  - from: skills
+    to: skills
+extraResources:
+  - from: resources/bin/cyrene-screenshot.exe
+    to: bin/cyrene-screenshot.exe
+  - from: resources/bin/mpv
+    to: bin/mpv
+  - from: resources/mingit
+    to: mingit
+  - from: resources/components
+    to: components
+win:
+  icon: assets/tray-icon.ico
+  target:
+    - nsis
+nsis:
+  artifactName: Cyrene-Setup-${version}.${ext}
+  oneClick: false
+  differentialPackage: false
+  allowToChangeInstallationDirectory: true
+  # Shortcut creation is controlled by the assisted install page below.
+  createDesktopShortcut: false
+  createStartMenuShortcut: true
+  menuCategory: Cyrene
+  include: build/installer/installer.nsh
+  installerSidebar: build/installer/installer-sidebar.bmp
+  uninstallerSidebar: build/installer/installer-sidebar.bmp

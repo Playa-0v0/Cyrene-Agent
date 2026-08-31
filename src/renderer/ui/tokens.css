@@ -1,0 +1,170 @@
+:root {
+  /* ===== Surfaces (deep dark for tech feel) ===== */
+  --rb-bg-0: #08070f;
+  --rb-bg-1: #0f0d1f;
+  --rb-bg-2: #181432;
+  --rb-bg-3: #221c46;
+  --rb-bg-elevated: #2a2350;
+
+  /* ===== Brand pink scale ===== */
+  --rb-pink-50:  #fef1f7;
+  --rb-pink-100: #fde0ed;
+  --rb-pink-200: #fbb6d4;
+  --rb-pink-300: #f88fbc;
+  --rb-pink-400: #f472b6;
+  --rb-pink-500: #ec4899;   /* primary brand */
+  --rb-pink-600: #db2777;
+  --rb-pink-700: #be185d;
+  --rb-pink-glow: #ff6ec7;
+
+  /* ===== Accent purple (gradient endpoint) ===== */
+  --rb-violet-400: #b794f4;
+  --rb-violet-500: #9f7aea;
+  --rb-violet-600: #7c5fcc;
+
+  /* ===== Cyan (secondary tech accent) ===== */
+  --rb-cyan-400: #67e8f9;
+  --rb-cyan-500: #22d3ee;
+
+  /* ===== Text ===== */
+  --rb-text-strong:  #fef7ff;
+  --rb-text-default: #ebe5f5;
+  --rb-text-muted:   #a094c1;
+  --rb-text-faint:   #6b6388;
+  --rb-text-on-pink: #ffffff;
+
+  /* ===== Borders ===== */
+  --rb-border-faint:  rgba(236, 72, 153, 0.08);
+  --rb-border-soft:   rgba(236, 72, 153, 0.18);
+  --rb-border-strong: rgba(236, 72, 153, 0.40);
+  --rb-border-grid:   rgba(157, 127, 234, 0.12);
+
+  /* ===== Gradient ===== */
+  --rb-grad-pink: linear-gradient(135deg, #ec4899 0%, #9f7aea 100%);
+  --rb-grad-pink-hot: linear-gradient(135deg, #ff6ec7 0%, #ec4899 50%, #9f7aea 100%);
+  --rb-grad-bg: radial-gradient(ellipse at top, #181432 0%, #08070f 60%);
+
+  /* ===== Glow (tech feel) ===== */
+  --rb-glow-pink: 0 0 20px rgba(236, 72, 153, 0.35);
+  --rb-glow-soft: 0 0 12px rgba(236, 72, 153, 0.18);
+  --rb-glow-violet: 0 0 24px rgba(157, 127, 234, 0.28);
+
+  /* ===== Radius (from MiniMax design ref, rounded everywhere) ===== */
+  --rb-radius-xs: 4px;
+  --rb-radius-sm: 6px;
+  --rb-radius-md: 8px;
+  --rb-radius-lg: 12px;
+  --rb-radius-xl: 16px;
+  --rb-radius-xxl: 20px;
+  --rb-radius-xxxl: 24px;
+  --rb-radius-hero: 32px;
+  --rb-radius-full: 9999px;
+
+  /* ===== Spacing ===== */
+  --rb-space-xxs: 4px;
+  --rb-space-xs:  8px;
+  --rb-space-sm:  12px;
+  --rb-space-md:  16px;
+  --rb-space-lg:  20px;
+  --rb-space-xl:  24px;
+  --rb-space-xxl: 32px;
+  --rb-space-xxxl: 40px;
+  --rb-space-section: 64px;
+
+  /* ===== Typography ===== */
+  --rb-font-sans: "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI",
+                  "PingFang SC", "Microsoft YaHei", sans-serif;
+  --rb-font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular,
+                  Menlo, Consolas, monospace;
+
+  /* 全局字间距：中英文正文统一略微松开，提升可读性。
+     局部元素可覆盖此值（如标题负间距、数字图表）。 */
+  --rb-letter-spacing: 0.7px;
+
+  --rb-text-hero:    600 80px/1.10 var(--rb-font-sans);
+  --rb-text-display: 600 56px/1.10 var(--rb-font-sans);
+  --rb-text-h1:      600 40px/1.20 var(--rb-font-sans);
+  --rb-text-h2:      600 32px/1.25 var(--rb-font-sans);
+  --rb-text-h3:      600 24px/1.30 var(--rb-font-sans);
+  --rb-text-title:   600 20px/1.40 var(--rb-font-sans);
+  --rb-text-body:    400 16px/1.50 var(--rb-font-sans);
+  --rb-text-body-em: 500 16px/1.50 var(--rb-font-sans);
+  --rb-text-small:   400 14px/1.50 var(--rb-font-sans);
+  --rb-text-small-em:500 14px/1.50 var(--rb-font-sans);
+  --rb-text-caption: 400 13px/1.70 var(--rb-font-sans);
+  --rb-text-micro:   400 12px/1.50 var(--rb-font-sans);
+  --rb-text-btn:     600 14px/1.40 var(--rb-font-sans);
+  --rb-text-mono:    400 13px/1.50 var(--rb-font-mono);
+  --rb-text-mono-em: 500 13px/1.50 var(--rb-font-mono);
+
+  /* ===== Shadows ===== */
+  --rb-shadow-card:    0 4px 16px rgba(0, 0, 0, 0.35),
+                       0 1px 2px rgba(0, 0, 0, 0.25);
+  --rb-shadow-elevated:0 12px 40px rgba(0, 0, 0, 0.55),
+                       0 0 0 1px rgba(236, 72, 153, 0.10);
+  --rb-shadow-pink:    0 8px 32px rgba(236, 72, 153, 0.35);
+
+  /* ===== Light-mode primitives (neutral defaults; pearl-white overrides these) ===== */
+  --rb-card-bg:        transparent;
+  --rb-divider-light:  rgba(0, 0, 0, 0.08);
+  --rb-hover-light:    rgba(0, 0, 0, 0.04);
+  --rb-active-light:   rgba(0, 0, 0, 0.08);
+  --rb-input-bg:       rgba(255, 255, 255, 0.06);
+  --rb-input-border:   rgba(236, 72, 153, 0.18);
+  --rb-input-text:     #ebe5f5;
+  --rb-input-placeholder: rgba(235, 229, 245, 0.48);
+  --rb-slider-track:   rgba(255, 255, 255, 0.18);
+  --rb-slider-fill:    #ec4899;
+  --rb-slider-thumb:   #ffffff;
+  --rb-toggle-off:     rgba(255, 255, 255, 0.18);
+  --rb-toggle-on:      #ec4899;
+  --rb-scroll-thumb:   rgba(255, 255, 255, 0.20);
+  --rb-scroll-thumb-hover: rgba(255, 255, 255, 0.32);
+
+  /* ===== Markdown render variables (dark theme defaults) ===== */
+  --md-code-bg:           rgba(255, 255, 255, 0.04);
+  --md-code-border:       rgba(255, 182, 220, 0.18);
+  --md-inline-code-bg:    rgba(255, 255, 255, 0.08);
+  --md-inline-code-text:  #fef7ff;
+  --md-quote-border:      var(--rb-pink-400);
+  --md-quote-bg:          rgba(236, 72, 153, 0.06);
+  --md-table-border:      rgba(255, 182, 220, 0.18);
+  --md-link-color:        var(--rb-pink-400);
+  --md-link-hover:        var(--rb-pink-300);
+  --md-copy-text:         var(--rb-text-muted);
+  --md-copy-bg:           rgba(255, 255, 255, 0.06);
+  --md-copy-border:       var(--rb-border-soft);
+  --md-katex-text:        var(--rb-text-default);
+
+  /* ===== Weather card (glass-morphism on dark UI) ===== */
+  --rb-weather-bg:          rgba(34, 33, 56, 0.58);
+  --rb-weather-card-border: rgba(255, 255, 255, 0.09);
+  --rb-weather-border:      rgba(167, 159, 196, 0.14);
+  --rb-weather-text-strong: #efeaf8;
+  --rb-weather-text-default: #d8d0ee;
+  --rb-weather-text-muted:  #a79fc4;
+  --rb-weather-text-faint:  #6f698c;
+  --rb-weather-accent:      #ff8fbf;
+  --rb-weather-detail-bg:   rgba(255, 255, 255, 0.045);
+  --rb-weather-detail-border: rgba(255, 255, 255, 0.07);
+  --rb-weather-icon-bg:     linear-gradient(135deg, rgba(255,143,191,0.16), rgba(157,140,255,0.16));
+  --rb-weather-panel-bg:    rgba(255, 255, 255, 0.03);
+  --rb-weather-panel-border: rgba(255, 255, 255, 0.06);
+  --rb-weather-tag-bg:      linear-gradient(135deg, rgba(255,143,191,0.22), rgba(157,140,255,0.22));
+
+  /* Chat typography (adjustable via settings sliders) */
+  --rb-chat-line-height:   1.75;
+  --rb-chat-para-spacing:  0.5em;
+
+  /* Weather illustration (CSS pure-graphic weather icons) */
+  --rb-weather-sun-core-1:  #ffe08a;
+  --rb-weather-sun-core-2:  #ffb14d;
+  --rb-weather-sun-ray:     #ffc95c;
+  --rb-weather-sun-glow:    rgba(255, 190, 90, 0.45);
+  --rb-weather-cloud:       #ffffff;
+  --rb-weather-cloud-shadow: rgba(190, 170, 215, 0.35);
+  --rb-weather-rain:        #7db4ff;
+  --rb-weather-snow:        #a8c8ff;
+  --rb-weather-bolt-1:      #ffe08a;
+  --rb-weather-bolt-2:      #ff9d4d;
+}

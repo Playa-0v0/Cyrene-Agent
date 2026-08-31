@@ -1,0 +1,159 @@
+import type { ChatAppearanceSettings } from "../../shared/chat-appearance";
+import type { UiTheme } from "../../shared/ui-theme";
+import type { UiFont } from "../../shared/ui-font";
+import type { UiIcon } from "../../shared/ui-icon";
+import type {
+  DefaultChatMode,
+  MobileMessageSegmentationMode,
+  ProactiveChatMode,
+  ProactiveDeliveryTarget,
+  SegmentedOutputMode,
+} from "../../shared/preferences";
+import type { CustomStyleConfig, StyleId } from "../../shared/style-sampling";
+import type { ToolModeOverrides } from "../orchestrator/tool-registry";
+import type { SkillModeOverrides } from "../skills/types";
+import type { LspServerOverride } from "../lsp/types";
+
+/**
+ * 通用设置（GeneralSettings）：与模型配置无关的 UI、TTS、工具开关、快捷键等。
+ * 与 ChatAppearanceSettings 组合，统一保存到 general-settings.json。
+ */
+export interface GeneralSettings extends ChatAppearanceSettings {
+  /** Harness 同时执行已明确安全工具的上限；1 表示完全串行。 */
+  maxParallelToolCalls: number;
+  citaEnabled: boolean;
+  citaSemanticEngine: "remote";
+  /** Chat 模式的轻量社交上下文；默认关闭，开启后每轮最多多一次异步抽取调用。 */
+  chatSocialContextEnabled: boolean;
+  petAlwaysOnTop: boolean;
+  petVisible: boolean;
+  /** 桌宠缩放因子：1.0=默认，0.5~2.0，窗口与模型同步等比缩放。 */
+  petZoom: number;
+  /** 桌宠窗口 X 坐标，未保存时为 undefined */
+  petWindowX?: number;
+  /** 桌宠窗口 Y 坐标，未保存时为 undefined */
+  petWindowY?: number;
+  disableGpuElectron?: boolean;
+  sidebarVisible: boolean;
+  tasksVisible: boolean;
+  launchAtLogin: boolean;
+  language: "zh-CN";
+  uiTheme: UiTheme;
+  windowCornerRadius: number;
+  /** @deprecated 旧版透明窗口开关，仅保留用于配置兼容。 */
+  uiThemeRadius: boolean;
+  uiFont: UiFont;
+  uiIcon: UiIcon;
+  /** 聊天窗口打开时默认选中的模式。 */
+  defaultChatMode: DefaultChatMode;
+  /** 聊天窗口当前风格，启动时恢复；本轮请求仍以 renderer 显式 styleId 为准。 */
+  currentStyleId: StyleId;
+  /** 全局自定义风格采样配置。 */
+  customStyle: CustomStyleConfig;
+  /** 聊天气泡分段输出偏好。 */
+  segmentedOutputMode: SegmentedOutputMode;
+  /** 手机渠道文本消息分段发送偏好。 */
+  mobileMessageSegmentation: MobileMessageSegmentationMode;
+  /** 主动聊天功能开关占位；当前不接实际逻辑。 */
+  proactiveChatMode: ProactiveChatMode;
+  /** 主动消息最终投递到本地、微信或飞书。 */
+  proactiveDeliveryTarget: ProactiveDeliveryTarget;
+  // TTS 配置
+  ttsEngine: "off" | "minimax" | "gptsovits" | "custom-cloud" | "mimo" | "mossland";
+  ttsAutoRead: boolean;
+  ttsSpeed: number;
+  ttsVolume: number;
+  // MiniMax
+  ttsMinimaxKey: string;
+  ttsMinimaxVoiceId: string;
+  /** MiniMax 合成模型：speech-2.8-hd(高保真¥3.5/万字符) | speech-2.8-turbo(极速¥2.0/万字符) */
+  ttsMinimaxModel: "speech-2.8-hd" | "speech-2.8-turbo";
+  /** MiniMax 流式播放（边合成边播，首字延迟低）；false=完整合成收完再播 */
+  ttsStreaming: boolean;
+  /** MiniMax 语音增强：自动插入 (laughs)、(breath) 等语气词标签 */
+  ttsMinimaxVocalEnhance: boolean;
+  // GPT-SoVITS（本地）
+  ttsGptsovitsBaseUrl: string;
+  ttsGptsovitsRefAudioPath: string;
+  ttsGptsovitsPromptText: string;
+  ttsGptsovitsFormat: "wav" | "mp3";
+  /** GPT-SoVITS 单次合成超时（毫秒）。本地推理长文本可能较慢，默认 3 分钟。 */
+  ttsGptsovitsTimeoutMs: number;
+  // 自定义云端 TTS
+  ttsCustomCloudEndpointUrl: string;
+  ttsCustomCloudApiKey: string;
+  ttsCustomCloudVoiceId: string;
+  ttsCustomCloudFormat: "wav" | "mp3";
+  ttsCustomCloudTimeoutMs: number;
+  // 小米 MiMo TTS
+  ttsMimoKey: string;
+  ttsMimoVoiceAudioPath: string;
+  ttsMimoStylePrompt: string;
+  // Mossland TTS
+  ttsMosslandKey: string;
+  ttsMosslandVoiceId: string;
+  ttsMosslandModel: string;
+  ttsMosslandTestText: string;
+  ttsMosslandFormat: "mp3" | "wav";
+  /** 天气源：open-meteo(免配置默认) | amap(高德,需填key) */
+  weatherSource: "open-meteo" | "amap";
+  /** 天气插件是否启用（开关） */
+  weatherEnabled: boolean;
+  /** 高德天气 key（https://lbs.amap.com 注册 Web服务 key） */
+  amapKey: string;
+  /** 🚗出行工具是否启用 */
+  travelEnabled: boolean;
+  /** 🖥️ 浏览器自动化（Playwright MCP）是否启用。默认 false，需用户手动开启。 */
+  playwrightMcpEnabled: boolean;
+  // 联网搜索：选哪个搜索源 + 对应 key
+  searchEngine: "off" | "bocha" | "tavily" | "minimax" | "anySearch";
+  searchBochaKey: string;
+  searchTavilyKey: string;
+  searchMinimaxKey: string;
+  searchAnySearchKey: string;
+  /** ✉️邮件发送插件是否启用 */
+  emailEnabled: boolean;
+  /** SMTP 主机，如 smtp.qq.com */
+  emailSmtpHost: string;
+  /** SMTP 端口，如 465（SSL）/ 587（STARTTLS） */
+  emailSmtpPort: number;
+  /** 使用 SSL/TLS（465 通常 true，587 通常 false；用户可覆盖） */
+  emailSmtpSecure: boolean;
+  /** 发件邮箱地址 */
+  emailSmtpUser: string;
+  /** SMTP 授权码（非邮箱登录密码） */
+  emailSmtpPass: string;
+  /** 发件人显示名（可选） */
+  emailFromName: string;
+  /** 🎧ASR 服务商：off(关闭) | aliyun(阿里云) | mossland(MOSI) | local(本地,占位) */
+  asrEngine: "off" | "aliyun" | "mossland" | "local";
+  /** 阿里云智能语音交互 AppKey */
+  asrAliyunAppKey: string;
+  /** 阿里云 RAM AccessKey ID */
+  asrAliyunAccessKeyId: string;
+  /** 阿里云 RAM AccessKey Secret */
+  asrAliyunAccessKeySecret: string;
+  /** ASR 识别语言：zh(中文) | en(英文) | auto(自动) */
+  asrLanguage: "zh" | "en" | "auto";
+  /** VAD 静默检测阈值（毫秒），500~2000，默认 1000 */
+  asrVadSilenceMs: number;
+  /** VAD 音量阈值（0~1），默认 0.01。环境吵或麦克风音量低时可调 */
+  asrVadThreshold: number;
+  /** 通话中显示文字转写 */
+  asrShowTranscript: boolean;
+  /** 截图全局热键（Electron Accelerator 格式，如 "Alt+Shift+S"） */
+  screenshotHotkey: string;
+  /** 工具-模式覆盖层：用户自定义每个工具在 learn/code/work 模式下的可见性。
+   *  key = toolId，value = { mode: enabled }。覆盖优先于工具声明的 modes 字段。
+   *  空对象 = 全部按默认（modes 字段或全可见），由设置面板 UI 写入。 */
+  toolModeOverrides: ToolModeOverrides;
+  /** Chat 模式工具增强总开关：false=纯聊天（现状零影响）；true=勾选的工具
+   *  经 toolModeOverrides.chat 放行，chat 会话走 CyreneHarness native function calling。 */
+  chatToolsEnabled: boolean;
+  /** Skill-模式覆盖层：用户自定义每个 skill 在 work/code/learn 模式下的可见性。
+   *  key = skillId，value = { mode: enabled }。覆盖优先于 skill 声明的 modes 字段。
+   *  空对象 = 全部按默认（modes 字段或全可见），由设置面板 UI 写入。 */
+  skillModeOverrides: SkillModeOverrides;
+  /** Code 模式使用的用户自管语言服务命令覆盖。 */
+  lspServerOverrides: LspServerOverride[];
+}

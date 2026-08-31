@@ -1,0 +1,148 @@
+/* ReviewDiffContent — diff 内容（由 RightInspector 容器承载） */
+
+.cy-review-diff-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cy-review-inspector__file-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--cy-border, #f0ebee);
+  background: #faf8f9;
+  flex-shrink: 0;
+  min-width: 0;
+}
+.cy-review-inspector__title-text {
+  font: 600 12px/1.3 var(--rb-font-mono, monospace);
+  color: var(--cy-text, #2f2d31);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 主体：diff 视图 ── */
+.cy-review-inspector__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.cy-review-inspector__loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--cy-text-muted, #99939a);
+}
+
+.cy-review-inspector__diff-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.cy-review-inspector__diff-lines {
+  flex: 1;
+  overflow: auto;
+  font: 12px/1.6 var(--rb-font-mono, monospace);
+}
+
+/* hunk */
+.cy-review-inspector__hunk {
+  margin-bottom: 2px;
+}
+.cy-review-inspector__hunk-header {
+  padding: 4px 14px;
+  color: #0550ae;
+  font-size: 11px;
+  font-weight: 600;
+  background: #ddf4ff;
+  border-top: 1px solid #b6e3ff;
+  border-bottom: 1px solid #b6e3ff;
+}
+
+/* diff 行 */
+.cy-review-inspector__line {
+  display: flex;
+  padding: 0 10px;
+  min-height: 20px;
+  white-space: pre;
+}
+.cy-review-inspector__line.is-add { background: #e6ffec; }
+.cy-review-inspector__line.is-remove { background: #ffebe9; }
+.cy-review-inspector__line.is-context { background: transparent; }
+
+/* 行号列 */
+.cy-review-inspector__line-old,
+.cy-review-inspector__line-new {
+  flex: 0 0 42px;
+  text-align: right;
+  padding-right: 10px;
+  color: var(--cy-text-muted, #b5adb2);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.cy-review-inspector__line-marker {
+  flex: 0 0 18px;
+  text-align: center;
+  user-select: none;
+}
+.cy-review-inspector__line.is-add .cy-review-inspector__line-marker { color: #116329; }
+.cy-review-inspector__line.is-remove .cy-review-inspector__line-marker { color: #82071e; }
+.cy-review-inspector__line.is-context .cy-review-inspector__line-marker { color: transparent; }
+
+.cy-review-inspector__line-text {
+  flex: 1;
+  overflow: visible;
+}
+.cy-review-inspector__line.is-add .cy-review-inspector__line-text { color: #116329; }
+.cy-review-inspector__line.is-remove .cy-review-inspector__line-text { color: #82071e; }
+.cy-review-inspector__line.is-context .cy-review-inspector__line-text { color: var(--cy-text-muted, #8b8489); }
+
+/* kind 徽标 */
+.cy-review-inspector__kind {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.cy-review-inspector__kind.is-modified { background: #ddf4ff; color: #0550ae; }
+.cy-review-inspector__kind.is-created  { background: #e6ffec; color: #116329; }
+.cy-review-inspector__kind.is-deleted  { background: #ffebe9; color: #82071e; }
+.cy-review-inspector__kind.is-renamed  { background: #ddf4ff; color: #0550ae; }
+.cy-review-inspector__kind.is-binary   { background: #f0f0f0; color: #6e7781; }
+.cy-review-inspector__kind.is-large    { background: #f0f0f0; color: #6e7781; }
+
+/* ── 元信息视图 ── */
+.cy-review-inspector__meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 30px 16px;
+  text-align: center;
+}
+.cy-review-inspector__meta-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cy-review-inspector__meta-size {
+  font-size: 11px;
+  color: var(--cy-text-muted, #99939a);
+}
+.cy-review-inspector__meta-hint {
+  font-size: 12px;
+  color: var(--cy-text-muted, #99939a);
+}

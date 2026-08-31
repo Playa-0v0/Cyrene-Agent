@@ -1,0 +1,432 @@
+{
+  "Version": 3,
+  "FileReferences": {
+    "Moc": "model.moc3",
+    "Textures": [
+      "texture_0.png"
+    ],
+    "Physics": "model.physics3.json",
+    "Motions": {
+      "动作#6": [
+        {
+          "Name": "动作回正",
+          "File": "motions/动作#6_0.motion3.json",
+          "WrapMode": 2,
+          "VarFloats": [
+            {
+              "Name": "OFF/ON",
+              "Type": 2,
+              "Code": "assign 1"
+            }
+          ]
+        },
+        {
+          "Name": "Wink~",
+          "File": "motions/动作#6_1.motion3.json",
+          "WrapMode": 2,
+          "VarFloats": [
+            {
+              "Name": "OFF/ON",
+              "Type": 1,
+              "Code": "equal 1"
+            }
+          ]
+        },
+        {
+          "Name": "我可爱吧~",
+          "File": "motions/动作#6_2.motion3.json",
+          "WrapMode": 2,
+          "VarFloats": [
+            {
+              "Name": "OFF/ON",
+              "Type": 1,
+              "Code": "equal 1"
+            }
+          ]
+        },
+        {
+          "Name": "笑一笑吧~",
+          "File": "motions/动作#6_3.motion3.json",
+          "WrapMode": 2,
+          "VarFloats": [
+            {
+              "Name": "OFF/ON",
+              "Type": 1,
+              "Code": "equal 1"
+            }
+          ]
+        }
+      ],
+      "绳子开关#5": [
+        {
+          "Name": "开/回正",
+          "Expression": "开",
+          "VarFloats": [
+            {
+              "Name": "off/on",
+              "Type": 2,
+              "Code": "assign 1"
+            }
+          ]
+        },
+        {
+          "Name": "关",
+          "Expression": "关",
+          "VarFloats": [
+            {
+              "Name": "off/on",
+              "Type": 2,
+              "Code": "assign 0"
+            }
+          ]
+        }
+      ],
+      "表情3#4": [
+        {
+          "Name": "表情回正",
+          "Expression": "表情回正",
+          "NextMtn": "表情2#3:表情回正"
+        },
+        {
+          "Name": "闪耀",
+          "Expression": "闪耀"
+        }
+      ],
+      "表情2#3": [
+        {
+          "Name": "表情回正",
+          "Expression": "表情回正",
+          "NextMtn": "表情#2:表情回正"
+        },
+        {
+          "Name": "问号",
+          "Expression": "问号"
+        }
+      ],
+      "表情#2": [
+        {
+          "Name": "表情回正",
+          "Expression": "表情回正"
+        },
+        {
+          "Name": "墨镜",
+          "Expression": "墨镜"
+        },
+        {
+          "Name": "星星眼",
+          "Expression": "星星眼"
+        },
+        {
+          "Name": "圈圈眼",
+          "Expression": "圈圈眼"
+        },
+        {
+          "Name": "开心眼",
+          "Expression": "开心眼"
+        }
+      ],
+      "秋千#1": [
+        {
+          "Name": "拽秋千0",
+          "WrapMode": 2,
+          "Expression": "拽秋千回正"
+        },
+        {
+          "Name": "拽秋千1",
+          "WrapMode": 2,
+          "Expression": "拽秋千1",
+          "NextMtn": "秋千#1:拽秋千0"
+        },
+        {
+          "Name": "拽秋千2",
+          "WrapMode": 2,
+          "Expression": "拽秋千2",
+          "NextMtn": "秋千#1:拽秋千0"
+        }
+      ],
+      "Tick3": [
+        {
+          "Name": "Wink（待机）",
+          "File": "motions/动作#6_1.motion3.json",
+          "WrapMode": 2,
+          "VarFloats": [
+            {
+              "Name": "OFF/ON",
+              "Type": 1,
+              "Code": "equal 0"
+            }
+          ]
+        },
+        {
+          "Name": "可爱（待机）",
+          "File": "motions/动作#6_2.motion3.json",
+          "WrapMode": 2,
+          "VarFloats": [
+            {
+              "Name": "OFF/ON",
+              "Type": 1,
+              "Code": "equal 0"
+            }
+          ]
+        },
+        {
+          "Name": "微笑（待机）",
+          "File": "motions/动作#6_3.motion3.json",
+          "WrapMode": 2,
+          "VarFloats": [
+            {
+              "Name": "OFF/ON",
+              "Type": 1,
+              "Code": "equal 0"
+            }
+          ]
+        },
+        {
+          "Name": "荡秋千（待机）",
+          "File": "motions/Tick3_3.motion3.json",
+          "WrapMode": 2,
+          "VarFloats": [
+            {
+              "Name": "off/on",
+              "Type": 1,
+              "Code": "equal 1"
+            }
+          ]
+        }
+      ],
+      "Start": [
+        {
+          "Name": "初始化",
+          "Expression": "开",
+          "VarFloats": [
+            {
+              "Name": "off/on",
+              "Type": 2,
+              "Code": "assign 1"
+            },
+            {
+              "Name": "OFF/ON",
+              "Type": 2,
+              "Code": "assign 0"
+            }
+          ]
+        }
+      ]
+    },
+    "Expressions": [
+      {
+        "Name": "表情回正",
+        "File": "expressions/0.exp3.json"
+      },
+      {
+        "Name": "墨镜",
+        "File": "expressions/1.exp3.json"
+      },
+      {
+        "Name": "问号",
+        "File": "expressions/2.exp3.json"
+      },
+      {
+        "Name": "闪耀",
+        "File": "expressions/3.exp3.json"
+      },
+      {
+        "Name": "星星眼",
+        "File": "expressions/4.exp3.json"
+      },
+      {
+        "Name": "圈圈眼",
+        "File": "expressions/5.exp3.json"
+      },
+      {
+        "Name": "开心眼",
+        "File": "expressions/6.exp3.json"
+      },
+      {
+        "Name": "拽秋千1",
+        "File": "expressions/7.exp3.json"
+      },
+      {
+        "Name": "拽秋千2",
+        "File": "expressions/8.exp3.json"
+      },
+      {
+        "Name": "拽秋千回正",
+        "File": "expressions/9.exp3.json"
+      },
+      {
+        "Name": "开",
+        "File": "expressions/10.exp3.json"
+      },
+      {
+        "Name": "关",
+        "File": "expressions/11.exp3.json"
+      }
+    ]
+  },
+  "Groups": [],
+  "HitAreas": [
+    {
+      "Name": "左侧秋千",
+      "Id": "ArtMesh11",
+      "Motion": "秋千#1:拽秋千1"
+    },
+    {
+      "Name": "右侧秋千",
+      "Id": "ArtMesh12",
+      "Motion": "秋千#1:拽秋千2"
+    },
+    {
+      "Name": "表情回正花",
+      "Id": "ArtMesh15",
+      "Motion": "表情3#4:表情回正"
+    },
+    {
+      "Name": "星星眼1坠",
+      "Id": "ArtMesh77",
+      "Motion": "表情#2:星星眼"
+    },
+    {
+      "Name": "圈圈眼2坠",
+      "Id": "ArtMesh78",
+      "Motion": "表情#2:圈圈眼"
+    },
+    {
+      "Name": "开心眼1叶",
+      "Id": "ArtMesh16",
+      "Motion": "表情#2:开心眼"
+    },
+    {
+      "Name": "墨镜刘海",
+      "Id": "ArtMesh20",
+      "Motion": "表情#2:墨镜"
+    },
+    {
+      "Name": "闪耀1枝",
+      "Id": "ArtMesh116",
+      "Motion": "表情3#4:闪耀"
+    },
+    {
+      "Name": "问号2枝",
+      "Id": "ArtMesh115",
+      "Motion": "表情2#3:问号"
+    }
+  ],
+  "Layout": {},
+  "DisplayParameters": [],
+  "Controllers": {
+    "ParamHit": {},
+    "ParamLoop": {},
+    "KeyTrigger": {
+      "Enabled": true
+    },
+    "ParamTrigger": {},
+    "AreaTrigger": {},
+    "HandTrigger": {},
+    "EyeBlink": {
+      "MinInterval": 500,
+      "MaxInterval": 6000,
+      "Items": [
+        {
+          "Id": "ParamEyeLOpen",
+          "Min": 0,
+          "Max": 1,
+          "BlendMode": 2,
+          "Input": 0
+        },
+        {
+          "Id": "ParamEyeROpen",
+          "Min": 0,
+          "Max": 1,
+          "BlendMode": 2,
+          "Input": 0
+        }
+      ],
+      "Enabled": true
+    },
+    "LipSync": {
+      "Gain": 5
+    },
+    "MouseTracking": {
+      "SmoothTime": 0.15,
+      "Enabled": true
+    },
+    "AutoBreath": {
+      "Enabled": true
+    },
+    "ExtraMotion": {
+      "Enabled": true
+    },
+    "Accelerometer": {
+      "Enabled": true
+    },
+    "Microphone": {},
+    "Transform": {},
+    "FaceTracking": {
+      "AngleX": [
+        {
+          "Id": "ParamAngleX",
+          "Input": 0
+        }
+      ],
+      "AngleY": [
+        {
+          "Id": "ParamAngleY",
+          "Input": 0
+        }
+      ],
+      "AngleZ": [
+        {
+          "Id": "ParamAngleZ",
+          "Input": 0
+        }
+      ],
+      "EyeLOpen": [
+        {
+          "Id": "ParamEyeLOpen",
+          "Input": 0
+        }
+      ],
+      "EyeROpen": [
+        {
+          "Id": "ParamEyeROpen",
+          "Input": 0
+        }
+      ],
+      "EyeballX": [
+        {
+          "Id": "ParamEyeBallX",
+          "Input": 0
+        }
+      ],
+      "EyeballY": [
+        {
+          "Id": "ParamEyeBallY",
+          "Input": 0
+        }
+      ],
+      "MouthOpenY": [
+        {
+          "Id": "ParamMouthOpenY",
+          "Input": 0
+        }
+      ],
+      "MouthForm": [
+        {
+          "Id": "ParamMouthForm",
+          "Input": 0
+        }
+      ],
+      "Enabled": true
+    },
+    "HandTracking": {},
+    "ParamValue": {},
+    "PartOpacity": {},
+    "ArtmeshOpacity": {},
+    "ArtmeshColor": {},
+    "ArtmeshCulling": {
+      "DefaultMode": 0
+    },
+    "IntimacySystem": {}
+  }
+}

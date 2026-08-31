@@ -1,0 +1,51 @@
+.cy-segmented {
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  padding: 3px;
+  background: #f1f1f3;
+  border-radius: 12px;
+  border: 1px solid rgba(31, 35, 48, 0.07);
+  box-shadow: var(--cy-shadow-bubble-neutral);
+  gap: 1px;
+}
+
+.cy-segment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 100%;
+  padding: 0 12px;
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  color: #3a3a3c;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s ease;
+  white-space: nowrap;
+}
+
+.cy-segment:hover:not(.is-active) {
+  color: #1d1d1f;
+}
+
+.cy-segment.is-active {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  color: #1d1d1f;
+}
+
+.cy-segment-icon {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+}
+
+.cy-segment-label {
+  line-height: 1;
+}

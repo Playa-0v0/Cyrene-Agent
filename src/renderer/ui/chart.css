@@ -1,0 +1,173 @@
+/* ============================================================
+   共享柱状图/用量进度条组件
+   tasks 窗口（今日日程）和 settings 窗口（Token 用量面板）共用。
+   抽出来避免两处重复——改一处两处都生效。
+   依赖：tokens.css 里的 --rb-text-micro / --rb-radius-full / --rb-text-on-pink
+   ============================================================ */
+
+/* 用量进度条容器（标签 + 数字 + 总量 + 进度条）。
+   外层 .schedule-usage 的布局由各窗口自己定义（tasks/settings 间距不同）。 */
+
+.usage-info {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.usage-label {
+  font: var(--rb-text-micro);
+  color: var(--rb-text-muted);
+  padding: 3px 9px;
+  border-radius: var(--rb-radius-full);
+  background: var(--rb-bg-2);
+  border: 1px solid var(--rb-border-soft);
+}
+
+.usage-number {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: var(--rb-text-strong);
+  /* pink 光晕收紧，避免 20px 字符叠 32px 大光晕糊成白光 */
+  text-shadow: 0 0 6px rgba(236, 72, 153, 0.4);
+}
+
+.usage-total {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rb-text-muted);
+}
+
+.usage-bar {
+  width: 100%;
+  height: 7px;
+  border-radius: var(--rb-radius-full);
+  overflow: hidden;
+  background: var(--rb-slider-track);
+}
+
+.usage-bar__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ff8ccc, #ec4899, #a855f7);
+  box-shadow: 0 0 10px rgba(236, 72, 153, 0.35);
+}
+
+/* 7 天柱状图 */
+.mini-chart {
+  position: relative;
+  height: 112px;
+  margin: 2px 0 6px;
+  padding-top: 18px;
+}
+
+.mini-chart__avg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 47px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--rb-pink-200);
+  z-index: 1;
+}
+
+.mini-chart__avg span {
+  position: absolute;
+  right: 0;
+  top: -23px;
+  padding: 4px 9px;
+  border-radius: var(--rb-radius-full);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: var(--rb-text-on-pink);
+  background: linear-gradient(135deg, #ff6ec7, #ec4899);
+  box-shadow: 0 4px 10px rgba(236, 72, 153, 0.22);
+  white-space: nowrap;
+}
+
+.mini-chart__bars {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: end;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+}
+
+.chart-bar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  flex: 1 1 0;
+  height: 100%;
+  padding-bottom: 18px;
+  cursor: pointer;
+}
+
+.chart-bar::before {
+  content: "";
+  display: block;
+  width: 100%;
+  max-width: 24px;
+  border-radius: var(--rb-radius-full);
+  background: linear-gradient(180deg, #ec4899 0%, #ff8ccc 100%);
+  box-shadow: 0 0 10px rgba(236, 72, 153, 0.22);
+}
+
+/* Token 面板动态柱子用的真实 fill div（高度由 JS 设像素值）。
+   tasks 窗口用上面的 ::before 伪元素（固定高度），两套互不干扰。 */
+.chart-bar__fill {
+  width: 100%;
+  max-width: 24px;
+  border-radius: var(--rb-radius-full);
+  background: linear-gradient(180deg, #ec4899 0%, #ff8ccc 100%);
+  box-shadow: 0 0 10px rgba(236, 72, 153, 0.22);
+  flex: 0 0 auto;
+}
+
+.chart-bar--mo::before { height: 34px; }
+.chart-bar--tu::before { height: 50px; }
+.chart-bar--we::before { height: 30px; }
+.chart-bar--th::before { height: 38px; }
+.chart-bar--fr::before { height: 46px; }
+.chart-bar--sa::before { height: 40px; }
+.chart-bar--su::before { height: 32px; }
+
+.chart-bar--peak::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.5px solid #ff8ccc;
+  box-shadow: 0 0 8px rgba(236, 72, 153, 0.32);
+}
+
+.chart-bar span {
+  position: absolute;
+  bottom: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--rb-text-muted);
+}
+
+.schedule-note {
+  margin: 6px 0 14px;
+  text-align: center;
+  font: var(--rb-text-micro);
+  color: var(--rb-text-muted);
+}
+
+@media (max-height: 650px) {
+  .mini-chart { height: 88px; }
+}

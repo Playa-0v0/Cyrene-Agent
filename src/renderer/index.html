@@ -1,0 +1,31 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN" data-ui-theme="pearl-white">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cyrene</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: transparent;
+      user-select: none;
+    }
+    #live2d-canvas {
+      display: block;
+      width: 100%; height: 100%;
+    }
+  </style>
+  <link rel="stylesheet" href="./ui/tokens.css" />
+  <link rel="stylesheet" href="./ui/fonts.css" />
+  <link rel="stylesheet" href="./ui/base.css" />
+  <link rel="stylesheet" href="./ui/theme.css" />
+  <!-- Cubism 4 Core (required by pixi-live2d-display/cubism4) -->
+  <script src="/live2dcubismcore.min.js"></script>
+</head>
+<body>
+  <canvas id="live2d-canvas"></canvas>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "优雅阅读",
+  "titleColor": "FF455A64",
+  "titleSize": 28,
+  "titleFont": "微软雅黑",
+  "bodyFont": "楷体",
+  "bodySize": 24,
+  "bodyColor": "FF37474F",
+  "lineSpacing": 380,
+  "headingColor": "FF455A64"
+}
