@@ -6,6 +6,7 @@ const REQUIRED_INPUT_IDS = [
   "tts-auto-read",
   "tts-speed",
   "tts-volume",
+  "tts-segmentation",
   "tts-minimax-key",
   "tts-minimax-voice",
   "tts-streaming",
@@ -45,6 +46,19 @@ function addSelect(id: string, values: string[]): HTMLSelectElement {
   return select;
 }
 
+function addSegmentedSelectBtns(): void {
+  const group = document.createElement("div");
+  group.className = "segmented-select";
+  for (const granularity of ["sentence", "paragraph"]) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "segmented-select__btn";
+    btn.dataset.granularity = granularity;
+    group.appendChild(btn);
+  }
+  document.body.appendChild(group);
+}
+
 describe("TTS settings panel", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -55,6 +69,7 @@ describe("TTS settings panel", () => {
     addSelect("tts-custom-cloud-format", ["mp3", "wav"]);
     addSelect("tts-mossland-model", ["moss-tts-1.5-flash", "moss-tts-1.0-pro"]);
     addSelect("tts-mossland-format", ["mp3", "wav"]);
+    addSegmentedSelectBtns();
   });
 
   it("persists the MiniMax model immediately when the select changes", async () => {
@@ -75,6 +90,56 @@ describe("TTS settings panel", () => {
     await Promise.resolve();
 
     expect(saveSettings).toHaveBeenCalledWith({ ttsMinimaxModel: "speech-2.8-hd" });
+  });
+
+  it("persists the segmentation granularity when a granularity button is clicked", async () => {
+    const saveSettings = vi.fn(async () => ({}));
+    Object.assign(window, {
+      tts: {
+        loadSettings: vi.fn(async () => ({ ttsMessageSegmentation: true, ttsSegmentationGranularity: "sentence" })),
+        saveSettings,
+      },
+    });
+    await import("./panel");
+    await Promise.resolve();
+    saveSettings.mockClear();
+
+    const paragraphBtn = document.querySelector<HTMLButtonElement>(
+      '.segmented-select__btn[data-granularity="paragraph"]',
+    );
+    expect(paragraphBtn).not.toBeNull();
+    paragraphBtn!.click();
+    await Promise.resolve();
+
+    expect(saveSettings).toHaveBeenCalledWith({ ttsSegmentationGranularity: "paragraph" });
+    expect(paragraphBtn!.classList.contains("is-active")).toBe(true);
+    const sentenceBtn = document.querySelector<HTMLButtonElement>(
+      '.segmented-select__btn[data-granularity="sentence"]',
+    );
+    expect(sentenceBtn!.classList.contains("is-active")).toBe(false);
+  });
+
+  it("disables granularity buttons when segmentation is turned off", async () => {
+    const saveSettings = vi.fn(async () => ({}));
+    Object.assign(window, {
+      tts: {
+        loadSettings: vi.fn(async () => ({ ttsMessageSegmentation: true })),
+        saveSettings,
+      },
+    });
+    await import("./panel");
+    await Promise.resolve();
+
+    const segmentation = document.getElementById("tts-segmentation") as HTMLInputElement;
+    segmentation.checked = false;
+    segmentation.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+
+    const buttons = document.querySelectorAll<HTMLButtonElement>(".segmented-select__btn");
+    for (const btn of buttons) {
+      expect(btn.disabled).toBe(true);
+    }
+    expect(saveSettings).toHaveBeenCalledWith({ ttsMessageSegmentation: false });
   });
 
   it("restores the saved Mossland model instead of forcing the legacy model", async () => {

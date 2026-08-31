@@ -63,6 +63,10 @@ export interface GeneralSettings extends ChatAppearanceSettings {
   ttsAutoRead: boolean;
   ttsSpeed: number;
   ttsVolume: number;
+  /** 消息朗读是否按粒度切分（自动朗读与手动朗读共用同一策略）。 */
+  ttsMessageSegmentation: boolean;
+  /** 消息切分粒度：sentence=按句切分，paragraph=按段落切分。 */
+  ttsSegmentationGranularity: "sentence" | "paragraph";
   // MiniMax
   ttsMinimaxKey: string;
   ttsMinimaxVoiceId: string;

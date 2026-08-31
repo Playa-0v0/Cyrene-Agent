@@ -5,6 +5,7 @@ import {
   toggleTtsPlayback,
   type TtsPlaybackStatus,
 } from "./tts-playback";
+import type { TtsSegmentationGranularity } from "../tts/early-tts-queue";
 
 interface TtsButtonProps {
   conversationId: string;
@@ -24,6 +25,23 @@ function buttonLabel(status: TtsPlaybackStatus): string {
   if (status === "completed") return "重新朗读";
   if (status === "error") return "重新朗读";
   return "朗读";
+}
+
+/** 现场读取 TTS 切分设置；读取失败时保持整段朗读（兼容旧版 preload）。 */
+async function readTtsSegmentation(): Promise<{
+  segmented?: boolean;
+  segmentationGranularity?: TtsSegmentationGranularity;
+}> {
+  try {
+    const general = await window.chat?.getGeneralSettings?.();
+    if (!general) return {};
+    return {
+      segmented: general.ttsMessageSegmentation,
+      segmentationGranularity: general.ttsSegmentationGranularity,
+    };
+  } catch {
+    return {};
+  }
 }
 
 export function TtsButton({
@@ -48,14 +66,18 @@ export function TtsButton({
     <button
       type="button"
       className={`cy-tts-button is-${status}`}
-      onClick={() => void toggleTtsPlayback({
-        conversationId,
-        messageId,
-        text,
-        speechMode,
-        preferredAddress,
-        onCacheKey,
-      })}
+      onClick={() => void (async () => {
+        const segmentation = await readTtsSegmentation();
+        await toggleTtsPlayback({
+          conversationId,
+          messageId,
+          text,
+          speechMode,
+          preferredAddress,
+          onCacheKey,
+          ...segmentation,
+        });
+      })()}
       aria-label={label}
       title={status === "error" ? playback.error ?? label : label}
       disabled={status === "synthesizing"}

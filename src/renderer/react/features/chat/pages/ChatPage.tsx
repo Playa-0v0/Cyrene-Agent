@@ -26,7 +26,7 @@ import { applyAgentRoundBoundary, createRoundProcessMessage } from "../component
 import { applyTaskDelegationEvent, normalizeTaskDelegationEvent } from "../components/task-delegations";
 import type { WeatherData } from "../components/weather/weather-types";
 import { getTtsPlaybackSnapshot, playTtsToCompletion, stopTtsPlayback } from "../components/tts-playback";
-import { EarlyTtsPlaybackQueue } from "../tts/early-tts-queue";
+import { EarlyTtsPlaybackQueue, type TtsSegmentationGranularity } from "../tts/early-tts-queue";
 import { ConversationSidebar } from "../components/ConversationSidebar";
 
 import type { AgentRoundRecord, ChatMessage, ChatSession, ChatSessionMeta, ConversationMode, ProcessMessageRecord, ReasoningBlock, RunActivityRecord, TaskDelegationDisplayRecord, ToolExecutionRecord, ToolFileChange } from "../../../../../shared/chat-types";
@@ -523,6 +523,11 @@ export function ChatPage() {
     sessionId: string;
     messageId: string;
   } | null>(null);
+  // TTS 消息切分设置缓存：每次建立朗读队列前现场刷新，保证设置即时生效
+  const ttsSegmentationRef = useRef<{ segmented: boolean; granularity: TtsSegmentationGranularity }>({
+    segmented: true,
+    granularity: "sentence",
+  });
 
   const activeSessionId = activeSessionIds[mode];
   const scopeKey = activeSessionId ?? `mode:${mode}`;
@@ -761,12 +766,27 @@ export function ChatPage() {
     void chatStore()?.setMessageTtsCacheKey(sessionId, messageId, cacheKey, converterVersion);
   }
 
+  /** 现场刷新 TTS 切分设置缓存（设置面板改动后无需重启即可生效）。 */
+  async function refreshTtsSegmentation(): Promise<void> {
+    try {
+      const general = await window.chat?.getGeneralSettings?.();
+      if (!general) return;
+      ttsSegmentationRef.current = {
+        segmented: general.ttsMessageSegmentation,
+        granularity: general.ttsSegmentationGranularity,
+      };
+    } catch {
+      // 读取失败时沿用上次缓存值
+    }
+  }
+
   function createEarlyTtsQueue(
     targetMode: ConversationMode,
     sessionId: string,
     messageId: string,
   ): EarlyTtsPlaybackQueue {
     activeEarlyTtsRef.current?.queue.cancel();
+    const segmentation = ttsSegmentationRef.current;
     const queue = new EarlyTtsPlaybackQueue(
       async (segment) => {
         if (
@@ -784,6 +804,7 @@ export function ChatPage() {
         });
       },
       stopTtsPlayback,
+      segmentation,
     );
     activeEarlyTtsRef.current = { queue, mode: targetMode, sessionId, messageId };
     return queue;
@@ -986,6 +1007,7 @@ export function ChatPage() {
       [input.sessionId]: { assistantId: input.assistantId, mode: input.targetMode },
     };
     setModelBusyByMode((current) => ({ ...current, [input.targetMode]: true }));
+    await refreshTtsSegmentation();
     const earlyTtsQueue = createEarlyTtsQueue(input.targetMode, input.sessionId, input.assistantId);
     let streamContent = "";
     // RUN_FINISHED.result.status，用于区分 success / cancelled / timeout / runtime_error

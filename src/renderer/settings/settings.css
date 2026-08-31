@@ -1803,6 +1803,60 @@ body {
   border-color: var(--rb-pink-200);
 }
 
+/* TTS 消息切分粒度按钮组（样式对齐 .gender-select） */
+.segmented-select {
+  display: flex;
+  gap: 6px;
+}
+
+.segmented-select__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 14px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(235, 229, 245, 0.70);
+  background: transparent;
+  border: 1px solid rgba(255, 182, 220, 0.18);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.segmented-select__btn:hover:not(:disabled) {
+  border-color: rgba(255, 182, 220, 0.36);
+  color: var(--rb-text-strong);
+}
+
+.segmented-select__btn.is-active {
+  color: var(--rb-text-strong);
+  background: rgba(236, 72, 153, 0.16);
+  border-color: rgba(255, 182, 220, 0.24);
+}
+
+.segmented-select__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 白调主题 */
+[data-ui-theme="pearl-white"] .segmented-select__btn {
+  color: var(--rb-text-muted);
+  border-color: var(--rb-pink-200);
+}
+
+[data-ui-theme="pearl-white"] .segmented-select__btn:hover:not(:disabled) {
+  color: var(--rb-pink-600);
+  border-color: var(--rb-pink-200);
+}
+
+[data-ui-theme="pearl-white"] .segmented-select__btn.is-active {
+  color: var(--rb-pink-600);
+  background: var(--rb-pink-50);
+  border-color: var(--rb-pink-200);
+}
+
 
 /* 插件面板 */
 .plugin-panel-heading {

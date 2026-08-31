@@ -129,6 +129,17 @@ async function loadTtsConfig(): Promise<void> {
   ttsEl("tts-volume").value = String(ttsState.config.ttsVolume ?? 1);
   updateTtsSliderLabels();
 
+  // 消息切分
+  const segmentationEnabled = ttsState.config.ttsMessageSegmentation !== false;
+  ttsEl("tts-segmentation").checked = segmentationEnabled;
+  const granularity = ttsState.config.ttsSegmentationGranularity === "paragraph" ? "paragraph" : "sentence";
+  document.querySelectorAll<HTMLButtonElement>(".segmented-select__btn").forEach((btn) => {
+    const isActive = btn.dataset.granularity === granularity;
+    btn.classList.toggle("is-active", isActive);
+    btn.setAttribute("aria-checked", isActive ? "true" : "false");
+  });
+  updateSegmentationEnabledState(segmentationEnabled);
+
   // MiniMax
   ttsEl("tts-minimax-key").value = String(ttsState.config.ttsMinimaxKey ?? "");
   ttsEl("tts-minimax-voice").value = String(ttsState.config.ttsMinimaxVoiceId ?? "");
@@ -198,6 +209,13 @@ function updateTtsSliderLabels(): void {
   if (volVal) volVal.textContent = Math.round(Number(ttsEl("tts-volume").value) * 100) + "%";
 }
 
+// 消息切分：开关关闭时粒度按钮置灰，避免修改无意义配置
+function updateSegmentationEnabledState(enabled: boolean): void {
+  document.querySelectorAll<HTMLButtonElement>(".segmented-select__btn").forEach((btn) => {
+    btn.disabled = !enabled;
+  });
+}
+
 // 保存单个 TTS 配置字段
 async function saveTtsField(field: string, value: unknown): Promise<void> {
   if (!window.tts) return;
@@ -256,6 +274,25 @@ ttsEl("tts-speed").addEventListener("input", updateTtsSliderLabels);
 ttsEl("tts-speed").addEventListener("change", () => saveTtsField("ttsSpeed", Number(ttsEl("tts-speed").value)));
 ttsEl("tts-volume").addEventListener("input", updateTtsSliderLabels);
 ttsEl("tts-volume").addEventListener("change", () => saveTtsField("ttsVolume", Number(ttsEl("tts-volume").value)));
+
+// 消息切分：开关保存并联动粒度按钮可用性
+ttsEl("tts-segmentation").addEventListener("change", () => {
+  const enabled = ttsEl("tts-segmentation").checked;
+  updateSegmentationEnabledState(enabled);
+  void saveTtsField("ttsMessageSegmentation", enabled);
+});
+// 消息切分：粒度按钮组（按句 / 整段）
+document.querySelectorAll<HTMLButtonElement>(".segmented-select__btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const granularity = btn.dataset.granularity === "paragraph" ? "paragraph" : "sentence";
+    document.querySelectorAll<HTMLButtonElement>(".segmented-select__btn").forEach((item) => {
+      const active = item.dataset.granularity === granularity;
+      item.classList.toggle("is-active", active);
+      item.setAttribute("aria-checked", active ? "true" : "false");
+    });
+    void saveTtsField("ttsSegmentationGranularity", granularity);
+  });
+});
 
 // GPT-SoVITS 超时输入框（number，blur 时保存并做简单边界限制）
 ttsEl("tts-gptsovits-timeout").addEventListener("change", () => {

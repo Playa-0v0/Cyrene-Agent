@@ -1,5 +1,6 @@
 export type EarlyTtsPlaybackResult = "completed" | "skipped" | "interrupted" | "error";
 export type EarlyTtsPlay = (segment: string, index: number) => Promise<EarlyTtsPlaybackResult>;
+export type TtsSegmentationGranularity = "sentence" | "paragraph";
 
 const SENTENCE_END = /[。！？!?；;]/;
 
@@ -31,7 +32,10 @@ export class StreamingMarkdownSegmenter {
   private buffer = "";
   private committed = 0;
 
-  constructor(private readonly minChars = 4) {}
+  constructor(
+    private readonly minChars = 4,
+    private readonly granularity: TtsSegmentationGranularity = "sentence",
+  ) {}
 
   append(delta: string): string[] {
     if (delta) this.buffer += delta;
@@ -158,7 +162,8 @@ export class StreamingMarkdownSegmenter {
         continue;
       }
 
-      if (SENTENCE_END.test(character)) {
+      // sentence 粒度在句末标点处切分；paragraph 粒度只在空行处切分（下方 \n\n 分支）
+      if (this.granularity === "sentence" && SENTENCE_END.test(character)) {
         commit(index + 1, false);
         continue;
       }
@@ -180,7 +185,7 @@ export class StreamingMarkdownSegmenter {
 
 /** Serializes complete speech segments so a later sentence never interrupts the current audio. */
 export class EarlyTtsPlaybackQueue {
-  private readonly segmenter = new StreamingMarkdownSegmenter();
+  private readonly segmenter: StreamingMarkdownSegmenter;
   private readonly pending: string[] = [];
   private drainPromise: Promise<void> | null = null;
   private cancelled = false;
@@ -188,21 +193,37 @@ export class EarlyTtsPlaybackQueue {
   private generation = 0;
   private segmentIndex = 0;
   private cancelNotified = false;
+  private readonly segmented: boolean;
+  private unsegmentedText = "";
 
   constructor(
     private readonly play: EarlyTtsPlay,
     private readonly cancelPlayback: () => void = () => undefined,
-  ) {}
+    options: { segmented?: boolean; granularity?: TtsSegmentationGranularity } = {},
+  ) {
+    this.segmented = options.segmented ?? true;
+    this.segmenter = new StreamingMarkdownSegmenter(4, options.granularity ?? "sentence");
+  }
 
   append(delta: string): void {
     if (this.cancelled || this.finished) return;
-    this.enqueue(this.segmenter.append(delta));
+    if (this.segmented) {
+      this.enqueue(this.segmenter.append(delta));
+    } else {
+      // 关闭切分：流式期间只累积文本，finish 时整段一次合成
+      this.unsegmentedText += delta;
+    }
   }
 
   async finish(fullText: string): Promise<void> {
     if (!this.cancelled && !this.finished) {
       this.finished = true;
-      this.enqueue(this.segmenter.finish(fullText));
+      if (this.segmented) {
+        this.enqueue(this.segmenter.finish(fullText));
+      } else {
+        const text = (fullText || this.unsegmentedText).trim();
+        if (text) this.enqueue([text]);
+      }
     }
     while (this.drainPromise) await this.drainPromise;
   }

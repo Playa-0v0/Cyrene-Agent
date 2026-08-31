@@ -7,6 +7,7 @@ import {
   markdownToSpeechText,
   type SpeechTextOptions,
 } from "../tts/markdown-to-speech-text";
+import { EarlyTtsPlaybackQueue, StreamingMarkdownSegmenter, type TtsSegmentationGranularity } from "../tts/early-tts-queue";
 
 export type TtsPlaybackStatus = "idle" | "synthesizing" | "playing" | "paused" | "completed" | "error";
 
@@ -23,6 +24,10 @@ export interface TtsPlaybackRequest {
   speechMode?: SpeechTextOptions["mode"];
   preferredAddress?: string;
   automatic?: boolean;
+  /** 手动朗读是否启用消息切分（关闭=整段一次合成，与自动朗读共用同一设置）。 */
+  segmented?: boolean;
+  /** 手动朗读切分粒度：sentence=按句切分，paragraph=按段落切分。 */
+  segmentationGranularity?: TtsSegmentationGranularity;
   onCacheKey?: (cacheKey: string, converterVersion: string) => void;
 }
 
@@ -63,6 +68,10 @@ let currentRequestId: string | null = null;
 let currentStream: StreamingPlayback | null = null;
 let currentOffSessionEvent: (() => void) | null = null;
 let requestGeneration = 0;
+// 手动分段朗读状态：generation 递增用于中断逐段播放循环
+let manualSegmentedActive = false;
+let manualSegmentedGeneration = 0;
+let manualSegmentedQueue: EarlyTtsPlaybackQueue | null = null;
 
 function browserApis(): { tts?: TtsSessionApi; live2dSpeech?: Live2dSpeechApi } {
   return window as typeof window & { tts?: TtsSessionApi; live2dSpeech?: Live2dSpeechApi };
@@ -299,8 +308,12 @@ export function subscribeTtsPlayback(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function stopTtsPlayback(): void {
+export function stopTtsPlayback(cancelManualSegmented = true): void {
   requestGeneration += 1;
+  if (cancelManualSegmented) {
+    manualSegmentedGeneration += 1;
+    manualSegmentedActive = false;
+  }
   const requestId = currentRequestId;
   currentRequestId = null;
   if (requestId) void browserApis().tts?.cancelSession(requestId);
@@ -315,7 +328,7 @@ export async function startTtsPlayback(request: TtsPlaybackRequest): Promise<voi
     return;
   }
 
-  stopTtsPlayback();
+  stopTtsPlayback(false);
   const generation = ++requestGeneration;
   const requestId = crypto.randomUUID();
   const speech = markdownToSpeechText(request.text, {
@@ -409,6 +422,11 @@ export async function playTtsToCompletion(request: TtsPlaybackRequest): Promise<
 }
 
 export async function toggleTtsPlayback(request: TtsPlaybackRequest): Promise<void> {
+  // 手动分段队列播放中再次点击同一消息 = 停止整段队列
+  if (manualSegmentedActive && snapshot.messageId === request.messageId && snapshot.status !== "idle") {
+    stopTtsPlayback();
+    return;
+  }
   const isCurrent = snapshot.messageId === request.messageId;
   if (isCurrent && snapshot.status === "playing" && currentAudio) {
     currentAudio.pause();
@@ -432,6 +450,46 @@ export async function toggleTtsPlayback(request: TtsPlaybackRequest): Promise<vo
       publish({ messageId: request.messageId, status: "error", error: error instanceof Error ? error.message : String(error) });
     }
     return;
+  }
+  // 手动朗读启用切分且文本可切成多段 → 逐段播放；否则回退整段一次合成
+  if (request.segmented) {
+    const speech = markdownToSpeechText(request.text, {
+      mode: request.speechMode,
+      preferredAddress: request.preferredAddress,
+    });
+    if (speech.text) {
+      const probe = new StreamingMarkdownSegmenter(4, request.segmentationGranularity ?? "sentence");
+      const segments = probe.finish(speech.text);
+      if (segments.length > 1) {
+        stopTtsPlayback();
+        const generation = ++manualSegmentedGeneration;
+        manualSegmentedActive = true;
+        const queue = new EarlyTtsPlaybackQueue(
+          (segment) => playTtsToCompletion({ ...request, text: segment, segmented: false }),
+          () => {
+            if (generation === manualSegmentedGeneration) {
+              manualSegmentedQueue = null;
+              manualSegmentedActive = false;
+            }
+          },
+          { segmented: true, granularity: request.segmentationGranularity ?? "sentence" },
+        );
+        manualSegmentedQueue = queue;
+        publish({ messageId: request.messageId, status: "synthesizing" });
+        void queue.finish(speech.text).finally(() => {
+          if (generation !== manualSegmentedGeneration) return;
+          manualSegmentedQueue = null;
+          manualSegmentedActive = false;
+          const playback = getTtsPlaybackSnapshot();
+          if (playback.messageId === request.messageId && playback.status === "completed") {
+            publish({ messageId: request.messageId, status: "completed" });
+          } else {
+            publish({ messageId: null, status: "idle" });
+          }
+        });
+        return;
+      }
+    }
   }
   await startTtsPlayback(request);
 }

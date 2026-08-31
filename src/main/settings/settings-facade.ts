@@ -63,6 +63,8 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   ttsAutoRead: true,
   ttsSpeed: 1,
   ttsVolume: 1,
+  ttsMessageSegmentation: true,
+  ttsSegmentationGranularity: "sentence",
   ttsMinimaxKey: "",
   ttsMinimaxVoiceId: "",
   ttsMinimaxModel: "speech-2.8-turbo",
@@ -217,6 +219,12 @@ export function normalizeGeneralSettings(
     ttsVolume: typeof input?.ttsVolume === "number"
       ? Math.max(0, Math.min(1, input.ttsVolume))
       : DEFAULT_GENERAL_SETTINGS.ttsVolume,
+    ttsMessageSegmentation: input?.ttsMessageSegmentation === undefined
+      ? DEFAULT_GENERAL_SETTINGS.ttsMessageSegmentation
+      : Boolean(input.ttsMessageSegmentation),
+    ttsSegmentationGranularity: ["sentence", "paragraph"].includes(String(input?.ttsSegmentationGranularity))
+      ? (input!.ttsSegmentationGranularity as "sentence" | "paragraph")
+      : DEFAULT_GENERAL_SETTINGS.ttsSegmentationGranularity,
     ttsMinimaxKey: typeof input?.ttsMinimaxKey === "string" ? input.ttsMinimaxKey : "",
     ttsMinimaxVoiceId: typeof input?.ttsMinimaxVoiceId === "string" ? input.ttsMinimaxVoiceId : "",
     ttsMinimaxModel: input?.ttsMinimaxModel === "speech-2.8-hd" ? "speech-2.8-hd" : "speech-2.8-turbo",

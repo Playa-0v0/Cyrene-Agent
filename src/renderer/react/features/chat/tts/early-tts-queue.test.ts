@@ -54,6 +54,15 @@ describe("StreamingMarkdownSegmenter", () => {
     unclosed.append("```ts\nconst value = 1");
     expect(unclosed.finish("```ts\nconst value = 1")).toEqual([]);
   });
+
+  it("paragraph granularity only splits on blank lines, not sentence punctuation", () => {
+    const segmenter = new StreamingMarkdownSegmenter(4, "paragraph");
+    expect(segmenter.append("第一句话完成了。第二句话也完成了。")).toEqual([]);
+    expect(segmenter.append("第三句。\n\n下一段。"))
+      .toEqual(["第一句话完成了。第二句话也完成了。第三句。"]);
+    expect(segmenter.finish("第一句话完成了。第二句话也完成了。第三句。\n\n下一段。"))
+      .toEqual(["下一段。"]);
+  });
 });
 
 describe("EarlyTtsPlaybackQueue", () => {
@@ -98,5 +107,29 @@ describe("EarlyTtsPlaybackQueue", () => {
     resolvePlayback();
     await expect(finished).resolves.toBeUndefined();
     expect(play).toHaveBeenCalledTimes(1);
+  });
+
+  it("segmented=false plays the whole text once on finish", async () => {
+    const play = vi.fn().mockResolvedValue("completed");
+    const queue = new EarlyTtsPlaybackQueue(play, undefined, { segmented: false });
+    queue.append("第一句话。第二句话。第三句话。 ");
+    await Promise.resolve();
+    expect(play).not.toHaveBeenCalled();
+    await queue.finish("第一句话。第二句话。第三句话。 ");
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(play).toHaveBeenCalledWith("第一句话。第二句话。第三句话。", 0);
+  });
+
+  it("paragraph granularity queues whole paragraphs", async () => {
+    const play = vi.fn().mockResolvedValue("completed");
+    const queue = new EarlyTtsPlaybackQueue(play, undefined, { granularity: "paragraph" });
+    queue.append("第一句话完成了。第二句话也完成了。");
+    await Promise.resolve();
+    expect(play).not.toHaveBeenCalled();
+    queue.append("\n\n下一段开始了。");
+    await Promise.resolve();
+    expect(play).toHaveBeenCalledTimes(1);
+    await queue.finish("第一句话完成了。第二句话也完成了。\n\n下一段开始了。");
+    expect(play).toHaveBeenCalledTimes(2);
   });
 });
