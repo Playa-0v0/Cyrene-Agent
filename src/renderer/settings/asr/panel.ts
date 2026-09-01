@@ -7,6 +7,7 @@ import {
   asrEngineSelect, asrAliyunConfig,
   asrAliyunAppKeyInput, asrAliyunAccessKeyIdInput, asrAliyunAccessKeySecretInput,
   asrMosslandConfig, asrMosslandKeyInput,
+  asrLocalConfig, asrLocalUrlInput,
   asrLanguageSelect,
   asrVadSilenceInput, asrVadThresholdInput, asrVadThresholdValue,
   asrShowTranscriptCheckbox,
@@ -18,6 +19,9 @@ export function syncAsrVisibility(): void {
   }
   if (asrMosslandConfig) {
     (asrMosslandConfig as HTMLElement).style.display = asrEngineSelect?.value === "mossland" ? "block" : "none";
+  }
+  if (asrLocalConfig) {
+    (asrLocalConfig as HTMLElement).style.display = asrEngineSelect?.value === "local" ? "block" : "none";
   }
 }
 
@@ -39,6 +43,7 @@ export async function loadAsrConfig(): Promise<void> {
       if (asrAliyunAccessKeyIdInput) asrAliyunAccessKeyIdInput.value = String(cfg.asrAliyunAccessKeyId ?? "");
       if (asrAliyunAccessKeySecretInput) asrAliyunAccessKeySecretInput.value = String(cfg.asrAliyunAccessKeySecret ?? "");
       if (asrMosslandKeyInput) asrMosslandKeyInput.value = String(cfg.ttsMosslandKey ?? "");
+      if (asrLocalUrlInput) asrLocalUrlInput.value = String(cfg.asrLocalBaseUrl ?? "http://127.0.0.1:8328");
       if (asrLanguageSelect) asrLanguageSelect.value = String(cfg.asrLanguage ?? "zh");
       if (asrVadSilenceInput) asrVadSilenceInput.value = String(cfg.asrVadSilenceMs ?? 1000);
       if (asrVadThresholdInput) {
@@ -64,6 +69,7 @@ asrAliyunAppKeyInput?.addEventListener("input", () => { clearTimeout(asrState.al
 asrAliyunAccessKeyIdInput?.addEventListener("input", () => { clearTimeout(asrState.aliyunAccessKeyIdTimer); asrState.aliyunAccessKeyIdTimer = setTimeout(() => void saveAsrField("asrAliyunAccessKeyId", asrAliyunAccessKeyIdInput.value.trim()), 800); });
 asrAliyunAccessKeySecretInput?.addEventListener("input", () => { clearTimeout(asrState.aliyunAccessKeySecretTimer); asrState.aliyunAccessKeySecretTimer = setTimeout(() => void saveAsrField("asrAliyunAccessKeySecret", asrAliyunAccessKeySecretInput.value.trim()), 800); });
 asrMosslandKeyInput?.addEventListener("input", () => { clearTimeout(asrState.mosslandKeyTimer); asrState.mosslandKeyTimer = setTimeout(() => void saveAsrField("ttsMosslandKey", asrMosslandKeyInput.value.trim()), 800); });
+asrLocalUrlInput?.addEventListener("input", () => { clearTimeout(asrState.localUrlTimer); asrState.localUrlTimer = setTimeout(() => void saveAsrField("asrLocalBaseUrl", asrLocalUrlInput.value.trim() || "http://127.0.0.1:8328"), 800); });
 asrLanguageSelect?.addEventListener("change", () => void saveAsrField("asrLanguage", asrLanguageSelect.value));
 asrVadSilenceInput?.addEventListener("input", () => {
   void saveAsrField("asrVadSilenceMs", Number(asrVadSilenceInput.value) || 1000);

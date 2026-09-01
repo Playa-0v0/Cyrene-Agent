@@ -1,4 +1,5 @@
 import type { AsrConfig } from "./asr-config";
+import { LocalAsrStream, DEFAULT_LOCAL_ASR_URL } from "./local-asr-engine";
 import { MosslandAsrStream } from "./mossland-asr-engine";
 import { VolcanoAsrStream } from "./volcano-asr-engine";
 
@@ -15,6 +16,10 @@ export function createAsrStream(
 ): AsrStreamSession {
   if (config.engine === "mossland") {
     return new MosslandAsrStream(config.apiKey, onFinal);
+  }
+
+  if (config.engine === "local") {
+    return new LocalAsrStream(config.baseUrl ?? DEFAULT_LOCAL_ASR_URL, onFinal);
   }
 
   const stream = new VolcanoAsrStream(onPartial, onFinal);

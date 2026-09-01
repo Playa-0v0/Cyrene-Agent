@@ -54,6 +54,19 @@ describe("general ASR settings", () => {
 
     expect(settings.asrEngine).toBe("mossland");
   });
+
+  it("keeps local FunASR as a supported ASR provider with a base URL", () => {
+    const settings = normalizeGeneralSettings({ asrEngine: "local", asrLocalBaseUrl: "http://127.0.0.1:9000" } as never);
+
+    expect(settings.asrEngine).toBe("local");
+    expect(settings.asrLocalBaseUrl).toBe("http://127.0.0.1:9000");
+  });
+
+  it("defaults the local base URL to 127.0.0.1:8328 when absent", () => {
+    const settings = normalizeGeneralSettings({ asrEngine: "local" } as never);
+
+    expect(settings.asrLocalBaseUrl).toBe("http://127.0.0.1:8328");
+  });
 });
 
 describe("general Mossland TTS settings", () => {

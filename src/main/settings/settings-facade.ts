@@ -104,6 +104,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   emailSmtpPass: "",
   emailFromName: "",
   asrEngine: "off",
+  asrLocalBaseUrl: "http://127.0.0.1:8328",
   asrAliyunAppKey: "",
   asrAliyunAccessKeyId: "",
   asrAliyunAccessKeySecret: "",
@@ -250,6 +251,9 @@ export function normalizeGeneralSettings(
     asrEngine: ["off", "aliyun", "mossland", "local"].includes(String(input?.asrEngine))
       ? (input!.asrEngine as "off" | "aliyun" | "mossland" | "local")
       : "off",
+    asrLocalBaseUrl: typeof input?.asrLocalBaseUrl === "string" && input.asrLocalBaseUrl.trim()
+      ? input.asrLocalBaseUrl.trim()
+      : DEFAULT_GENERAL_SETTINGS.asrLocalBaseUrl,
     asrAliyunAppKey: typeof input?.asrAliyunAppKey === "string" ? input.asrAliyunAppKey : "",
     asrAliyunAccessKeyId: typeof input?.asrAliyunAccessKeyId === "string" ? input.asrAliyunAccessKeyId : "",
     asrAliyunAccessKeySecret: typeof input?.asrAliyunAccessKeySecret === "string" ? input.asrAliyunAccessKeySecret : "",
