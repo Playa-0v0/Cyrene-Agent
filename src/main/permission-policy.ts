@@ -17,6 +17,7 @@ export type ToolRiskLevel =
   | "fs-write"
   | "shell"
   | "network"
+  | "screen-read"
   | "input-control";
 
 export function policyFor(
@@ -24,6 +25,11 @@ export function policyFor(
   risk: ToolRiskLevel,
 ): "allow" | "ask" | "deny" {
   if (risk === "safe") return "allow";
+
+  // Screen capture can expose private data even though it does not mutate the
+  // machine. Ask in every non-full profile; lease-bound tools still require a
+  // separately issued scoped lease before this static policy is considered.
+  if (risk === "screen-read") return level === "full" ? "allow" : "ask";
 
   // shell 的安全边界由沙箱兜底：所有档位都放行进 executeRunShell 的档位路由，
   // 由 buildFilesystemConfigForLevel + wrapWithSandbox 强制 fs 边界。

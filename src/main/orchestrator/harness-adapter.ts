@@ -13,6 +13,7 @@ import type { HarnessEvent, HarnessInput } from "./harness";
 import type { AgentLoopResult } from "./cyrene-agent";
 import type { CyreneRunOptions, AgentLoopSettings } from "./cyrene-agent";
 import type { ToolCallResult } from "./types";
+import { capabilityLeaseStore } from "../capability-leases/lease-store";
 import { mapTerminateReason, mapTerminateReasonToTerminal } from "./harness/adapter/terminal-mapper";
 export { mapTerminateReasonToTerminal } from "./harness/adapter/terminal-mapper";
 export {
@@ -121,7 +122,12 @@ export async function runHarnessWithAdapter(
 
   // ── 运行 Harness ──
   // 这是唯一的真实执行边界。事件回调只负责同步转发，业务状态仍由各自的所有者维护。
-  const result = await runCyreneHarness(harnessInput);
+  let result: Awaited<ReturnType<typeof runCyreneHarness>>;
+  try {
+    result = await runCyreneHarness(harnessInput);
+  } finally {
+    capabilityLeaseStore.revokeRun(runId);
+  }
 
   // ── 转换结果 ──
   const completionReason = mapTerminateReason(result.terminateReason);

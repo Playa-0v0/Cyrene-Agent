@@ -50,16 +50,22 @@ describe("policyFor — non-shell risks unchanged", () => {
   });
 
   it("per-action asks for every non-safe risk", () => {
-    const risks: ToolRiskLevel[] = ["fs-read", "fs-write", "network", "input-control"];
+    const risks: ToolRiskLevel[] = ["fs-read", "fs-write", "network", "screen-read", "input-control"];
     for (const risk of risks) {
       expect(policyFor("per-action", risk)).toBe("ask");
     }
   });
 
   it("full allows every risk", () => {
-    const risks: ToolRiskLevel[] = ["fs-read", "fs-write", "network", "input-control", "shell"];
+    const risks: ToolRiskLevel[] = ["fs-read", "fs-write", "network", "screen-read", "input-control", "shell"];
     for (const risk of risks) {
       expect(policyFor("full", risk)).toBe("allow");
+    }
+  });
+
+  it("screen-read always asks outside full access", () => {
+    for (const level of LEVELS.filter((item) => item !== "full")) {
+      expect(policyFor(level, "screen-read")).toBe("ask");
     }
   });
 });

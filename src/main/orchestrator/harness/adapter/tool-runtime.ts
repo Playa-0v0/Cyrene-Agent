@@ -13,6 +13,17 @@ import { FileToolOutputStore } from "../tool-output/file-tool-output-store";
 import { sendTaskLifecycleAsAgui } from "./event-mapper";
 import type { PreparedHarnessRun } from "./run-preparation";
 import type { CyreneRunOptions } from "../../cyrene-agent";
+import { capabilityLeaseStore } from "../../../capability-leases/lease-store";
+
+function leaseScopeFromArgs(scopeArgs: string[], args: Record<string, unknown>): Record<string, string> | null {
+  const scope: Record<string, string> = {};
+  for (const key of scopeArgs) {
+    const value = args[key];
+    if (typeof value !== "string" || value.length === 0) return null;
+    scope[key] = value;
+  }
+  return scope;
+}
 
 /**
  * 为一次 Harness run 构造工具运行时（tool runtime）。
@@ -37,7 +48,20 @@ export function prepareToolRuntime(input: {
     toolId: string,
     args: Record<string, unknown>,
   ): Promise<boolean> => {
-    // allow_all 是显式总开关，会跳过后续权限检查；普通权限模式下才先执行计划只读拦截。
+    const tool = toolRegistry.getById(toolId);
+    if (!tool) return false;
+    if (tool.permissionLease) {
+      const scope = leaseScopeFromArgs(tool.permissionLease.scopeArgs, args);
+      if (!scope || !tool.ownerPluginId || !toolContext.conversationId || !runId) return false;
+      return capabilityLeaseStore.allows({
+        pluginId: tool.ownerPluginId,
+        conversationId: toolContext.conversationId,
+        runId,
+        capability: tool.capability ?? tool.id,
+        scope,
+      });
+    }
+    // allow_all 是显式总开关，只跳过不要求 lease 的普通权限检查。
     if (options.permissionMode === "allow_all") return true;
     if (
       (options.conversationMode === "code" || options.conversationMode === "chat")
@@ -50,8 +74,6 @@ export function prepareToolRuntime(input: {
         return false;
       }
     }
-    const tool = toolRegistry.getById(toolId);
-    if (!tool) return false;
     const risk: ToolRiskLevel = (tool as ToolDefinition & { risk?: ToolRiskLevel }).risk ?? "safe";
     return (await checkPermission({
       toolId,

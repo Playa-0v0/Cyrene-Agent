@@ -295,6 +295,49 @@ describe("createContext", () => {
     expect(calls).toEqual(["你好"]);
   });
 
+  it("仅按 manifest 注入权限与子进程服务，并在释放时回收", async () => {
+    tmp = mkdtempSync(path.join(os.tmpdir(), "cyrene-ctx-test-"));
+    const rt = runtime();
+    const permissionService = { requestLease: vi.fn(), revokeLease: vi.fn() };
+    const subprocessService = { spawn: vi.fn() };
+    const revokePlugin = vi.fn();
+    const stopPlugin = vi.fn(async () => {});
+    rt.permissions = { forPlugin: vi.fn(() => permissionService), revokePlugin };
+    rt.subprocess = { forPlugin: vi.fn(() => subprocessService), stopPlugin };
+
+    const without = createTestContext(rt);
+    expect(without.deps.permissions).toBeUndefined();
+    expect(without.deps.subprocess).toBeUndefined();
+
+    const withDeps = createTestContext(rt, ["permissions", "subprocess"]);
+    expect(withDeps.deps.permissions).toBe(permissionService);
+    expect(withDeps.deps.subprocess).toBe(subprocessService);
+    await withDeps.dispose();
+
+    expect(revokePlugin).toHaveBeenCalledWith("demo");
+    expect(stopPlugin).toHaveBeenCalledWith("demo");
+  });
+
+  it("注册工具时记录插件所有者", () => {
+    tmp = mkdtempSync(path.join(os.tmpdir(), "cyrene-ctx-test-"));
+    const rt = runtime();
+    const register = vi.fn();
+    rt.toolRegistry.register = register;
+    const ctx = createTestContext(rt);
+    ctx.registerTool({
+      id: "demo_observe",
+      name: "observe",
+      description: "d",
+      enabled: true,
+      inputSchema: { type: "object", properties: {}, required: [] },
+      execute: async () => "ok",
+    });
+    expect(register).toHaveBeenCalledWith(expect.objectContaining({
+      id: "demo_observe",
+      ownerPluginId: "demo",
+    }));
+  });
+
   it("dispose 返回 Promise 并等待渠道注销完成", async () => {
     tmp = mkdtempSync(path.join(os.tmpdir(), "cyrene-ctx-test-"));
     const rt = runtime();

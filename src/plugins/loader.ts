@@ -15,7 +15,7 @@ import type {
 const MANIFEST_FILE = "manifest.json";
 const ID_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
-const DEPS_ALLOWED = new Set(["channels", "llm"]);
+const DEPS_ALLOWED = new Set(["channels", "llm", "permissions", "subprocess"]);
 const ENTRY_EXTENSIONS = new Set([".cjs", ".js", ".mjs"]);
 const ICON_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".svg"]);
 const ICON_MAX_BYTES = 2 * 1024 * 1024;

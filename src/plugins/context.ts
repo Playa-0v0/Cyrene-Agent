@@ -10,7 +10,9 @@ import type {
   PluginDeps,
   PluginLlmService,
   PluginManifest,
+  PluginPermissionService,
   PluginPromptProvider,
+  PluginSubprocessService,
   PluginTool,
 } from "./types";
 import type { PluginPromptRegistry } from "./prompts";
@@ -58,6 +60,14 @@ export interface PluginRuntime {
   unregisterIpc: (channel: string) => void;
   promptRegistry: Pick<PluginPromptRegistry, "register" | "unregister">;
   llm?: PluginLlmService;
+  permissions?: {
+    forPlugin(id: string): PluginPermissionService;
+    revokePlugin(id: string): void;
+  };
+  subprocess?: {
+    forPlugin(id: string, signal: AbortSignal): PluginSubprocessService;
+    stopPlugin(id: string): Promise<void>;
+  };
 }
 
 interface DisposableContext extends PluginContext {
@@ -98,6 +108,12 @@ export function createContext(
         purpose: options?.purpose ? `${id}:${options.purpose}` : id,
       }),
     };
+  }
+  if (declaredDeps?.includes("permissions") && runtime.permissions) {
+    deps.permissions = runtime.permissions.forPlugin(id);
+  }
+  if (declaredDeps?.includes("subprocess") && runtime.subprocess) {
+    deps.subprocess = runtime.subprocess.forPlugin(id, abortController.signal);
   }
 
   const ctx: PluginContext = {
@@ -146,7 +162,7 @@ export function createContext(
       if (existing) {
         throw new Error(`插件工具 id 已被占用: ${tool.id}`);
       }
-      runtime.toolRegistry.register(tool as ToolDefinition);
+      runtime.toolRegistry.register({ ...tool, ownerPluginId: id } as ToolDefinition);
       registeredTools.add(tool.id);
     },
     unregisterTool(toolId: string) {
@@ -237,6 +253,14 @@ export function createContext(
           for (const unsubscribe of eventUnsubscribers) {
             try {
               unsubscribe();
+            } catch (error) {
+              cleanupErrors.push(error);
+            }
+          }
+          runtime.permissions?.revokePlugin(id);
+          if (runtime.subprocess) {
+            try {
+              await runPluginCleanup(() => runtime.subprocess!.stopPlugin(id), `插件 ${id} subprocess`);
             } catch (error) {
               cleanupErrors.push(error);
             }

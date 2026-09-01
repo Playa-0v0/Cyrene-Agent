@@ -11,6 +11,9 @@ import { pluginPromptRegistry } from "../plugins/prompts";
 import type { LlmClient } from "./services/llm/llm-client";
 import { enqueueLLMTask } from "./llm-queue";
 import type { IpcScope } from "./application/ipc-scope";
+import { createPluginPermissionService } from "./capability-leases/plugin-permission-service";
+import { capabilityLeaseStore } from "./capability-leases/lease-store";
+import { PluginSubprocessHost } from "./plugin-subprocess-service";
 
 export interface PluginRuntimeDeps {
   llmClient: LlmClient;
@@ -20,6 +23,7 @@ export interface PluginRuntimeDeps {
 export async function startPluginRuntime(deps: PluginRuntimeDeps): Promise<PluginManager> {
   const userPluginRoot = path.join(app.getPath("userData"), "plugins");
   const pluginDataRoot = path.join(app.getPath("userData"), "plugin-data");
+  const subprocessHost = new PluginSubprocessHost();
   const manager = new PluginManager({
     scanRoots: [
       { path: path.join(__dirname, "..", "plugins"), source: "builtin" },
@@ -47,6 +51,14 @@ export async function startPluginRuntime(deps: PluginRuntimeDeps): Promise<Plugi
           enqueueLLMTask,
           options,
         ),
+      },
+      permissions: {
+        forPlugin: (id) => createPluginPermissionService(id),
+        revokePlugin: (id) => { capabilityLeaseStore.revokePlugin(id); },
+      },
+      subprocess: {
+        forPlugin: (id, signal) => subprocessHost.forPlugin(id, signal),
+        stopPlugin: (id) => subprocessHost.stopPlugin(id),
       },
     },
     loadEnabledMap: () => loadGeneralSettings().plugins,

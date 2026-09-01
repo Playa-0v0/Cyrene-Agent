@@ -78,6 +78,17 @@ describe("readManifest", () => {
     expect(readManifest(dir)).toBeNull();
   });
 
+  it("接受权限租约与受管子进程依赖声明", () => {
+    const dir = fixture("computer-use-deps", {
+      "manifest.json": JSON.stringify({
+        ...validManifest,
+        deps: ["permissions", "subprocess"],
+      }),
+      "index.cjs": `module.exports = { register() {} };`,
+    });
+    expect(readManifest(dir)?.deps).toEqual(["permissions", "subprocess"]);
+  });
+
   it("拒绝不兼容 apiVersion 和非 SemVer 版本", () => {
     const badApi = fixture("bad-api", {
       "manifest.json": JSON.stringify({ ...validManifest, apiVersion: 2 }),
