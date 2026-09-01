@@ -2064,9 +2064,9 @@
               <h2 class="tts-section__title">通话设置</h2>
               <div class="tts-field">
                 <label for="asr-vad-silence">VAD 静默阈值（毫秒）</label>
-                <input type="number" id="asr-vad-silence" placeholder="1000" min="300" max="10000" step="100" value="1000" />
+                <input type="number" id="asr-vad-silence" placeholder="600" min="300" max="10000" step="100" value="600" />
               </div>
-              <p class="tts-hint">用户说话后停顿多久判定为说完。有人想词慢就填大一点（如 3000），反应快就填小一点（如 800）。默认 1000ms。</p>
+              <p class="tts-hint">用户说话后停顿多久判定为说完。有人想词慢就填大一点（如 3000），反应快就填小一点（如 600）。默认 600ms。</p>
               <div class="tts-field">
                 <label for="asr-vad-threshold">VAD 音量阈值（0.001 ~ 0.5）</label>
                 <input type="range" id="asr-vad-threshold" min="0.001" max="0.5" step="0.001" value="0.01" />

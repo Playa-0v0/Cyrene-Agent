@@ -40,7 +40,7 @@ export async function loadAsrConfig(): Promise<void> {
       if (asrAliyunAccessKeySecretInput) asrAliyunAccessKeySecretInput.value = String(cfg.asrAliyunAccessKeySecret ?? "");
       if (asrMosslandKeyInput) asrMosslandKeyInput.value = String(cfg.ttsMosslandKey ?? "");
       if (asrLanguageSelect) asrLanguageSelect.value = String(cfg.asrLanguage ?? "zh");
-      if (asrVadSilenceInput) asrVadSilenceInput.value = String(cfg.asrVadSilenceMs ?? 1000);
+      if (asrVadSilenceInput) asrVadSilenceInput.value = String(cfg.asrVadSilenceMs ?? 600);
       if (asrVadThresholdInput) {
         const v = Number(cfg.asrVadThreshold) || 0.01;
         asrVadThresholdInput.value = String(v);
@@ -66,7 +66,7 @@ asrAliyunAccessKeySecretInput?.addEventListener("input", () => { clearTimeout(as
 asrMosslandKeyInput?.addEventListener("input", () => { clearTimeout(asrState.mosslandKeyTimer); asrState.mosslandKeyTimer = setTimeout(() => void saveAsrField("ttsMosslandKey", asrMosslandKeyInput.value.trim()), 800); });
 asrLanguageSelect?.addEventListener("change", () => void saveAsrField("asrLanguage", asrLanguageSelect.value));
 asrVadSilenceInput?.addEventListener("input", () => {
-  void saveAsrField("asrVadSilenceMs", Number(asrVadSilenceInput.value) || 1000);
+  void saveAsrField("asrVadSilenceMs", Number(asrVadSilenceInput.value) || 600);
 });
 asrVadThresholdInput?.addEventListener("input", () => {
   const v = Number(asrVadThresholdInput.value) || 0.01;

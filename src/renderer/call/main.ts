@@ -298,7 +298,7 @@ let analyser: AnalyserNode | null = null;
 let workletNode: AudioWorkletNode | null = null;
 let micStream: MediaStream | null = null;
 let vadSilenceTimer: ReturnType<typeof setTimeout> | null = null;
-let vadSilenceMs = 1000;
+let vadSilenceMs = 600;
 let vadThreshold = 0.01; // 音量阈值，默认调低照顾安静环境/小声麦克风
 let hasSpoken = false; // 用户是否已开始说话（VAD 只在说过话后检测静默）
 
@@ -550,7 +550,7 @@ async function init(): Promise<void> {
   try {
     const cfg = await window.tts?.loadSettings();
     if (cfg) {
-      vadSilenceMs = typeof cfg.asrVadSilenceMs === "number" ? cfg.asrVadSilenceMs : 1000;
+      vadSilenceMs = typeof cfg.asrVadSilenceMs === "number" ? cfg.asrVadSilenceMs : 600;
       vadThreshold = typeof cfg.asrVadThreshold === "number" ? cfg.asrVadThreshold : 0.01;
       showTranscript = Boolean(cfg.asrShowTranscript);
     }

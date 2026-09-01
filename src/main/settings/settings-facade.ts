@@ -108,7 +108,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   asrAliyunAccessKeyId: "",
   asrAliyunAccessKeySecret: "",
   asrLanguage: "zh",
-  asrVadSilenceMs: 1000,
+  asrVadSilenceMs: 600,
   asrVadThreshold: 0.01,
   asrShowTranscript: false,
   screenshotHotkey: "Alt+Shift+S",
