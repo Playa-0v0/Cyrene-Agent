@@ -15,6 +15,9 @@
 | **注册 AI 工具** | 昔涟在对话里能查系统状态、查天气、操作你的番茄钟 |
 | **弹自己的窗口** | 一个独立界面，想画什么都行（HTML/CSS 随便写） |
 | **调用宿主的 AI** | 插件自己也能调 LLM，不用配 API key（复用 Cyrene 的模型配置） |
+| **返回截图给模型** | 工具结果可带短生命周期的 PNG/JPEG/WebP/GIF 图片 |
+| **申请高风险授权** | 屏幕读取、输入控制等能力按会话和 run 使用可撤销租约 |
+| **托管辅助进程** | 用绝对路径启动本地 helper，停用插件时由宿主回收进程树 |
 | **接入新聊天渠道** | 把昔涟接到 Telegram、Discord 等平台（进阶） |
 | **事件通信** | 监听宿主生命周期事件、和其他插件互通消息（收到"要关机了"提前收尾、天气更新通知别的插件） |
 | **注入动态上下文** | 让昔涟主动"知道"实时状态——天气、日程、番茄钟，不用用户开口问 |
@@ -121,7 +124,7 @@ ctx.registerTool({
   description: "设置一个提醒，minutes 分钟后提示用户",
   enabled: true,
   risk: "safe",
-  effectKind: "write",   // 有副作用时用 write
+  effectKind: "mutation",   // 有副作用时用 mutation
   inputSchema: {
     type: "object",
     properties: {
@@ -143,8 +146,22 @@ ctx.registerTool({
 
 - **id 必须以 `<插件id>_` 开头**（如插件 id 是 `my-plugin`，工具就得叫 `my-plugin_xxx`），否则启用直接报错——这是防抢名机制
 - **description 写给 AI 看**，写清楚“什么场景该用这个工具”，直接决定 AI 用不用它
-- `execute` 返回**字符串**（或可序列化对象），这段文字会进入对话上下文
-- 常用风险标注：只读查询 `risk: "safe"` + `effectKind: "read"`；有副作用（写文件、发消息）用 `effectKind: "write"`
+- `execute` 通常返回字符串；需要给模型看截图时可返回含文字和图片块的结构化结果
+- 常用风险标注：只读查询 `risk: "safe"` + `effectKind: "read"`；有副作用（写文件、发消息）用 `effectKind: "mutation"`
+
+### 把截图作为工具结果返回
+
+```js
+return {
+  content: [
+    { type: "text", text: "屏幕已捕获" },
+    { type: "image", mimeType: "image/png", data: pngBase64 }
+  ]
+};
+```
+
+图片使用不带 `data:` 前缀的 base64。最多 4 张、每张最多 5 MiB；图片只用于当前下一次模型
+请求，不会写入会话检查点或工具执行缓存。完整约束见接口规范。
 
 ---
 
@@ -229,6 +246,29 @@ const text = await ctx.deps.llm.generateText(
   { purpose: "translate", maxTokens: 1024, timeoutMs: 30000 }
 );
 ```
+
+---
+
+## 高风险能力租约
+
+屏幕读取或输入控制不要只靠工具的 `risk` 标签。manifest 加上
+`"deps": ["permissions"]`，先用当前工具上下文请求租约，再把工具声明为
+`permissionLease: { scopeArgs: ["sessionId"] }`。宿主会精确校验插件、会话、run、能力和
+`sessionId`，拒绝跨会话、跨任务或跨插件复用；即使运行在 `allow_all` 模式也不能绕过。
+
+租约最多 30 分钟，并会在 run 结束或插件停止时自动撤销。用户拒绝时
+`requestLease()` 返回 `null`，插件应直接结束本次操作。
+
+---
+
+## 启动本地辅助程序
+
+manifest 加上 `"deps": ["subprocess"]` 后，使用
+`ctx.deps.subprocess.spawn({ executable, args, cwd })`。可执行文件和工作目录必须是绝对路径，
+不能传 shell 命令；stdin 只接受单行消息，stdout/stderr 以行回调接收。宿主会过滤继承环境、
+限制输出，并在插件停止时回收整棵进程树。
+
+这套接口便于生命周期管理，但插件代码本身仍在 Electron Main Process 中运行，不是沙箱。
 
 ---
 
@@ -346,7 +386,7 @@ async register(ctx) {
 |---|---|
 | 启用报错“工具 id 必须以 xxx 开头” | 工具 id 没加 `<插件id>_` 前缀 |
 | 启用报错“version 不是 SemVer” | 版本号要写 `1.0.0`，不能是 `1.0` 或 `v1.0` |
-| 启用报错“deps 含未知值” | `deps` 只接受 `channels` / `llm`，检查拼写 |
+| 启用报错“deps 含未知值” | `deps` 只接受 `channels` / `llm` / `permissions` / `subprocess`，检查拼写 |
 | AI 不用我的工具 | description 没写清楚使用场景，AI 不知道何时该调 |
 | 弹窗图片不显示 | 用相对路径且文件确实打进了包里 |
 | 改了代码没生效 | 聊天窗口插件面板点“刷新插件”（会清模块缓存重新加载） |

@@ -2,7 +2,7 @@
 
 本文描述 Cyrene-Agent 的可信本地运行时插件系统。插件以“目录 + `manifest.json` +
 JavaScript 入口”交付，可注册工具、插件私有 IPC、渠道 adapter，并按声明使用 Cyrene
-提供的 LLM 服务。
+提供的 LLM、权限租约和受管子进程服务。
 
 ## 安全与信任边界
 
@@ -16,6 +16,9 @@ JavaScript 入口”交付，可注册工具、插件私有 IPC、渠道 adapter
 - 聊天窗口插件面板显示开发者、版本、运行状态和最后一次错误。
 - 只有用户明确点击“启用”后，用户插件入口才会被加载。
 - 内置插件可使用 `defaultEnabled`，因为它与应用一起构建和发布。
+
+`permissions` 与 `subprocess` 是宿主提供的安全编排接口，不会把 Main Process 插件变成
+沙箱。它们的作用是让高风险工具获得可审计、可撤销的授权，并让辅助进程能够被统一回收。
 
 ## 目录与扫描来源
 
@@ -324,6 +327,83 @@ LLM 请求使用当前默认模型档案，并统一经过 Cyrene 的 `LlmClient
 - `timeoutMs`：1000-300000；缺省使用聊天超时并封顶 120 秒；
 - `purpose`：只用于诊断标签，不影响模型选择。
 
+### 富媒体工具结果
+
+已有插件可以继续从 `execute()` 返回字符串。需要把截图交给模型时，可以返回结构化结果：
+
+```js
+return {
+  content: [
+    { type: "text", text: "已捕获当前桌面" },
+    { type: "image", mimeType: "image/png", data: pngBase64, alt: "当前桌面" }
+  ],
+  metadata: { width, height }
+};
+```
+
+图片 `data` 必须是原始 base64，不含 `data:` 前缀；支持 PNG、JPEG、WebP 和 GIF。单次结果
+最多 4 张图片，每张解码后最多 5 MiB。宿主只把图片附加到紧随工具调用的模型请求，序列化
+检查点、执行账本和普通工具日志只保留文字观察，不持久化图片字节。不要在 `metadata` 或文字
+块中重复放入图片、密钥或其他敏感数据。
+
+### 权限租约
+
+需要屏幕读取或输入控制的工具，应在 manifest 声明：
+
+```json
+{ "deps": ["permissions"] }
+```
+
+插件先针对当前工具上下文请求短期租约：
+
+```js
+const lease = await ctx.deps.permissions.requestLease({
+  capability: "computer-use",
+  risk: "screen-read",
+  reason: "读取当前屏幕以定位用户要求操作的控件",
+  scope: { sessionId },
+  ttlMs: 10 * 60_000
+}, toolContext);
+```
+
+返回 `null` 表示用户拒绝。租约会绑定当前插件、会话、run、能力名和完整 scope，并在到期、
+run 结束、插件停止或 `ctx.signal` 取消时失效。依赖租约的工具还必须声明相同能力和从参数中
+提取 scope 的字段：
+
+```js
+ctx.registerTool({
+  id: "computer-use_click",
+  capability: "computer-use",
+  permissionLease: { scopeArgs: ["sessionId"] },
+  risk: "input-control",
+  // ...
+});
+```
+
+执行时 scope 必须逐项精确匹配；全局 `allow_all` 不会绕过租约。`screen-read` 在 full 之外
+始终询问，输入控制仍按现有高风险策略处理。不要把某次 Computer Use 租约解释为其他插件或
+其他工具的通用输入控制权限。
+
+### 受管子进程
+
+需要启动本地辅助程序时，在 manifest 声明 `"subprocess"`，并使用宿主服务：
+
+```js
+const process = await ctx.deps.subprocess.spawn({
+  executable: "C:\\Program Files\\Example\\helper.exe",
+  args: ["--stdio"],
+  cwd: "C:\\Program Files\\Example"
+});
+const off = process.onStdoutLine((line) => ctx.log("helper:", line));
+process.write(JSON.stringify({ type: "ping" }));
+ctx.onDispose(off);
+```
+
+`executable` 和可选 `cwd` 必须是绝对路径；接口不接受 shell 命令字符串，并固定使用
+`shell: false`。宿主只继承少量运行环境变量，过滤凭据形态的变量，限制单行和累计输出，
+并在插件停用、刷新、卸载、启动回滚或应用退出时终止整棵辅助进程树。插件仍应实现协议级
+退出和错误处理，不能把受管接口当作进程隔离沙箱。
+
 ## 生命周期和状态
 
 ```text
@@ -416,6 +496,7 @@ state，避免每次启动重复尝试。
 - `deps.channels.channelManager` 已移除，改用 Context 注册方法和
   `deps.channels.has()`；
 - 非法 deps 不再过滤，而是拒绝 manifest；
+- `deps` 当前可声明 `channels`、`llm`、`permissions`、`subprocess`；
 - version 必须为 SemVer；
 - 注销非本插件资源会抛错；
 - 插件列表 IPC 返回 `{ plugins, issues }`，不再只返回数组。
