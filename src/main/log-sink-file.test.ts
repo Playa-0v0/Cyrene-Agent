@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,12 +11,19 @@ import {
 } from "./log-sink-file";
 
 let tmpDir: string;
+let outSpy: ReturnType<typeof vi.spyOn>;
+let errSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cyrene-log-sink-"));
+  // e2e 用例走真实 logger：拦截 stdout/stderr，避免测试输出泄漏脏行
+  outSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  errSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 });
 
 afterEach(() => {
+  outSpy.mockRestore();
+  errSpy.mockRestore();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -71,6 +78,17 @@ describe("createFileLogSink", () => {
     const logPath = path.join(tmpDir, "no-such-dir", "cyrene.log");
     const sink = createFileLogSink(logPath);
     expect(() => sink(makeEntry())).not.toThrow();
+  });
+
+  it("rotates automatically on write when the file exceeds maxBytes", () => {
+    // 注入小 maxBytes，走真实的"写入 → 轮转 → 追加"链路
+    const logPath = path.join(tmpDir, "cyrene.log");
+    const sink = createFileLogSink(logPath, 40);
+    sink(makeEntry({ message: "big-entry", line: "INFO  Cyrene         big-entry" }));
+    sink(makeEntry({ message: "next", line: "INFO  Cyrene         next" }));
+    expect(fs.existsSync(logPath + ".1")).toBe(true);
+    expect(fs.readFileSync(logPath + ".1", "utf8")).toContain("big-entry");
+    expect(fs.readFileSync(logPath, "utf8")).toContain("next");
   });
 });
 
