@@ -75,10 +75,14 @@ export function createFileLogSink(
 /**
  * 安装文件落盘接收器（主进程启动时调用一次）。
  * @param userDataDir Electron app.getPath("userData") 的结果
+ * @param maxBytes 单文件滚动阈值，测试可注入小值触发真实轮转链路
  * @returns 卸载函数（测试用）
  */
-export function installFileLogSink(userDataDir: string): () => void {
+export function installFileLogSink(
+  userDataDir: string,
+  maxBytes = DEFAULT_MAX_BYTES,
+): () => void {
   const dir = path.join(userDataDir, "logs");
   fs.mkdirSync(dir, { recursive: true });
-  return addLogSink(createFileLogSink(path.join(dir, "cyrene.log")));
+  return addLogSink(createFileLogSink(path.join(dir, "cyrene.log"), maxBytes));
 }

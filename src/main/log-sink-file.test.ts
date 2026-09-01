@@ -138,4 +138,33 @@ describe("installFileLogSink", () => {
       expect(after).toBe(before);
     }
   });
+
+  it("rotates through the real logger with a small maxBytes", () => {
+    // 全链路：logger.emit → stdout(spy 拦截) → logSinks 广播 →
+    // createFileLogSink → rotateIfNeeded(超限滚动) → appendFileSync(追加)。
+    // installFileLogSink 注入 80 字节阈值，通过真实 logger 走通"写入→轮转→追加"。
+    const uninstall = installFileLogSink(tmpDir, 80);
+    try {
+      setLogLevel("info");
+      const logPath = path.join(tmpDir, "logs", "cyrene.log");
+
+      // 阶段一：连续写入，每行约 120 字节 > 80 阈值 → 每次写入触发轮转
+      // 滚动规则：当前文件超限 → .1 ← 当前，.2 ← .1（最多保留 3 份，最老淘汰）
+      for (let i = 0; i < 5; i++) {
+        logger.info("Cyrene", `rotation-${i}-${"x".repeat(60)}`);
+      }
+      // 5 次写入后：当前=[rot4], .1=[rot3], .2=[rot2]，rot0/rot1 已淘汰
+      expect(fs.existsSync(logPath + ".1")).toBe(true);
+      expect(fs.readFileSync(logPath + ".1", "utf8")).toContain("rotation-3");
+      expect(fs.existsSync(logPath + ".2")).toBe(true);
+      expect(fs.readFileSync(logPath + ".2", "utf8")).toContain("rotation-2");
+      expect(fs.readFileSync(logPath, "utf8")).toContain("rotation-4");
+
+      // 阶段二：轮转后继续追加，当前文件应包含最新一行（真实追加链路）
+      logger.info("Cyrene", "after-rotate");
+      expect(fs.readFileSync(logPath, "utf8")).toContain("after-rotate");
+    } finally {
+      uninstall();
+    }
+  });
 });
