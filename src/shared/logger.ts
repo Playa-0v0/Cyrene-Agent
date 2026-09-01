@@ -46,6 +46,41 @@ function readEnvLevel(): LogLevel | null {
   return null;
 }
 
+/**
+ * 日志接收器（sink）机制。
+ *
+ * 默认 logger 只写 stdout/stderr——打包版 Electron 的 stdout 在用户机器上
+ * 默认不可见（甚至可能断管），出问题无从排查。主进程可通过 addLogSink
+ * 注册额外出口（例如落盘 userData/logs/cyrene.log），渲染器进程不注册
+ * 就不受影响。sink 抛错被吞掉，绝不干扰主链路。
+ */
+export interface LogEntry {
+  /** 事件发生时间（epoch ms），落盘侧自行格式化 */
+  ts: number;
+  level: LogLevel;
+  tag: string;
+  /** 格式化后的消息（多参数已拼接、非字符串已 JSON 化） */
+  message: string;
+  /** 与 stdout 一致的纯文本行（无 ANSI 色码），适合落盘/转发 */
+  line: string;
+}
+
+export type LogSink = (entry: LogEntry) => void;
+
+const logSinks = new Set<LogSink>();
+
+/** 注册日志接收器，返回取消函数。 */
+export function addLogSink(sink: LogSink): () => void {
+  logSinks.add(sink);
+  return () => {
+    logSinks.delete(sink);
+  };
+}
+
+export function removeLogSink(sink: LogSink): void {
+  logSinks.delete(sink);
+}
+
 export function setLogLevel(level: LogLevel): void {
   currentLevel = level;
 }
@@ -86,6 +121,20 @@ function emit(level: LogLevel, tag: string, args: unknown[]): void {
   } else {
     const line = `${lvl} ${tagCol} ${message}`;
     (level === "error" || level === "warn" ? process.stderr : process.stdout).write(line + "\n");
+  }
+
+  // 广播给额外接收器（文件落盘等）。发生在 stdout/stderr 写入之后，
+  // 保持原有行为不变；sink 自身异常不影响主链路。
+  if (logSinks.size > 0) {
+    const plainLine = `${lvl} ${tagCol} ${message}`;
+    const entry: LogEntry = { ts: Date.now(), level, tag, message, line: plainLine };
+    for (const sink of logSinks) {
+      try {
+        sink(entry);
+      } catch {
+        // 忽略：日志接收器故障不能反过来拖垮业务日志
+      }
+    }
   }
 }
 

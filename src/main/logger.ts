@@ -10,6 +10,7 @@
 import { app } from "electron";
 import { setLogLevel, type LogLevel } from "../shared/logger";
 import { logger } from "../shared/logger";
+import { installFileLogSink } from "./log-sink-file";
 
 function resolveDefaultLevel(): LogLevel {
   // env wins
@@ -24,6 +25,14 @@ function resolveDefaultLevel(): LogLevel {
 }
 
 setLogLevel(resolveDefaultLevel());
+
+// 打包版 stdout 不可见：把日志同步落盘到 userData/logs/cyrene.log（滚动 3 份×5MB），
+// 用户/issue 上报可直接附日志文件。dev 下同样落盘，便于本地排查。
+try {
+  installFileLogSink(app.getPath("userData"));
+} catch {
+  // userData 不可用时静默跳过，日志落盘只是增强项
+}
 
 export { logger, setLogLevel, LogTag } from "../shared/logger";
 export type { LogLevel } from "../shared/logger";
