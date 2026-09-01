@@ -608,6 +608,17 @@ async function transcribeInboundWechatVoice(
   return transcribePcmWithConfiguredAsr(pcm, cfg);
 }
 
+// 微信入站语音的统一转写入口：调用方传入一段 PCM（已解码为
+// 16kHz / 16bit / 单声道），本函数按 cfg.engine 选合适的批量/流式引擎。
+//
+// 设计要点：
+//   - 「mossland」与「local」两个引擎的 createAsrStream(...).stop() 都是
+//     Promise<string>，是真正的「缓存一轮 PCM → 上传 → 拿结果」同步等待型。
+//     这两个走同一个 await 批量分支。
+//   - 「aliyun」走 VolcanoAsrStream（WebSocket 流式），stop() 是 void，
+//     只通过 onFinal 回调推回若干 final 段。
+//     历史上本函数对 aliyun 走的是「延迟 2.5s 再读 finals」的兜底逻辑，
+//     与批量分支不再共用，单独放在下面那段保留原结构。
 async function transcribePcmWithConfiguredAsr(pcm: Buffer, cfg: AsrConfig): Promise<string> {
   const finals: string[] = [];
   const stream = createAsrStream(
@@ -618,7 +629,11 @@ async function transcribePcmWithConfiguredAsr(pcm: Buffer, cfg: AsrConfig): Prom
     },
   );
 
-  if (cfg.engine === "mossland") {
+  // 批量分支：mossland（MosslandAsrStream）与 local（LocalAsrStream）。
+  // 必须把 local 并到这个分支 —— 否则它会落到下面那个为 aliyun 流式设计
+  // 的延迟兜底里，而 FunASR 批量推理通常 > 2.5s，结果还没回来就被
+  // 「没有识别到文字」打断（PR #51 反馈的故障根因）。
+  if (cfg.engine === "mossland" || cfg.engine === "local") {
     await stream.start();
     stream.sendAudio(pcm);
     const completed = await stream.stop();
@@ -627,6 +642,10 @@ async function transcribePcmWithConfiguredAsr(pcm: Buffer, cfg: AsrConfig): Prom
     throw new Error("没有识别到文字");
   }
 
+  // 流式分支（aliyun）：stop() 不返回结果，靠 onFinal 回调收集 finals。
+  // 保留历史 15s timeout + 2.5s 延迟兜底，不在本 PR 范围重构
+  // ——如果将来要把 aliyun 路径也改成「真正等 WebSocket SentenceEnd 信号」，
+  // 请另开一个 PR 单独处理，PR #51 不应混合无关改动。
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       stream.stop();
