@@ -2033,10 +2033,10 @@
                   <option value="off">关闭</option>
                   <option value="aliyun">阿里云（实时语音识别）</option>
                   <option value="mossland">Mossland（轮次结束后转写）</option>
-                  <option value="local">本地（占位，敬请期待）</option>
+                  <option value="local">本地（FunASR，127.0.0.1:8328）</option>
                 </select>
               </div>
-              <p class="tts-hint">阿里云支持实时中间结果；Mossland 会在每轮说话结束后返回完整文本。</p>
+              <p class="tts-hint">阿里云支持实时中间结果；Mossland 会在每轮说话结束后返回完整文本；本地走本机 FunASR 服务（HTTP 批量转写，需先启动配套的 asr_server.py）。</p>
             </div>
 
             <div class="tts-section" id="asr-aliyun-config">
@@ -2070,6 +2070,15 @@
                 <input type="password" id="asr-mossland-key" placeholder="MOSI API 平台 → API 密钥" autocomplete="off" />
               </div>
               <p class="tts-hint">与 Mossland TTS 共用同一 API Key。音频在 VAD 判定本轮结束后上传到 moss-transcribe，不提供实时中间字幕。</p>
+            </div>
+
+            <div class="tts-section" id="asr-local-config" style="display:none">
+              <h2 class="tts-section__title">本地 FunASR 配置</h2>
+              <div class="tts-field">
+                <label for="asr-local-url">服务地址</label>
+                <input type="text" id="asr-local-url" placeholder="http://127.0.0.1:8328" autocomplete="off" />
+              </div>
+              <p class="tts-hint">需要本机运行 FunASR 的 asr_server.py（配套技能 cyrene-local-asr，端口 8328）。音频在 VAD 判定本轮结束后批量上传转写，不提供实时中间字幕。</p>
             </div>
 
             <div class="tts-section">

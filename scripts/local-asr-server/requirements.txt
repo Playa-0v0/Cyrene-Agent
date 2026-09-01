@@ -1,0 +1,11 @@
+# Cyrene 本地 ASR 服务（FunASR）
+# Python 3.9+
+# torch 按本机 CUDA 版本安装，见 https://pytorch.org/get-started/locally/
+# CPU-only 直接 pip install torch 亦可
+funasr>=1.1.0
+torch>=2.0.0
+fastapi>=0.110.0
+uvicorn>=0.29.0
+python-multipart>=0.0.9
+numpy>=1.24.0
+librosa>=0.10.0

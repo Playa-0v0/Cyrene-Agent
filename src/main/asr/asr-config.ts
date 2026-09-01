@@ -11,7 +11,13 @@ export interface MosslandAsrConfig {
   apiKey: string;
 }
 
-export type AsrConfig = AliyunAsrConfig | MosslandAsrConfig;
+export interface LocalAsrConfig {
+  engine: "local";
+  /** 本地 FunASR 服务地址，默认 http://127.0.0.1:8328 */
+  baseUrl?: string;
+}
+
+export type AsrConfig = AliyunAsrConfig | MosslandAsrConfig | LocalAsrConfig;
 
 let asrConfigGetter: (() => AsrConfig | null) | null = null;
 

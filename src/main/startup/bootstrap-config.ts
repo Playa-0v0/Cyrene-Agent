@@ -120,6 +120,9 @@ export function bootstrapConfigGetters(ctx: BootstrapConfigContext): void {
     if (s.asrEngine === "mossland") {
       return { engine: "mossland", apiKey: s.ttsMosslandKey };
     }
+    if (s.asrEngine === "local") {
+      return { engine: "local", baseUrl: s.asrLocalBaseUrl || "http://127.0.0.1:8328" };
+    }
     if (s.asrEngine === "aliyun") {
       return { engine: "aliyun", appKey: s.asrAliyunAppKey, accessKeyId: s.asrAliyunAccessKeyId, accessKeySecret: s.asrAliyunAccessKeySecret, language: s.asrLanguage };
     }
