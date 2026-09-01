@@ -70,6 +70,11 @@ export interface ChatMessage {
     runId: string;
     createdAt: number;
   };
+  /**
+   * Ephemeral rich blocks attached to a tool result for the next model request.
+   * Created as a non-enumerable property so checkpoints and JSON logs never persist image bytes.
+   */
+  transientToolContent?: OpenAIContentBlock[];
 }
 
 export interface ToolSpec {

@@ -14,7 +14,7 @@
 // 非流式从 response.output 捕获；流式由 sdk-stream runtime 在 response.completed/incomplete 补挂。
 import {
   ChatMessage, ChatRequest, ChatResponse, ChatVendorAdapter,
-  HttpRequest, ProviderCapability, StreamChunk, StreamEvent,
+  HttpRequest, OpenAIContentBlock, ProviderCapability, StreamChunk, StreamEvent,
   TestConnectionResult, ToolCall, ToolExecutionResult, VendorConfig,
 } from "./types";
 import { toResponseInputItems } from "openai/lib/responses/ResponseInputItems";
@@ -136,8 +136,15 @@ function toWireInput(
 ): { instructions: string | undefined; input: Array<Record<string, unknown>> } {
   const systemParts: string[] = [];
   const input: Array<Record<string, unknown>> = [];
+  let pendingToolImages: OpenAIContentBlock[] = [];
+  const flushToolImages = () => {
+    if (pendingToolImages.length === 0) return;
+    input.push({ role: "user", content: toUserContentBlocks(pendingToolImages) });
+    pendingToolImages = [];
+  };
 
   for (const m of messages) {
+    if (m.role !== "tool") flushToolImages();
     if (m.role === "system") {
       const text = typeof m.content === "string" ? m.content : "";
       if (text) systemParts.push(text);
@@ -153,6 +160,9 @@ function toWireInput(
         call_id: m.toolCallId,
         output: typeof m.content === "string" ? m.content : "",
       });
+      pendingToolImages.push(...(m.transientToolContent ?? []).filter(
+        (block): block is Extract<OpenAIContentBlock, { type: "image_url" }> => block.type === "image_url",
+      ));
       continue;
     }
     // assistant：rawAssistant 存在 → 原顺序回放（function_call items 已含工具调用）
@@ -167,6 +177,7 @@ function toWireInput(
       input.push({ type: "function_call", call_id: tc.id, name: tc.name, arguments: tc.arguments });
     }
   }
+  flushToolImages();
 
   return { instructions: systemParts.length > 0 ? systemParts.join("\n\n") : undefined, input };
 }

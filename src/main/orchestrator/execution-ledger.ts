@@ -54,7 +54,8 @@ export class ExecutionLedger {
     // 原因：非终态结果是中间状态，如果被缓存，后续相同输入会命中缓存返回中间结果，
     // 导致 Agent 认为工具已成功完成而跳过实际执行，形成无限循环。
     // terminal 未显式提供时按默认终态语义（true）处理。
-    if (outcome.status === "succeeded" && outcome.terminal !== false) {
+    const containsTransientImage = outcome.content?.some((block) => block.type === "image") === true;
+    if (outcome.status === "succeeded" && outcome.terminal !== false && !containsTransientImage) {
       this.succeeded.set(key, outcome);
     }
     return { outcome, cached: false };

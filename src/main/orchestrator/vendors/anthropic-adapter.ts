@@ -151,10 +151,18 @@ function toWireMessages(messages: ChatMessage[], options?: { cacheBreakpoints?: 
         wire.push({ role: "assistant", content: blocks.length > 0 ? blocks : "" });
       }
     } else if (m.role === "tool") {
+      const transient = m.transientToolContent?.length
+        ? toAnthropicContent(m.transientToolContent)
+        : undefined;
+      const richBlocks = Array.isArray(transient)
+        ? transient.filter((block) => block.type === "image")
+        : [];
       const block: ContentBlock = {
         type: "tool_result",
         tool_use_id: m.toolCallId,
-        content: m.content ?? "",
+        content: richBlocks.length > 0
+          ? [{ type: "text", text: typeof m.content === "string" ? m.content : "" }, ...richBlocks]
+          : m.content ?? "",
       };
       const last = wire[wire.length - 1];
       if (last && last.role === "user" && Array.isArray(last.content)) {

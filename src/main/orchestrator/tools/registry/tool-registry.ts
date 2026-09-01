@@ -5,6 +5,7 @@ import { searchMemory } from "../../../rag/index";
 import type { ToolRiskLevel } from "../../../permission";
 import type { ToolContext } from "./tool-context";
 import type { ConversationMode } from "../../../../shared/chat-types";
+import type { PluginToolResult } from "../../../../plugins/api";
 
 /** 工具效果类型：决定工具对系统状态的影响分类。未配置默认 "unknown"。 */
 export type ToolEffectKind =
@@ -62,6 +63,9 @@ export interface ToolDefinition {
   category?: string;
   /** 权限审批与执行记账使用的稳定能力标识；未填时回落到工具 id。 */
   capability?: string;
+  /** Internal permission lease contract. PluginContext stamps ownerPluginId. */
+  permissionLease?: { scopeArgs: string[] };
+  ownerPluginId?: string;
   /** Runtime 校验受控参数来源；这些值不能由模型自由编造。支持带 kind 的对象形式用于类型化引用验证。 */
   controlledInput?: Record<string, ControlledInputPolicy>;
   enabled: boolean;     // 用户是否启用（对应设置面板的开关）
@@ -97,7 +101,7 @@ export interface ToolDefinition {
   /** 动态验证策略解析器（覆盖 verificationPolicy）。用于 write_file 根据文件扩展名判断。 */
   verificationPolicyResolver?: VerificationPolicyResolver;
   // 执行器：内置工具指向本地函数，外部 MCP 工具指向 transport 调用
-  execute: (args: Record<string, unknown>, ctx?: ToolContext) => Promise<string>;
+  execute: (args: Record<string, unknown>, ctx?: ToolContext) => Promise<PluginToolResult>;
 }
 
 /** 工具-模式覆盖层：用户自定义每个工具在每个会话模式下的可见性。

@@ -84,6 +84,24 @@ describe("ResponsesAdapter — URL 与基础字段", () => {
   });
 });
 
+describe("ResponsesAdapter — transient rich tool images", () => {
+  test("emits function_call_output before an ephemeral input_image message", () => {
+    const toolMessage = { role: "tool" as const, toolCallId: "call_1", name: "observe", content: "captured" };
+    Object.defineProperty(toolMessage, "transientToolContent", {
+      value: [{ type: "image_url", image_url: { url: "data:image/png;base64,aGVsbG8=" } }],
+      enumerable: false,
+    });
+    const { body } = makeBody([toolMessage]);
+    const input = body.input as Array<Record<string, unknown>>;
+    expect(input[0]).toEqual({ type: "function_call_output", call_id: "call_1", output: "captured" });
+    expect(input[1]).toEqual({
+      role: "user",
+      content: [{ type: "input_image", image_url: "data:image/png;base64,aGVsbG8=" }],
+    });
+    expect(JSON.stringify(toolMessage)).not.toContain("aGVsbG8=");
+  });
+});
+
 describe("ResponsesAdapter — 消息形态映射", () => {
   test("system 消息聚合为顶层 instructions，不进 input", () => {
     const { body } = makeBody([

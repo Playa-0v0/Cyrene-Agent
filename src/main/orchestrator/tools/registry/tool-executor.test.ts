@@ -20,6 +20,46 @@ describe("executeToolDefinition", () => {
     expect(outcome).toMatchObject({ status: "succeeded", output: "ok", terminal: true, retryable: false });
   });
 
+  it("normalizes rich text and image blocks without flattening image bytes into output", async () => {
+    const outcome = await executeToolDefinition(fakeTool(vi.fn(async () => ({
+      content: [
+        { type: "text", text: "captured" },
+        { type: "image", mimeType: "image/png", data: "aGVsbG8=" },
+      ],
+    }))), {});
+    expect(outcome).toMatchObject({
+      status: "succeeded",
+      output: "captured",
+      content: [
+        { type: "text", text: "captured" },
+        { type: "image", mimeType: "image/png", data: "aGVsbG8=" },
+      ],
+    });
+    expect(outcome.output).not.toContain("aGVsbG8=");
+  });
+
+  it("rejects malformed rich image results at the execution boundary", async () => {
+    const outcome = await executeToolDefinition(fakeTool(vi.fn(async () => ({
+      content: [{ type: "image", mimeType: "image/png", data: "not base64!" }],
+    }))), {});
+    expect(outcome).toMatchObject({
+      status: "failed",
+      errorCode: "E_TOOL_RESULT_INVALID_IMAGE",
+      category: "invalid_arguments",
+    });
+  });
+
+  it("rejects unsupported rich image MIME types", async () => {
+    const outcome = await executeToolDefinition(fakeTool(vi.fn(async () => ({
+      content: [{ type: "image", mimeType: "image/svg+xml", data: "PHN2Zz4=" }],
+    } as never))), {});
+    expect(outcome).toMatchObject({
+      status: "failed",
+      errorCode: "E_TOOL_RESULT_INVALID_IMAGE_TYPE",
+      category: "invalid_arguments",
+    });
+  });
+
   it("always passes ToolContext so every tool can observe the run signal", async () => {
     const execute = vi.fn(async () => "ok");
     const signal = new AbortController().signal;

@@ -162,7 +162,13 @@ export function bootstrapConfigGetters(ctx: BootstrapConfigContext): void {
         const cityMatch = userText.match(/([北京上海广州深圳成都杭州南京武汉西安重庆天津苏州长沙郑州青岛大连沈阳哈尔滨长春济南太原合肥南昌福州昆明贵阳拉萨乌鲁木齐呼和浩特]+)/);
         const city = cityMatch?.[1] ?? "";
         const result = await weatherTool.execute({ city }, undefined);
-        return result;
+        if (typeof result === "string") return result;
+        const text = result.content
+          .filter((block) => block.type === "text")
+          .map((block) => block.text)
+          .join("\n")
+          .trim();
+        return text || null;
       } catch (err) {
         console.warn("[Call] 天气查询失败:", err);
         return null;

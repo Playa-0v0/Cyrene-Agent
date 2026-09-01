@@ -1,12 +1,15 @@
 // Orchestrator types
 
 import type { ToolEffectState, ToolErrorCategory } from "./tools/registry/tool-execution-error";
+import type { PluginToolResultContentBlock } from "../../plugins/api";
 
 // ToolCallResult: 单次工具调用的结果
 export interface ToolCallResult {
   toolId: string;
   args: Record<string, unknown>;
   output: string;
+  /** Rich model-facing blocks. Images stay transient and are never written to ordinary logs. */
+  content?: PluginToolResultContentBlock[];
   status: "succeeded" | "failed";
   errorCode?: string;
   category?: ToolErrorCategory;
@@ -33,6 +36,7 @@ export interface ToolCallResult {
 
 export interface ToolExecutionOutcome {
   output: string;
+  content?: PluginToolResultContentBlock[];
   status: "succeeded" | "failed";
   errorCode?: string;
   category?: ToolErrorCategory;

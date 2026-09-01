@@ -26,6 +26,7 @@ import { classifyToolResultError } from "./error-classifier";
 import { decideRetry, getRetryParams, sleepWithJitter } from "./retry-policy";
 import { isCancellationError, raceWithSignal } from "../../abort-utils";
 import type { HarnessRun } from "./cyrene-harness";
+import type { PluginToolResultContentBlock } from "../../../plugins/api";
 
 /** 工具轮结果：completed = 结果已全部写回，继续下一轮；cancelled = 用户取消。 */
 export type ToolRoundOutcome = "completed" | "cancelled";
@@ -252,12 +253,29 @@ function toolResultMessage(
   if (modelObservation.truncated === true) {
     modelObservation.output = modelObservation.preview ?? modelObservation.message;
   }
+  const richContent = modelObservation.richContent as PluginToolResultContentBlock[] | undefined;
+  delete modelObservation.richContent;
   delete modelObservation.rawResult;
   delete modelObservation.toolOutputRef;
-  return {
+  const message: ChatMessage = {
     role: "tool",
     toolCallId: call.id,
     name: call.name,
     content: JSON.stringify(modelObservation),
   };
+  if (richContent?.length) {
+    const blocks = richContent.map((block) => block.type === "text"
+      ? { type: "text" as const, text: block.text }
+      : {
+          type: "image_url" as const,
+          image_url: { url: `data:${block.mimeType};base64,${block.data}` },
+        });
+    Object.defineProperty(message, "transientToolContent", {
+      value: blocks,
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+  }
+  return message;
 }

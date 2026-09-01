@@ -15,6 +15,7 @@ import type { ToolErrorCategory } from "../tools/registry/tool-execution-error";
 import type { ToolFileChange } from "../../../shared/chat-types";
 import type { ContextUsageSnapshot } from "../../../shared/context-usage";
 import type { ToolOutputRef, ToolOutputStore } from "./tool-output/tool-output-store";
+import type { PluginToolResultContentBlock } from "../../../plugins/api";
 export type { ToolErrorCategory } from "../tools/registry/tool-execution-error";
 export type { TodoItem, TodoStatus } from "../../../shared/task-session";
 
@@ -57,6 +58,8 @@ export interface ToolObservation {
   toolOutputRef?: ToolOutputRef;
   /** 工具返回的原始输出（未截断前），可能被截断后只保留 preview */
   output?: string;
+  /** Runtime-only rich blocks. tool-round attaches them non-enumerably to ChatMessage. */
+  richContent?: PluginToolResultContentBlock[];
 }
 
 // ── Uncertain Effect（结果不确定的副作用追踪）────────────

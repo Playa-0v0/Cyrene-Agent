@@ -221,6 +221,7 @@ export async function dispatchToolCall(
     target: (args.path as string | undefined) ?? (args.command as string | undefined) ?? (args.query as string | undefined),
     message: preview,
     output: result.output,
+    ...(result.content ? { richContent: result.content } : {}),
     truncated,
     preview,
     rawResult: result,

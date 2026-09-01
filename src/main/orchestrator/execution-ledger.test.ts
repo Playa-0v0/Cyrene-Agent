@@ -95,4 +95,16 @@ describe("ExecutionLedger terminal-aware caching", () => {
     await ledger.execute(input, run);
     expect(run).toHaveBeenCalledTimes(2);
   });
+
+  it("does not cache transient image outcomes", async () => {
+    const ledger = new ExecutionLedger();
+    const run = vi.fn(async () => ({
+      status: "succeeded" as const,
+      output: "captured",
+      content: [{ type: "image" as const, mimeType: "image/png" as const, data: "aGVsbG8=" }],
+    }));
+    await ledger.execute(input, run);
+    await ledger.execute(input, run);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
 });

@@ -2,7 +2,7 @@
 // 请求体协议：POST {baseUrl}/chat/completions，messages + tools[].type=function
 import {
   ChatMessage, ChatRequest, ChatResponse, ChatVendorAdapter,
-  HttpRequest, ProviderCapability, StreamChunk, StreamEvent,
+  HttpRequest, OpenAIContentBlock, ProviderCapability, StreamChunk, StreamEvent,
   TestConnectionResult, ToolCall, ToolExecutionResult, VendorConfig,
 } from "./types";
 import { authHeaderFor } from "./auth";
@@ -16,29 +16,49 @@ import { buildStableCacheFingerprint } from "../prompt-layers";
 
 /** 把统一消息翻译成 OpenAI wire messages。 */
 function toWireMessages(messages: ChatMessage[]): unknown[] {
-  return messages.map(m => {
-    if (m.role === "system") return { role: "system", content: m.content ?? "" };
-    if (m.role === "user") return { role: "user", content: m.content ?? "" };
+  const result: unknown[] = [];
+  let pendingToolImages: OpenAIContentBlock[] = [];
+  const flushToolImages = () => {
+    if (pendingToolImages.length === 0) return;
+    result.push({ role: "user", content: pendingToolImages });
+    pendingToolImages = [];
+  };
+  for (const m of messages) {
+    if (m.role !== "tool") flushToolImages();
+    if (m.role === "system") {
+      result.push({ role: "system", content: m.content ?? "" });
+      continue;
+    }
+    if (m.role === "user") {
+      result.push({ role: "user", content: m.content ?? "" });
+      continue;
+    }
     if (m.role === "tool") {
-      const wire: Record<string, unknown> = {
+      const item: Record<string, unknown> = {
         role: "tool",
         tool_call_id: m.toolCallId,
-        content: m.content ?? "",
+        content: typeof m.content === "string" ? m.content : "",
       };
-      if (m.name) wire.name = m.name;
-      return wire;
+      if (m.name) item.name = m.name;
+      pendingToolImages.push(...(m.transientToolContent ?? []).filter(
+        (block): block is Extract<OpenAIContentBlock, { type: "image_url" }> => block.type === "image_url",
+      ));
+      result.push(item);
+      continue;
     }
     // assistant：回传 content + tool_calls（OpenAI 多轮要求 assistant 消息带 tool_calls）
-    const wire: Record<string, unknown> = { role: "assistant", content: m.content || null };
+    const item: Record<string, unknown> = { role: "assistant", content: m.content || null };
     if (m.toolCalls && m.toolCalls.length > 0) {
-      wire.tool_calls = m.toolCalls.map(tc => ({
+      item.tool_calls = m.toolCalls.map(tc => ({
         id: tc.id,
         type: "function",
         function: { name: tc.name, arguments: tc.arguments },
       }));
     }
-    return wire;
-  });
+    result.push(item);
+  }
+  flushToolImages();
+  return result;
 }
 
 function toWireTools(tools?: ChatRequest["tools"]): unknown[] | undefined {

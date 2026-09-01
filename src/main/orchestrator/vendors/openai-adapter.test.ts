@@ -347,3 +347,31 @@ describe("OpenAICompatAdapter", () => {
     expect(body.messages[3]).toEqual({ role: "user", content: "那上海呢" });
   });
 });
+
+describe("OpenAICompatAdapter — transient rich tool images", () => {
+  test("keeps function outputs ordered before an ephemeral user image message", () => {
+    const adapter = new OpenAICompatAdapter("test-openai", capability);
+    const toolMessage = { role: "tool" as const, toolCallId: "tc1", name: "observe", content: "captured" };
+    Object.defineProperty(toolMessage, "transientToolContent", {
+      value: [{ type: "image_url", image_url: { url: "data:image/png;base64,aGVsbG8=" } }],
+      enumerable: false,
+    });
+    const req = adapter.buildRequest(
+      {
+        model: "m",
+        messages: [
+          { role: "assistant", content: null as never, toolCalls: [{ id: "tc1", name: "observe", arguments: "{}" }] },
+          toolMessage,
+        ],
+      },
+      { provider: "p", baseUrl: "https://e.test/v1", model: "m", apiKey: "k" },
+    );
+    const body = JSON.parse(req.body) as { messages: Array<Record<string, unknown>> };
+    expect(body.messages[1]).toMatchObject({ role: "tool", tool_call_id: "tc1", content: "captured" });
+    expect(body.messages[2]).toEqual({
+      role: "user",
+      content: [{ type: "image_url", image_url: { url: "data:image/png;base64,aGVsbG8=" } }],
+    });
+    expect(JSON.stringify(toolMessage)).not.toContain("aGVsbG8=");
+  });
+});

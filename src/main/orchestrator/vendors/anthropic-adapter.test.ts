@@ -466,3 +466,28 @@ describe("AnthropicAdapter", () => {
     expect(body.messages[0].content.map((b) => b.type)).toEqual(["image", "image"]);
   });
 });
+
+describe("AnthropicAdapter — transient rich tool images", () => {
+  test("embeds an image inside tool_result content without making it checkpoint-enumerable", () => {
+    const adapter = new AnthropicAdapter("test-anthropic", anthropicCap);
+    const toolMessage = { role: "tool" as const, toolCallId: "t1", name: "observe", content: "captured" };
+    Object.defineProperty(toolMessage, "transientToolContent", {
+      value: [{ type: "image_url", image_url: { url: "data:image/png;base64,aGVsbG8=" } }],
+      enumerable: false,
+    });
+    const req = adapter.buildRequest(
+      { model: "m", messages: [toolMessage] },
+      { provider: "p", baseUrl: "https://e.test/v1", model: "m", apiKey: "k" },
+    );
+    const body = JSON.parse(req.body) as { messages: Array<{ content: Array<Record<string, unknown>> }> };
+    expect(body.messages[0].content[0]).toEqual({
+      type: "tool_result",
+      tool_use_id: "t1",
+      content: [
+        { type: "text", text: "captured" },
+        { type: "image", source: { type: "base64", media_type: "image/png", data: "aGVsbG8=" } },
+      ],
+    });
+    expect(JSON.stringify(toolMessage)).not.toContain("aGVsbG8=");
+  });
+});

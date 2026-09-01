@@ -8,7 +8,25 @@
 
 export const CURRENT_PLUGIN_API_VERSION = 1 as const;
 
-export type PluginCapability = "channels" | "llm";
+export type PluginCapability = "channels" | "llm" | "permissions" | "subprocess";
+
+export type PluginToolResultContentBlock =
+  | { type: "text"; text: string }
+  | {
+      type: "image";
+      /** Supported model-facing image type. */
+      mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+      /** Raw base64 payload without a data: URL prefix. */
+      data: string;
+      alt?: string;
+    };
+
+/** String remains the compatibility path for every existing plugin. */
+export type PluginToolResult = string | {
+  content: PluginToolResultContentBlock[];
+  /** Non-sensitive diagnostics only. Never include image bytes or secrets. */
+  metadata?: Record<string, unknown>;
+};
 
 export interface PluginManifest {
   /** Plugin API major version required by this plugin. */
@@ -58,8 +76,13 @@ export interface PluginTool {
   catalogHint?: string;
   category?: string;
   capability?: string;
+  /** Require an active host-issued capability lease before execution. */
+  permissionLease?: {
+    /** Scope fields are read from tool args and compared exactly. */
+    scopeArgs: string[];
+  };
   enabled: boolean;
-  risk?: "safe" | "fs-read" | "fs-write" | "shell" | "network" | "input-control";
+  risk?: "safe" | "fs-read" | "fs-write" | "shell" | "network" | "screen-read" | "input-control";
   modes?: Array<"learn" | "code" | "work">;
   inputSchema: {
     type: "object";
@@ -71,7 +94,7 @@ export interface PluginTool {
   deprecated?: boolean;
   effectKind?: "read" | "mutation" | "verification" | "external_side_effect" | "unknown";
   verificationPolicy?: "none" | "artifact" | "code" | "unknown";
-  execute(args: Record<string, unknown>, ctx?: PluginToolContext): Promise<string>;
+  execute(args: Record<string, unknown>, ctx?: PluginToolContext): Promise<PluginToolResult>;
 }
 
 export interface PluginChannelCapability {
@@ -158,6 +181,64 @@ export interface PluginLlmService {
   ): Promise<string>;
 }
 
+export type PluginPermissionRisk =
+  | "safe"
+  | "fs-read"
+  | "fs-write"
+  | "shell"
+  | "network"
+  | "screen-read"
+  | "input-control";
+
+export interface PluginCapabilityLease {
+  leaseId: string;
+  capability: string;
+  scope: Record<string, string>;
+  expiresAt: number;
+}
+
+export interface PluginPermissionService {
+  requestLease(
+    request: {
+      capability: string;
+      risk: PluginPermissionRisk;
+      reason: string;
+      scope: Record<string, string>;
+      /** 1 second to 30 minutes; host defaults to 10 minutes. */
+      ttlMs?: number;
+    },
+    toolContext: PluginToolContext,
+  ): Promise<PluginCapabilityLease | null>;
+  revokeLease(leaseId: string): void;
+}
+
+export interface PluginManagedProcessExit {
+  exitCode: number | null;
+  signal: string | null;
+}
+
+export interface PluginManagedProcess {
+  readonly pid: number;
+  write(line: string): void;
+  onStdoutLine(listener: (line: string) => void): () => void;
+  onStderrLine(listener: (line: string) => void): () => void;
+  wait(): Promise<PluginManagedProcessExit>;
+  stop(): Promise<void>;
+}
+
+export interface PluginSubprocessService {
+  spawn(options: {
+    /** Absolute executable path. Shell command strings are intentionally unsupported. */
+    executable: string;
+    args?: string[];
+    cwd?: string;
+    /** Explicit additions to a small sanitized host environment. */
+    env?: Record<string, string>;
+    startupTimeoutMs?: number;
+    maxOutputBytes?: number;
+  }): Promise<PluginManagedProcess>;
+}
+
 export interface PluginStorage {
   get<T>(key: string): T | undefined;
   set<T>(key: string, value: T): void;
@@ -177,6 +258,8 @@ export interface PluginDeps {
   /** Read-only channel discovery. Registration must use PluginContext methods. */
   channels?: { has(id: string): boolean };
   llm?: PluginLlmService;
+  permissions?: PluginPermissionService;
+  subprocess?: PluginSubprocessService;
 }
 
 export type PluginCleanup = () => void | Promise<void>;
