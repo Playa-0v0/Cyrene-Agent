@@ -48,7 +48,9 @@ export function RunRecoveryNotices({
           <button type="button" onClick={() => onResume(interruptedRun.runId)}>{t("workspaceNotices.resumeTask")}</button>
         </div>
       )}
-      {sessionTakeover?.sessionId === activeSessionId && (
+      {/* 欢迎页 activeSessionId 为 undefined，sessionTakeover 为 null 时
+          null?.sessionId 同样是 undefined，直接 === 会误判相等而在欢迎页渲染本卡片 */}
+      {sessionTakeover && sessionTakeover.sessionId === activeSessionId && (
         <div className="cy-harness-recovery">
           <span>{t("workspaceNotices.sessionTakeover")}</span>
           <button type="button" onClick={onTakeover}>{t("workspaceNotices.takeoverAndRestart")}</button>
