@@ -1,21 +1,20 @@
-name: Bug Report
-description: 反馈安装或运行问题 / Installation or runtime issue
+name: 安装/构建问题 🔧
+description: npm install / npm run build 等环境与构建失败
 labels: ["bug", "needs-triage"]
 body:
   - type: markdown
     attributes:
       value: |
-## ⚠️ 请先确认环境
-从源码构建需要 **Node.js 24 LTS**（`npm install` / `npm run build` 依赖此版本）。
-Electron runtime 当前为 **Electron 33**（暂不升级）。
+        ## ⚠️ 请先确认环境
+        从源码构建需要 **Node.js 24 LTS**（`npm install` / `npm run build` 依赖此版本）。
+        Electron runtime 当前为 **Electron 33**（暂不升级）。
 
-Please first confirm you are using **Node.js 24 LTS** for installation and build.
-Electron runtime is currently **Electron 33**.
+        > 如果是应用运行中的功能异常（不是安装/构建），请返回选择「运行时 Bug 🐛」。
 
   - type: dropdown
     id: os
     attributes:
-      label: 操作系统 / Operating System
+      label: 操作系统
       options:
         - Windows 11
         - Windows 10
@@ -27,7 +26,7 @@ Electron runtime is currently **Electron 33**.
   - type: input
     id: node-version
     attributes:
-      label: Node.js 版本 / Node.js version
+      label: Node.js 版本
       description: 运行 `node --version` 的输出
       placeholder: "v24.x.x"
       validations:
@@ -36,7 +35,7 @@ Electron runtime is currently **Electron 33**.
   - type: input
     id: npm-version
     attributes:
-      label: npm 版本 / npm version
+      label: npm 版本
       description: 运行 `npm --version` 的输出
       placeholder: "11.x.x"
       validations:
@@ -45,7 +44,7 @@ Electron runtime is currently **Electron 33**.
   - type: textarea
     id: steps
     attributes:
-      label: 复现步骤 / Reproduction steps
+      label: 复现步骤
       description: 你执行了哪些命令？按顺序列出
       placeholder: |
         1. git clone https://github.com/Playa-0v0/Cyrene-Agent.git
@@ -58,7 +57,7 @@ Electron runtime is currently **Electron 33**.
   - type: textarea
     id: error
     attributes:
-      label: 错误日志 / Error log
+      label: 错误日志
       description: |
         完整错误信息。请用 `npm install 2>&1 | tee log.txt` 保存日志，
         然后粘贴 `log.txt` 最后 ~50 行。
@@ -68,7 +67,7 @@ Electron runtime is currently **Electron 33**.
   - type: textarea
     id: expected
     attributes:
-      label: 期望行为 / Expected behavior
+      label: 期望行为
       description: 你期望发生什么？实际发生了什么？
       validations:
         required: false
@@ -76,7 +75,7 @@ Electron runtime is currently **Electron 33**.
   - type: textarea
     id: screenshots
     attributes:
-      label: 截图 / Screenshots
-      description: 如果有报错截图，请拖拽上传 / Drag and drop screenshots here
+      label: 截图
+      description: 如果有报错截图，请拖拽上传
       validations:
         required: false

@@ -1,0 +1,91 @@
+name: 运行时 Bug 🐛
+description: 应用运行中的功能异常、偶现问题、崩溃等
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## ⚠️ 我们无法重现的问题是无法修复的
+        请尽量写清触发条件和复现步骤；偶现问题请注明出现频率（如「上千次出一次」）。
+
+        > 如果是 npm install / 构建失败，请返回选择「安装/构建问题 🔧」。
+
+  - type: input
+    id: app-version
+    attributes:
+      label: 应用版本
+      description: 设置页 / 关于页显示的版本号（如 v1.1.9）
+      placeholder: "v1.x.x"
+      validations:
+        required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统
+      options:
+        - Windows 11
+        - Windows 10
+      validations:
+        required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: 出问题的会话模式
+      multiple: true
+      options:
+        - chat（聊天）
+        - work（工作）
+        - learn（学习）
+        - code（编程）
+        - 不确定 / 其他入口（渠道、定时任务等）
+      validations:
+        required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 按顺序描述你做了什么。偶现问题写触发场景即可。
+      placeholder: |
+        1.
+        2.
+        3.
+      validations:
+        required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 实际发生了什么？有没有报错提示？
+      validations:
+        required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 你认为应该发生什么？
+      validations:
+        required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 截图
+      description: |
+        如有报错弹窗、异常截图请拖拽上传。
+        日志位于 `%APPDATA%/live2d-cyrene/logs/`，可粘贴相关片段。
+      validations:
+        required: false
+
+  - type: input
+    id: frequency
+    attributes:
+      label: 出现频率
+      description: 必现 / 偶现（大约多少次出一次）
+      placeholder: "必现 / 偶现（约 N 次出 1 次）"
+      validations:
+        required: false

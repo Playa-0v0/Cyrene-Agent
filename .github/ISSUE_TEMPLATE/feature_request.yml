@@ -1,0 +1,51 @@
+name: 功能请求 ✨
+description: 提议一个新功能或改进
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🌸 感谢你的提议！
+        请先搜索已有 Issue，避免重复提交。
+        涉及核心架构、权限边界或行为调整的大功能，建议先写清动机和使用场景。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决的问题
+      description: 你遇到了什么不便？什么场景下需要这个功能？
+      placeholder: 在使用 XX 功能时，我想要……但是……
+      validations:
+        required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 期望的方案
+      description: 你希望它怎么工作？交互上长什么样？
+      validations:
+        required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 考虑过的替代方案
+      description: 有没有想过其他做法？为什么觉得现在的方案更好？
+      validations:
+        required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 相关区域
+      multiple: true
+      options:
+        - 对话 / Agent
+        - 工具 / 技能 / 插件
+        - 界面 / 交互
+        - 渠道接入（QQ、微信等）
+        - 语音（TTS / ASR / 通话）
+        - Live2D / 外观
+        - 其他
+      validations:
+        required: true
