@@ -296,8 +296,20 @@ await ctx.events.emit("updated", { value: 1 });
 
 `ctx.events.on()` 返回退订函数；即使不手动调用，停用或刷新插件时也会自动清理，进入停止
 阶段后不能再新增订阅。异步监听器会被等待，某个监听器报错或执行超过 5 秒不会影响其他
-监听器。当前宿主内置事件为
-`host:plugins:ready` 和 `host:plugins:stopping`。
+监听器。当前宿主内置事件为：
+
+- `host:plugins:ready`：插件系统启动完成；
+- `host:plugins:stopping`：插件系统开始停止；
+- `host:turn:completed`：桌面或外部渠道的一轮对话成功完成。首版 payload 仅含
+  `source`、`mode`、`conversationId` 和可选 `channel` / `runId`，不广播对话原文，
+  也不含完整历史、模型配置或工具内部状态。
+
+```js
+ctx.events.on("host:turn:completed", ({ conversationId, source, mode }) => {
+  // 宿主不会等待这里的异步工作；耗时任务应自行排队，并响应 ctx.signal。
+  ctx.log(`${source} 的会话 ${conversationId} 已完成一轮 ${mode} 对话`);
+});
+```
 
 ---
 

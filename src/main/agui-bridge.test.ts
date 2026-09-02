@@ -115,6 +115,45 @@ describe("agui-bridge sticker event ordering", () => {
     mocks.completeOnAbort = false;
   });
 
+  it("成功桌面对话把来源、模式和 canonical runId 交给收尾回调", async () => {
+    vi.resetModules();
+    mocks.handlers.clear();
+    mocks.getSession.mockReturnValue({ id: "chat-events", mode: "chat" });
+    const { registerAgUiIpc } = await import("./agui-bridge");
+    const onFinished = vi.fn(async () => ({ sticker: null }));
+    registerAgUiIpc(async () => ({
+      options: {
+        settings: { provider: "test", baseUrl: "", model: "", apiKey: "", contextWindowTokens: 256000 },
+        messages: [],
+        timeoutMs: 1000,
+        toolSystemContent: "TOOL",
+        soulSystemBaseContent: "SOUL",
+      },
+      latestUserText: "你好",
+    }), onFinished, () => null);
+
+    const handler = mocks.handlers.get(IPC.AGUI_RUN);
+    if (!handler) throw new Error("AGUI_RUN handler was not registered");
+    const ack = await handler({
+      sender: { isDestroyed: () => false, send: () => {} },
+    }, {
+      messages: [{ role: "user", content: "你好" }],
+      sessionId: "chat-events",
+    }) as { runId: string };
+    await expect.poll(() => onFinished.mock.calls.length).toBe(1);
+
+    expect(onFinished).toHaveBeenCalledWith(
+      expect.objectContaining({ reply: "抱抱你" }),
+      "你好",
+      {
+        source: "desktop",
+        mode: "chat",
+        conversationId: "chat-events",
+        runId: ack.runId,
+      },
+    );
+  });
+
   it("routes structured Ask cards to the AG-UI run sender", async () => {
     vi.resetModules();
     mocks.handlers.clear();

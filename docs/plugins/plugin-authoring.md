@@ -235,7 +235,13 @@ await ctx.events.emit("status", { online: true });
 `host:chat:message`。目前内置事件：
 
 - `host:plugins:ready`：启动扫描和自动启用完成，payload 为 `{ pluginIds: string[] }`；
-- `host:plugins:stopping`：全局插件停止开始、任何活动插件被注销之前，payload 为 `undefined`。
+- `host:plugins:stopping`：全局插件停止开始、任何活动插件被注销之前，payload 为 `undefined`；
+- `host:turn:completed`：桌面或外部渠道的一轮对话成功完成并执行宿主收尾后发布。首版 payload
+  仅包含 `source`、`mode`、`conversationId` 和可选 `channel` / `runId`，不会广播对话原文，
+  也不会包含完整历史、模型配置或工具内部状态。
+
+轮次完成事件属于旁路通知。宿主不会等待插件监听器，插件应自行排队处理持久化或网络同步，
+并在 `ctx.signal` 取消后尽快停止。若未来确需对话文本，应先单独评审权限和兼容边界。
 
 ### 动态提示词上下文
 

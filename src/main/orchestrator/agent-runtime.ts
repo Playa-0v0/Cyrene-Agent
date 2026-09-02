@@ -50,7 +50,11 @@ import { resolveRunCapabilities } from "./run-capabilities";
 import { loadStickerSettings } from "./sticker-settings";
 import type { RuntimeStateService } from "./runtime-state-service";
 import type { LlmClient } from "../services/llm/llm-client";
-import type { PluginPromptBuildInput } from "../../plugins/types";
+import type {
+  PluginTurnCompletedEvent,
+  PluginPromptBuildInput,
+  PluginPromptMode,
+} from "../../plugins/types";
 
 type EnqueueLLMTask = <T>(
   label: string,
@@ -80,13 +84,22 @@ export interface AgentRuntimeDeps {
   chatsStore: { getWorkspaceBinding: (conversationId: string) => { workspaceRoot: string; displayName: string; boundAt: number } | undefined };
   socialAtomStore: { listActive: (conversationId: string, now: number) => SocialAtom[] };
   buildPluginPromptContext: (input: PluginPromptBuildInput) => Promise<string>;
+  publishPluginHostEvent: <T>(event: string, payload: T) => Promise<void>;
 }
 
 type SchedulerRunOptions = Omit<CyreneRunOptions, "toolSystemContent" | "soulSystemBaseContent">;
 
+export interface AgentRunFinishedContext {
+  source: PluginTurnCompletedEvent["source"];
+  mode: PluginPromptMode;
+  conversationId: string;
+  channel?: string;
+  runId?: string;
+}
+
 export interface AgentRuntime {
   buildOptions(input: AguiRunInput): Promise<{ options: CyreneRunOptions; latestUserText: string }>;
-  onRunFinished(result: CyreneRunResult, latestUserText: string, channel?: ChannelId, conversationId?: string): Promise<{ sticker: string | null }>;
+  onRunFinished(result: CyreneRunResult, latestUserText: string, context: AgentRunFinishedContext): Promise<{ sticker: string | null }>;
   buildSchedulerOptions(task: ScheduledTask): Promise<SchedulerRunOptions>;
 }
 
@@ -253,9 +266,32 @@ export function createAgentRuntime(rawDeps: AgentRuntimeDeps): AgentRuntime {
       return buildAgentRunOptions(input, buildOptionsDeps);
     },
 
-    onRunFinished: async (result, latestUserText, channel, conversationId) => {
+    onRunFinished: async (result, latestUserText, context) => {
       const onRunFinishedDeps = buildOnRunFinishedDeps();
-      return onAgentRunFinished(result, latestUserText, onRunFinishedDeps, channel, conversationId);
+      const effects = await onAgentRunFinished(
+        result,
+        latestUserText,
+        onRunFinishedDeps,
+        context.channel as ChannelId | undefined,
+        context.conversationId,
+      );
+      // 调用方应只在成功终态进入收尾；此处再守住插件事件契约，避免未来新增入口误报完成。
+      const terminalStatus = result.terminal?.status;
+      if (terminalStatus !== undefined && terminalStatus !== "success") {
+        return effects;
+      }
+      const payload: PluginTurnCompletedEvent = {
+        source: context.source,
+        mode: context.mode,
+        conversationId: context.conversationId,
+        ...(context.channel ? { channel: context.channel } : {}),
+        ...(context.runId ? { runId: context.runId } : {}),
+      };
+      // 插件监听器属于旁路扩展：不等待它们，避免第三方插件延迟主回复的终态事件。
+      void rawDeps.publishPluginHostEvent("turn:completed", payload).catch((error) => {
+        console.warn("[plugins] 发布对话轮次完成事件失败", error);
+      });
+      return effects;
     },
 
     buildSchedulerOptions: async (task) => {

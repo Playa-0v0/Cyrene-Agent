@@ -39,6 +39,7 @@ import { cancelPendingApprovalsForRun } from "./permission";
 import { approvePlan, getPlanPath, moveToReview, supplementPlan } from "./orchestrator/plan-mode";
 import { buildPlanReviewCard, buildPlanSupplementCard } from "./orchestrator/harness/plan-tools";
 import type { AskUserAnswer } from "../shared/ask-clarification";
+import type { PluginPromptMode, PluginTurnCompletedEvent } from "../plugins/types";
 /**
  * 从 RUN_FINISHED 事件中提取规范的终态结果（terminal）。
  *
@@ -124,7 +125,13 @@ export interface RunFinishedEffects {
 export type OnRunFinishedFn = (
   result: CyreneRunResult,
   latestUserText: string,
-  conversationId?: string,
+  context: {
+    source: PluginTurnCompletedEvent["source"];
+    mode: PluginPromptMode;
+    conversationId: string;
+    channel?: string;
+    runId?: string;
+  },
 ) => Promise<void | RunFinishedEffects> | void | RunFinishedEffects;
 
 /** 调用方注入：拿聊天窗口（广播副作用用，可空）。 */
@@ -692,7 +699,12 @@ export function registerAgUiIpc(
           // 这些副作用假定 run 已经成功产出回复；其他终态不能保证有可用 finalAnswer。
           if (agent.lastResult && isSuccessfulCompletion) {
             const lastResult = agent.lastResult;
-            const effects = await perf.track("on_run_finished", async () => onFinished(lastResult, latestUserText, sessionId));
+            const effects = await perf.track("on_run_finished", async () => onFinished(lastResult, latestUserText, {
+              source: "desktop",
+              mode,
+              conversationId: sessionId,
+              runId,
+            }));
             if (mode !== "code" && effects?.sticker !== undefined) {
               send({
                 type: "CUSTOM",

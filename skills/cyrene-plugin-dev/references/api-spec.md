@@ -100,9 +100,9 @@ async register(ctx) {
 | `ctx.unregisterTool(id)` | 只能注销本插件注册过的工具 |
 | `ctx.registerPromptProvider(spec)` | 注册每轮动态提示词贡献；id 在当前插件内唯一，可按 chat/work/learn/code 过滤 |
 | `ctx.unregisterPromptProvider(id)` | 只能注销本插件注册过的提示词 Provider |
+| `ctx.events.on(event, listener)` | 订阅 `host:*` 或 `plugin:<id>:*` 事件；停用时自动退订 |
+| `ctx.events.emit(event, payload)` | 发布当前插件自有事件；框架自动添加 `plugin:<id>:` 前缀 |
 | `ctx.registerIpc(channel, handler)` | 注册私有 IPC，实际通道名 `plugin:<id>:<channel>`；channel 只允许字母数字 `.` `_` `-`，≤64 字符 |
-| `ctx.events.on(name, listener)` | 订阅宿主或其他插件事件，返回幂等退订函数；插件停止时自动退订 |
-| `ctx.events.emit(name, payload)` | 发布自己的事件；只能用短名，框架自动补 `plugin:<id>:` 前缀 |
 | `ctx.signal` | 只读 AbortSignal；停止流程开始时先于 `unregister()` 被取消 |
 | `ctx.onDispose(callback)` | 登记兜底清理回调（逆序执行，单个最多 5 秒） |
 | `ctx.storage.set(key, value)` / `ctx.storage.get(key)` | 私有 JSON 存储，key 匹配 `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$` |
@@ -144,7 +144,7 @@ await ctx.events.emit("updated", { value: 1 });
 - `on()` 返回幂等退订函数；插件停用/刷新/卸载时自动退订，进入停止阶段后不能再新增订阅
 - 监听器按订阅顺序执行并等待异步结果；单个失败或超过 5 秒只跳过自己，不影响其他监听器
 - 事件名 segment 只允许字母数字 `.` `_` `-`，≤64 字符
-- 当前内置宿主事件：`host:plugins:ready`（payload `{ pluginIds: string[] }`）、`host:plugins:stopping`（无 payload）
+- 当前内置宿主事件：`host:plugins:ready`（payload `{ pluginIds: string[] }`）、`host:plugins:stopping`（无 payload）、`host:turn:completed`（详见下文）
 
 ---
 
@@ -166,6 +166,23 @@ ctx.registerPromptProvider({
 - 内容进入每轮 runtime context，不修改核心提示词文件或稳定缓存前缀。
 - 多个 Provider 并行生成、按注册顺序拼接；单个最多等待 2 秒、16000 字符，总计最多 32000 字符。
 - 失败、超时或返回空字符串只跳过当前 Provider；插件停止时自动注销。
+
+---
+
+# 宿主对话轮次完成事件
+
+```js
+ctx.events.on("host:turn:completed", ({
+  source, mode, conversationId, channel, runId,
+}) => {
+  // 旁路通知不会阻塞主回复；耗时处理应自行排队，并响应 ctx.signal。
+});
+```
+
+- 仅在桌面或外部渠道的一轮对话成功完成并执行宿主收尾后发布。
+- `source` 为 `desktop` 或 `channel`；`channel` 仅渠道来源提供，`runId` 仅可取得时提供。
+- 首版 payload 只含轮次元数据，不向插件广播用户或助手的对话原文。
+- 不含完整历史、模型配置或工具内部状态；如需文本字段，应另行评审权限与兼容边界。
 
 ---
 

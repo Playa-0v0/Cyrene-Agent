@@ -54,6 +54,7 @@ import {
 import { getEmbeddingProvider, getSceneEmbeddingProvider } from "../rag/embedding";
 import { toolRegistry } from "../orchestrator/tools/registry/tool-registry";
 import { pluginPromptRegistry } from "../../plugins/prompts";
+import type { PluginManager } from "../../plugins/manager";
 import { setLive2dWindowSender } from "../orchestrator/tools/built-in-tools";
 import { registerAllTools } from "../orchestrator/tools/registry/tool-registration";
 import { LspManager } from "../lsp/manager";
@@ -154,6 +155,8 @@ async function reconcileUserMemoryIndex(): Promise<void> {
 }
 
 export function createDefaultApplicationDependencies(): ApplicationDependencies {
+  // Agent Runtime 早于插件管理器构造；通过窄闭包在运行期转发宿主事件，避免反转启动顺序。
+  let pluginManager: PluginManager | undefined;
   const readiness = createStartupReadiness();
   const activation = createWindowActivationBroker();
   const shutdown = createShutdownCoordinator({ readiness, timeoutMs: SHUTDOWN_TIMEOUT_MS });
@@ -373,6 +376,9 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         chatsStore,
         socialAtomStore: services.social.store,
         buildPluginPromptContext: (input) => pluginPromptRegistry.build(input),
+        publishPluginHostEvent: (event, payload) => pluginManager
+          ? pluginManager.publishHostEvent(event, payload)
+          : Promise.resolve(),
       }),
 
       createChannels: (runtime, services) => createChannelsSubsystem({
@@ -382,10 +388,13 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         ipc: shell.ipc,
       }),
 
-      startPlugins: (services) => startPluginRuntime({
-        llmClient: services.llm,
-        ipc: shell.ipc,
-      }),
+      startPlugins: async (services) => {
+        pluginManager = await startPluginRuntime({
+          llmClient: services.llm,
+          ipc: shell.ipc,
+        });
+        return pluginManager;
+      },
 
       createScheduler: (runtime) => createSchedulerSubsystem({
         agentRuntime: runtime,
@@ -436,7 +445,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         // AG-UI 事件流桥：渲染进程 invoke(AGUI_RUN) → CyreneAgent 跑 Agent 循环 → 事件透传
         registerAgUiIpc(
           (input) => runtime.buildOptions(input),
-          (result, latestUserText, conversationId) => runtime.onRunFinished(result, latestUserText, undefined, conversationId),
+          (result, latestUserText, context) => runtime.onRunFinished(result, latestUserText, context),
           () => reactChatWindow,
           services.proactive.proactiveConversationLifecycle,
           ipc,

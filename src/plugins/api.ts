@@ -173,6 +173,15 @@ export interface PluginEvents {
   emit<T = unknown>(event: string, payload: T): Promise<void>;
 }
 
+/** host:turn:completed 的公开 payload；首版只暴露稳定元数据，不包含对话原文。 */
+export interface PluginTurnCompletedEvent {
+  source: "desktop" | "channel";
+  mode: PluginPromptMode;
+  conversationId: string;
+  channel?: string;
+  runId?: string;
+}
+
 export interface PluginDeps {
   /** Read-only channel discovery. Registration must use PluginContext methods. */
   channels?: { has(id: string): boolean };
