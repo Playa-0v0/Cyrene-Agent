@@ -11,6 +11,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { app } from "electron";
+import { loadModelSettings, resolveModelSettingsProfile } from "../settings/model-settings";
 
 // ── 模型配置 ──
 
@@ -62,50 +63,50 @@ function parseTransport(value: unknown): MemoryModelConfig["explicitTransport"] 
  *
  * 优先级：
  *   1. 专用 memory* 字段（dedicated）— 当前未在 UI 暴露，但解析层已预留
- *   2. 主模型配置（inherited-main）— provider + apiKey 非空
+ *   2. 主模型配置（inherited-main）— 先展开默认档案再读顶层镜像
  *   3. 旧 DeepSeek 配置（legacy-deepseek）— 有 DeepSeek provider 但可能是旧配置
  *   4. 都不满足 → 抛 MemoryLlmConfigurationError
  */
 export function loadMemoryModelConfig(): MemoryModelConfig {
-  let raw: RawSettings;
+  // 1. 专用 Memory 模型配置（预留）：memory* 字段不在 ModelSettings schema 里，单独从原始 JSON 读
   try {
     const filePath = getSettingsPath();
-    if (!fs.existsSync(filePath)) {
-      return { ...LEGACY_DEEPSEEK, source: "legacy-deepseek" };
+    if (fs.existsSync(filePath)) {
+      const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as RawSettings;
+      if (raw.memoryProvider && raw.memoryApiKey) {
+        return {
+          source: "dedicated",
+          provider: raw.memoryProvider,
+          baseUrl: raw.memoryBaseUrl ?? "",
+          model: raw.memoryModel ?? "",
+          apiKey: raw.memoryApiKey,
+          explicitTransport: parseTransport(raw.explicitTransport),
+        };
+      }
     }
-    raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as RawSettings;
   } catch {
-    return { ...LEGACY_DEEPSEEK, source: "legacy-deepseek" };
+    // 读不到/解析失败 → 继续走主模型继承
   }
 
-  // 1. 专用 Memory 模型配置（预留）
-  if (raw.memoryProvider && raw.memoryApiKey) {
-    return {
-      source: "dedicated",
-      provider: raw.memoryProvider,
-      baseUrl: raw.memoryBaseUrl ?? "",
-      model: raw.memoryModel ?? "",
-      apiKey: raw.memoryApiKey,
-      explicitTransport: parseTransport(raw),
-    };
-  }
-
-  // 2. 继承主模型配置
-  const mainProvider = typeof raw.provider === "string" ? raw.provider.trim() : "";
-  const mainApiKey = typeof raw.apiKey === "string" ? raw.apiKey.trim() : "";
+  // 2. 继承主模型配置：先展开默认档案再读顶层镜像（与 loadVisionConfig / channel bot 同策略）。
+  // 顶层镜像可能指向空壳 provider（真实配置在默认档案里），直接读会把已配置的用户
+  // 误判为"无 API key"并落到 legacy-deepseek 兜底。
+  const settings = resolveModelSettingsProfile(loadModelSettings());
+  const mainProvider = settings.provider.trim();
+  const mainApiKey = settings.apiKey.trim();
   if (mainProvider && mainApiKey) {
     return {
       source: "inherited-main",
       provider: mainProvider,
-      baseUrl: typeof raw.baseUrl === "string" ? raw.baseUrl.trim() : "",
-      model: typeof raw.model === "string" ? raw.model.trim() : "",
+      baseUrl: settings.baseUrl.trim(),
+      model: settings.model.trim(),
       apiKey: mainApiKey,
-      explicitTransport: parseTransport(raw.explicitTransport),
+      explicitTransport: parseTransport(settings.explicitTransport),
     };
   }
 
   // 3. 旧 DeepSeek 兼容
-  return { ...LEGACY_DEEPSEEK, source: "legacy-deepseek" };
+  return { ...LEGACY_DEEPSEEK };
 }
 
 // ── 文本处理 ──
