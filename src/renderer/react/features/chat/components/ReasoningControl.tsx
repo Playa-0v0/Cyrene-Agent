@@ -14,6 +14,8 @@ interface ReasoningState {
   model: string;
   preference?: ReasoningPreference;
   thinkingOverride?: -1 | 0 | 1;
+  /** 当前档案解析出的协议（PRO 档仅 Responses 协议显示） */
+  transport?: "openai" | "anthropic" | "responses";
   /** 主进程实际解析到的档案 id（会话绑定 / 欢迎页待定 / 默认档案），SET 时原样回传保证读写对称 */
   modelProfileId?: string | null;
 }
@@ -28,12 +30,13 @@ function reasoningApi(): ChatReasoningApi | undefined {
 }
 
 function preferenceKey(preference: ReasoningPreference): string {
-  return `${preference.mode}:${preference.effort ?? ""}`;
+  return `${preference.mode}:${preference.effort ?? ""}:${preference.proMode ? "pro" : ""}`;
 }
 
 function preferenceLabel(preference: ReasoningPreference): string {
   if (preference.mode === "auto") return "auto";
   if (preference.mode === "off") return "off";
+  if (preference.proMode) return "PRO";
   return preference.effort ?? "on";
 }
 
@@ -55,7 +58,7 @@ export function ReasoningControl({ sessionId, modelProfileId }: { sessionId?: st
       const state = await api.getReasoningState({ sessionId, modelProfileId });
       setProviderKey(state.providerKey);
       setResolvedProfileId(state.modelProfileId ?? null);
-      setView(computeReasoningDropdown(state.providerId, state.model, state.preference, state.thinkingOverride));
+      setView(computeReasoningDropdown(state.providerId, state.model, state.preference, state.thinkingOverride, state.transport));
     } catch {
       setView(undefined);
     }

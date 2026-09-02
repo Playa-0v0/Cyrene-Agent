@@ -434,4 +434,32 @@ describe("ResponsesAdapter — structuredOutput 与推理控制", () => {
     expect(body).not.toHaveProperty("thinking");
     expect(body).not.toHaveProperty("output_config");
   });
+
+  test("proMode 翻译为 reasoning:{mode:'pro'}，effort 缺省填 defaultEffort（gpt-5.6）", () => {
+    const chatgptCap: ProviderCapability = { ...capability, id: "chatgpt" };
+    const { body } = makeBody([{ role: "user", content: "hi" }], {
+      cap: chatgptCap,
+      config: { model: "gpt-5.6", reasoning: { mode: "on", proMode: true } },
+    });
+    expect(body.reasoning).toEqual({ effort: "medium", mode: "pro" });
+    expect(body).not.toHaveProperty("reasoning_effort");
+  });
+
+  test("proMode + 显式 effort 共存：reasoning:{effort, mode:'pro'}", () => {
+    const chatgptCap: ProviderCapability = { ...capability, id: "chatgpt" };
+    const { body } = makeBody([{ role: "user", content: "hi" }], {
+      cap: chatgptCap,
+      config: { model: "gpt-5.6-sol", reasoning: { mode: "on", effort: "high", proMode: true } },
+    });
+    expect(body.reasoning).toEqual({ effort: "high", mode: "pro" });
+  });
+
+  test("proMode 不被支持的模型（gpt-5.1）→ 不发 reasoning.mode", () => {
+    const chatgptCap: ProviderCapability = { ...capability, id: "chatgpt" };
+    const { body } = makeBody([{ role: "user", content: "hi" }], {
+      cap: chatgptCap,
+      config: { model: "gpt-5.1", reasoning: { mode: "on", effort: "low", proMode: true } },
+    });
+    expect(body.reasoning).toEqual({ effort: "low" });
+  });
 });

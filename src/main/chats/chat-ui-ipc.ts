@@ -13,6 +13,7 @@ import {
   resolveModelSettingsProfile,
 } from "../settings/model-settings";
 import { resolveVendorRuntimeSettings } from "../orchestrator/vendors/runtime-settings";
+import { resolveTransport } from "../orchestrator/vendors/transport-detector";
 import { getSession } from "./chats-store";
 import { describePendingAttachment } from "../rag/file-ingest";
 import { processDocumentIndexRequest } from "../rag/document-index-ipc";
@@ -88,6 +89,12 @@ export function registerChatUiIpc(deps: ChatUiIpcDependencies): void {
       model: settings.model,
       preference: settings.reasoning,
       thinkingOverride: resolveVendorRuntimeSettings(settings).thinkingOverride,
+      // PRO 档（reasoning.mode="pro"）仅 Responses 协议存在，UI 据此决定是否显示
+      transport: resolveTransport({
+        baseUrl: settings.baseUrl,
+        explicitTransport: settings.explicitTransport,
+        provider: settings.provider,
+      }),
       modelProfileId: profile?.id ?? null,
     };
   });

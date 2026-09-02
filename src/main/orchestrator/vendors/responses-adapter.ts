@@ -19,7 +19,7 @@ import {
 } from "./types";
 import { toResponseInputItems } from "openai/lib/responses/ResponseInputItems";
 import { authHeaderFor } from "./auth";
-import { resolveReasoningCapability } from "../../../shared/reasoning";
+import { resolveEffectiveReasoning, resolveReasoningCapability } from "../../../shared/reasoning";
 import { applyReasoningPreference } from "./reasoning";
 import { getTimeoutSettings } from "../../timeout-manager";
 import { resolveAutomaticToolChoicePolicy, resolveToolChoicePolicy } from "./tool-choice-policy";
@@ -253,7 +253,19 @@ export class ResponsesAdapter implements ChatVendorAdapter {
     delete scratch.thinking;
     delete scratch.enable_thinking;
     delete scratch.output_config;
-    if (typeof effort === "string") scratch.reasoning = { effort };
+    // pro 模式（gpt-5.6 系列）：reasoning.mode="pro"，与 effort 正交。
+    // 仅 Responses 协议有此字段，openai transport 静默忽略 proMode。
+    const proMode = resolveEffectiveReasoning(
+      cfg.reasoning ?? { mode: "auto" },
+      reasoningCap,
+      getVendorRuntimeSettings().thinkingOverride,
+    ).proMode === true;
+    if (typeof effort === "string" || proMode) {
+      scratch.reasoning = {
+        ...(typeof effort === "string" ? { effort } : {}),
+        ...(proMode ? { mode: "pro" } : {}),
+      };
+    }
     Object.assign(body, scratch);
 
     // 结构化输出：response_format → text.format

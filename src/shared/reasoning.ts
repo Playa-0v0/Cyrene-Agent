@@ -59,6 +59,12 @@ export interface ReasoningCapability {
    */
   keepOnTools?: boolean;
   /**
+   * 是否支持 Responses API 的 reasoning.mode:"pro"（GPT-5.6 系列，2026-07 GA）。
+   * pro 与 effort 正交；仅 Responses 协议生效 —— Chat Completions 无该字段，
+   * openai 路径静默忽略 proMode。
+   */
+  supportsProMode?: boolean;
+  /**
    * auto 档显式映射的 effort。不设置时 auto = 不发字段（交给服务端默认）。
    * 用于服务端默认档不可控/过重的模型：GLM-5.3 服务端默认 effort=max，
    * auto 不发字段 ≡ max，多步任务思考会吃穿输出预算。
@@ -70,6 +76,8 @@ export interface ReasoningCapability {
 export interface ReasoningPreference {
   mode: ReasoningMode;
   effort?: ReasoningEffort;
+  /** Responses 专属 pro 模式（reasoning.mode="pro"）。仅 mode="on" 且 capability.supportsProMode 时生效 */
+  proMode?: boolean;
 }
 
 export interface ModelReasoningRule {
@@ -96,12 +104,14 @@ export const MODEL_REASONING_RULES: readonly ModelReasoningRule[] = [
   // ── chatgpt（OpenAI）──
   // 按具体型号拆分；GPT-5.6 当前 Chat Completions 接受 low/medium/high/xhigh/max
   // （不含 minimal）；supportsDisable=true，off → reasoning_effort:"none"。
+  // supportsProMode=true：Responses API 支持 reasoning.mode:"pro"（与 effort 正交）。
   { providerId: "chatgpt", modelPattern: /^gpt-5\.6/i, capability: {
     control: "effort",
     supportedEfforts: ["low", "medium", "high", "xhigh", "max"],
     defaultEffort: "medium",
     requestStyle: "openai-effort",
     supportsDisable: true,
+    supportsProMode: true,
   } },
   { providerId: "chatgpt", modelPattern: /^gpt-5/i, capability: {
     control: "effort",
@@ -393,7 +403,10 @@ export function resolveEffectiveReasoning(
     effort = capability.defaultEffort;
   }
 
-  return { mode, ...(effort !== undefined ? { effort } : {}) };
+  // proMode 仅在 capability 声明支持且显式为 true 时保留
+  const proMode = capability.supportsProMode === true && pref.proMode === true;
+
+  return { mode, ...(effort !== undefined ? { effort } : {}), ...(proMode ? { proMode: true } : {}) };
 }
 
 // ── normalize 白名单（用户修订 #4：白名单，不 trim）──
@@ -404,28 +417,36 @@ const EFFORT_SET: ReadonlySet<ReasoningEffort> = new Set([
 ]);
 
 /**
- * 把任意 input 归一化为合法 { mode, effort? }。
+ * 把任意 input 归一化为合法 { mode, effort?, proMode? }。
  * - 完全非法对象 → undefined
  * - mode 非法 → undefined
  * - mode 合法但 effort 非法 → 返 { mode }，effort 字段丢弃
+ * - mode 合法但 proMode 非布尔 → 返 { mode, ... }，proMode 字段丢弃
  * - 完全合法 → 原样
  */
 export function normalizeReasoningPreference(
   input: unknown,
-): { mode: ReasoningMode; effort?: ReasoningEffort } | undefined {
+): ReasoningPreference | undefined {
   if (!input || typeof input !== "object") return undefined;
-  const obj = input as { mode?: unknown; effort?: unknown };
+  const obj = input as { mode?: unknown; effort?: unknown; proMode?: unknown };
   if (typeof obj.mode !== "string" || !MODE_SET.has(obj.mode as ReasoningMode)) {
     return undefined;
   }
   const mode = obj.mode as ReasoningMode;
-  if (obj.effort === undefined || obj.effort === null) {
-    return { mode };
+  let effort: ReasoningEffort | undefined;
+  if (obj.effort !== undefined && obj.effort !== null) {
+    if (typeof obj.effort !== "string" || !EFFORT_SET.has(obj.effort as ReasoningEffort)) {
+      effort = undefined;
+    } else {
+      effort = obj.effort as ReasoningEffort;
+    }
   }
-  if (typeof obj.effort !== "string" || !EFFORT_SET.has(obj.effort as ReasoningEffort)) {
-    return { mode };
-  }
-  return { mode, effort: obj.effort as ReasoningEffort };
+  const proMode = obj.proMode === true ? true : undefined;
+  return {
+    mode,
+    ...(effort !== undefined ? { effort } : {}),
+    ...(proMode !== undefined ? { proMode } : {}),
+  };
 }
 
 /**

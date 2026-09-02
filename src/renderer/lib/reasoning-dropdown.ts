@@ -54,6 +54,7 @@ export function computeReasoningDropdown(
   model: string,
   saved: ReasoningPreference | undefined,
   thinkingOverride?: -1 | 0 | 1,
+  transport?: "openai" | "anthropic" | "responses",
 ): ReasoningDropdownView {
   const cap = resolveReasoningCapability(providerId, model);
   // 用户修正 #2：必须用 resolveEffectiveReasoning，不能 saved ?? auto
@@ -155,7 +156,7 @@ export function computeReasoningDropdown(
     };
   }
 
-  // ── effort / toggle-effort（带 supportedEfforts） ──
+  // ── effort / toggle-effort（带 supportedEfforts）──
   const efforts = cap.supportedEfforts ?? [];
   const items: ReasoningDropdownItem[] = [
     { label: "跟随模型", preference: { mode: "auto" } },
@@ -165,6 +166,14 @@ export function computeReasoningDropdown(
   }
   for (const e of efforts) {
     items.push({ label: EFFORT_LABEL[e], preference: { mode: "on", effort: e } });
+  }
+  // PRO 档（gpt-5.6 系列）：reasoning.mode="pro"，仅 Responses 协议存在该字段
+  if (cap.supportsProMode && transport === "responses") {
+    items.push({
+      label: "PRO",
+      preference: { mode: "on", proMode: true },
+      hint: "最高智能档，延迟更高（Responses API reasoning.mode=pro）",
+    });
   }
   return {
     disabled: false,
@@ -177,6 +186,7 @@ export function computeReasoningDropdown(
 function statusTextFor(effective: ReasoningPreference): string {
   if (effective.mode === "auto") return "跟随模型";
   if (effective.mode === "off") return "关闭";
+  if (effective.proMode) return "PRO";
   if (effective.effort) return EFFORT_LABEL[effective.effort];
   return "开启";
 }
