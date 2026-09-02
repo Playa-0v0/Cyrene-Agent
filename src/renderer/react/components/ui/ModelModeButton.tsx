@@ -1,4 +1,4 @@
-import modelIconUrl from "../../assets/status-moods/陪伴中.png?url";
+import modelIconUrl from "../../assets/model.png?url";
 import { useTranslation } from "../../i18n";
 
 interface ModelModeButtonProps {
