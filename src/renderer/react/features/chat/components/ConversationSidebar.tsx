@@ -295,7 +295,13 @@ export function ConversationSidebar({
               groupable={supportsProjects ? {
                 collapsible: true,
                 expandedKeys,
-                onExpand: setExpandedKeys,
+                // @ant-design/x 2.9.0 在 setState updater 内部调用 onExpand（use-collapsible.js），
+                // updater 会在渲染期执行，直接 setExpandedKeys 会触发
+                // "Cannot update a component while rendering a different component"。
+                // 用 queueMicrotask 把 setState 挪出渲染期，行为不变。
+                onExpand: (keys) => {
+                  queueMicrotask(() => setExpandedKeys(keys));
+                },
                 label: (group) => {
                   const project = projects.get(group);
                   if (!project) return null;
