@@ -1640,14 +1640,14 @@ window.settings?.onChannelsStatusChanged((status) => {
 });
 
 // ===== channels panel (连接手机) =====
-// 飞书配置输入框（Phase 2 长连接版：只需 App ID + App Secret）
+// 飞书配置输入框（长连接版：只需 App ID + App Secret）
 // 微信按钮
 
 
 
 
 
-// ===== Phase 3.4：消息日志 =====
+// ===== 消息日志 =====
 
 
 
@@ -1657,7 +1657,7 @@ window.settings?.onChannelsStatusChanged((status) => {
 // （也可以在用户展开 details 时再拉，但保持简单直接拉）
 void loadChannelsPanel();
 
-// ===== Phase 2: 音乐工具面板 =====
+// ===== 音乐工具面板 =====
 // 备注：window.music.* 已在 preload 中通过 contextBridge 暴露。
 // 由于 renderer 走 Vite 打包、main/preload 走 esbuild，两端类型不互通，
 // 这里直接用 (window as any).music 做弱类型化调用，避免给 global.d.ts 加一堆 cross-bundle 类型。

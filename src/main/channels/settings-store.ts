@@ -137,7 +137,7 @@ export interface ChannelRuntimeConfig {
 }
 
 export interface WechatChannelConfig extends ChannelRuntimeConfig {
-  /** 待审批用户列表（Phase 1 接入 OpenClaw pairing 后实装） */
+  /** 待审批用户列表。TODO：当前微信 iLink 模式无 pairing 概念（pairing IPC 为空实现），字段暂未使用，保留给将来需要审批流的接入。 */
   pairingPending?: Array<{ code: string; senderId: string; createdAt: number }>;
   /** 当前扫码登录二维码（base64 PNG），会话级不持久化 */
 }

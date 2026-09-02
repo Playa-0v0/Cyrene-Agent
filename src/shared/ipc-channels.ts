@@ -327,7 +327,7 @@ export const IPC = {
   CALL_ERROR: "call:error",               // main → renderer：错误
   CALL_STOP: "call:stop",                 // renderer → main：挂断
 
-  // 多渠道（Phase 0 骨架，Phase 1+ 实装微信/飞书）
+  // 多渠道（微信/飞书/QQ/QQ 机器人）
   CHANNELS_GET_CONFIG: "channels:get-config",
   CHANNELS_SAVE_CONFIG: "channels:save-config",
   CHANNELS_LIST: "channels:list",
@@ -354,7 +354,7 @@ export const IPC = {
   CHANNELS_QQ_TEST_CONNECTION: "channels:qq:test-connection",
   // QQ 官方机器人（QQ 开放平台）专属
   CHANNELS_QQBOT_TEST_CONNECTION: "channels:qqbot:test-connection",
-  // Phase 3.4：消息日志
+  // 消息日志
   CHANNELS_LOG_GET: "channels:log:get",
   CHANNELS_LOG_CLEAR: "channels:log:clear",
 

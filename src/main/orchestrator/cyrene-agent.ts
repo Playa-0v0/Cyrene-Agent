@@ -170,7 +170,11 @@ export interface CyreneRunOptions {
   };
   /** 可用 Skill 列表（feature flag 开启时使用）。Skill 路由层不依赖该字段是否存在。 */
   availableSkills?: SkillRouteInfo[];
-  /** ExecutionLedger：同进程工具去重缓存(设计稿 v3 §5.5.1.1,指 docs/design/2026-08-08-cyreneHarnessloopdesign.md)。CyreneAgent 内部默认从 ExecutionLedgerStore 取,调用方一般不用传。 */
+  /**
+   * ExecutionLedger：同进程工具去重缓存（设计稿 v3 §5.5.1.1，
+   * 指 docs/design/2026-08-08-cyreneHarnessloopdesign.md）。
+   * CyreneAgent 内部默认从 ExecutionLedgerStore 取，调用方一般不用传。
+   */
   executionLedger?: ExecutionLedger;
   /**
    * 可信工作区根目录（来自 Conversation Workspace Binding）。

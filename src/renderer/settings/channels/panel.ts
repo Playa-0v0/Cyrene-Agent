@@ -218,7 +218,7 @@ export async function loadChannelsPanel(): Promise<void> {
     renderQqDetail(status.qq);
     renderChannelStatus(channelsQqBotStatusEl, status.qqbot?.phase ?? "offline", status.qqbot?.message);
     renderQqBotDetail(status.qqbot);
-    // Phase 3.4：拉一次消息日志
+    // 拉一次消息日志
     void refreshChannelsLog();
   } catch (err) {
     console.warn("[Channels] loadChannelsPanel 失败:", err);
@@ -260,7 +260,7 @@ export async function loadChannelsPanel(): Promise<void> {
     el?.addEventListener("change", scheduleSave);
   }
 
-  // 监听安装进度（Phase 1+ 才会收到）
+  // 监听安装进度（渠道运行时安装进行时才会收到）
   window.settings.onChannelsInstallProgress((progress) => {
     const target = progress.channel === "wechat" ? channelsWechatStatusEl : progress.channel === "feishu" ? channelsFeishuStatusEl : progress.channel === "qq" ? channelsQqStatusEl : null;
     if (target) renderChannelStatus(target, "starting", `${progress.phase} ${progress.pct}%`);
@@ -276,7 +276,7 @@ export async function loadChannelsPanel(): Promise<void> {
     renderQqBotDetail(s.qqbot);
   });
 
-  // ===== 飞书交互（Phase 2 长连接版） =====
+  // ===== 飞书交互（长连接版） =====
 
   // 显示/隐藏 App Secret
   channelsFeishuAppSecretRevealBtn?.addEventListener("click", () => {
@@ -523,7 +523,7 @@ export async function loadChannelsPanel(): Promise<void> {
     }
   });
 
-  // ===== Phase 3.4：消息日志事件绑定 =====
+  // ===== 消息日志事件绑定 =====
   channelsLogRefreshBtn?.addEventListener("click", () => void refreshChannelsLog());
   channelsLogClearBtn?.addEventListener("click", async () => {
     if (!confirm("确认清空所有 bot 消息日志？")) return;

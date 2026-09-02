@@ -5,7 +5,8 @@
 //   - 共享密钥 header：X-Cyrene-Channel-Secret（启动时自动生成 32 字节 hex）
 //   - 路由前缀：/channels/<id>/inbound   /channels/<id>/healthz
 //
-// Phase 0 只搭骨架（健康检查 + 路由框架）。Phase 1 接入 wechat 路由，Phase 2 接入 feishu 路由。
+// 通用入站路由 + 健康检查。当前无内置渠道依赖它（飞书走长连接、微信走 ilink 协议），
+// 保留给需要 HTTP 回调的外部渠道使用。
 import * as http from "http";
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { loadChannelsSettings, saveChannelsSettings } from "./settings-store";

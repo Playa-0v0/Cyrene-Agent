@@ -1,8 +1,7 @@
 // init-channels —— channels 模块的主入口。由 index.ts 在 app.whenReady() 调一次。
 //
-// 当前阶段：
-//   - Phase 0: 骨架 + dispatcher + inbound-server
-//   - Phase 2: 接入 FeishuAdapter（自建飞书应用 + 事件订阅）
+// 已接入渠道：飞书（长连接）、微信（ilink 协议）、QQ（NapCat OneBot）、QQ 机器人（官方网关）。
+// 另含消息日志与渠道安装进度上报。
 //
 // 生命周期（Task 1 起，显式化）：
 //   - initializeChannels()：注入 dispatcher、注册 adapter、注册 IPC（无网络/定时器副作用）
@@ -245,7 +244,7 @@ function registerChannelsIpc(ipcOption?: IpcScope): void {
     return { ok: true, phase: "ready" };
   });
 
-  // Phase 2 长连接：测试连接 = 重建 LarkChannel（SDK 内部会自动跑 WSS handshake）
+  // 飞书长连接：测试连接 = 重建 LarkChannel（SDK 内部会自动跑 WSS handshake）
   ipc.handle(IPC.CHANNELS_FEISHU_TEST_CONNECTION, async () => {
     const adapter = channelManager.getAdapter("feishu") as FeishuAdapter | undefined;
     if (!adapter) return { ok: false, error: "飞书 adapter 未注册" };
@@ -285,7 +284,7 @@ function registerChannelsIpc(ipcOption?: IpcScope): void {
     return await qqBotAdapter.testConnection();
   });
 
-  // Phase 3.4：消息日志
+  // 消息日志
   ipc.handle(IPC.CHANNELS_LOG_GET, (_e, limit: unknown) => {
     const n = typeof limit === "number" && limit > 0 ? limit : 100;
     return getRecentLog(n);

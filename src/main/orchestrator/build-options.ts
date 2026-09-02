@@ -19,7 +19,8 @@
 //   broadcastRuntimeStateChanged / observeRuntimeState
 //   sticker 文本预处理 / stickerEmbeddingIndex / getEmbeddingProvider / loadStickerSettings
 //
-// 这些全部塞到 BuildOptionsDeps 里。dispatcher 在 Phase 1 注入同样的 deps 即可。
+// 这些全部塞到 BuildOptionsDeps 里。dispatcher / agent-runtime 通过
+// buildBuildOptionsDeps()（agent-runtime.ts）注入同一份 deps，保证口径一致。
 import { existsSync } from "fs";
 import { basename } from "path";
 import {

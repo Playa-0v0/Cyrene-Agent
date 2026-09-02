@@ -1,6 +1,6 @@
 // ContextUsageRing 单测：纯函数口径 + 静态渲染断言（renderToStaticMarkup，项目惯例）。
 //
-// 重点覆盖施工文档 Phase 3 验收点：
+// 重点覆盖边界与验收用例：
 // - visualRatio clamp（含 ratio>1：文本诚实显示 117%，圆环 clamp 整圈）
 // - contextWindowTokens<=0 / NaN：不渲染进度弧与百分比，菜单仍显示绝对值
 // - 分级变色（normal / warm≥70% / alert≥90%）

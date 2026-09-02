@@ -197,7 +197,7 @@ export interface MemoryJudgeTurn {
 
 /**
  * L2 热层 DMAE 运行时状态（V5）。
- * 随 memory.json 持久化；archived 条目在 Phase 1 跳过更新。
+ * 随 memory.json 持久化；archived 条目不参与热层更新（见 dmae-v5 spec）。
  */
 export interface L2DmaeState {
   l2Id: string
