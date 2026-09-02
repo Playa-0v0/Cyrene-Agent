@@ -462,4 +462,37 @@ describe("ResponsesAdapter — structuredOutput 与推理控制", () => {
     });
     expect(body.reasoning).toEqual({ effort: "low" });
   });
+
+  // ── MiniMax-M3（anthropic-adaptive）：Responses 协议下 thinking → reasoning.effort 映射 ──
+  // 官方 Responses API：省略 reasoning = 默认 effort:"none"（关闭）；非 none 值开启推理但不调深度。
+
+  test("MiniMax-M3 + on → thinking.type=adaptive 翻译为 reasoning:{effort:'minimal'}", () => {
+    const minimaxCap: ProviderCapability = { ...capability, id: "minimax" };
+    const { body } = makeBody([{ role: "user", content: "hi" }], {
+      cap: minimaxCap,
+      config: { model: "MiniMax-M3", reasoning: { mode: "on" } },
+    });
+    expect(body.reasoning).toEqual({ effort: "minimal" });
+    expect(body).not.toHaveProperty("thinking");
+  });
+
+  test("MiniMax-M3 + off → thinking.type=disabled 不发 reasoning（落默认 effort:none 即关闭）", () => {
+    const minimaxCap: ProviderCapability = { ...capability, id: "minimax" };
+    const { body } = makeBody([{ role: "user", content: "hi" }], {
+      cap: minimaxCap,
+      config: { model: "MiniMax-M3", reasoning: { mode: "off" } },
+    });
+    expect(body).not.toHaveProperty("reasoning");
+    expect(body).not.toHaveProperty("thinking");
+  });
+
+  test("MiniMax-M3 + auto → 不发 reasoning（跟随服务端默认）", () => {
+    const minimaxCap: ProviderCapability = { ...capability, id: "minimax" };
+    const { body } = makeBody([{ role: "user", content: "hi" }], {
+      cap: minimaxCap,
+      config: { model: "MiniMax-M3", reasoning: { mode: "auto" } },
+    });
+    expect(body).not.toHaveProperty("reasoning");
+    expect(body).not.toHaveProperty("thinking");
+  });
 });

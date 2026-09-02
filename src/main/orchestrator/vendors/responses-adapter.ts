@@ -249,6 +249,11 @@ export class ResponsesAdapter implements ChatVendorAdapter {
       },
     );
     const effort = scratch.reasoning_effort;
+    // thinking 字段删除前捕获开关状态：thinking-type / anthropic-adaptive 风格模型
+    // （如 MiniMax-M3）的 on 会落在这里。Responses API 无 thinking 字段，
+    // 语义映射：effort 非 none 值 = 开启推理（不调深度）。
+    const scratchThinking = scratch.thinking as { type?: unknown } | undefined;
+    const thinkingOn = scratchThinking?.type === "adaptive" || scratchThinking?.type === "enabled";
     delete scratch.reasoning_effort;
     delete scratch.thinking;
     delete scratch.enable_thinking;
@@ -260,9 +265,16 @@ export class ResponsesAdapter implements ChatVendorAdapter {
       reasoningCap,
       getVendorRuntimeSettings().thinkingOverride,
     ).proMode === true;
-    if (typeof effort === "string" || proMode) {
+    // thinking on 且无显式 effort（M3 无 effort 档）→ effort:"minimal" 开启推理；
+    // thinking off / auto → 不发字段，落 Responses 默认（MiniMax-M3 默认 effort:"none" 即关闭）。
+    const resolvedEffort = typeof effort === "string"
+      ? effort
+      : thinkingOn
+        ? "minimal"
+        : undefined;
+    if (resolvedEffort !== undefined || proMode) {
       scratch.reasoning = {
-        ...(typeof effort === "string" ? { effort } : {}),
+        ...(resolvedEffort !== undefined ? { effort: resolvedEffort } : {}),
         ...(proMode ? { mode: "pro" } : {}),
       };
     }
