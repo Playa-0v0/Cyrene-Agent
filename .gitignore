@@ -125,6 +125,9 @@ sim-result/
 # Codebuddy IDE scratch（plan 草稿等，会话级缓存）
 .codebuddy/
 
+# 本地 issue 回复草稿（ant-design/x 等上游 issue 沟通用，不发布）
+.github/issue-reply-draft.md
+
 # Agent / CLI 一次性验证目录（regenerated，每次 worktree 都不一样名字）
 .tmp-*/
 .tmp-builtin-cli-*
