@@ -175,11 +175,12 @@ export function ChatPage() {
   useEffect(() => {
     const settings = settingsApprovalApi();
     if (!settings) return;
-    return settings.onPermissionApprovalRequest((request) => {
+    const offRequest = settings.onPermissionApprovalRequest((request) => {
       const currentMode = activeModeRef.current;
       const currentSessionId = activeSessionIdsRef.current[currentMode];
       const ownerSessionId = findSessionIdForRun(activeRunsBySession.current, request.runId)
         ?? currentSessionId;
+      // 路由不到会话时先丢弃：主进程每 10s 幂等重播，会话就绪后卡片自然出现。
       if (!ownerSessionId) return;
       setInteractionForSession(ownerSessionId, permissionInteraction(request));
       const activeRun = activeRunsBySession.current[ownerSessionId];
@@ -188,6 +189,24 @@ export function ChatPage() {
         runCheckpointBySessionRef.current[ownerSessionId]?.("waiting_user");
       }
     });
+    // 结算广播：pending 已在主进程被结算（用户已答 / run 取消），
+    // 渲染端据此立即清卡——这是「僵尸审批卡（点了没反应）」的根治点。
+    const offSettled = settings.onPermissionApprovalSettled((settlement) => {
+      setInteractionsBySession((current) => {
+        for (const [sessionId, entry] of Object.entries(current)) {
+          if (entry.interaction.kind === "permission" && entry.interaction.id === settlement.id) {
+            const next = { ...current };
+            delete next[sessionId];
+            return next;
+          }
+        }
+        return current;
+      });
+    });
+    return () => {
+      offRequest();
+      offSettled();
+    };
   }, []);
 
   useEffect(() => {
@@ -376,6 +395,16 @@ export function ChatPage() {
       if (event.name === "cyrene.choice") {
         const interaction = normalizeDeferredPlanChoice(event.value, activeSessionId);
         if (interaction) setInteractionForSession(activeSessionId, interaction);
+        return;
+      }
+      if (event.name === "cyrene.choice.dismiss") {
+        // run 事件闸之外的 dismiss（老版选择卡超时 / run 结束后发出的结算）：
+        // 匹配当前 ask 卡时清掉，避免留下点不出结果的僵尸卡。
+        setInteractionsBySession((current) => {
+          const entry = current[activeSessionId];
+          if (!entry || entry.interaction.kind !== "ask" || !shouldDismissAsk(entry.interaction, event.value)) return current;
+          return clearSessionInteraction(current, activeSessionId);
+        });
         return;
       }
       if (!event.name.startsWith("cyrene.plan.")) return;
@@ -2102,10 +2131,12 @@ export function ChatPage() {
               if (!settings) return;
               setInteractionBusyForSession(activeSessionId, true);
               void settings.resolvePermissionApproval(id, allowed).then((result) => {
+                // ok:false = pending 已在主进程被结算（run 取消等）：卡片不可能再提交成功，直接清掉，
+                // 避免留下一张点多少次都没反应的僵尸卡。
                 if (result.ok) {
-                  clearInteractionForSession(activeSessionId);
                   runCheckpointBySessionRef.current[activeSessionId]?.("running");
                 }
+                clearInteractionForSession(activeSessionId);
                 setInteractionBusyForSession(activeSessionId, false);
               }).catch(() => setInteractionBusyForSession(activeSessionId, false));
             }}

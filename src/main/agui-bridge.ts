@@ -488,6 +488,14 @@ export function registerAgUiIpc(
     // 这覆盖：upstream 连续发两个 terminal、success 后 error、error 后 success 等竞态。
     const settlementGate = new RunSettlementGate();
     let lifecycleEnded = false;
+    // run 终态统一清理：从 activeRuns 移除 + 清理该 run 关联的 pending 审批/选择卡。
+    // 审批卡不再设超时，任何终态路径（success/cancelled/timeout/error）都必须走到这里，
+    // 否则 pending promise 会永久悬挂；取消时会广播 PERMISSION_APPROVAL_SETTLED 让渲染端清卡。
+    const cleanupRunState = (): void => {
+      activeRuns.delete(runId);
+      cancelPendingChoicesForRun(runId);
+      cancelPendingApprovalsForRun(runId);
+    };
     const endLifecycle = (): void => {
       if (lifecycleEnded) return;
       lifecycleEnded = true;
@@ -662,18 +670,18 @@ export function registerAgUiIpc(
             send(pendingRunFinishedEvent);
             pendingRunFinishedEvent = null;
           }
-          activeRuns.delete(runId);
+          cleanupRunState();
           endLifecycle();
           return;
         }
         // 补发 RUN_ERROR 事件，渲染端据此收尾（invoke 早已 resolve，靠事件驱动）
         send({ type: "RUN_ERROR", message, code, threadId, runId });
-        activeRuns.delete(runId);
+        cleanupRunState();
         endLifecycle();
       },
       complete: async () => {
         perf.mark("agent_run_complete");
-        activeRuns.delete(runId);
+        cleanupRunState();
         // complete 路径下 settlement 应已由 next(RUN_FINISHED) 写入。
         // 若 upstream 走裸 complete（没有 RUN_FINISHED），必须补发一个合成的 RUN_FINISHED，
         // 否则 renderer 收到零个终态事件，exactly-once 退化为 at-most-once。

@@ -301,6 +301,8 @@ export const IPC = {
   PERMISSION_APPROVAL_REQUEST: "permission:approval-request",
   // renderer → main：审批结果回传
   PERMISSION_APPROVAL_RESOLVE: "permission:approval-resolve",
+  // main → renderer：审批结算广播（用户已答 / run 取消），渲染端据此清卡
+  PERMISSION_APPROVAL_SETTLED: "permission:approval-settled",
   // main → renderer：计划模式状态变化广播（任何入口触发都走这条）
   PLAN_STATE_CHANGED: "plan:state-changed",
   // renderer → main：设置计划模式 on/off（显式目标，不是 toggle）

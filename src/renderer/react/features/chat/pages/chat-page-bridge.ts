@@ -80,9 +80,16 @@ export interface PermissionApprovalRequest {
   risk: string;
 }
 
+export interface PermissionApprovalSettled {
+  id: string;
+  runId?: string;
+  reason: "answered" | "cancelled" | "unavailable";
+}
+
 export interface SettingsApprovalApi {
   onPermissionApprovalRequest: (callback: (request: PermissionApprovalRequest) => void) => () => void;
   resolvePermissionApproval: (id: string, allowed: boolean) => Promise<{ ok: boolean }>;
+  onPermissionApprovalSettled: (callback: (settlement: PermissionApprovalSettled) => void) => () => void;
 }
 
 export interface PublicModelConfig {

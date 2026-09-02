@@ -9,7 +9,6 @@ import * as fs from "fs";
 import * as path from "path";
 import { IPC } from "../shared/ipc-channels";
 import { createAbortError } from "./abort-utils";
-import { getTimeoutSettings } from "./timeout-manager";
 import { logger, LogTag } from "./logger";
 import {
   policyFor,
@@ -86,17 +85,35 @@ export function initPermissionFromDisk(): void {
 // ── 审批弹窗（per-action 档位下使用） ─────────────────────
 // 通过 IPC 把审批请求发到任意一个有焦点的窗口（一般是 chat 或 settings），
 // 渲染端弹一个卡片，用户点同意/拒绝后回传结果。
+//
+// 审批不设超时：pending 只能被「用户点击」或「run 终态清理」结算。
+// 为防渲染端就绪前丢请求（会话切换/窗口重载），主进程每 10s 幂等重播一次，
+// 渲染端 setInteractionForSession 是同 id 覆盖，重播无副作用。
+// 任何一侧结算（answered / cancelled / unavailable）都会广播
+// PERMISSION_APPROVAL_SETTLED，渲染端据此清卡，杜绝「点了没反应」的僵尸卡。
+
+/** 重播间隔：渲染端丢首次广播时，最多等这么久就能等到重播。 */
+const APPROVAL_REBROADCAST_INTERVAL_MS = 10_000;
 
 interface PendingApproval {
   resolve: (allowed: boolean) => void;
   reject: (err: Error) => void;
-  timer: NodeJS.Timeout;
+  /** 重播定时器：结算时必须清掉。 */
+  rebroadcastTimer: NodeJS.Timeout;
   /** 关联的 canonical runId，用于 cancelPendingApprovalsForRun。 */
   runId?: string;
 }
 
 const pendingApprovals = new Map<string, PendingApproval>();
 let approvalCounter = 0;
+
+export type ApprovalSettleReason = "answered" | "cancelled" | "unavailable";
+
+export interface ApprovalSettledPayload {
+  id: string;
+  runId?: string;
+  reason: ApprovalSettleReason;
+}
 
 export interface ApprovalRequest {
   id: string;
@@ -105,42 +122,63 @@ export interface ApprovalRequest {
   toolDescription: string;
   args: Record<string, unknown>;
   risk: ToolRiskLevel;
-  timeoutMs: number;
   /** 可选 runId，用于 cancel 时按 run 清理。 */
   runId?: string;
 }
 
+function broadcastToAllWindows(channel: string, payload: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(channel, payload);
+  }
+}
+
+/**
+ * 结算一条 pending 审批：清重播定时器、从 map 移除、广播结算事件、执行 settle。
+ * 所有结算路径（用户点击 / run 取消 / 无窗口）都必须走这里，保证渲染端总能收到通知。
+ */
+function settlePendingApproval(
+  id: string,
+  reason: ApprovalSettleReason,
+  settle: (pending: PendingApproval) => void,
+): void {
+  const pending = pendingApprovals.get(id);
+  if (!pending) return;
+  clearInterval(pending.rebroadcastTimer);
+  pendingApprovals.delete(id);
+  broadcastToAllWindows(IPC.PERMISSION_APPROVAL_SETTLED, {
+    id,
+    runId: pending.runId,
+    reason,
+  } satisfies ApprovalSettledPayload);
+  settle(pending);
+}
+
 /**
  * 向用户发起一次审批请求，等用户点同意/拒绝。
- * 60 秒不响应自动拒绝。
+ * 不设超时，无限等待直到用户回应或所属 run 终态取消。
  */
 export function requestApproval(request: Omit<ApprovalRequest, "id">): Promise<boolean> {
   return new Promise<boolean>((resolve, reject) => {
     const id = "approve-" + (++approvalCounter) + "-" + Date.now();
-    const timeout = getTimeoutSettings().userChoiceTimeout;
-    const timer = setTimeout(() => {
-      pendingApprovals.delete(id);
-      console.warn(LOG_PREFIX, `审批超时（${timeout}ms 未响应），自动拒绝:`, request.toolId);
-      resolve(false);
-    }, timeout);
-    pendingApprovals.set(id, { resolve, reject, timer, runId: request.runId });
-
     const payload: ApprovalRequest = { id, ...request };
     console.log(LOG_PREFIX, "向渲染端发送审批请求:", id, request.toolId);
 
-    // 广播给所有窗口（chat 窗口会优先显示卡片）
-    const wins = BrowserWindow.getAllWindows();
-    if (wins.length === 0) {
-      // 没有窗口可以审批 → 直接拒绝
-      clearTimeout(timer);
-      pendingApprovals.delete(id);
+    // 没有窗口可以审批 → 直接拒绝（应用退出中的边缘情况）
+    if (BrowserWindow.getAllWindows().length === 0) {
       console.warn(LOG_PREFIX, "无窗口可审批，自动拒绝");
       resolve(false);
       return;
     }
-    for (const win of wins) {
-      win.webContents.send(IPC.PERMISSION_APPROVAL_REQUEST, payload);
-    }
+
+    const rebroadcastTimer = setInterval(() => {
+      broadcastToAllWindows(IPC.PERMISSION_APPROVAL_REQUEST, payload);
+    }, APPROVAL_REBROADCAST_INTERVAL_MS);
+    if (typeof rebroadcastTimer.unref === "function") rebroadcastTimer.unref();
+
+    pendingApprovals.set(id, { resolve, reject, rebroadcastTimer, runId: request.runId });
+
+    // 首次广播给所有窗口（chat 窗口会优先显示卡片）
+    broadcastToAllWindows(IPC.PERMISSION_APPROVAL_REQUEST, payload);
   });
 }
 
@@ -167,10 +205,8 @@ export function registerPermissionIpc(ipcOption?: IpcScope): void {
       console.warn(LOG_PREFIX, "审批回传未匹配到 pending:", payload?.id);
       return { ok: false };
     }
-    clearTimeout(pending.timer);
-    pendingApprovals.delete(payload.id);
     console.log(LOG_PREFIX, "审批结果:", payload.id, payload.allowed ? "同意" : "拒绝");
-    pending.resolve(Boolean(payload.allowed));
+    settlePendingApproval(payload.id, "answered", (p) => p.resolve(Boolean(payload.allowed)));
     return { ok: true };
   });
 
@@ -209,14 +245,13 @@ export async function checkPermission(input: {
       reason: "当前档位「" + ACCESS_LEVEL_LABEL[level] + "」不允许此操作（risk=" + input.risk + "）。请到设置 → 昔涟 → 本地文件权限提升档位。",
     };
   }
-  // ask → 弹审批
+  // ask → 弹审批（不设超时，等用户回应或 run 终态取消）
   const approved = await requestApproval({
     toolId: input.toolId,
     toolName: input.toolName,
     toolDescription: input.toolDescription,
     args: input.args,
     risk: input.risk,
-    timeoutMs: getTimeoutSettings().userChoiceTimeout,
     runId: input.runId,
   });
   if (approved) return { allowed: true };
@@ -225,15 +260,14 @@ export async function checkPermission(input: {
 
 /**
  * 取消指定 runId 关联的所有 pending 审批。
- * 在 AGUI_CANCEL abort signal 后调用，清理权限卡片的 pending 状态与 timer。
- * 渲染端通过 RUN_FINISHED(result.status="cancelled") 自然收到卡片关闭信号。
+ * 在 AGUI_CANCEL abort signal 后调用，清理权限卡片的 pending 状态与重播定时器。
+ * 每次结算都会广播 PERMISSION_APPROVAL_SETTLED，渲染端据此立即清卡，
+ * 不再依赖 RUN_FINISHED 事件（可能被渲染端事件闸过滤）兜底。
  */
 export function cancelPendingApprovalsForRun(runId: string): void {
-  for (const [id, pending] of pendingApprovals) {
+  for (const [id, pending] of [...pendingApprovals]) {
     if (pending.runId === runId) {
-      clearTimeout(pending.timer);
-      pendingApprovals.delete(id);
-      pending.reject(createAbortError());
+      settlePendingApproval(id, "cancelled", (p) => p.reject(createAbortError()));
       console.log(LOG_PREFIX, "cancelPendingApprovalsForRun 清理:", id, "runId=", runId);
     }
   }

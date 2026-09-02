@@ -422,7 +422,7 @@ const settingsApi = {
     return () => ipcRenderer.removeListener(IPC.PLAN_STATE_CHANGED, listener);
   },
 
-  // 审批弹窗：主进程在 per-action 档位下推过来的请求（每 60 秒超时自动拒绝）
+  // 审批弹窗：主进程在 per-action 档位下推过来的请求（不设超时，等用户回应或 run 取消）
   onPermissionApprovalRequest: (
     cb: (req: { id: string; toolId: string; toolName: string; toolDescription: string; args: Record<string, unknown>; risk: string }) => void
   ): (() => void) => {
@@ -432,6 +432,14 @@ const settingsApi = {
   },
   resolvePermissionApproval: (id: string, allowed: boolean): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IPC.PERMISSION_APPROVAL_RESOLVE, { id, allowed }),
+  // 审批结算广播：pending 已在主进程被结算（用户已答 / run 取消），渲染端据此清卡
+  onPermissionApprovalSettled: (
+    cb: (settlement: { id: string; runId?: string; reason: "answered" | "cancelled" | "unavailable" }) => void
+  ): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, settlement: Parameters<typeof cb>[0]) => cb(settlement);
+    ipcRenderer.on(IPC.PERMISSION_APPROVAL_SETTLED, listener);
+    return () => ipcRenderer.removeListener(IPC.PERMISSION_APPROVAL_SETTLED, listener);
+  },
   // 截图热键捕获（设置页临时挂起全局快捷键）
   beginScreenshotHotkeyCapture: () => ipcRenderer.invoke(IPC.SCREENSHOT_HOTKEY_CAPTURE_START),
   endScreenshotHotkeyCapture: () => ipcRenderer.invoke(IPC.SCREENSHOT_HOTKEY_CAPTURE_END),
