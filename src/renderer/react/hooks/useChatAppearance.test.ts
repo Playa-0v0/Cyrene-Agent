@@ -26,9 +26,9 @@ describe("applyChatAppearance", () => {
     expect(dataset.assistantBubble).toBe("off");
   });
 
-  it("defaults existing settings to bubbles on", () => {
+  it("defaults existing settings to bubbles off", () => {
     applyChatAppearance({ chatLineHeight: 1.75 });
 
-    expect(dataset.assistantBubble).toBe("on");
+    expect(dataset.assistantBubble).toBe("off");
   });
 });

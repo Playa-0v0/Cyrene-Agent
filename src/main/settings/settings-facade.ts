@@ -114,7 +114,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   asrShowTranscript: false,
   screenshotHotkey: "Alt+Shift+S",
   chatLineHeight: 1.75,
-  assistantBubbleEnabled: true,
+  assistantBubbleEnabled: false,
   toolModeOverrides: {},
   chatToolsEnabled: false,
   skillModeOverrides: {},

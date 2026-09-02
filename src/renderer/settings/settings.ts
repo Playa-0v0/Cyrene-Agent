@@ -189,7 +189,7 @@ if (!window.settings) {
       petVisible: true,
       petZoom: 1,
       chatLineHeight: 1.75,
-      assistantBubbleEnabled: true,
+      assistantBubbleEnabled: false,
       chatParaSpacing: 0.5,
       sidebarVisible: true,
       tasksVisible: true,
@@ -1023,7 +1023,7 @@ async function loadGeneralSettings(): Promise<void> {
     chatLineHeightInput.value = String(cfg.chatLineHeight ?? 1.75);
     chatLineHeightVal.textContent = (cfg.chatLineHeight ?? 1.75).toFixed(2);
     document.documentElement.style.setProperty("--rb-chat-line-height", String(cfg.chatLineHeight ?? 1.75));
-    assistantBubbleEnabledInput.checked = cfg.assistantBubbleEnabled ?? true;
+    assistantBubbleEnabledInput.checked = cfg.assistantBubbleEnabled ?? false;
     chatParaSpacingInput.value = String(cfg.chatParaSpacing ?? 0.5);
     chatParaSpacingVal.textContent = (cfg.chatParaSpacing ?? 0.5).toFixed(2) + "em";
     document.documentElement.style.setProperty("--rb-chat-para-spacing", (cfg.chatParaSpacing ?? 0.5) + "em");
