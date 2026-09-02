@@ -295,7 +295,9 @@ export function createAgentRuntime(rawDeps: AgentRuntimeDeps): AgentRuntime {
     },
 
     buildSchedulerOptions: async (task) => {
-      const settings = rawDeps.loadModelSettings();
+      // 与 channel bot / 聊天路径同策略：先展开默认模型档案再取顶层镜像，
+      // 否则用户只在档案里配模型时顶层 baseUrl/apiKey 可能为空，定时任务会调不到 LLM。
+      const settings = resolveModelSettingsProfile(rawDeps.loadModelSettings());
       const profile = rawDeps.loadUserProfile();
       const generalSettings = rawDeps.loadGeneralSettings();
       const messages = [{ role: "user" as const, content: task.prompt }];
@@ -321,6 +323,9 @@ export function createAgentRuntime(rawDeps: AgentRuntimeDeps): AgentRuntime {
           baseUrl: settings.baseUrl,
           model: settings.model,
           apiKey: settings.apiKey,
+          // 协议与推理偏好需与聊天路径一致透传，否则定时任务会按默认协议发请求。
+          explicitTransport: settings.explicitTransport,
+          reasoning: settings.reasoning,
           contextWindowTokens: settings.contextWindowTokens,
         },
         messages: [{ role: "system" as const, content: systemContent }, ...messages],
