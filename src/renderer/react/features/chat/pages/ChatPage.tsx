@@ -7,15 +7,8 @@ import { TodoPanel } from "../components/TodoPanel";
 import { CodeGitPanel } from "../components/CodeGitPanel";
 import type { PlanReviewPhase } from "../components/PlanReviewPanel";
 import { ChatPageInspector, type ChatPageInspectorTabId } from "../components/ChatPageInspector";
-import type { TodoItem } from "../../../../../shared/todo-types";
 import {
-  normalizeChoiceInteraction,
   normalizeDeferredPlanChoice,
-  normalizeTaskPlanPresentation,
-  isFormalAnswerCommitted,
-  resolveRunFinishedStage,
-  resolveTerminalContent,
-  shouldClearComposerInteractionForTerminal,
   shouldDismissAsk,
   type ComposerInteraction,
 } from "../components/run-presentation";
@@ -26,13 +19,11 @@ import {
   FileDropOverlay,
   RunRecoveryNotices,
 } from "../components/ChatWorkspaceNotices";
-import { applyAgentRoundBoundary, createRoundProcessMessage } from "../components/agent-rounds";
-import { applyTaskDelegationEvent, normalizeTaskDelegationEvent } from "../components/task-delegations";
 import { getTtsPlaybackSnapshot, playTtsToCompletion, stopTtsPlayback } from "../components/tts-playback";
 import { EarlyTtsPlaybackQueue } from "../tts/early-tts-queue";
 
-import type { AgentRoundRecord, ChatMessage, ChatSession, ChatSessionMeta, ConversationMode, ProcessMessageRecord, ReasoningBlock, RunActivityRecord, TaskDelegationDisplayRecord, ToolExecutionRecord } from "../../../../../shared/chat-types";
-import { isContextUsageSnapshot, type ContextUsageSnapshot } from "../../../../../shared/context-usage";
+import type { ChatMessage, ChatSession, ChatSessionMeta, ConversationMode } from "../../../../../shared/chat-types";
+import { type ContextUsageSnapshot } from "../../../../../shared/context-usage";
 import { ChatPagePanelHost } from "../components/ChatPagePanelHost";
 import { useUserCallPreference } from "../../../hooks/useUserNickname";
 import { resolveRevisableLastTurn } from "../components/last-turn-actions";
@@ -44,17 +35,13 @@ import {
   choiceApi,
   settingsApprovalApi,
   sidebarApi,
-  type AguiEvent,
   type ModelConfigApi,
   type PublicModelConfig,
 } from "./chat-page-bridge";
 import {
   getInitialMode,
   isConversationMode,
-  normalizeWeatherData,
-  parseSessionRunActiveError,
   permissionInteraction,
-  stageForStep,
   toUiMessages,
 } from "./chat-page-normalizers";
 import {
@@ -64,22 +51,18 @@ import {
   type OpenSessionArgs,
   type ReactSessionMode,
 } from "./openSessionByDeps";
-import { RunEventGate } from "./run-event-gate";
-import { splitTextForReveal } from "./message-reveal";
+import { AgentRunController, type AgentRunInput } from "./run/AgentRunController";
 import {
   clearSessionInteraction,
-  buildTodoRecoveryContext,
   bindWorkspaceName,
   findSessionIdForRun,
   hasActiveRunForSession,
   hydrateSessionMessages,
-  mergeHarnessTodosForSession,
   patchSessionMessage,
   sessionInteraction,
   setSessionInteraction,
   setSessionInteractionBusy,
   type SessionInteractionState,
-  startSessionTodos,
   type TodoStateBySession,
 } from "./session-runtime-state";
 import "../../../components/ui/SidebarToggle.css";
@@ -506,7 +489,6 @@ export function ChatPage() {
   }
 
   function handleTtsCacheKey(
-    targetMode: ConversationMode,
     sessionId: string,
     messageId: string,
     cacheKey: string,
@@ -662,661 +644,82 @@ export function ChatPage() {
   // 渲染期间同步安装真实实现，保证 mount effect 不会先观察到默认 no-op。
   refreshSessionsRef.current = refreshSessions;
 
-  async function runModel(input: {
-    targetMode: ConversationMode;
-    sessionId: string;
-    userMessageId: string;
-    assistantId: string;
-    session: ChatSession;
-    attachments: ComposerAttachment[];
-    resumeFromRunId?: string;
-    takeoverFromRunId?: string;
-  }) {
-    const api = aguiApi();
-    const store = chatStore();
-    if (!api || !store) {
-      const visibleError = t("chatPage.errorModelServiceNotReady");
-      updateMessage(input.sessionId, input.assistantId, {
-        content: visibleError,
-        loading: false,
-        waitingForFirstEvent: false,
-        streaming: false,
-        responseStarted: true,
-      });
-      await store?.append(input.sessionId, {
-        id: input.assistantId,
-        role: "model",
-        content: visibleError,
-        at: Date.now(),
-      });
-      return;
-    }
-
-    modelBusyByModeRef.current = { ...modelBusyByModeRef.current, [input.targetMode]: true };
-    activeRunsBySession.current = {
-      ...activeRunsBySession.current,
-      [input.sessionId]: { assistantId: input.assistantId, mode: input.targetMode },
-    };
-    setModelBusyByMode((current) => ({ ...current, [input.targetMode]: true }));
-    const earlyTtsQueue = createEarlyTtsQueue(input.targetMode, input.sessionId, input.assistantId);
-    let streamContent = "";
-    // RUN_FINISHED.result.status，用于区分 success / cancelled / timeout / runtime_error
-    let terminalStatus: string | undefined;
-    let reasoningContent = "";
-    let reasoningBlocks: ReasoningBlock[] = [];
-    let processMessages: ProcessMessageRecord[] = [];
-    let agentRounds: AgentRoundRecord[] = [];
-    let taskDelegations: TaskDelegationDisplayRecord[] = [];
-    let activeRoundId: string | undefined;
-    let processMessageSequence = 0;
-    let finalMessageCompleted = false;
-    let revealCancelled = false;
-    let revealChain: Promise<void> = Promise.resolve();
-    let sticker: string | null = null;
-    let toolExecutions: ToolExecutionRecord[] = [];
-    let runStarted = false;
-    let runActivity: RunActivityRecord | undefined;
-    let currentTodos: TodoItem[] = [];
-    let persistedFinalContent = "";
-    // 上下文容量快照：preRequest 每轮实时覆盖（纯内存），terminal 随 checkpoint 落盘。
-    let contextUsage: ContextUsageSnapshot | undefined;
-    const assistantAt = Date.now();
-    let checkpointTimer: number | undefined;
-    let checkpointChain = Promise.resolve<ChatSession | null>(null);
-    const activeReasoningStarts = new Map<string, number>();
-    let currentReasoningId: string | undefined;
-    let resolveTerminal!: (error?: Error) => void;
-    const terminal = new Promise<Error | undefined>((resolve) => {
-      resolveTerminal = resolve;
-    });
-    const buildCheckpoint = (
-      status: "running" | "waiting_user" | "terminal",
-    ): ChatMessage => ({
-      id: input.assistantId,
-      role: "model",
-      content: status === "terminal" ? persistedFinalContent : "",
-      reasoning: reasoningContent || undefined,
-      reasoningBlocks,
-      processMessages,
-      agentRounds,
-      taskDelegations,
-      runActivity,
-      at: assistantAt,
-      sticker,
-      toolExecutions,
-      contextUsage,
-      runSnapshot: {
-        runId: activeRunsBySession.current[input.sessionId]?.runId,
-        status,
-        terminalStatus: status === "terminal"
-          ? (terminalStatus as "success" | "cancelled" | "timeout" | "runtime_error" | undefined)
-          : undefined,
-        todos: currentTodos,
-        updatedAt: Date.now(),
-      },
-    });
-    const writeCheckpoint = (
-      status: "running" | "waiting_user" | "terminal",
-    ): Promise<ChatSession | null> => {
-      const snapshot = buildCheckpoint(status);
-      checkpointChain = checkpointChain
-        .catch(() => null)
-        .then(() => store.upsert(input.sessionId, snapshot));
-      return checkpointChain;
-    };
-    const checkpointRun = (
-      status: "running" | "waiting_user" | "terminal",
-      immediate = false,
-    ): Promise<ChatSession | null> => {
-      if (checkpointTimer !== undefined) {
-        window.clearTimeout(checkpointTimer);
-        checkpointTimer = undefined;
-      }
-      if (immediate) return writeCheckpoint(status);
-      checkpointTimer = window.setTimeout(() => {
-        checkpointTimer = undefined;
-        void writeCheckpoint(status);
-      }, 350);
-      return checkpointChain;
-    };
-    // 落盘确认：终态快照写入会话存储后上报主进程，
-    // 是插件桌面轮次结束事件（turn:finished）发布的双条件之一
-    const reportRunPersisted = (): void => {
-      const runId = activeRunsBySession.current[input.sessionId]?.runId;
-      if (runId) api.reportRunPersisted?.({ runId, finalMessageId: input.assistantId });
-    };
-    runCheckpointBySessionRef.current = {
-      ...runCheckpointBySessionRef.current,
-      [input.sessionId]: (status) => {
-        void checkpointRun(status, true);
-      },
-    };
-    await checkpointRun("running", true);
-    const updateRunTool = (toolId: string, patch: Partial<ToolExecutionRecord>) => {
-      const index = toolExecutions.findIndex((tool) => tool.id === toolId);
-      toolExecutions = index === -1
-        ? [...toolExecutions, {
-            id: toolId,
-            name: patch.name ?? t("chatPage.toolCallFallbackName"),
-            status: patch.status ?? "running",
-            result: patch.result,
-            argsText: patch.argsText,
-            changes: patch.changes,
-            roundId: patch.roundId ?? activeRoundId,
-          }]
-        : toolExecutions.map((tool, toolIndex) => toolIndex === index ? { ...tool, ...patch } : tool);
-      updateMessage(input.sessionId, input.assistantId, { toolExecutions });
-    };
-    const enqueuePublicTextReveal = (content: string, publish: (chunk: string) => void) => {
-      if (input.targetMode === "chat") {
-        publish(content);
-        return;
-      }
-      revealChain = revealChain.then(async () => {
-        for (const chunk of splitTextForReveal(content)) {
-          if (revealCancelled) break;
-          publish(chunk);
-          await new Promise<void>((resolve) => window.setTimeout(resolve, 14));
-        }
-      });
-    };
-    const publishRunActivity = () => {
-      if (!runActivity) return;
-      updateMessage(input.sessionId, input.assistantId, { runActivity: { ...runActivity } });
-    };
-    const updateActiveReasoningStart = () => {
-      const starts = [...activeReasoningStarts.values()];
-      if (!runActivity) return;
-      runActivity = {
-        ...runActivity,
-        activeReasoningStartedAt: starts.length ? Math.min(...starts) : undefined,
-      };
-    };
-    const completeRunActivity = (keepExpanded = false) => {
-      if (!runActivity || runActivity.completedAt === undefined) {
-        const completedAt = Date.now();
-        for (const startedAt of activeReasoningStarts.values()) {
-          runActivity = {
-            ...(runActivity ?? { startedAt: completedAt, reasoningMs: 0 }),
-            reasoningMs: (runActivity?.reasoningMs ?? 0) + Math.max(0, completedAt - startedAt),
-          };
-        }
-        activeReasoningStarts.clear();
-        runActivity = {
-          ...(runActivity ?? { startedAt: completedAt, reasoningMs: 0 }),
-          completedAt,
-          activeReasoningStartedAt: undefined,
-          keepExpanded,
-        };
-        publishRunActivity();
-      }
-    };
-    const markFirstResponse = () => {
-      updateMessage(input.sessionId, input.assistantId, { waitingForFirstEvent: false });
-    };
-    const updateReasoningBlock = (id: string, patch: Partial<ReasoningBlock>) => {
-      const index = reasoningBlocks.findIndex((block) => block.id === id);
-      reasoningBlocks = index < 0
-        ? [...reasoningBlocks, { id, content: "", afterToolCount: toolExecutions.length, roundId: activeRoundId, ...patch }]
-        : reasoningBlocks.map((block, blockIndex) => blockIndex === index ? { ...block, ...patch } : block);
-      reasoningContent = reasoningBlocks.map((block) => block.content).filter(Boolean).join("\n\n");
-      updateMessage(input.sessionId, input.assistantId, { reasoning: reasoningContent || undefined, reasoningBlocks });
-      void checkpointRun("running");
-    };
-
-    const handleEvent = (event: AguiEvent) => {
-      if (event.type === "CUSTOM" && event.name === "cyrene.round") {
-        const value = event.value as { action?: unknown; roundId?: unknown } | null | undefined;
-        if ((value?.action === "start" || value?.action === "end") && typeof value.roundId === "string") {
-          const next = applyAgentRoundBoundary(
-            { rounds: agentRounds, activeRoundId },
-            value.action,
-            value.roundId,
-          );
-          agentRounds = next.rounds;
-          activeRoundId = next.activeRoundId;
-          updateMessage(input.sessionId, input.assistantId, { agentRounds });
-          void checkpointRun("running", true);
-        }
-      } else if (event.type === "RUN_STARTED") {
-        runStarted = true;
-        runActivity = { startedAt: Date.now(), reasoningMs: 0 };
-        setIsCompressingContext(false);
-        if (event.runId) {
-          // RUN_STARTED.runId 必须与 ack.runId 一致（由 bridge 注入 options.runId 保证）。
-          // 不一致时只 warn 不重写，避免渲染端拿到错误 runId 后无法 cancel。
-          const existing = activeRunsBySession.current[input.sessionId];
-          if (existing?.runId && existing.runId !== event.runId) {
-            console.warn(
-              `[ChatPage] RUN_STARTED.runId (${event.runId}) 与 ack.runId (${existing.runId}) 不一致，` +
-              `请检查 bridge 是否正确注入 options.runId。保留 ack.runId 作为权威值。`,
-            );
-          } else {
-            activeRunsBySession.current = {
-              ...activeRunsBySession.current,
-              [input.sessionId]: { ...(existing ?? { assistantId: input.assistantId, mode: input.targetMode }), runId: event.runId },
-            };
-          }
-        }
-        currentTodos = [];
-        setTodoStateBySession((current) => startSessionTodos(
-          current,
-          input.sessionId,
-          event.runId ?? activeRunsBySession.current[input.sessionId]?.runId,
-        ));
-        updateMessage(input.sessionId, input.assistantId, {
-          waitingForFirstEvent: false,
-          runActivity: { ...runActivity },
-          runStage: { kind: "understanding" },
-          runId: event.runId ?? activeRunsBySession.current[input.sessionId]?.runId,
-        });
-        void checkpointRun("running", true);
-        return;
-      }
-      if (!runStarted) return;
-      if (
-        event.type === "REASONING_MESSAGE_START"
-        || event.type === "REASONING_MESSAGE_CONTENT"
-        || event.type === "REASONING_MESSAGE_END"
-        || event.type === "TOOL_CALL_START"
-        || event.type === "TOOL_CALL_RESULT"
-        || event.type === "TOOL_CALL_END"
-        || event.type === "TEXT_MESSAGE_START"
-        || event.type === "TEXT_MESSAGE_CONTENT"
-        || event.type === "TEXT_MESSAGE_END"
-        || event.type === "CUSTOM"
-      ) markFirstResponse();
-      if (event.type === "REASONING_MESSAGE_START") {
-        const reasoningId = event.messageId ?? crypto.randomUUID();
-        currentReasoningId = reasoningId;
-        activeReasoningStarts.set(reasoningId, Date.now());
-        updateActiveReasoningStart();
-        publishRunActivity();
-        updateReasoningBlock(reasoningId, { streaming: true });
-        updateMessage(input.sessionId, input.assistantId, {
-          loading: false,
-          reasoningStreaming: true,
-          runStage: { kind: "responding" },
-        });
-      } else if (event.type === "REASONING_MESSAGE_CONTENT" && event.delta) {
-        const reasoningId = event.messageId ?? currentReasoningId ?? crypto.randomUUID();
-        currentReasoningId = reasoningId;
-        const current = reasoningBlocks.find((block) => block.id === reasoningId)?.content ?? "";
-        updateReasoningBlock(reasoningId, { content: current + event.delta, streaming: true });
-        updateMessage(input.sessionId, input.assistantId, {
-          reasoning: reasoningContent,
-          loading: false,
-          reasoningStreaming: true,
-        });
-      } else if (event.type === "REASONING_MESSAGE_END") {
-        const reasoningId = event.messageId ?? currentReasoningId;
-        if (reasoningId) {
-          const startedAt = activeReasoningStarts.get(reasoningId);
-          if (startedAt && runActivity) {
-            runActivity = {
-              ...runActivity,
-              reasoningMs: runActivity.reasoningMs + Math.max(0, Date.now() - startedAt),
-            };
-          }
-          activeReasoningStarts.delete(reasoningId);
-          updateActiveReasoningStart();
-          publishRunActivity();
-          updateReasoningBlock(reasoningId, { streaming: false });
-        }
-        currentReasoningId = undefined;
-        updateMessage(input.sessionId, input.assistantId, { reasoningStreaming: false, loading: false });
-        } else if (event.type === "STEP_STARTED") {
-          const stage = stageForStep(event.stepName);
-          if (stage) updateMessage(input.sessionId, input.assistantId, { runStage: stage });
-        } else if (event.type === "TOOL_CALL_START" && event.toolCallId) {
-          updateRunTool(event.toolCallId, {
-            name: event.toolCallName ?? t("chatPage.toolCallFallbackName"),
-            status: "running",
-            roundId: activeRoundId,
+  /**
+   * 模型运行入口：组装运行宿主与共享注册表，交给运行控制器执行。
+   * run 结束后的会话列表刷新与待发队列消费在 onRunFinished 中协调。
+   */
+  async function runModel(input: AgentRunInput) {
+    const controller = new AgentRunController(input, {
+      api: aguiApi(),
+      store: chatStore(),
+      host: {
+        patchMessage: (sessionId, messageId, patch) => updateMessage(sessionId, messageId, patch),
+        setInteraction: setInteractionForSession,
+        clearInteraction: clearInteractionForSession,
+        dismissAskIfMatched: (sessionId, value) => {
+          setInteractionsBySession((current) => {
+            const interaction = sessionInteraction(current, sessionId)?.interaction;
+            if (interaction?.kind !== "ask" || !shouldDismissAsk(interaction, value)) return current;
+            return clearSessionInteraction(current, sessionId);
           });
-          updateMessage(input.sessionId, input.assistantId, {
-            runStage: { kind: "executing", detail: event.toolCallName ?? t("chatPage.toolCallFallbackName") },
-          });
-      } else if (event.type === "TOOL_CALL_ARGS" && event.toolCallId && event.delta) {
-        const currentArgs = toolExecutions.find((tool) => tool.id === event.toolCallId)?.argsText ?? "";
-        updateRunTool(event.toolCallId, { argsText: currentArgs + event.delta, roundId: activeRoundId });
-      } else if (event.type === "TOOL_CALL_RESULT" && event.toolCallId) {
-        updateRunTool(event.toolCallId, {
-          status: event.status === "failed" ? "error" : "success",
-          result: (event.content ?? "").slice(0, 4000),
-          changes: event.changes,
-        });
-        void checkpointRun("running", true);
-      } else if (event.type === "TOOL_CALL_END" && event.toolCallId) {
-        updateRunTool(event.toolCallId, {});
-      } else if (event.type === "TEXT_MESSAGE_START") {
-        updateMessage(input.sessionId, input.assistantId, {
-          loading: false,
-          reasoningStreaming: false,
-          responseStarted: true,
-          streaming: true,
-          runStage: { kind: "responding" },
-        });
-      } else if (event.type === "TEXT_MESSAGE_CONTENT" && event.delta) {
-        enqueuePublicTextReveal(event.delta, (chunk) => {
-          streamContent += chunk;
-          earlyTtsQueue.append(chunk);
-          updateMessage(input.sessionId, input.assistantId, {
-            content: streamContent,
-            loading: false,
-            streaming: true,
-            responseStarted: true,
-          });
-          void checkpointRun("running");
-        });
-      } else if (event.type === "TEXT_MESSAGE_END") {
-        revealChain = revealChain.then(() => {
-          finalMessageCompleted = true;
-          updateMessage(input.sessionId, input.assistantId, { streaming: false });
-        });
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.process_text") {
-        const content = (event.value as { content?: unknown } | null | undefined)?.content;
-        if (typeof content === "string" && content.trim()) {
-          const processId = `process-${processMessageSequence++}`;
-          processMessages = [...processMessages, createRoundProcessMessage(
-            processId,
-            "",
-            toolExecutions.length,
-            activeRoundId,
-          )];
-          updateMessage(input.sessionId, input.assistantId, { processMessages });
-          enqueuePublicTextReveal(content, (chunk) => {
-            processMessages = processMessages.map((message) => message.id === processId
-              ? { ...message, content: message.content + chunk }
-              : message);
-            updateMessage(input.sessionId, input.assistantId, { processMessages });
-            void checkpointRun("running");
-          });
-        }
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.task") {
-        const delegation = normalizeTaskDelegationEvent(event.value);
-        if (delegation) {
-          taskDelegations = applyTaskDelegationEvent(taskDelegations, delegation, activeRoundId);
-          updateMessage(input.sessionId, input.assistantId, {
-            taskDelegations,
-            runStage: { kind: "executing", detail: delegation.nickname },
-          });
-          void checkpointRun("running", true);
-        }
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.choice") {
-        const interaction = normalizeChoiceInteraction(event.value);
-        if (interaction) {
-          setInteractionForSession(input.sessionId, interaction);
-          updateMessage(input.sessionId, input.assistantId, { runStage: { kind: "waiting_user" } });
-          void checkpointRun("waiting_user", true);
-        }
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.choice.dismiss") {
-        setInteractionsBySession((current) => {
-          const interaction = sessionInteraction(current, input.sessionId)?.interaction;
-          if (interaction?.kind !== "ask" || !shouldDismissAsk(interaction, event.value)) return current;
-          return clearSessionInteraction(current, input.sessionId);
-        });
-        void checkpointRun("running", true);
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.taskPlan") {
-        const taskPlan = normalizeTaskPlanPresentation(event.value);
-        if (taskPlan) {
-          updateMessage(input.sessionId, input.assistantId, {
-            taskPlan,
-            runStage: { kind: "executing" },
-          });
-        }
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.todo") {
-        // Harness 的 Todo 复用右侧现有 TodoPanel，不再复制成消息内 TaskPlanCard。
-        const items = (event.value as { items?: Array<{ id: string; content: string; status: string }> } | null | undefined)?.items;
-        if (Array.isArray(items)) {
-          const ownerRunId = event.runId ?? activeRunsBySession.current[input.sessionId]?.runId;
-          const normalized = mergeHarnessTodosForSession({
-            [input.sessionId]: {
-              runId: ownerRunId,
-              todos: currentTodos,
-              updatedAt: Date.now(),
-            },
-          }, input.sessionId, ownerRunId, items);
-          currentTodos = normalized[input.sessionId]?.todos ?? currentTodos;
-          setTodoStateBySession((current) => mergeHarnessTodosForSession(
-            current,
-            input.sessionId,
-            ownerRunId,
-            items,
-          ));
-          void checkpointRun("running", true);
-        }
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.compressingContext") {
-        setIsCompressingContext(true);
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.context.usage") {
-        // 上下文容量快照：preRequest 纯内存实时刷新（零 I/O）；
-        // terminal 用 debounce 版 checkpointRun，合并进紧随其后的 RUN_FINISHED terminal checkpoint，一次落盘。
-        const snapshot = isContextUsageSnapshot(event.value) ? event.value : undefined;
-        if (snapshot) {
-          contextUsage = snapshot;
-          updateMessage(input.sessionId, input.assistantId, { contextUsage: snapshot });
-          // session 级状态同步刷新：环形图优先读取点，手动压缩等场景不再依赖消息级兜底。
-          setSessionContextUsageBySession((current) => ({ ...current, [input.sessionId]: snapshot }));
-          if (snapshot.phase === "terminal") void checkpointRun("running");
-        }
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.sticker") {
-        sticker = typeof event.value === "string" ? event.value : null;
-        updateMessage(input.sessionId, input.assistantId, { sticker });
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.weather") {
-        const weather = normalizeWeatherData(event.value);
-        if (weather) {
-          updateMessage(input.sessionId, input.assistantId, { weather });
-        }
-      } else if (event.type === "RUN_FINISHED") {
-        // 读取 result.status 区分终态（success / cancelled / timeout / runtime_error）
-        const result = (event as { result?: { status?: string } }).result;
-        terminalStatus = result?.status;
-        if (terminalStatus !== "success") revealCancelled = true;
-        const stage = resolveRunFinishedStage(result);
-        updateMessage(input.sessionId, input.assistantId, { runStage: stage });
-        const activeRunId = activeRunsBySession.current[input.sessionId]?.runId;
-        if (shouldClearComposerInteractionForTerminal(activeRunId, event.runId)) {
-          clearInteractionForSession(input.sessionId);
-        }
-        resolveTerminal();
-      } else if (event.type === "RUN_ERROR") {
-        revealCancelled = true;
-        completeRunActivity(true);
-        updateMessage(input.sessionId, input.assistantId, { runStage: { kind: "failed" } });
-        const activeRunId = activeRunsBySession.current[input.sessionId]?.runId;
-        if (shouldClearComposerInteractionForTerminal(activeRunId, event.runId)) {
-          clearInteractionForSession(input.sessionId);
-        }
-        resolveTerminal(new Error(event.message ?? event.error ?? event.content ?? t("chatPage.errorModelRequestFailed")));
-      }
-    };
-    const eventGate = new RunEventGate<AguiEvent>();
-    const off = api.onEvent((event) => {
-      for (const accepted of eventGate.accept(event)) handleEvent(accepted);
-    });
-    activeAguiOffsRef.current.add(off);
-
-    try {
-      const general = await window.chat?.getGeneralSettings?.();
-      const ack = await api.run({
-        messages: input.session.messages.slice(-16).map((item) => ({
-          role: item.role,
-          content: item.content,
-          at: item.at,
+        },
+        updateTodos: (_sessionId, updater) => setTodoStateBySession((current) => updater(current)),
+        updateContextUsage: (sessionId, snapshot) => setSessionContextUsageBySession((current) => ({
+          ...current,
+          [sessionId]: snapshot,
         })),
-        userTurnId: input.userMessageId,
-        assistantTurnId: input.assistantId,
-        styleId: general?.currentStyleId,
-        sessionId: input.sessionId,
-        recoveryContext: buildTodoRecoveryContext(input.session.messages, input.assistantId),
-        ...(input.resumeFromRunId ? { resumeFromRunId: input.resumeFromRunId } : {}),
-        ...(input.takeoverFromRunId ? { takeoverFromRunId: input.takeoverFromRunId } : {}),
-        imageAttachments: input.attachments
-          .filter((attachment) => attachment.kind === "image" && attachment.filePath)
-          .map((attachment) => ({
-            name: attachment.name,
-            filePath: attachment.filePath!,
-            mime: attachment.mime,
-          })),
-      });
-      if (!ack.success) throw new Error(ack.error ?? t("chatPage.errorModelRequestStartFailed"));
-      // 新 run 已被主进程接受：同会话旧的守卫冲突操作卡（若有）不再有效
-      setSessionTakeover((current) => (current && current.sessionId === input.sessionId ? null : current));
-      // 立即把 ack.runId 写入 activeRunsBySession，
-      // 让 cancel 在 RUN_STARTED 事件到达前也能找到正确的 runId。
-      // RUN_STARTED.runId 必须与 ack.runId 一致（由 bridge 注入 options.runId 保证）。
-      if (ack.runId) {
-        const existing = activeRunsBySession.current[input.sessionId];
-        activeRunsBySession.current = {
-          ...activeRunsBySession.current,
-          [input.sessionId]: {
-            ...(existing ?? { assistantId: input.assistantId, mode: input.targetMode }),
-            runId: ack.runId,
-          },
-        };
-        for (const accepted of eventGate.bind(ack.runId)) handleEvent(accepted);
-        await checkpointRun("running", true);
-        if (cancelRequestedSessionsRef.current.delete(input.sessionId)) {
-          await api.cancel(ack.runId);
-        }
-      }
-      const terminalError = await terminal;
-      if (terminalError) throw terminalError;
-      await revealChain;
-
-      // 只有 success + 完整 TEXT_MESSAGE_END + 非空正文才提交正式回答。
-      // cancelled / timeout / runtime_error 与半截流都只保留在展开的过程区。
-      const formalAnswerCommitted = isFormalAnswerCommitted(streamContent, terminalStatus, finalMessageCompleted);
-      completeRunActivity(!formalAnswerCommitted);
-      const finalContent = formalAnswerCommitted ? resolveTerminalContent(streamContent, terminalStatus) : "";
-      persistedFinalContent = finalContent;
-      updateMessage(input.sessionId, input.assistantId, {
-        content: finalContent,
-        loading: false,
-        waitingForFirstEvent: false,
-        streaming: false,
-        reasoning: reasoningContent || undefined,
-        reasoningBlocks,
-        processMessages,
-        agentRounds,
-        reasoningStreaming: false,
-        runActivity,
-        responseStarted: formalAnswerCommitted,
-        sticker,
-        toolExecutions,
-      });
-      const savedAssistant = await checkpointRun("terminal", true);
-      reportRunPersisted();
-      if (savedAssistant && formalAnswerCommitted) {
-        finishEarlyTtsQueue(earlyTtsQueue, finalContent);
-      } else earlyTtsQueue.cancel();
-    } catch (error) {
-      earlyTtsQueue.cancel();
-      terminalStatus = terminalStatus ?? "runtime_error";
-      completeRunActivity(true);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      // 会话守卫冲突：主进程拒绝了并发 run（典型场景：F5 后立即发消息）。
-      // 不走通用错误文案，改为挂起操作卡等用户决定是否终止旧 run 并重开本轮。
-      const conflictRunId = parseSessionRunActiveError(errorMessage);
-      if (conflictRunId) {
-        processMessages = [...processMessages, createRoundProcessMessage(
-          `process-${processMessageSequence++}`,
-          t("chatPage.sessionRunActiveNotice"),
-          toolExecutions.length,
-          activeRoundId,
-        )];
-        updateMessage(input.sessionId, input.assistantId, {
-          content: "",
-          processMessages,
-          loading: false,
-          waitingForFirstEvent: false,
-          streaming: false,
-          reasoningStreaming: false,
-          runActivity,
-          responseStarted: false,
-        });
-        persistedFinalContent = "";
-        setSessionTakeover({
-          sessionId: input.sessionId,
-          activeRunId: conflictRunId,
-          retry: async () => {
-            // 重开本轮：assistant 占位消息回到 loading，带 takeoverFromRunId 重发
-            updateMessage(input.sessionId, input.assistantId, {
-              loading: true,
-              waitingForFirstEvent: true,
-              streaming: false,
-              responseStarted: false,
+        setCompressingContext: (_sessionId, value) => setIsCompressingContext(value),
+        setModeBusy: (targetMode, busy) => {
+          if (busy) {
+            modelBusyByModeRef.current = { ...modelBusyByModeRef.current, [targetMode]: true };
+            setModelBusyByMode((current) => ({ ...current, [targetMode]: true }));
+          } else {
+            const nextBusy = { ...modelBusyByModeRef.current };
+            delete nextBusy[targetMode];
+            modelBusyByModeRef.current = nextBusy;
+            setModelBusyByMode((current) => {
+              const next = { ...current };
+              delete next[targetMode];
+              return next;
             });
-            await runModel({ ...input, takeoverFromRunId: conflictRunId });
-          },
-        });
-        await checkpointRun("terminal", true);
-        return;
-      }
-      const visibleError = t("chatPage.errorModelRequestFailedWith", { message: errorMessage });
-      processMessages = [...processMessages, createRoundProcessMessage(
-        `process-${processMessageSequence++}`,
-        visibleError,
-        toolExecutions.length,
-        activeRoundId,
-      )];
-      updateMessage(input.sessionId, input.assistantId, {
-        content: "",
-        processMessages,
-        loading: false,
-        waitingForFirstEvent: false,
-        streaming: false,
-        reasoningStreaming: false,
-        runActivity,
-        responseStarted: false,
-      });
-      persistedFinalContent = "";
-      await checkpointRun("terminal", true);
-      // 错误终态的快照也已落盘：上报落盘确认（runId 未知时静默跳过）
-      reportRunPersisted();
-    } finally {
-      if (checkpointTimer !== undefined) window.clearTimeout(checkpointTimer);
-      const checkpointCallbacks = { ...runCheckpointBySessionRef.current };
-      delete checkpointCallbacks[input.sessionId];
-      runCheckpointBySessionRef.current = checkpointCallbacks;
-      off();
-      activeAguiOffsRef.current.delete(off);
-      const currentActive = activeRunsBySession.current[input.sessionId];
-      cancelRequestedSessionsRef.current.delete(input.sessionId);
-      if (currentActive?.assistantId === input.assistantId) {
-        const nextActive = { ...activeRunsBySession.current };
-        delete nextActive[input.sessionId];
-        activeRunsBySession.current = nextActive;
-      }
-      const nextBusy = { ...modelBusyByModeRef.current };
-      delete nextBusy[input.targetMode];
-      modelBusyByModeRef.current = nextBusy;
-      setModelBusyByMode((current) => {
-        const next = { ...current };
-        delete next[input.targetMode];
-        return next;
-      });
-      void refreshSessions(input.targetMode, false);
-      // 当前 session 队列中的下一条消息自动消费
-      const queue = pendingQueueBySessionRef.current[input.sessionId] ?? [];
-      if (queue.length > 0) {
-        const [next, ...rest] = queue;
-        pendingQueueBySessionRef.current = { ...pendingQueueBySessionRef.current, [input.sessionId]: rest };
-        setPendingQueueBySession(pendingQueueBySessionRef.current);
-        const assistantId = crypto.randomUUID();
-        void dispatchUserMessage({
-          targetMode: input.targetMode,
-          sessionId: input.sessionId,
-          rawContent: next.rawContent,
-          visibleContent: next.visibleContent,
-          attachments: next.attachments,
-          userSticker: next.userSticker,
-          assistantId,
-          userMessageId: next.id,
-          keepComposer: next.keepComposer,
-        });
-      }
-    }
+          }
+        },
+        requestTakeover: (sessionId, activeRunId, retry) => setSessionTakeover({ sessionId, activeRunId, retry }),
+        clearTakeover: (sessionId) => setSessionTakeover((current) => (current && current.sessionId === sessionId ? null : current)),
+        earlyTts: {
+          start: createEarlyTtsQueue,
+          finish: finishEarlyTtsQueue,
+        },
+        onRunFinished: ({ mode, sessionId }) => {
+          void refreshSessions(mode, false);
+          // 当前 session 队列中的下一条消息自动消费
+          const queue = pendingQueueBySessionRef.current[sessionId] ?? [];
+          if (queue.length === 0) return;
+          const [next, ...rest] = queue;
+          pendingQueueBySessionRef.current = { ...pendingQueueBySessionRef.current, [sessionId]: rest };
+          setPendingQueueBySession(pendingQueueBySessionRef.current);
+          void dispatchUserMessage({
+            targetMode: mode,
+            sessionId,
+            rawContent: next.rawContent,
+            visibleContent: next.visibleContent,
+            attachments: next.attachments,
+            userSticker: next.userSticker,
+            assistantId: crypto.randomUUID(),
+            userMessageId: next.id,
+            keepComposer: next.keepComposer,
+          });
+        },
+      },
+      registries: {
+        activeRuns: activeRunsBySession,
+        checkpointTriggers: runCheckpointBySessionRef,
+        cancelRequestedSessions: cancelRequestedSessionsRef,
+        eventUnsubscribers: activeAguiOffsRef,
+      },
+      startRun: runModel,
+    });
+    await controller.start();
   }
 
   function isSessionBusy(sessionId: string): boolean {
@@ -2149,7 +1552,6 @@ export function ChatPage() {
             onRegenerateLastResponse={mode === "chat" ? regenerateLastChatResponse : undefined}
             onTtsCacheKey={activeSessionId
               ? (messageId, cacheKey, converterVersion) => handleTtsCacheKey(
-                mode,
                 activeSessionId,
                 messageId,
                 cacheKey,
