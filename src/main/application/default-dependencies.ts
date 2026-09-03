@@ -92,6 +92,7 @@ import { registerCallIpc } from "../call/call-manager";
 import { initSkills, skillRegistry } from "../skills";
 import { createSchedulerSubsystem } from "../scheduler/bootstrap";
 import { createChannelsSubsystem } from "../channels/bootstrap";
+import { createLifecyclePublisher } from "../plugin-host/lifecycle-publisher";
 import { startPluginRuntime } from "../plugin-runtime";
 import { createAgentRuntime } from "../orchestrator/agent-runtime";
 import { createRuntimeStateService } from "../orchestrator/runtime-state-service";
@@ -157,6 +158,12 @@ async function reconcileUserMemoryIndex(): Promise<void> {
 export function createDefaultApplicationDependencies(): ApplicationDependencies {
   // Agent Runtime 早于插件管理器构造；通过窄闭包在运行期转发宿主事件，避免反转启动顺序。
   let pluginManager: PluginManager | undefined;
+  // 生命周期事件发布器：插件系统就绪前发布的事件没有监听器，直接丢弃
+  const lifecyclePublisher = createLifecyclePublisher({
+    publish: (event, payload) => pluginManager
+      ? pluginManager.publishHostEvent(event, payload)
+      : Promise.resolve(),
+  });
   const readiness = createStartupReadiness();
   const activation = createWindowActivationBroker();
   const shutdown = createShutdownCoordinator({ readiness, timeoutMs: SHUTDOWN_TIMEOUT_MS });
@@ -386,6 +393,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         ttsSynthesisService: services.tts,
         getReactChatWindow: () => reactChatWindow,
         ipc: shell.ipc,
+        publishLifecycle: lifecyclePublisher,
       }),
 
       startPlugins: async (services, scheduler) => {
@@ -403,6 +411,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         agentRuntime: runtime,
         getReactChatWindow: () => reactChatWindow,
         ipc: shell.ipc,
+        publishLifecycle: lifecyclePublisher,
         // 插件任务只有在所属插件运行中才允许触发；用户任务不受影响。
         canRunTask: (task) => !task.ownerPluginId
           || (pluginManager?.isRunning(task.ownerPluginId) ?? false),

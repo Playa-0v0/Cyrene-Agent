@@ -1,6 +1,7 @@
 import type { BrowserWindow } from "electron";
 import type { IpcScope } from "../application/ipc-scope";
 import type { AgentRuntime } from "../orchestrator/agent-runtime";
+import type { LifecyclePublisher } from "../plugin-host/lifecycle-publisher";
 import { toolRegistry } from "../orchestrator/tools/registry/tool-registry";
 import type { ScheduledTask } from "./types";
 import { SchedulerEngine, type SchedulerEngineDeps } from "./scheduler-engine";
@@ -21,6 +22,8 @@ export interface SchedulerSubsystemDeps {
    * 插件停用时定时触发和手动触发都被跳过。
    */
   canRunTask?: (task: ScheduledTask) => boolean;
+  /** 生命周期事件发布器：调度轮次事件与 scheduler:finished 由此发布。 */
+  publishLifecycle?: LifecyclePublisher;
 }
 
 export interface SchedulerSubsystem {
@@ -47,6 +50,7 @@ export function createSchedulerSubsystem(deps: SchedulerSubsystemDeps): Schedule
     recordHistory: (entry) => store.recordHistory(entry),
     id: () => `hist-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     now: () => new Date(),
+    ...(deps.publishLifecycle ? { publishLifecycle: deps.publishLifecycle } : {}),
   });
 
   const engineDeps: SchedulerEngineDeps = {

@@ -275,6 +275,17 @@ export type PluginTurnFinishedEvent =
       schedulerRunId: string;
     });
 
+/**
+ * 调度任务完成事件：携带任务 ID 与历史记录 ID，供插件把轮次事件与任务执行关联。
+ * 只含稳定元数据，不含任务提示词与模型输出正文。
+ */
+export interface PluginSchedulerFinishedEvent extends PluginHostEventBase {
+  taskId: string;
+  schedulerRunId: string;
+  status: PluginTurnStatus;
+  durationMs?: number;
+}
+
 /** 会话列表的稳定投影；只暴露插件需要的字段，不透出内部索引和存储细节。 */
 export interface PluginConversationSummary {
   id: string;

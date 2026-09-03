@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto";
 import type { BrowserWindow } from "electron";
 import type { IpcScope } from "../application/ipc-scope";
 import { IPC } from "../../shared/ipc-channels";
+import type { PluginPromptMode, PluginTurnStatus } from "../../plugins/api";
 import { loadGeneralSettings } from "../settings/settings-facade";
 import { loadModelSettings, loadVisionConfig, resolveModelSettingsProfile } from "../settings/model-settings";
+import type { LifecyclePublisher } from "../plugin-host/lifecycle-publisher";
 import { CyreneAgent } from "../orchestrator/cyrene-agent";
 import { toolRegistry } from "../orchestrator/tools/registry/tool-registry";
 import { decideImageSendStrategy } from "../chat/image-send-strategy";
@@ -50,6 +53,8 @@ export interface ChannelsSubsystemDeps {
   getReactChatWindow: () => BrowserWindow | null;
   /** 共享 IPC scope；传入后 channels IPC 由组合根统一注销。 */
   ipc?: IpcScope;
+  /** 生命周期事件发布器：渠道轮次事件由此发布。 */
+  publishLifecycle?: LifecyclePublisher;
 }
 
 /**
@@ -139,28 +144,55 @@ export function createChannelsSubsystem(
 
     const threadId = `thread-${sessionId}-${Date.now()}`;
     const agent = new CyreneAgent({ threadId, description: `bot:${msg.channel}:${msg.senderId}` });
-    const reply = await new Promise<string>((resolve, reject) => {
-      agent.runWithEvents(options).subscribe({
-        complete: () => {
-          resolve(agent.lastResult?.reply ?? "");
-        },
-        error: (err) => reject(err instanceof Error ? err : new Error(String(err))),
-      });
+    // 渠道消息不写入桌面会话 Store：轮次事件只带渠道会话标识，不提供消息边界
+    const mode: PluginPromptMode = options.conversationMode
+      ?? (options.executionMode === "chat" ? "chat" : "work");
+    const runId = randomUUID();
+    const runStartedAt = Date.now();
+    deps.publishLifecycle?.publishTurnStarted({
+      source: "channel",
+      channel: msg.channel,
+      conversationId: sessionId,
+      runId,
+      mode,
     });
-    channelResult.text = reply;
-    // Observable 在超时终态下也会正常 complete；只有成功终态才能进入记忆、表情等成功收尾。
-    const terminalStatus = agent.lastResult?.terminal?.status;
-    if (agent.lastResult && (terminalStatus === undefined || terminalStatus === "success")) {
-      const finished = await deps.agentRuntime.onRunFinished(agent.lastResult, agentUserText, {
-        source: "channel",
-        mode: options.conversationMode ?? (options.executionMode === "chat" ? "chat" : "work"),
-        conversationId: sessionId,
-        channel: msg.channel,
+    let lifecycleStatus: PluginTurnStatus = "runtime_error";
+    try {
+      const reply = await new Promise<string>((resolve, reject) => {
+        agent.runWithEvents(options).subscribe({
+          complete: () => {
+            resolve(agent.lastResult?.reply ?? "");
+          },
+          error: (err) => reject(err instanceof Error ? err : new Error(String(err))),
+        });
       });
-      channelResult.sticker = finished.sticker;
+      lifecycleStatus = agent.lastResult?.terminal?.status ?? "success";
+      channelResult.text = reply;
+      // Observable 在超时终态下也会正常 complete；只有成功终态才能进入记忆、表情等成功收尾。
+      const terminalStatus = agent.lastResult?.terminal?.status;
+      if (agent.lastResult && (terminalStatus === undefined || terminalStatus === "success")) {
+        const finished = await deps.agentRuntime.onRunFinished(agent.lastResult, agentUserText, {
+          source: "channel",
+          mode,
+          conversationId: sessionId,
+          channel: msg.channel,
+        });
+        channelResult.sticker = finished.sticker;
+      }
+      void indexConversationTurn(sessionId, agentUserText, reply);
+      return channelResult;
+    } finally {
+      // 无论成功、超时还是异常退出，轮次结束事件都要发布一次
+      deps.publishLifecycle?.publishTurnFinished({
+        source: "channel",
+        channel: msg.channel,
+        conversationId: sessionId,
+        runId,
+        mode,
+        status: lifecycleStatus,
+        durationMs: Date.now() - runStartedAt,
+      });
     }
-    void indexConversationTurn(sessionId, agentUserText, reply);
-    return channelResult;
   });
 
   setDispatcherSynthesizeTts(async (text: string, context) => {
