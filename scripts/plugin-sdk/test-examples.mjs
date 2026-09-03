@@ -12,7 +12,10 @@ const sdkDir = path.join(repoRoot, "packages", "plugin-sdk");
 const examplesDir = path.join(repoRoot, "examples");
 const exampleIds = ["weather-tool", "long-term-memory", "scheduled-automation", "local-asr-contract"];
 
-const npmCli = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+// npm 的 cli 入口：优先取 npm run 注入的 npm_execpath（跨平台指向真实 npm-cli.js，
+// Linux CI 上 node 与 npm 不在同一目录）；直接跑 node 脚本时回退 Windows 安装器布局
+const npmCli = process.env.npm_execpath
+  ?? path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
 const tscJs = path.join(repoRoot, "node_modules", "typescript", "bin", "tsc");
 
 function fail(message) {

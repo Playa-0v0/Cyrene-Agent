@@ -18,9 +18,11 @@ function fail(message) {
   process.exit(1);
 }
 
-// npm 的 cli 入口随 Node 发行（node_modules/npm/bin/npm-cli.js），
-// 直接用 node 驱动，避免 Windows 上派生 .cmd 的已知问题
-const npmCli = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+// npm 的 cli 入口：优先取 npm run 注入的 npm_execpath（跨平台指向真实 npm-cli.js，
+// Linux CI 上 node 与 npm 不在同一目录）；直接跑 node 脚本时回退 Windows 安装器布局。
+// 始终用 node 驱动该 js 入口，避免 Windows 上派生 .cmd 的已知问题
+const npmCli = process.env.npm_execpath
+  ?? path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
 
 // 1. Schema 无漂移
 execFileSync(
