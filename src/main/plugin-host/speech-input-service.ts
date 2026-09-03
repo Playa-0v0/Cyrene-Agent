@@ -1,13 +1,15 @@
 /**
  * 独占语音输入租约服务：主进程全局同一时刻只允许一个插件持有租约。
  *
- * 设计要点（与实现计划阶段 5 对齐）：
+ * 设计要点（与实现计划阶段 5/6 对齐）：
  * - acquire() 在一次同步临界区内完成"检查占用 → 冻结目标 → 登记插件资源"，
  *   中途不让出事件循环，避免两个插件同时拿到租约；
  * - 目标冻结自活动聊天目标登记表：页面内切换会话不迁移、不终止已取得的
  *   租约；页面重载/导航/销毁或冻结会话被删除时租约自动中止（signal 触发）；
- * - commit() 只校验租约本身、冻结会话是否仍存在、非空文本和插件状态，
- *   不校验当前 UI 是否仍显示被冻结会话；同一租约的多次 commit 串行执行；
+ * - active-call 目标冻结通话代次：取得租约时接管通话输入（停止内置 ASR），
+ *   通话结束立即中止租约；代次单调递增，旧租约不可能提交到下一次通话；
+ * - commit() 只校验租约本身、冻结目标是否仍有效、非空文本和插件状态；
+ *   同一租约的多次 commit 串行执行；
  * - release() 幂等；插件停用、激活回滚（资源跟踪器清理）、目标失效和
  *   应用退出都收敛到同一条释放路径。
  */
@@ -23,6 +25,35 @@ import type { ActiveChatTarget, ActiveChatTargetRegistry } from "./active-chat-t
 
 /** 租约冻结的提交目标：取得租约时从登记表拷贝，后续切换会话不影响该值。 */
 export type FrozenSpeechInputTarget = ActiveChatTarget;
+
+/**
+ * 租约内部冻结的输入目标：普通聊天冻结渲染目标，活动通话冻结通话代次。
+ * 通话代次与渲染目标无关；通话结束后代次永不复用，提交自然被拒。
+ */
+export type FrozenSpeechInputLeaseTarget =
+  | { kind: "active-chat"; chat: FrozenSpeechInputTarget }
+  | { kind: "active-call"; callGeneration: number };
+
+/**
+ * 活动通话输入控制器：语音租约选择 active-call 目标时由宿主接线。
+ * 实现方（通话管理器适配器）负责把结果映射为稳定错误码后抛出。
+ */
+export interface SpeechInputCallController {
+  /**
+   * 接管通话输入：无活动通话返回 null；成功则停止内置 ASR 并返回冻结的通话代次。
+   * 必须同步完成所有权标记，避免接管与音频帧转发交错。
+   */
+  claimExternalInput(): { callGeneration: number } | null;
+  /**
+   * 提交外部文本到冻结代次的通话；接受即返回，不等待轮次结束。
+   * 通话结束、代次过期、轮次进行中或输入未被接管时抛稳定错误码异常。
+   */
+  commitExternalText(callGeneration: number, text: string): void;
+  /** 释放外部输入所有权：同一通话仍有效时归还内置 ASR；其余情况静默 no-op。 */
+  releaseExternalInput(callGeneration: number): void;
+  /** 通话结束通知：冻结该通话代次的租约据此立即中止。 */
+  onCallEnded(listener: (callGeneration: number) => void): () => void;
+}
 
 /**
  * 文本提交桥：把冻结目标与最终文本送入聊天渲染页。
@@ -53,6 +84,8 @@ export interface SpeechInputServiceOptions {
   registry: ActiveChatTargetRegistry;
   sessionStore: SpeechInputSessionStore;
   commitBridge: SpeechInputCommitBridge;
+  /** 活动通话输入控制器：active-call 目标的接管、提交与释放经它落到通话管理器。 */
+  callController: SpeechInputCallController;
 }
 
 export interface SpeechInputService {
@@ -70,7 +103,7 @@ interface LeaseState {
   key: string;
   pluginId: string;
   ownerSignal: AbortSignal;
-  frozen: FrozenSpeechInputTarget;
+  frozen: FrozenSpeechInputLeaseTarget;
   controller: AbortController;
   released: boolean;
   /** 同一租约多次 commit 的串行队列；前一次失败不阻断后续。 */
@@ -80,7 +113,7 @@ interface LeaseState {
 }
 
 export function createSpeechInputService(options: SpeechInputServiceOptions): SpeechInputService {
-  const { registry, sessionStore, commitBridge } = options;
+  const { registry, sessionStore, commitBridge, callController } = options;
   let current: LeaseState | null = null;
   let disposed = false;
 
@@ -95,6 +128,14 @@ export function createSpeechInputService(options: SpeechInputServiceOptions): Sp
         console.warn(`[speech-input] 退订监听失败（插件 ${state.pluginId}）`, error);
       }
     }
+    // 活动通话目标：释放时归还内置 ASR（通话已结束则控制器内部 no-op）
+    if (state.frozen.kind === "active-call") {
+      try {
+        callController.releaseExternalInput(state.frozen.callGeneration);
+      } catch (error) {
+        console.warn(`[speech-input] 归还通话输入失败（插件 ${state.pluginId}）`, error);
+      }
+    }
     if (!state.controller.signal.aborted) {
       state.controller.abort();
     }
@@ -107,13 +148,21 @@ export function createSpeechInputService(options: SpeechInputServiceOptions): Sp
   // 同页面切换会话不会触发失效（rendererTargetId 不变），租约不受影响。
   const offInvalidated = registry.onInvalidated((_reason, affected) => {
     if (!current || !affected) return;
-    if (current.frozen.rendererTargetId === affected.rendererTargetId) {
+    if (current.frozen.kind === "active-chat"
+      && current.frozen.chat.rendererTargetId === affected.rendererTargetId) {
       releaseLease(current);
     }
   });
   // 任意会话删除：冻结了该会话的租约中止，即使页面已切到其他会话。
   const offSessionDeleted = registry.onSessionDeleted((sessionId) => {
-    if (current && current.frozen.sessionId === sessionId) {
+    if (current && current.frozen.kind === "active-chat"
+      && current.frozen.chat.sessionId === sessionId) {
+      releaseLease(current);
+    }
+  });
+  // 通话结束：active-call 租约立即中止（唯一租约、唯一通话，无需比对代次）
+  const offCallEnded = callController.onCallEnded(() => {
+    if (current && current.frozen.kind === "active-call") {
       releaseLease(current);
     }
   });
@@ -130,19 +179,26 @@ export function createSpeechInputService(options: SpeechInputServiceOptions): Sp
       if (target !== "active-chat" && target !== "active-call") {
         throw pluginHostError("E_INVALID_ARGUMENT", `非法语音输入目标: ${String(target)}`);
       }
-      if (target === "active-call") {
-        // 活动通话语音租约按计划在阶段 6 接入，当前版本直接拒绝
-        throw pluginHostError("E_CAPABILITY_UNAVAILABLE", "活动通话语音输入尚未支持");
-      }
       if (current) {
         throw pluginHostError(
           "E_SPEECH_INPUT_BUSY",
           `语音输入租约正被插件 ${current.pluginId} 占用`,
         );
       }
-      const active = registry.getActive();
-      if (!active) {
-        throw pluginHostError("E_NO_ACTIVE_INPUT_TARGET", "当前没有可用的聊天输入目标");
+      let frozen: FrozenSpeechInputLeaseTarget;
+      if (target === "active-chat") {
+        const active = registry.getActive();
+        if (!active) {
+          throw pluginHostError("E_NO_ACTIVE_INPUT_TARGET", "当前没有可用的聊天输入目标");
+        }
+        frozen = { kind: "active-chat", chat: { ...active } };
+      } else {
+        // 同步接管通话输入：无活动通话返回 null，成功则停止内置 ASR 并冻结代次
+        const claim = callController.claimExternalInput();
+        if (!claim) {
+          throw pluginHostError("E_NO_ACTIVE_INPUT_TARGET", "当前没有进行中的通话");
+        }
+        frozen = { kind: "active-call", callGeneration: claim.callGeneration };
       }
 
       // 同步临界区：到这里为止没有 await，检查占用与冻结目标之间不会插入其他 acquire
@@ -150,7 +206,7 @@ export function createSpeechInputService(options: SpeechInputServiceOptions): Sp
         key: `speech-input-lease-${randomUUID()}`,
         pluginId: owner.pluginId,
         ownerSignal: owner.signal,
-        frozen: { ...active },
+        frozen,
         controller: new AbortController(),
         released: false,
         queue: Promise.resolve(),
@@ -196,12 +252,17 @@ export function createSpeechInputService(options: SpeechInputServiceOptions): Sp
             if (state.released) {
               throw pluginHostError("E_NOT_FOUND", "语音输入租约已释放");
             }
-            // 只看冻结会话是否仍存在；不校验当前 UI 显示的是哪个会话
-            if (sessionStore.getSession(state.frozen.sessionId) == null) {
-              throw pluginHostError("E_NOT_FOUND", `会话已删除: ${state.frozen.sessionId}`);
+            if (state.frozen.kind === "active-call") {
+              // 通话代次、轮次状态等校验由通话控制器完成并以稳定错误码抛出
+              callController.commitExternalText(state.frozen.callGeneration, text);
+              return;
             }
-            // rendererTargetId 的迟到响应校验由提交桥负责（大步 3）
-            return commitBridge.commit(state.frozen, text);
+            // 只看冻结会话是否仍存在；不校验当前 UI 显示的是哪个会话
+            if (sessionStore.getSession(state.frozen.chat.sessionId) == null) {
+              throw pluginHostError("E_NOT_FOUND", `会话已删除: ${state.frozen.chat.sessionId}`);
+            }
+            // rendererTargetId 的迟到响应校验由提交桥负责
+            return commitBridge.commit(state.frozen.chat, text);
           });
           state.queue = run.then(() => undefined, () => undefined);
           return run;
@@ -222,6 +283,7 @@ export function createSpeechInputService(options: SpeechInputServiceOptions): Sp
       }
       offInvalidated();
       offSessionDeleted();
+      offCallEnded();
     },
   };
 }

@@ -32,7 +32,19 @@ vi.mock("../token-usage-store", () => ({
   recordUsage: vi.fn(),
 }));
 
-import { endTurn, setCallSettings, setCallWindow, startCall, stopCall } from "./call-manager";
+import {
+  claimExternalSpeechInput,
+  endTurn,
+  handleAudioFrame,
+  onCallEnded,
+  onTtsDone,
+  releaseExternalSpeechInput,
+  setCallSettings,
+  setCallWindow,
+  startCall,
+  stopCall,
+  submitExternalText,
+} from "./call-manager";
 
 describe("call turn submission", () => {
   const sentStates: string[] = [];
@@ -170,5 +182,199 @@ describe("call turn submission", () => {
     // 模型 getter 未返回 apiKey → 不发 LLM 请求，直接报配置缺失
     expect(fetchMock).not.toHaveBeenCalled();
     expect(sentErrors.some((msg) => msg.includes("模型配置缺失"))).toBe(true);
+  });
+});
+
+describe("external speech input takeover", () => {
+  const sentStates: string[] = [];
+  const sentErrors: string[] = [];
+  let asrStop: ReturnType<typeof vi.fn>;
+  let asrSendAudio: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    sentStates.length = 0;
+    sentErrors.length = 0;
+    mocks.getAsrConfig.mockReset();
+    mocks.createAsrStream.mockReset();
+    mocks.getAsrConfig.mockReturnValue({ engine: "mossland", apiKey: "test-key" });
+    asrStop = vi.fn(async () => "");
+    asrSendAudio = vi.fn();
+    mocks.createAsrStream.mockReturnValue({
+      start: vi.fn(async () => undefined),
+      sendAudio: asrSendAudio,
+      stop: asrStop,
+    });
+    setCallWindow({
+      isDestroyed: () => false,
+      webContents: {
+        send: (_channel: string, payload: { state?: string; message?: string }) => {
+          if (payload.state) sentStates.push(payload.state);
+          if (payload.message) sentErrors.push(payload.message);
+        },
+      },
+    } as never);
+    setCallSettings(
+      () => ({ provider: "openai", baseUrl: "", model: "test", apiKey: "test-key" }),
+      () => ({ ttsEngine: "off" } as never),
+      async () => "",
+      async () => null,
+    );
+  });
+
+  afterEach(() => {
+    stopCall();
+    setCallWindow(null);
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("returns null when no call is active", () => {
+    expect(claimExternalSpeechInput()).toBeNull();
+  });
+
+  it("stops the builtin ASR stream and freezes the call generation on claim", () => {
+    startCall();
+    const claim = claimExternalSpeechInput();
+    expect(claim).not.toBeNull();
+    expect(asrStop).toHaveBeenCalledOnce();
+    expect(handleAudioFrame(Buffer.from("audio"))).toBeUndefined();
+    expect(asrSendAudio).not.toHaveBeenCalled();
+  });
+
+  it("ignores builtin VAD end-turn while external input owns the call", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    startCall();
+    claimExternalSpeechInput();
+
+    await endTurn();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(sentStates).not.toContain("THINKING");
+  });
+
+  it("feeds external text into the agent pipeline and returns to LISTENING without builtin ASR", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    startCall();
+    const claim = claimExternalSpeechInput();
+    expect(mocks.createAsrStream).toHaveBeenCalledOnce();
+
+    const result = submitExternalText(claim!.callGeneration, "插件识别的外部文本");
+    expect(result).toEqual({ ok: true });
+    expect(sentStates.at(-1)).toBe("THINKING");
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(sentStates.at(-1)).toBe("LISTENING");
+    });
+    // TTS 未配置走恢复路径；外部持有期间不重启内置 ASR
+    expect(mocks.createAsrStream).toHaveBeenCalledOnce();
+    expect(sentErrors).toContain("TTS 未配置：请在设置中启用 TTS 引擎");
+  });
+
+  it("rejects a second submission while a turn is in flight", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    startCall();
+    const claim = claimExternalSpeechInput();
+
+    expect(submitExternalText(claim!.callGeneration, "第一句")).toEqual({ ok: true });
+    expect(submitExternalText(claim!.callGeneration, "第二句")).toEqual({
+      ok: false,
+      reason: "busy",
+    });
+
+    await vi.waitFor(() => {
+      expect(sentStates.at(-1)).toBe("LISTENING");
+    });
+  });
+
+  it("does not restart builtin ASR after TTS playback while external input owns the call", () => {
+    startCall();
+    const claim = claimExternalSpeechInput();
+    onTtsDone();
+    expect(sentStates.at(-1)).toBe("LISTENING");
+    expect(mocks.createAsrStream).toHaveBeenCalledOnce();
+    expect(claim).not.toBeNull();
+  });
+
+  it("restores builtin ASR when released in LISTENING state", () => {
+    startCall();
+    const claim = claimExternalSpeechInput();
+    releaseExternalSpeechInput(claim!.callGeneration);
+    expect(mocks.createAsrStream).toHaveBeenCalledTimes(2);
+  });
+
+  it("restores builtin ASR via the turn-recovery path when released mid-turn", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    startCall();
+    const claim = claimExternalSpeechInput();
+    submitExternalText(claim!.callGeneration, "轮次进行中释放");
+
+    // THINKING 期间释放：不抢启内置 ASR，等轮次结束的恢复路径重启
+    releaseExternalSpeechInput(claim!.callGeneration);
+    expect(mocks.createAsrStream).toHaveBeenCalledOnce();
+
+    await vi.waitFor(() => {
+      expect(sentStates.at(-1)).toBe("LISTENING");
+    });
+    expect(mocks.createAsrStream).toHaveBeenCalledTimes(2);
+  });
+
+  it("notifies listeners and rejects submissions after the call ends", () => {
+    const endedGenerations: number[] = [];
+    const unsubscribe = onCallEnded((generation) => endedGenerations.push(generation));
+
+    startCall();
+    const claim = claimExternalSpeechInput();
+    stopCall();
+
+    expect(endedGenerations).toEqual([claim!.callGeneration]);
+    expect(submitExternalText(claim!.callGeneration, "挂断后提交")).toEqual({
+      ok: false,
+      reason: "no-call",
+    });
+
+    // 新通话代次不同：旧代次的提交不允许进入新通话
+    startCall();
+    expect(submitExternalText(claim!.callGeneration, "旧代次提交")).toEqual({
+      ok: false,
+      reason: "stale-call",
+    });
+    unsubscribe();
+  });
+
+  it("rejects submissions from a stale generation and blank text", () => {
+    startCall();
+    const claim = claimExternalSpeechInput();
+    expect(submitExternalText(claim!.callGeneration + 999, "旧代次")).toEqual({
+      ok: false,
+      reason: "stale-call",
+    });
+    expect(submitExternalText(claim!.callGeneration, "   ")).toEqual({
+      ok: false,
+      reason: "empty-text",
+    });
+  });
+
+  it("rejects submissions when external input is not the owner", () => {
+    startCall();
+    // 接管后立即释放：代次有效但所有权已归还内置
+    const claim = claimExternalSpeechInput();
+    releaseExternalSpeechInput(claim!.callGeneration);
+    expect(submitExternalText(claim!.callGeneration, "内置持有期间的提交")).toEqual({
+      ok: false,
+      reason: "not-owner",
+    });
   });
 });

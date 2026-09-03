@@ -28,6 +28,32 @@ let finalText = "";
 let latestPartialText = "";
 let active = false;
 
+/** 通话输入所有者：builtin 为内置 ASR，external 为插件语音租约接管。 */
+type CallInputOwner = "builtin" | "external";
+let inputOwner: CallInputOwner = "builtin";
+/** 通话代次：每次 startCall 单调递增；外部租约冻结该值，防止提交到下一次通话。 */
+let callGeneration = 0;
+/** 通话结束监听器：语音租约服务据此立即中止 active-call 租约。 */
+const callEndedListeners = new Set<(generation: number) => void>();
+
+/** 通话结束通知（挂断或通话窗口关闭触发）；generation 为刚结束通话的代次。 */
+export function onCallEnded(listener: (generation: number) => void): () => void {
+  callEndedListeners.add(listener);
+  return () => {
+    callEndedListeners.delete(listener);
+  };
+}
+
+function notifyCallEnded(generation: number): void {
+  for (const listener of [...callEndedListeners]) {
+    try {
+      listener(generation);
+    } catch (error) {
+      console.warn(LOG_PREFIX, "通话结束监听器抛错", error);
+    }
+  }
+}
+
 /** 通话上下文：保留最近 N 轮对话历史（每轮 = user + assistant 一对）。
  * 主聊天窗口（src/main/index.ts:1276 normalizeChatMessages）默认保留 24 条（12 轮）。
  * 通话场景对短上下文敏感度低，但用户希望"加点内存"——给到 24 轮（48 条），
@@ -141,6 +167,8 @@ export function startCall(): void {
   }
 
   active = true;
+  callGeneration += 1;
+  inputOwner = "builtin";
   finalText = "";
   latestPartialText = "";
   callHistory.length = 0;
@@ -163,38 +191,46 @@ function startAsrStream(cfg: AsrConfig): void {
   });
 }
 
-/** 结束本轮（VAD 静默）：停 ASR → 跑 agent → TTS → 播放。 */
-export async function endTurn(): Promise<void> {
-  console.log(LOG_PREFIX, "endTurn 入口: active=", active, "state=", currentState, "finalText.length=", finalText.length);
-  if (!active || currentState !== "LISTENING") return;
-
-  // 立即离开 LISTENING，避免批量转写等待期间被手动按钮或 VAD 重复提交。
-  sendState("THINKING");
-
+/**
+ * 停止内置 ASR 并收集最终转写文本。
+ * 返回空字符串表示无有效文本；停止失败返回 null（调用方恢复 LISTENING）。
+ */
+async function stopAsrAndCollectText(): Promise<string | null> {
   if (asrStream) {
+    const stream = asrStream;
+    asrStream = null;
     try {
-      await asrStream.stop();
+      await stream.stop();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       sendError(message);
-      sendState("LISTENING");
-      restartAsr();
-      return;
+      return null;
     }
   }
-
   const text = finalText.trim() || latestPartialText.trim();
   finalText = "";
   latestPartialText = "";
+  return text;
+}
 
-  if (!text) {
-    // 空文本，直接重启 ASR 回 LISTENING
-    console.log(LOG_PREFIX, "endTurn 空文本，直接重启 ASR");
-    sendState("LISTENING");
-    restartAsr();
-    return;
-  }
+/** 校验最终转写：去掉首尾空白后非空才进入模型轮次。 */
+function validateFinalTranscript(text: string): string | null {
+  const trimmed = text.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
+/** 轮次失败或空文本后的兜底恢复：回 LISTENING，输入所有者决定是否重启内置 ASR。 */
+function recoverToListening(): void {
+  if (!active) return;
+  sendState("LISTENING");
+  restartAsr();
+}
+
+/**
+ * 处理最终转写文本：Agent → TTS → SPEAKING。
+ * 内置 ASR 与外部插件语音共用同一条流水线；播完后由 onTtsDone 回 LISTENING。
+ */
+async function processFinalTranscript(text: string): Promise<void> {
   try {
     // 调 agent 获取回复
     console.log(LOG_PREFIX, "runAgentTurn 开始, text.length=", text.length);
@@ -202,8 +238,7 @@ export async function endTurn(): Promise<void> {
     console.log(LOG_PREFIX, "runAgentTurn 结果: reply.length=", reply?.length ?? "null");
     if (!reply) {
       sendError("未收到 agent 回复");
-      sendState("LISTENING");
-      restartAsr();
+      recoverToListening();
       return;
     }
 
@@ -211,34 +246,29 @@ export async function endTurn(): Promise<void> {
     const tts = ttsSettingsGetter?.();
     if (!tts || tts.ttsEngine === "off") {
       sendError("TTS 未配置：请在设置中启用 TTS 引擎");
-      sendState("LISTENING");
-      restartAsr();
+      recoverToListening();
       return;
     }
 
     // 引擎配置完整性检查
     if (tts.ttsEngine === "minimax" && (!tts.ttsMinimaxKey || !tts.ttsMinimaxVoiceId)) {
       sendError("TTS 未配置：请在设置中配置 MiniMax API Key 和音色 ID");
-      sendState("LISTENING");
-      restartAsr();
+      recoverToListening();
       return;
     }
     if (tts.ttsEngine === "gptsovits" && (!tts.ttsGptsovitsBaseUrl || !tts.ttsGptsovitsRefAudioPath || !tts.ttsGptsovitsPromptText)) {
       sendError("TTS 未配置：请在设置中配置 GPT-SoVITS baseUrl、参考音频和文本");
-      sendState("LISTENING");
-      restartAsr();
+      recoverToListening();
       return;
     }
     if (tts.ttsEngine === "custom-cloud" && !tts.ttsCustomCloudEndpointUrl) {
       sendError("TTS 未配置：请在设置中配置自定义云端 Endpoint URL");
-      sendState("LISTENING");
-      restartAsr();
+      recoverToListening();
       return;
     }
     if (tts.ttsEngine === "mimo" && (!tts.ttsMimoKey || !tts.ttsMimoVoiceAudioPath)) {
       sendError("TTS 未配置：请在设置中配置小米 MiMo API Key 和昔涟克隆音频");
-      sendState("LISTENING");
-      restartAsr();
+      recoverToListening();
       return;
     }
 
@@ -278,13 +308,93 @@ export async function endTurn(): Promise<void> {
     } catch (ttsErr) {
       const msg = ttsErr instanceof Error ? ttsErr.message : String(ttsErr);
       sendError("TTS 合成失败：" + msg);
-      sendState("LISTENING");
-      restartAsr();
+      recoverToListening();
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     sendError("通话出错：" + msg);
-    sendState("LISTENING");
+    recoverToListening();
+  }
+}
+
+/** 结束本轮（VAD 静默）：停 ASR → 校验文本 → Agent → TTS → 播放。 */
+export async function endTurn(): Promise<void> {
+  console.log(LOG_PREFIX, "endTurn 入口: active=", active, "state=", currentState, "finalText.length=", finalText.length);
+  if (!active || currentState !== "LISTENING") return;
+  // 外部插件持有输入期间，忽略内置 VAD 的静默结束信号
+  if (inputOwner === "external") return;
+
+  // 立即离开 LISTENING，避免批量转写等待期间被手动按钮或 VAD 重复提交。
+  sendState("THINKING");
+
+  const text = await stopAsrAndCollectText();
+  if (text === null) {
+    recoverToListening();
+    return;
+  }
+
+  const finalTranscript = validateFinalTranscript(text);
+  if (!finalTranscript) {
+    // 空文本，直接重启 ASR 回 LISTENING
+    console.log(LOG_PREFIX, "endTurn 空文本，直接重启 ASR");
+    recoverToListening();
+    return;
+  }
+
+  await processFinalTranscript(finalTranscript);
+}
+
+/** 外部语音租约接管通话输入的结果。 */
+export type ExternalInputClaimResult = { callGeneration: number } | null;
+
+/** 外部语音租约接管通话输入：无活动通话返回 null，成功则停止内置 ASR 并冻结通话代次。 */
+export function claimExternalSpeechInput(): ExternalInputClaimResult {
+  if (!active) return null;
+  inputOwner = "external";
+  // 音频帧已被 inputOwner 门挡住；停止失败仅告警，不影响接管成立
+  if (asrStream) {
+    const stream = asrStream;
+    asrStream = null;
+    void Promise.resolve(stream.stop()).catch((err) => {
+      console.warn(LOG_PREFIX, "外部接管时停止内置 ASR 失败:", err);
+    });
+  }
+  // 内置转写的残留文本随接管作废，避免恢复内置 ASR 后串轮
+  finalText = "";
+  latestPartialText = "";
+  return { callGeneration };
+}
+
+/** 外部文本提交结果；reason 供宿主映射为稳定错误码。 */
+export type ExternalTextSubmitResult =
+  | { ok: true }
+  | { ok: false; reason: "no-call" | "stale-call" | "busy" | "not-owner" | "empty-text" };
+
+/**
+ * 外部文本提交入口：校验通过（通话仍在、代次匹配、外部持有、LISTENING 状态）后
+ * 走与内置转写相同的 Agent → TTS 流水线，接受即返回，不等待轮次结束。
+ */
+export function submitExternalText(callGenerationFrozen: number, text: string): ExternalTextSubmitResult {
+  if (!active) return { ok: false, reason: "no-call" };
+  if (callGenerationFrozen !== callGeneration) return { ok: false, reason: "stale-call" };
+  if (inputOwner !== "external") return { ok: false, reason: "not-owner" };
+  if (currentState !== "LISTENING") return { ok: false, reason: "busy" };
+  // 宿主侧已校验非空，这里兜底拒绝空白文本
+  const finalTranscript = validateFinalTranscript(text);
+  if (!finalTranscript) return { ok: false, reason: "empty-text" };
+  sendState("THINKING");
+  void processFinalTranscript(finalTranscript);
+  return { ok: true };
+}
+
+/**
+ * 释放外部输入所有权：同一通话仍有效时归还内置 ASR。
+ * THINKING/SPEAKING 期间释放则不抢启，等轮次结束的恢复路径自然重启。
+ */
+export function releaseExternalSpeechInput(callGenerationFrozen: number): void {
+  if (!active || callGenerationFrozen !== callGeneration || inputOwner !== "external") return;
+  inputOwner = "builtin";
+  if (currentState === "LISTENING") {
     restartAsr();
   }
 }
@@ -293,11 +403,13 @@ export async function endTurn(): Promise<void> {
 export function onTtsDone(): void {
   if (!active) return;
   sendState("LISTENING");
+  // 外部输入持有时保持所有权：不自动重启内置 ASR，等租约释放时恢复
   restartAsr();
 }
 
-/** 重新开始一轮 ASR 识别。 */
+/** 重新开始一轮 ASR 识别；外部输入持有期间不启动内置 ASR。 */
 function restartAsr(): void {
+  if (inputOwner !== "builtin") return;
   const cfg = getAsrConfig();
   if (!cfg) return;
   if (asrStream) void Promise.resolve(asrStream.stop()).catch((err) => {
@@ -310,7 +422,10 @@ function restartAsr(): void {
 
 /** 挂断：清理一切。 */
 export function stopCall(): void {
+  // 先收尾本地状态再广播：监听方收到通知时通话已不可提交，释放路径自然 no-op
+  const endedGeneration = callGeneration;
   active = false;
+  inputOwner = "builtin";
   finalText = "";
   latestPartialText = "";
   callHistory.length = 0;
@@ -321,10 +436,12 @@ export function stopCall(): void {
     asrStream = null;
   }
   sendState("ENDED");
+  notifyCallEnded(endedGeneration);
 }
 
-/** 处理音频帧：转发给 ASR。 */
+/** 处理音频帧：转发给 ASR；外部输入持有期间忽略通话音频，防止双输入源。 */
 export function handleAudioFrame(frame: Buffer): void {
+  if (inputOwner === "external") return;
   if (asrStream && currentState === "LISTENING") {
     asrStream.sendAudio(frame);
   }

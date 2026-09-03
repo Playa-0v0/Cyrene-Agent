@@ -1,7 +1,7 @@
 # Cyrene 插件系统扩展施工进度
 
 > **更新时间**：2026-09-03
-> **当前状态**：阶段 1（公开契约 + Schema + 资源跟踪器）、阶段 2（Secrets/Workspace/Conversations）、阶段 3（插件调度任务所有权）、阶段 4（生命周期观察事件）、阶段 5（普通聊天语音输入租约）已全部完成；下一步从阶段 6（活动通话语音输入）开始，见第 5 节。
+> **当前状态**：阶段 1（公开契约 + Schema + 资源跟踪器）、阶段 2（Secrets/Workspace/Conversations）、阶段 3（插件调度任务所有权）、阶段 4（生命周期观察事件）、阶段 5（普通聊天语音输入租约）、阶段 6（活动通话语音输入）已全部完成；下一步从阶段 7（SDK、示例、Skill 与发布）开始，见第 5 节。
 > **架构设计**：[architecture.md](./architecture.md)
 > **施工方案**：[implementation-plan.md](./implementation-plan.md)
 
@@ -467,6 +467,37 @@ Harness 只读回调（`src/main/orchestrator/harness/types.ts`、`tool-round.ts
 - 新增：`src/main/plugin-host/active-chat-target.ts`、`active-chat-target.test.ts`（12 项）、`speech-input-service.ts`、`speech-input-service.test.ts`（17 项）、`speech-input-commit-bridge.ts`、`speech-input-commit-bridge.test.ts`（5 项）
 - 修改：`src/main/chats/chat-ui-ipc.ts`、`src/main/plugin-host/host-services.ts`、`src/main/plugin-runtime.ts`、`src/shared/ipc-channels.ts`、`src/preload/index.ts`、`src/renderer/react/features/chat/pages/chat-page-bridge.ts`、`ChatPage.tsx`
 
+### 2.20 活动通话语音输入（阶段 6）
+
+本步完成施工方案阶段 6 的全部改动：同一语音租约选择 `active-call` 时只替换通话中的 ASR 输入，模型与 TTS 仍走通话流水线。
+
+通话管理器重构（`src/main/call/call-manager.ts`）：
+
+- `endTurn()` 拆分为流水线：`stopAsrAndCollectText()`（停止内置 ASR 并收集转写，停止失败返回 null）→ `validateFinalTranscript()`（非空校验）→ `processFinalTranscript()`（Agent → TTS → SPEAKING，播完由 `onTtsDone` 回 LISTENING）。内置转写与外部插件文本共用同一条流水线，外部插件只进入 `processFinalTranscript` 之前的文本入口。
+- 新增内部状态：`inputOwner`（builtin/external）、单调递增的 `callGeneration`（每次 `startCall` 递增）、通话结束监听器集合。
+- 新增三个外部输入入口：`claimExternalSpeechInput()`（同步标记所有权、停止内置 ASR、冻结通话代次；无活动通话返回 null）、`submitExternalText()`（校验通话存在、代次匹配、外部持有、LISTENING 状态后进入流水线，接受即返回；失败返回原因枚举 no-call/stale-call/busy/not-owner/empty-text）、`releaseExternalSpeechInput()`（同一通话仍有效且 LISTENING 时恢复内置 ASR；轮次进行中释放则等恢复路径自然重启）。
+- 防双输入源与防串轮：`handleAudioFrame` 在外部持有期间忽略通话音频帧；`restartAsr` 在外部持有期间不启动内置 ASR（含 `onTtsDone` 与全部错误恢复路径）；外部接管时清空内置转写残留文本；内置 VAD 的 `endTurn` 在外部持有期间直接忽略。
+- `stopCall` 先收尾本地状态（active=false、所有权归还 builtin）再广播 `onCallEnded`（携带刚结束通话的代次）：监听方收到通知时通话已不可提交，释放路径自然 no-op；`recoverToListening` 增加 `!active` 守卫，挂断后不再复活 ASR。
+- THINKING/SPEAKING 状态的提交返回 busy，不并发开启第二轮。
+
+语音租约服务扩展（`src/main/plugin-host/speech-input-service.ts`）：
+
+- 租约冻结目标改为联合类型：`active-chat`（冻结渲染目标）与 `active-call`（冻结通话代次）；提交桥接口不变，仍只接收聊天目标。
+- 新增 `SpeechInputCallController` 接口（接管/提交/释放/通话结束通知）并作为服务工厂必填依赖；`acquireForPlugin` 选择 `active-call` 时在同一同步临界区内完成"检查占用 → 接管通话输入（停止内置 ASR）→ 冻结代次"，无进行中通话返回 `E_NO_ACTIVE_INPUT_TARGET`。
+- `commit()` 按 frozen 类型分流：active-call 走通话控制器（代次、轮次状态校验由控制器以稳定错误码抛出），active-chat 走原有会话校验 + IPC 提交桥；互斥关系不变（全局唯一租约，两种目标互相占用时 `E_SPEECH_INPUT_BUSY`）。
+- 通话结束监听：active-call 租约立即中止（signal 触发 + 归还通话输入）；active-chat 租约不受通话结束影响，active-call 租约也不受聊天目标失效与会话删除影响。
+- 全部释放路径（手动 release、插件停止、资源跟踪器清理、通话结束、应用退出）收敛到 `releaseLease`，active-call 分支额外调用 `releaseExternalInput` 归还内置 ASR。
+
+控制器适配器（新增 `src/main/plugin-host/speech-input-call-controller.ts`）：
+
+- 把通话管理器的结果式接口包装成 `SpeechInputCallController`，提交失败原因映射为稳定错误码：no-call/stale-call → `E_NOT_FOUND`、busy → `E_SPEECH_INPUT_BUSY`、empty-text → `E_INVALID_ARGUMENT`、not-owner → `E_INTERNAL`。
+- `plugin-runtime.ts` 装配真实适配器；宿主服务工厂与插件侧 API 形状不变。
+
+涉及文件：
+
+- 新增：`src/main/plugin-host/speech-input-call-controller.ts`、`speech-input-call-controller.test.ts`（4 项）
+- 修改：`src/main/call/call-manager.ts`、`call-manager.test.ts`（新增 11 项，共 16 项）、`src/main/plugin-host/speech-input-service.ts`、`speech-input-service.test.ts`（新增 11 项，共 28 项）、`src/main/plugin-runtime.ts`
+
 ## 3. 已完成验证
 
 | 验证项 | 结果 |
@@ -510,22 +541,18 @@ Harness 只读回调（`src/main/orchestrator/harness/types.ts`、`tool-round.ts
 | `npm run build:main`（阶段 5 后） | 通过 |
 | `npm run build:preload`（阶段 5 后） | 通过 |
 | `npm test`（阶段 5 后） | 405 个文件 3194 项测试全部通过 |
+| `npx vitest run src/main/call/call-manager.test.ts src/main/plugin-host/speech-input-service.test.ts src/main/plugin-host/speech-input-call-controller.test.ts src/main/plugin-host/speech-input-commit-bridge.test.ts src/main/plugin-host/active-chat-target.test.ts`（阶段 6 定向） | 5 个文件 65 项测试全部通过 |
+| `npm run build:main`（阶段 6 后） | 通过 |
+| `npm test`（阶段 6 后） | 406 个文件 3220 项测试全部通过 |
 | `git diff --check` | 通过，仅有 Git 换行符提示 |
 
 ## 4. 未完成项
 
 以下项目均未开始实现，不能因为设计文档已经写好而标记为完成。
 
-（公开契约、Manifest Schema、统一资源跟踪器和宿主服务工厂已在 2.4–2.10 完成；Secrets、Workspace、Conversations 宿主数据服务已在 2.11 完成；调度数据模型、授权指纹与 scheduler-service 已在 2.12 完成；引擎运行条件、插件启停联动、渲染层投影已在 2.13 完成；用户确认 UI 与卸载清理已在 2.14 完成；事件总线旁路与生命周期屏障已在 2.15 完成；生命周期发布器与渠道/调度轮次事件已在 2.16 完成；桌面轮次协调与落盘确认已在 2.17 完成；工具完成事件已在 2.18 完成；普通聊天语音输入租约与文本提交桥已在 2.19 完成，阶段 5 至此全部完成。）
+（公开契约、Manifest Schema、统一资源跟踪器和宿主服务工厂已在 2.4–2.10 完成；Secrets、Workspace、Conversations 宿主数据服务已在 2.11 完成；调度数据模型、授权指纹与 scheduler-service 已在 2.12 完成；引擎运行条件、插件启停联动、渲染层投影已在 2.13 完成；用户确认 UI 与卸载清理已在 2.14 完成；事件总线旁路与生命周期屏障已在 2.15 完成；生命周期发布器与渠道/调度轮次事件已在 2.16 完成；桌面轮次协调与落盘确认已在 2.17 完成；工具完成事件已在 2.18 完成；普通聊天语音输入租约与文本提交桥已在 2.19 完成；活动通话语音输入已在 2.20 完成，阶段 5–6 至此全部完成。）
 
-### 4.1 活动通话语音输入（阶段 6）
-
-- `call-manager.ts` 的 `endTurn()` 拆分重构（停止内置 ASR → 校验 → 文本入口 → Agent → TTS）。
-- `active-call` 租约目标：冻结通话代次、停止内置 ASR、外持期间忽略通话音频帧、释放时恢复内置 ASR。
-- 通话结束立即中止租约；THINKING/SPEAKING 状态的提交限制。
-- 最小本地 ASR 契约示例；不把模型和推理运行时放入 Cyrene 安装包。
-
-### 4.2 开发者交付物
+### 4.1 开发者交付物
 
 - `@cyrene/plugin-sdk` 开发包。
 - 插件清单结构定义及校验命令。
@@ -535,7 +562,7 @@ Harness 只读回调（`src/main/orchestrator/harness/types.ts`、`tool-round.ts
 
 ## 5. 下一步起点
 
-阶段 4（生命周期观察事件）四个大步已全部完成（见 2.15–2.18）。阶段 5（普通聊天语音输入租约）已全部完成（见 2.19）。下一步从阶段 6（活动通话语音输入）开始，见 implementation-plan.md 第 6 节：先重构 `call-manager.ts` 把 `endTurn()` 拆分为可插入外部文本入口的流水线，再扩展 `speech-input-service` 支持 `active-call` 目标（冻结通话代次、内置 ASR 停止/恢复）。
+阶段 5（普通聊天语音输入租约）与阶段 6（活动通话语音输入）已全部完成（见 2.19、2.20），两种目标均满足租约契约。下一步从阶段 7（SDK、示例、Skill 与发布）开始，见 implementation-plan.md 第 7 节：`@cyrene/plugin-sdk` 开发包、契约示例（含最小本地 ASR 插件示例，模型与推理运行时不放入 Cyrene 安装包）、插件开发文档与 `cyrene-plugin-dev` Skill 更新。
 
 ### 大步 1：事件总线升级（4.1）——已完成（见 2.15）
 
@@ -587,5 +614,6 @@ Harness 只读回调（`src/main/orchestrator/harness/types.ts`、`tool-round.ts
 - `scripts/plugin-sdk/generate-schema.mjs`：新增；
 - `package.json`、`package-lock.json`：已修改（ajv 直接依赖、Schema 生成脚本、构建拷贝过滤器）。
 - 阶段 5（本次）：`src/main/plugin-host/` 新增 `active-chat-target.ts`、`active-chat-target.test.ts`、`speech-input-service.ts`、`speech-input-service.test.ts`、`speech-input-commit-bridge.ts`、`speech-input-commit-bridge.test.ts`；修改 `host-services.ts`、`src/main/plugin-runtime.ts`、`src/main/chats/chat-ui-ipc.ts`、`src/shared/ipc-channels.ts`、`src/preload/index.ts`、`src/renderer/react/features/chat/pages/chat-page-bridge.ts`、`ChatPage.tsx`、`docs/design/plugin-system/construction-progress.md`。
+- 阶段 6（本次）：`src/main/call/call-manager.ts`、`call-manager.test.ts` 已修改（endTurn 流水线拆分与外部输入入口）；`src/main/plugin-host/` 新增 `speech-input-call-controller.ts`、`speech-input-call-controller.test.ts`，修改 `speech-input-service.ts`、`speech-input-service.test.ts`；`src/main/plugin-runtime.ts` 已修改（装配通话控制器适配器）。
 
 后续智能体不得覆盖不属于当前小步骤的用户改动；发现工作区状态与本节不同，应以实时状态为准并先判断差异来源。
