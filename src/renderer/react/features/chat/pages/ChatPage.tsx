@@ -230,7 +230,8 @@ export function ChatPage() {
   const lastTurnRevisionStartingRef = useRef(false);
   const activeAguiOffsRef = useRef(new Set<() => void>());
   const cancelRequestedSessionsRef = useRef(new Set<string>());
-  const [pendingQueueBySession, setPendingQueueBySession] = useState<Record<string, { id: string; rawContent: string; visibleContent: string; attachments: ComposerAttachment[]; userSticker?: string }[]>>({});
+  // 外部提交（语音输入）入队的消息带 keepComposer，消费时不触碰用户草稿
+  const [pendingQueueBySession, setPendingQueueBySession] = useState<Record<string, { id: string; rawContent: string; visibleContent: string; attachments: ComposerAttachment[]; userSticker?: string; keepComposer?: boolean }[]>>({});
   const pendingQueueBySessionRef = useRef(pendingQueueBySession);
   useEffect(() => {
     pendingQueueBySessionRef.current = pendingQueueBySession;
@@ -359,6 +360,37 @@ export function ChatPage() {
       disposed = true;
       unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 外部语音文本提交：主进程经 IPC 要求把文本提交到租约冻结的会话。
+  // 页面重新加载后 rendererTargetId 变化，旧目标的迟到请求直接回绝。
+  useEffect(() => {
+    const store = chatStore();
+    if (!store?.onSpeechInputCommitRequest) return;
+    const unsubscribe = store.onSpeechInputCommitRequest((request) => {
+      void (async () => {
+        let result: { ok: true } | { ok: false; error: { code: string; message: string } };
+        if (request.rendererTargetId !== store.getRendererTargetId()) {
+          result = {
+            ok: false,
+            error: { code: "E_NO_ACTIVE_INPUT_TARGET", message: "渲染目标已过期" },
+          };
+        } else {
+          result = await submitTextToSession({
+            sessionId: request.sessionId,
+            mode: request.mode,
+            text: request.text,
+          });
+        }
+        store.sendSpeechInputCommitResult({
+          requestId: request.requestId,
+          rendererTargetId: request.rendererTargetId,
+          ...(result.ok ? { ok: true } : { ok: false, error: result.error }),
+        });
+      })();
+    });
+    return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -569,7 +601,7 @@ export function ChatPage() {
       ...current,
       [targetMode]: session.workspaceBinding?.displayName,
     }));
-    if (targetMode === activeModeRef.current) void store.setActiveSession(sessionId);
+    if (targetMode === activeModeRef.current) void store.setActiveSession(sessionId, targetMode);
   }
 
   /**
@@ -624,7 +656,7 @@ export function ChatPage() {
       return next;
     });
     setWorkspaceNames((current) => ({ ...current, [targetMode]: undefined }));
-    if (targetMode === activeModeRef.current) void store.setActiveSession(null);
+    if (targetMode === activeModeRef.current) void store.setActiveSession(null, targetMode);
   }
 
   // 渲染期间同步安装真实实现，保证 mount effect 不会先观察到默认 no-op。
@@ -1281,6 +1313,7 @@ export function ChatPage() {
           userSticker: next.userSticker,
           assistantId,
           userMessageId: next.id,
+          keepComposer: next.keepComposer,
         });
       }
     }
@@ -1809,8 +1842,12 @@ export function ChatPage() {
     assistantId: string;
     userMessageId: string;
     resumeFromRunId?: string;
-  }) {
-    const { targetMode, sessionId, rawContent, visibleContent, attachments, userSticker, assistantId, userMessageId, resumeFromRunId } = input;
+    /** 外部提交（语音输入）为 true：不清空用户正在编辑的草稿与附件。 */
+    keepComposer?: boolean;
+    /** 为 false 时用户消息落盘后立即返回，模型运行转入后台继续。 */
+    waitForRun?: boolean;
+  }): Promise<{ persisted: boolean }> {
+    const { targetMode, sessionId, rawContent, visibleContent, attachments, userSticker, assistantId, userMessageId, resumeFromRunId, keepComposer } = input;
     setMessagesBySession((current) => ({
       ...current,
       [sessionId]: [
@@ -1833,8 +1870,10 @@ export function ChatPage() {
         },
       ],
     }));
-    setDrafts((current) => ({ ...current, [scopeKey]: "" }));
-    setAttachmentsByScope((current) => ({ ...current, [scopeKey]: [] }));
+    if (!keepComposer) {
+      setDrafts((current) => ({ ...current, [scopeKey]: "" }));
+      setAttachmentsByScope((current) => ({ ...current, [scopeKey]: [] }));
+    }
     const updatedSession = await chatStore()?.append(sessionId, {
       id: userMessageId,
       role: "user",
@@ -1869,6 +1908,19 @@ export function ChatPage() {
         streaming: false,
         responseStarted: true,
       });
+      return { persisted: false };
+    }
+    if (input.waitForRun === false) {
+      // 外部提交：用户消息已接受并落盘，模型运行在后台继续
+      void runModel({
+        targetMode,
+        sessionId,
+        userMessageId,
+        assistantId,
+        session: updatedSession,
+        attachments,
+        resumeFromRunId,
+      });
     } else {
       await runModel({
         targetMode,
@@ -1880,6 +1932,70 @@ export function ChatPage() {
         resumeFromRunId,
       });
     }
+    return { persisted: true };
+  }
+
+  /**
+   * 外部（语音输入租约）向指定会话提交文本：
+   * - 使用提交请求冻结的会话与模式，不读取当前页面状态；
+   * - 不清空用户正在编辑的草稿、附件和输入框；
+   * - 会话忙时进入与手动发送相同的消息队列；
+   * - 用户消息被接受并落盘后即返回，不等待模型完整回答。
+   */
+  async function submitTextToSession(input: {
+    sessionId: string;
+    mode: ConversationMode;
+    text: string;
+  }): Promise<{ ok: true } | { ok: false; error: { code: string; message: string } }> {
+    const text = input.text.trim();
+    if (!text) {
+      return { ok: false, error: { code: "E_INVALID_ARGUMENT", message: "提交文本不能为空" } };
+    }
+    const store = chatStore();
+    if (!store) {
+      return { ok: false, error: { code: "E_INTERNAL", message: "会话存储不可用" } };
+    }
+    const session = await store.get(input.sessionId);
+    if (!session) {
+      return { ok: false, error: { code: "E_NOT_FOUND", message: "会话已删除" } };
+    }
+    if (session.mode !== input.mode) {
+      return { ok: false, error: { code: "E_INVALID_ARGUMENT", message: "会话模式不匹配" } };
+    }
+    // 会话忙时进入同一消息队列，当前 run 结束后自动发送（视为已接受）
+    if (isSessionBusy(input.sessionId)) {
+      const nextQueue = {
+        ...pendingQueueBySessionRef.current,
+        [input.sessionId]: [
+          ...(pendingQueueBySessionRef.current[input.sessionId] ?? []),
+          {
+            id: crypto.randomUUID(),
+            rawContent: text,
+            visibleContent: text,
+            attachments: [],
+            keepComposer: true,
+          },
+        ],
+      };
+      pendingQueueBySessionRef.current = nextQueue;
+      setPendingQueueBySession(nextQueue);
+      return { ok: true };
+    }
+    const dispatched = await dispatchUserMessage({
+      targetMode: input.mode,
+      sessionId: input.sessionId,
+      rawContent: text,
+      visibleContent: text,
+      attachments: [],
+      assistantId: crypto.randomUUID(),
+      userMessageId: crypto.randomUUID(),
+      keepComposer: true,
+      waitForRun: false,
+    });
+    if (!dispatched.persisted) {
+      return { ok: false, error: { code: "E_INTERNAL", message: "用户消息落盘失败" } };
+    }
+    return { ok: true };
   }
 
   async function cancelCurrentRun() {

@@ -2,6 +2,10 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { IPC } from "../shared/ipc-channels";
 import type { StartTtsRequest, TtsSessionEvent, TtsStartResult } from "../shared/tts-session";
 import type { ScreenshotInsertPayload } from "../shared/ipc-channels";
+import type {
+  SpeechInputCommitRequest,
+  SpeechInputCommitResult,
+} from "../shared/ipc-channels";
 import type { UiTheme } from "../shared/ui-theme";
 import type { UiFont } from "../shared/ui-font";
 import type { ReasoningPreference } from "../shared/reasoning";
@@ -12,6 +16,11 @@ import { getLive2DIpcListenerCounts } from "./live2d-listener-diagnostics";
 import { exposeMusicApi } from "./music";
 import { normalizeChatAppearance, type ChatAppearanceSettings } from "../shared/chat-appearance";
 import type { AppUpdateApi, AppUpdateState } from "../shared/app-update";
+import type { ConversationMode } from "../shared/chat-types";
+
+// 渲染目标标识：preload 每次加载（即每次页面初始化/重新加载）生成一次，
+// 随活动会话一并上报主进程；同一页面内切换会话不改变该标识。
+const rendererTargetId = crypto.randomUUID();
 
 const cyreneApi = {
   minimize: () => ipcRenderer.send(IPC.WINDOW_MINIMIZE),
@@ -619,9 +628,13 @@ const chatStoreApi = {
     ipcRenderer.invoke(IPC.CHATS_OPEN_WORKSPACE, workspaceRoot),
   migrateLegacy: (messages: unknown[]) =>
     ipcRenderer.invoke(IPC.CHATS_MIGRATE_LEGACY, messages),
-  // 聊天窗口加载 / 切换 session 时上报；其他窗口可查询/订阅
-  setActiveSession: (sessionId: string | null) =>
-    ipcRenderer.invoke(IPC.CHATS_SET_ACTIVE_SESSION, sessionId),
+  // 聊天窗口加载 / 切换 session 时上报；附带本页面的渲染目标标识与会话模式，
+  // 主进程据此维护语音输入租约冻结的活动目标；其他窗口可查询/订阅
+  setActiveSession: (sessionId: string | null, mode?: ConversationMode) =>
+    ipcRenderer.invoke(
+      IPC.CHATS_SET_ACTIVE_SESSION,
+      sessionId ? { sessionId, mode, rendererTargetId } : null,
+    ),
   getActiveSession: () => ipcRenderer.invoke(IPC.CHATS_GET_ACTIVE_SESSION),
   onActiveSessionChanged: (callback: (sessionId: string | null) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, sessionId: string | null) => callback(sessionId);
@@ -662,6 +675,20 @@ const chatStoreApi = {
   },
   // reactChatWindow → main：ChatPage 已挂好 IPC 监听，允许 flush pending sessionId
   notifyReactReady: () => ipcRenderer.send(IPC.CHATS_REACT_READY),
+  // 本页面的渲染目标标识（页面初始化时生成一次；语音提交桥据此识别过期请求）
+  getRendererTargetId: () => rendererTargetId,
+  // main → ChatPage：外部语音文本提交请求（携带租约冻结的目标）
+  onSpeechInputCommitRequest: (callback: (request: SpeechInputCommitRequest) => void) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      request: SpeechInputCommitRequest,
+    ) => callback(request);
+    ipcRenderer.on(IPC.SPEECH_INPUT_COMMIT_REQUEST, listener);
+    return () => ipcRenderer.removeListener(IPC.SPEECH_INPUT_COMMIT_REQUEST, listener);
+  },
+  // ChatPage → main：提交结果（必须回显 requestId 与 rendererTargetId）
+  sendSpeechInputCommitResult: (result: SpeechInputCommitResult) =>
+    ipcRenderer.send(IPC.SPEECH_INPUT_COMMIT_RESULT, result),
 };
 
 contextBridge.exposeInMainWorld("chatStore", chatStoreApi);

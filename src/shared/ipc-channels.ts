@@ -8,6 +8,26 @@ export interface ScreenshotInsertPayload {
   hasAnnotations: boolean;
 }
 
+/** 语音输入提交请求（main → 聊天窗口渲染页）：把外部识别文本提交到冻结的会话。 */
+export interface SpeechInputCommitRequest {
+  /** 本次提交的关联标识；结果必须原样回显。 */
+  requestId: string;
+  /** 租约冻结的渲染目标标识；页面据此识别过期请求。 */
+  rendererTargetId: string;
+  sessionId: string;
+  mode: "chat" | "work" | "learn" | "code";
+  text: string;
+}
+
+/** 语音输入提交结果（渲染页 → main）：必须回显 requestId 与 rendererTargetId。 */
+export interface SpeechInputCommitResult {
+  requestId: string;
+  rendererTargetId: string;
+  ok: boolean;
+  /** ok 为 false 时的稳定错误码（PluginHostErrorCode 之一）与说明。 */
+  error?: { code: string; message: string };
+}
+
 export const IPC = {
   // pet window
   WINDOW_MINIMIZE: "window:minimize",
@@ -152,6 +172,12 @@ export const IPC = {
   CHATS_GET_ACTIVE_SESSION: "chats:get-active-session",
   // main → 所有窗口：活跃 sessionId 变化时广播
   CHATS_ACTIVE_SESSION_CHANGED: "chats:active-session-changed",
+
+  // 语音输入提交桥（主进程 ↔ 聊天窗口渲染页，仅供宿主内部使用，插件不直接接触）
+  // main → reactChatWindow：要求把外部语音识别文本提交到租约冻结的会话
+  SPEECH_INPUT_COMMIT_REQUEST: "speech-input:commit-request",
+  // reactChatWindow → main：提交结果（必须回显 requestId 与 rendererTargetId）
+  SPEECH_INPUT_COMMIT_RESULT: "speech-input:commit-result",
 
   // 对话工作区绑定
   // renderer → main：设置当前对话的工作区目录

@@ -1,7 +1,7 @@
 # Cyrene 插件系统扩展施工进度
 
 > **更新时间**：2026-09-03
-> **当前状态**：阶段 1（公开契约 + Schema + 资源跟踪器）、阶段 2（Secrets/Workspace/Conversations）、阶段 3（插件调度任务所有权）、阶段 4 全部四个大步（事件总线旁路与生命周期屏障、生命周期发布器与渠道/调度轮次、桌面轮次、工具完成事件）已完成；下一步从阶段 5（语音输入接管）开始，见第 5 节。
+> **当前状态**：阶段 1（公开契约 + Schema + 资源跟踪器）、阶段 2（Secrets/Workspace/Conversations）、阶段 3（插件调度任务所有权）、阶段 4（生命周期观察事件）、阶段 5（普通聊天语音输入租约）已全部完成；下一步从阶段 6（活动通话语音输入）开始，见第 5 节。
 > **架构设计**：[architecture.md](./architecture.md)
 > **施工方案**：[implementation-plan.md](./implementation-plan.md)
 
@@ -429,6 +429,44 @@ Harness 只读回调（`src/main/orchestrator/harness/types.ts`、`tool-round.ts
 - 修改：`src/plugins/api.ts`、`src/main/orchestrator/harness/types.ts`、`tool-round.ts`、`cyrene-harness.ts`、`src/main/orchestrator/cyrene-agent.ts`、`harness-adapter.ts`、`agent-runtime.ts`、`src/main/plugin-host/lifecycle-publisher.ts`、`src/main/application/default-dependencies.ts`
 - 测试补充：`cyrene-harness.test.ts`（成功提交后的字段白名单断言、ask_user 排他轮 not_executed/耗时语义 2 项）、`lifecycle-publisher.test.ts`（tool:finished 盖章断言）、`agent-runtime.test.ts`（buildOptions 注入转发与未配置不注入）
 
+### 2.19 大步：普通聊天语音输入租约（阶段 5）
+
+本步完成施工方案阶段 5 的全部改动：插件用自己的麦克风与模型识别文本后，把最终文本送入 Cyrene 的正常聊天路径。
+
+活动聊天目标登记（新增 `src/main/plugin-host/active-chat-target.ts`）：
+
+- `createActiveChatTargetRegistry()` 记录当前聊天窗口的活动目标：会话 ID、模式、渲染目标标识（`rendererTargetId`，preload 每次页面初始化生成）与上报的 WebContents。
+- 同一页面内切换会话不改变 `rendererTargetId`，不触发失效；主框架导航、WebContents 销毁、当前目标会话删除使目标失效并通知监听方（子框架导航不失效，用 `on` 而非 `once` 保持监听）。
+- `onSessionDeleted` 对任意会话删除触发（无论是否当前目标）：冻结了该会话的租约据此中止，即使页面已切到其他会话。
+- `chat-ui-ipc.ts` 的单个 `activeChatSessionId` 模块变量替换为全局 `activeChatTargetRegistry`；`CHATS_SET_ACTIVE_SESSION` 校验 sender 必须是聊天窗口 WebContents 后登记/清空目标；`CHATS_DELETE` 删除成功后调用 `notifySessionDeleted`。`getActiveChatSessionId()` 保留为兼容读法。
+- preload 的 `setActiveSession(sessionId, mode)` 自动附带模块级 `rendererTargetId`；ChatPage 上报时传入当前模式。
+
+独占语音输入租约（新增 `src/main/plugin-host/speech-input-service.ts`）：
+
+- `createSpeechInputService({ registry, sessionStore, commitBridge })` 在主进程维护全局唯一租约；`acquireForPlugin` 在一次同步临界区内完成"检查占用 → 冻结目标 → 登记插件资源"，两个插件争抢只有一个成功（`E_SPEECH_INPUT_BUSY`）。
+- 无活动目标返回 `E_NO_ACTIVE_INPUT_TARGET`；`active-call` 目标当前版本返回 `E_CAPABILITY_UNAVAILABLE`（阶段 6 接入）；非法目标返回 `E_INVALID_ARGUMENT`。
+- 租约登记进插件的资源跟踪器（kind `speech-input-lease`）：插件停用、激活回滚（tracker dispose）、插件停止信号、目标失效、冻结会话删除和应用退出全部收敛到同一条幂等释放路径 `releaseLease`。
+- `commit()` 校验非空文本、插件状态、租约未释放、冻结会话仍存在；不校验当前 UI 显示的会话；同一租约多次 commit 串行执行，前一次失败不阻断后续；`release()` 幂等。
+- host-services 工厂新增必填 `speechInput`，`createForPlugin` 把插件上下文（停止信号 + 资源跟踪器）绑定到全局租约服务；`plugin-runtime.ts` 创建全局单例并装配真实提交桥。
+
+文本提交桥（新增 `src/main/plugin-host/speech-input-commit-bridge.ts`）：
+
+- 新增内部 IPC（`ipc-channels.ts`）：`SPEECH_INPUT_COMMIT_REQUEST`（main → 聊天窗口）与 `SPEECH_INPUT_COMMIT_RESULT`（渲染页 → main），插件无法直接拿到通道名。
+- 请求携带 `requestId` + 冻结的 `rendererTargetId` + 会话/模式/文本；结果必须回显两者，`requestId` + `rendererTargetId` 双重匹配忽略旧页面或错误目标的迟到响应；渲染页 15 秒未响应按 `E_INTERNAL` 超时失败；渲染端回传错误码白名单归一化（未知归 `E_INTERNAL`）。
+- 目标 WebContents 不存在或已销毁返回 `E_NO_ACTIVE_INPUT_TARGET`。
+
+渲染端提交路径（`ChatPage.tsx` + preload + chat-page-bridge）：
+
+- preload 的 chatStore API 新增 `getRendererTargetId()` / `onSpeechInputCommitRequest()` / `sendSpeechInputCommitResult()`。
+- ChatPage 新增 `submitTextToSession({ sessionId, mode, text })`：使用提交请求冻结的会话与模式，不读取当前页面状态；会话已删除返回 `E_NOT_FOUND`，模式不匹配返回 `E_INVALID_ARGUMENT`；会话忙时进入与手动发送相同的消息队列（视为已接受）；用户消息落盘后即返回，模型运行转入后台。
+- `dispatchUserMessage` 新增 `keepComposer`（外部提交不清空用户草稿与附件）与 `waitForRun`（外部提交落盘后立即返回）两个可选输入；返回 `{ persisted }` 供外部提交判断落盘结果；既有手动发送路径行为不变。
+- 外部提交的监听 effect 校验 `rendererTargetId` 与本页面一致，过期请求直接回绝 `E_NO_ACTIVE_INPUT_TARGET`（页面重载后旧请求不会等到超时）。
+
+涉及文件：
+
+- 新增：`src/main/plugin-host/active-chat-target.ts`、`active-chat-target.test.ts`（12 项）、`speech-input-service.ts`、`speech-input-service.test.ts`（17 项）、`speech-input-commit-bridge.ts`、`speech-input-commit-bridge.test.ts`（5 项）
+- 修改：`src/main/chats/chat-ui-ipc.ts`、`src/main/plugin-host/host-services.ts`、`src/main/plugin-runtime.ts`、`src/shared/ipc-channels.ts`、`src/preload/index.ts`、`src/renderer/react/features/chat/pages/chat-page-bridge.ts`、`ChatPage.tsx`
+
 ## 3. 已完成验证
 
 | 验证项 | 结果 |
@@ -468,21 +506,23 @@ Harness 只读回调（`src/main/orchestrator/harness/types.ts`、`tool-round.ts
 | `npx vitest run --maxWorkers=1 src/main/orchestrator/harness src/main/orchestrator/agent-runtime.test.ts src/main/plugin-host src/plugins src/main/scheduler src/main/channels src/main/agui-bridge.test.ts`（阶段 4 大步 4 后定向） | 77 个文件 609 项测试全部通过 |
 | `npm run build:main`（阶段 4 大步 4 后） | 通过 |
 | `npm test`（阶段 4 大步 4 后） | 402 个文件 3160 项测试全部通过 |
+| `npx vitest run src/main/plugin-host/active-chat-target.test.ts src/main/plugin-host/speech-input-service.test.ts src/main/plugin-host/speech-input-commit-bridge.test.ts`（阶段 5 定向） | 3 个文件 34 项测试全部通过 |
+| `npm run build:main`（阶段 5 后） | 通过 |
+| `npm run build:preload`（阶段 5 后） | 通过 |
+| `npm test`（阶段 5 后） | 405 个文件 3194 项测试全部通过 |
 | `git diff --check` | 通过，仅有 Git 换行符提示 |
 
 ## 4. 未完成项
 
 以下项目均未开始实现，不能因为设计文档已经写好而标记为完成。
 
-（公开契约、Manifest Schema、统一资源跟踪器和宿主服务工厂已在 2.4–2.10 完成；Secrets、Workspace、Conversations 宿主数据服务已在 2.11 完成；调度数据模型、授权指纹与 scheduler-service 已在 2.12 完成；引擎运行条件、插件启停联动、渲染层投影已在 2.13 完成；用户确认 UI 与卸载清理已在 2.14 完成；事件总线旁路与生命周期屏障已在 2.15 完成；生命周期发布器与渠道/调度轮次事件已在 2.16 完成；桌面轮次协调与落盘确认已在 2.17 完成；工具完成事件已在 2.18 完成，阶段 4 至此全部完成。）
+（公开契约、Manifest Schema、统一资源跟踪器和宿主服务工厂已在 2.4–2.10 完成；Secrets、Workspace、Conversations 宿主数据服务已在 2.11 完成；调度数据模型、授权指纹与 scheduler-service 已在 2.12 完成；引擎运行条件、插件启停联动、渲染层投影已在 2.13 完成；用户确认 UI 与卸载清理已在 2.14 完成；事件总线旁路与生命周期屏障已在 2.15 完成；生命周期发布器与渠道/调度轮次事件已在 2.16 完成；桌面轮次协调与落盘确认已在 2.17 完成；工具完成事件已在 2.18 完成；普通聊天语音输入租约与文本提交桥已在 2.19 完成，阶段 5 至此全部完成。）
 
-### 4.1 语音输入接管
+### 4.1 活动通话语音输入（阶段 6）
 
-- 普通聊天语音输入目标登记。
-- 独占租约、内置 ASR 暂停和自动恢复。
-- 冻结会话及渲染目标后的文本提交桥。
-- 页面重载、导航、目标删除、插件停用和异常回收。
-- 活动通话的语音输入接入。
+- `call-manager.ts` 的 `endTurn()` 拆分重构（停止内置 ASR → 校验 → 文本入口 → Agent → TTS）。
+- `active-call` 租约目标：冻结通话代次、停止内置 ASR、外持期间忽略通话音频帧、释放时恢复内置 ASR。
+- 通话结束立即中止租约；THINKING/SPEAKING 状态的提交限制。
 - 最小本地 ASR 契约示例；不把模型和推理运行时放入 Cyrene 安装包。
 
 ### 4.2 开发者交付物
@@ -495,7 +535,7 @@ Harness 只读回调（`src/main/orchestrator/harness/types.ts`、`tool-round.ts
 
 ## 5. 下一步起点
 
-阶段 3（插件调度任务所有权）已全部完成（见 2.12–2.14）。阶段 4（生命周期观察事件）四个大步已全部完成（见 2.15–2.18）。下一步从阶段 5（普通聊天语音输入租约）开始，见 implementation-plan.md 第 5 节。
+阶段 4（生命周期观察事件）四个大步已全部完成（见 2.15–2.18）。阶段 5（普通聊天语音输入租约）已全部完成（见 2.19）。下一步从阶段 6（活动通话语音输入）开始，见 implementation-plan.md 第 6 节：先重构 `call-manager.ts` 把 `endTurn()` 拆分为可插入外部文本入口的流水线，再扩展 `speech-input-service` 支持 `active-call` 目标（冻结通话代次、内置 ASR 停止/恢复）。
 
 ### 大步 1：事件总线升级（4.1）——已完成（见 2.15）
 
@@ -525,8 +565,6 @@ Harness 只读回调（`src/main/orchestrator/harness/types.ts`、`tool-round.ts
 
 验证命令：`npx vitest run --maxWorkers=1 src/plugins src/main/plugin-host src/main/scheduler`、`npm run build:main`，每个大步合并前全量 `npm test`。
 
-不要在本阶段实现语音输入。
-
 ## 6. 当前工作区状态
 
 当前改动尚未提交。交接时应先运行 `git status --short` 复核，因为用户可能在其他智能体或本地继续修改。
@@ -548,5 +586,6 @@ Harness 只读回调（`src/main/orchestrator/harness/types.ts`、`tool-round.ts
 - `src/renderer/settings/scheduler/`：`types.ts` 已修改（补充 `ownerPluginId`）；`panel.ts`、`state.ts` 已修改（大步 3 的插件任务标注、启用确认弹窗与"等待插件启用"状态）；
 - `scripts/plugin-sdk/generate-schema.mjs`：新增；
 - `package.json`、`package-lock.json`：已修改（ajv 直接依赖、Schema 生成脚本、构建拷贝过滤器）。
+- 阶段 5（本次）：`src/main/plugin-host/` 新增 `active-chat-target.ts`、`active-chat-target.test.ts`、`speech-input-service.ts`、`speech-input-service.test.ts`、`speech-input-commit-bridge.ts`、`speech-input-commit-bridge.test.ts`；修改 `host-services.ts`、`src/main/plugin-runtime.ts`、`src/main/chats/chat-ui-ipc.ts`、`src/shared/ipc-channels.ts`、`src/preload/index.ts`、`src/renderer/react/features/chat/pages/chat-page-bridge.ts`、`ChatPage.tsx`、`docs/design/plugin-system/construction-progress.md`。
 
 后续智能体不得覆盖不属于当前小步骤的用户改动；发现工作区状态与本节不同，应以实时状态为准并先判断差异来源。

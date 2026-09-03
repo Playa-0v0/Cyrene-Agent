@@ -8,6 +8,7 @@ import {
 } from "./conversations-service";
 import { createPluginSchedulerService, type PluginSchedulerStore } from "./scheduler-service";
 import { createPluginSecretsService, type SafeStorageLike } from "./secrets-service";
+import type { SpeechInputService } from "./speech-input-service";
 import {
   createPluginWorkspaceService,
   type PluginWorkspaceStoreReader,
@@ -27,6 +28,8 @@ export interface PluginHostServicesOptions {
   chatsReader: PluginHostChatsReader;
   /** 调度存储；必须在 store.load() 完成后再创建工厂，否则插件写入会覆盖磁盘数据。 */
   schedulerStore: PluginSchedulerStore;
+  /** 独占语音输入租约服务；全局单例，由 plugin-runtime 创建一次后传入。 */
+  speechInput: SpeechInputService;
 }
 
 /**
@@ -36,7 +39,7 @@ export interface PluginHostServicesOptions {
  */
 export function createHostServiceFactory(options: PluginHostServicesOptions): PluginHostServiceFactory {
   return {
-    createForPlugin({ pluginId, signal }) {
+    createForPlugin({ pluginId, signal, trackResource }) {
       return {
         channels: { has: (channelId) => options.channelManager.has(channelId) },
         llm: options.llm,
@@ -59,6 +62,14 @@ export function createHostServiceFactory(options: PluginHostServicesOptions): Pl
           store: options.schedulerStore,
           signal,
         }),
+        speechInput: {
+          // 每插件包装：把插件上下文（停止信号 + 资源跟踪器）绑定到全局租约服务
+          acquire: (acquireOptions) =>
+            options.speechInput.acquireForPlugin(
+              { pluginId, signal, tracker: trackResource },
+              acquireOptions,
+            ),
+        },
       };
     },
   };

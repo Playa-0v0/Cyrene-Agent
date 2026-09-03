@@ -5,6 +5,10 @@ import type {
   ConversationMode,
   ToolFileChange,
 } from "../../../../../shared/chat-types";
+import type {
+  SpeechInputCommitRequest,
+  SpeechInputCommitResult,
+} from "../../../../../shared/ipc-channels";
 
 export interface ChatStoreApi {
   list: (options?: { mode?: ConversationMode }) => Promise<ChatSessionMeta[]>;
@@ -22,10 +26,18 @@ export interface ChatStoreApi {
   setWorkspace: (sessionId: string, workspaceRoot: string) => Promise<{ ok: boolean; error?: string; isEmpty?: boolean }>;
   initLearnWorkspace: (sessionId: string) => Promise<{ ok: boolean; error?: string; created?: string[]; skipped?: string[] }>;
   openWorkspace: (workspaceRoot: string) => Promise<{ ok: boolean; error?: string }>;
-  setActiveSession: (sessionId: string | null) => Promise<unknown>;
+  setActiveSession: (sessionId: string | null, mode?: ConversationMode) => Promise<unknown>;
   onChanged: (callback: () => void) => () => void;
   onReactSwitchSession: (callback: (sessionId: string) => void) => () => void;
   notifyReactReady: () => void;
+  // 本页面的渲染目标标识；语音提交桥据此识别过期请求
+  getRendererTargetId: () => string;
+  // main → ChatPage：外部语音文本提交请求（携带租约冻结的目标）
+  onSpeechInputCommitRequest: (
+    callback: (request: SpeechInputCommitRequest) => void,
+  ) => () => void;
+  // ChatPage → main：提交结果（必须回显 requestId 与 rendererTargetId）
+  sendSpeechInputCommitResult: (result: SpeechInputCommitResult) => void;
 }
 
 export interface SidebarApi {

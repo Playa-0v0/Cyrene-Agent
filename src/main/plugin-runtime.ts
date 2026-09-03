@@ -9,6 +9,9 @@ import { loadModelSettings, resolveModelSettingsProfile } from "./settings/model
 import { pluginGenerateText } from "./plugin-llm";
 import { createHostServiceFactory } from "./plugin-host/host-services";
 import type { PluginSchedulerStore } from "./plugin-host/scheduler-service";
+import { activeChatTargetRegistry } from "./plugin-host/active-chat-target";
+import { createSpeechInputService } from "./plugin-host/speech-input-service";
+import { createSpeechInputCommitBridge } from "./plugin-host/speech-input-commit-bridge";
 import { PluginManager } from "../plugins/manager";
 import { pluginPromptRegistry } from "../plugins/prompts";
 import type { LlmClient } from "./services/llm/llm-client";
@@ -32,6 +35,13 @@ export interface PluginRuntimeDeps {
 export async function startPluginRuntime(deps: PluginRuntimeDeps): Promise<PluginManager> {
   const userPluginRoot = path.join(app.getPath("userData"), "plugins");
   const pluginDataRoot = path.join(app.getPath("userData"), "plugin-data");
+  // 独占语音输入租约：全局单例，随插件运行时启动创建；
+  // 文本提交桥把冻结目标与文本经 IPC 送入聊天窗口渲染页
+  const speechInput = createSpeechInputService({
+    registry: activeChatTargetRegistry,
+    sessionStore: { getSession: (id) => chatsStore.getSession(id) ?? null },
+    commitBridge: createSpeechInputCommitBridge(deps.ipc),
+  });
   const manager = new PluginManager({
     scanRoots: [
       { path: path.join(__dirname, "..", "plugins"), source: "builtin" },
@@ -69,6 +79,7 @@ export async function startPluginRuntime(deps: PluginRuntimeDeps): Promise<Plugi
         storage: safeStorage,
         chatsReader: chatsStore,
         schedulerStore: deps.schedulerStore,
+        speechInput,
       }),
     },
     loadEnabledMap: () => loadGeneralSettings().plugins,

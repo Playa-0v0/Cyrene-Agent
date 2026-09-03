@@ -26,6 +26,10 @@ import { validateCaptionImagePath, buildImageCaptionPrompt } from "../chat/image
 import { decideImageSendStrategy } from "../chat/image-send-strategy";
 import type { WindowManager } from "../windows/window-manager";
 import { reactChatSession, reactChatWindow } from "../windows/window-state";
+import {
+  activeChatTargetRegistry,
+  parseActiveTargetPayload,
+} from "../plugin-host/active-chat-target";
 
 export interface ChatUiIpcDependencies {
   live2dWindowLifecycle: { getDiagnostics(): unknown };
@@ -34,10 +38,12 @@ export interface ChatUiIpcDependencies {
   ipc?: IpcScope;
 }
 
-let activeChatSessionId: string | null = null;
+// 活动会话不再用模块变量记录：activeChatTargetRegistry 同时维护会话、模式、
+// 渲染目标标识与失效监听，供语音输入租约冻结提交目标使用。
 
+/** 兼容旧语义：当前活动会话 ID（无目标或欢迎页时为 null）。 */
 export function getActiveChatSessionId(): string | null {
-  return activeChatSessionId;
+  return activeChatTargetRegistry.getActive()?.sessionId ?? null;
 }
 
 export function registerChatUiIpc(deps: ChatUiIpcDependencies): void {
@@ -246,15 +252,29 @@ export function registerChatUiIpc(deps: ChatUiIpcDependencies): void {
     }
   });
 
-  // 聊天窗口启动/切换会话时上报当前活跃 sessionId；main 广播给所有窗口
-  ipc.handle(IPC.CHATS_SET_ACTIVE_SESSION, (_event, sessionId: string | null) => {
-    activeChatSessionId = sessionId ?? null;
+  // 聊天窗口启动/切换会话时上报当前活跃目标（会话 + 模式 + 渲染目标标识）；
+  // 只有聊天窗口的 webContents 可以登记，其他窗口的上报被忽略；main 广播给所有窗口
+  ipc.handle(IPC.CHATS_SET_ACTIVE_SESSION, (event, payload: unknown) => {
+    const chatWindow = reactChatWindow;
+    if (!chatWindow || chatWindow.isDestroyed() || event.sender !== chatWindow.webContents) {
+      return false;
+    }
+    let activeSessionId: string | null = null;
+    if (payload == null) {
+      activeChatTargetRegistry.clearActive(event.sender);
+    } else {
+      const parsed = parseActiveTargetPayload(payload);
+      if (parsed) {
+        activeChatTargetRegistry.setActive({ sender: event.sender, ...parsed });
+        activeSessionId = parsed.sessionId;
+      }
+    }
     for (const win of BrowserWindow.getAllWindows()) {
       if (win.isDestroyed()) continue;
-      try { win.webContents.send(IPC.CHATS_ACTIVE_SESSION_CHANGED, activeChatSessionId); } catch { /* ignore */ }
+      try { win.webContents.send(IPC.CHATS_ACTIVE_SESSION_CHANGED, activeSessionId); } catch { /* ignore */ }
     }
     return true;
   });
 
-  ipc.handle(IPC.CHATS_GET_ACTIVE_SESSION, () => activeChatSessionId);
+  ipc.handle(IPC.CHATS_GET_ACTIVE_SESSION, () => getActiveChatSessionId());
 }
