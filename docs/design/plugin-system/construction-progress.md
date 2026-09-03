@@ -1,7 +1,7 @@
 # Cyrene 插件系统扩展施工进度
 
 > **更新时间**：2026-09-03
-> **当前状态**：阶段 1（公开契约 + Schema + 资源跟踪器）、阶段 2（Secrets/Workspace/Conversations）、阶段 3（插件调度任务所有权）、阶段 4（生命周期观察事件）、阶段 5（普通聊天语音输入租约）、阶段 6（活动通话语音输入）已全部完成；下一步从阶段 7（SDK、示例、Skill 与发布）开始，见第 5 节。
+> **当前状态**：阶段 1（公开契约 + Schema + 资源跟踪器）、阶段 2（Secrets/Workspace/Conversations）、阶段 3（插件调度任务所有权）、阶段 4（生命周期观察事件）、阶段 5（普通聊天语音输入租约）、阶段 6（活动通话语音输入）、阶段 7（SDK、示例、Skill 与发布）已全部完成，施工方案范围内的开发工作至此收尾；遗留项见第 4 节。
 > **架构设计**：[architecture.md](./architecture.md)
 > **施工方案**：[implementation-plan.md](./implementation-plan.md)
 
@@ -498,6 +498,36 @@ Harness 只读回调（`src/main/orchestrator/harness/types.ts`、`tool-round.ts
 - 新增：`src/main/plugin-host/speech-input-call-controller.ts`、`speech-input-call-controller.test.ts`（4 项）
 - 修改：`src/main/call/call-manager.ts`、`call-manager.test.ts`（新增 11 项，共 16 项）、`src/main/plugin-host/speech-input-service.ts`、`speech-input-service.test.ts`（新增 11 项，共 28 项）、`src/main/plugin-runtime.ts`
 
+### 2.21 SDK、示例、Skill 与发布（阶段 7）
+
+本步完成施工方案阶段 7 的全部改动：外部开发者不阅读宿主源码也能完成插件。
+
+SDK 包（`packages/plugin-sdk`，包名 `@cyrene/plugin-sdk`，版本独立维护）：
+
+- 契约单一事实来源：`scripts/plugin-sdk/build-sdk.mjs` 把 `src/plugins/api.ts` 与 `src/plugins/manifest.schema.json` 逐字节同步进 SDK 源码；`verify-package.mjs` 检查两份文件无漂移。
+- 双格式输出：tsc 产出 CJS 与 `.d.ts` 到 `dist/`，esbuild 产出 ESM 到 `dist/esm/`（JSON Schema 内联进产物，运行时唯一外部依赖为 ajv）；`package.json` exports 提供 types/require/import 映射，`./testing` 子路径导出 Mock Context。
+- `src/plugins/api.ts` 新增运行时常量导出：`PLUGIN_CAPABILITIES`（与 `PluginCapability` 一一对应）和 `PLUGIN_HOST_ERROR_CODES`（原内部 Set 转公开导出），SDK 直接再导出供插件与测试断言使用。
+- `validate-manifest.ts` 提供基于 Ajv 的 Manifest 校验入口；`testing/index.ts` 提供 `createMockPluginContext()`（可记录工具/IPC/Provider/事件/存储/onDispose，零 Electron 依赖）与契约断言工具。
+- 根 `package.json` 新增脚本：`build:plugin-sdk`、`check:plugin-sdk`（构建 + Schema 无漂移 + npm pack 包内容 + 内部路径检查）、`test:plugin-examples`。
+
+四个契约示例（`examples/`，均为 TypeScript 源码 + manifest + tsconfig）：
+
+- `weather-tool`：联网查询、工具、普通存储、Secrets 与稳定错误码处理，含后备数据源。
+- `long-term-memory`：轮次事件、冻结分页读消息、LLM 摘要、Prompt Provider。
+- `scheduled-automation`：自有定时任务的创建/列出/更新/删除，不触碰 toggle/fireNow，新建一律停用 + 白名单。
+- `local-asr-contract`：语音输入租约 acquire/commit/release 全契约（模拟识别，不含模型文件与推理运行时）。
+
+`test:plugin-examples` 模拟仓库外空项目验证退出条件：npm pack tarball → 临时项目安装 → tsc 编译四个示例 → 组装可安装目录（manifest + index.cjs）→ Mock Context 冒烟注册与契约断言。
+
+文档与 Skill 更新：`docs/plugins/plugin-dev-guide.md`、`plugin-authoring.md`、`skills/cyrene-plugin-dev/SKILL.md` 及 references（getting-started / api-spec / example-walkthrough）补充新能力（secrets/scheduler/speech-input）、错误码表、SDK 用法与测试指引。
+
+发布工作流（`.github/workflows/plugin-sdk.yml`）：PR 与 master push 只构建、打包校验和示例冒烟；`plugin-sdk-v*` 标签触发 npm 发布，优先 Trusted Publishing，未配置时回退最小权限 `NPM_TOKEN`。
+
+涉及文件：
+
+- 新增：`packages/plugin-sdk/`（package.json、README.md、tsconfig.json、src/api.ts、src/index.ts、src/validate-manifest.ts、src/manifest.schema.json、src/testing/index.ts、src/testing/index.test.ts，9 项测试）、`examples/weather-tool/`、`examples/long-term-memory/`、`examples/scheduled-automation/`、`examples/local-asr-contract/`、`scripts/plugin-sdk/build-sdk.mjs`、`verify-package.mjs`、`test-examples.mjs`、`smoke-examples.mjs`、`.github/workflows/plugin-sdk.yml`
+- 修改：`src/plugins/api.ts`（能力与错误码常量导出）、根 `package.json`（三个脚本）、`vitest.config.ts`（include 增加 `packages/*/src/**/*.test.ts`）、`.gitignore`（忽略 `packages/*/dist/` 与 npm pack 临时包）、`docs/plugins/*.md`、`skills/cyrene-plugin-dev/**`
+
 ## 3. 已完成验证
 
 | 验证项 | 结果 |
@@ -544,53 +574,28 @@ Harness 只读回调（`src/main/orchestrator/harness/types.ts`、`tool-round.ts
 | `npx vitest run src/main/call/call-manager.test.ts src/main/plugin-host/speech-input-service.test.ts src/main/plugin-host/speech-input-call-controller.test.ts src/main/plugin-host/speech-input-commit-bridge.test.ts src/main/plugin-host/active-chat-target.test.ts`（阶段 6 定向） | 5 个文件 65 项测试全部通过 |
 | `npm run build:main`（阶段 6 后） | 通过 |
 | `npm test`（阶段 6 后） | 406 个文件 3220 项测试全部通过 |
+| `npx vitest run --maxWorkers=1 packages`（阶段 7 SDK 测试定向） | 1 个文件 9 项测试全部通过 |
+| `npm run check:plugin-sdk`（阶段 7 后） | 通过（构建 + Schema 无漂移 + npm pack 包内容 + 内部路径检查） |
+| `npm run test:plugin-examples`（阶段 7 后） | 通过（四个示例从打包产物编译并冒烟契约断言） |
+| `npm test`（阶段 7 后） | 407 个文件 3229 项测试全部通过 |
 | `git diff --check` | 通过，仅有 Git 换行符提示 |
 
 ## 4. 未完成项
 
-以下项目均未开始实现，不能因为设计文档已经写好而标记为完成。
+以下为施工方案范围外的遗留项，不属于阶段 1–7 的验收条件。
 
-（公开契约、Manifest Schema、统一资源跟踪器和宿主服务工厂已在 2.4–2.10 完成；Secrets、Workspace、Conversations 宿主数据服务已在 2.11 完成；调度数据模型、授权指纹与 scheduler-service 已在 2.12 完成；引擎运行条件、插件启停联动、渲染层投影已在 2.13 完成；用户确认 UI 与卸载清理已在 2.14 完成；事件总线旁路与生命周期屏障已在 2.15 完成；生命周期发布器与渠道/调度轮次事件已在 2.16 完成；桌面轮次协调与落盘确认已在 2.17 完成；工具完成事件已在 2.18 完成；普通聊天语音输入租约与文本提交桥已在 2.19 完成；活动通话语音输入已在 2.20 完成，阶段 5–6 至此全部完成。）
+（公开契约、Manifest Schema、统一资源跟踪器和宿主服务工厂已在 2.4–2.10 完成；Secrets、Workspace、Conversations 宿主数据服务已在 2.11 完成；调度数据模型、授权指纹与 scheduler-service 已在 2.12 完成；引擎运行条件、插件启停联动、渲染层投影已在 2.13 完成；用户确认 UI 与卸载清理已在 2.14 完成；事件总线旁路与生命周期屏障已在 2.15 完成；生命周期发布器与渠道/调度轮次事件已在 2.16 完成；桌面轮次协调与落盘确认已在 2.17 完成；工具完成事件已在 2.18 完成；普通聊天语音输入租约与文本提交桥已在 2.19 完成；活动通话语音输入已在 2.20 完成；SDK、四个契约示例、文档与 Skill 更新、发布工作流已在 2.21 完成，阶段 1–7 至此全部完成。）
 
-### 4.1 开发者交付物
+### 4.1 官方插件仓库收录工具链（施工方案范围外）
 
-- `@cyrene/plugin-sdk` 开发包。
-- 插件清单结构定义及校验命令。
-- 天气、长期记忆、自动化和本地 ASR 契约示例。
-- 插件开发文档和 `cyrene-plugin-dev` Skill（技能）同步更新。
-- 官方插件仓库所需的基础静态检查规则。
+- 官方插件仓库所需的基础静态检查规则（风险声明与实际副作用比对、内部导入扫描、危险安装脚本检测）。
+- 该审核属于官方收录标准，不改变任意来源插件由用户自行承担风险的产品边界；不影响 SDK 与示例的可用性。
 
 ## 5. 下一步起点
 
-阶段 5（普通聊天语音输入租约）与阶段 6（活动通话语音输入）已全部完成（见 2.19、2.20），两种目标均满足租约契约。下一步从阶段 7（SDK、示例、Skill 与发布）开始，见 implementation-plan.md 第 7 节：`@cyrene/plugin-sdk` 开发包、契约示例（含最小本地 ASR 插件示例，模型与推理运行时不放入 Cyrene 安装包）、插件开发文档与 `cyrene-plugin-dev` Skill 更新。
+阶段 1–7 已全部完成（见 2.21），施工方案范围内的插件系统开发收尾。SDK 的首次发布流程：本地 `npm run check:plugin-sdk` 通过后，为 `packages/plugin-sdk` 更新版本号并打 `plugin-sdk-v*` 标签，由 `.github/workflows/plugin-sdk.yml` 自动发布到 npm（需先在 npm 侧配置 Trusted Publishing 或仓库 `NPM_TOKEN`）。
 
-### 大步 1：事件总线升级（4.1）——已完成（见 2.15）
-
-- `emit()` 改为 `setImmediate` 宏任务旁路：发布函数返回时不在当前调用栈进入任何第三方监听器；快照顺序派发，不等待监听器 Promise（fire-and-forget），每个监听器异步结果独立超时与错误日志。
-- 单独保留 `emitLifecycleBarrier()` 给 `plugins:ready` / `plugins:stopping`（沿用现有顺序等待 + 5 秒超时语义），普通宿主事件不得误用阻塞入口。
-- 宿主发布生成唯一 `eventId` 与 ISO 时间戳（落到新事件 payload，兼容事件不强行补入）。
-- 涉及：`src/plugins/events.ts`、`src/plugins/manager.ts`。
-
-### 大步 2：生命周期发布器 + 渠道与调度轮次（4.3）——已完成（见 2.16）
-
-- 新增 `src/main/plugin-host/lifecycle-publisher.ts` 统一盖章 `eventId`/时间戳并发布。
-- 渠道在开始执行与规范终态后发布 `turn:started` / `turn:finished`；不写桌面会话 Store 时不提供消息边界。
-- 调度器发布 `turn:started` / `turn:finished` 与含任务 ID、历史 ID 的 `scheduler:finished`；无桌面会话时不伪造 `conversationId`。
-- 涉及：`src/main/channels/bootstrap.ts`、`src/main/scheduler/scheduler-runner.ts`。
-
-### 大步 3：桌面轮次（4.2）——已完成（见 2.17）
-
-- `PendingTurnLifecycle` 协调器：runId + 终态 + 落盘确认双条件才发布一次；落盘确认 60 秒超时放弃（best-effort at-most-once）；计时器可注入时钟且 `unref()`；渲染进程销毁/重载/导航与应用关闭时清理。
-- 新增渲染端→主进程落盘确认内部 IPC（`ChatPage.tsx` 在 `checkpointRun("terminal", true)` 成功后上报）。
-- `host:turn:completed` 原样保留为 v1 兼容事件；新插件用 `host:turn:finished`；非成功终态只在真实落盘确认存在时携带 `finalMessageId`。
-- 涉及：`src/main/agui-bridge.ts`、`src/shared/ipc-channels.ts`、`src/preload/index.ts`、`src/renderer/react/features/chat/pages/ChatPage.tsx`（最小侵入）。
-
-### 大步 4：工具完成事件（4.4）——已完成（见 2.18）
-
-- Harness 内部只读 `onToolFinished` 回调，放在工具结果已确定的位置；只读 toolId、toolCallId、runId、归一化状态、注册时声明的风险、耗时；不发布参数、输出、文件变更正文与内部异常；不参与权限判断、重试、提交或恢复。
-- 涉及：`src/main/orchestrator/harness/tool-round.ts`、`src/main/orchestrator/harness/types.ts`、`lifecycle-publisher.ts`。
-
-验证命令：`npx vitest run --maxWorkers=1 src/plugins src/main/plugin-host src/main/scheduler`、`npm run build:main`，每个大步合并前全量 `npm test`。
+后续可选方向（均不在本次施工方案内）：官方插件仓库收录工具链（见第 4 节）、基于 `local-asr-contract` 示例的真实本地 ASR 插件（模型分发与推理运行时由插件仓库维护）。
 
 ## 6. 当前工作区状态
 
@@ -615,5 +620,7 @@ Harness 只读回调（`src/main/orchestrator/harness/types.ts`、`tool-round.ts
 - `package.json`、`package-lock.json`：已修改（ajv 直接依赖、Schema 生成脚本、构建拷贝过滤器）。
 - 阶段 5（本次）：`src/main/plugin-host/` 新增 `active-chat-target.ts`、`active-chat-target.test.ts`、`speech-input-service.ts`、`speech-input-service.test.ts`、`speech-input-commit-bridge.ts`、`speech-input-commit-bridge.test.ts`；修改 `host-services.ts`、`src/main/plugin-runtime.ts`、`src/main/chats/chat-ui-ipc.ts`、`src/shared/ipc-channels.ts`、`src/preload/index.ts`、`src/renderer/react/features/chat/pages/chat-page-bridge.ts`、`ChatPage.tsx`、`docs/design/plugin-system/construction-progress.md`。
 - 阶段 6（本次）：`src/main/call/call-manager.ts`、`call-manager.test.ts` 已修改（endTurn 流水线拆分与外部输入入口）；`src/main/plugin-host/` 新增 `speech-input-call-controller.ts`、`speech-input-call-controller.test.ts`，修改 `speech-input-service.ts`、`speech-input-service.test.ts`；`src/main/plugin-runtime.ts` 已修改（装配通话控制器适配器）。
+- 阶段 7（本次）：新增 `packages/plugin-sdk/`（源码；`dist/` 已 gitignore）、`examples/weather-tool/`、`examples/long-term-memory/`、`examples/scheduled-automation/`、`examples/local-asr-contract/`、`scripts/plugin-sdk/build-sdk.mjs`、`verify-package.mjs`、`test-examples.mjs`、`smoke-examples.mjs`、`.github/workflows/plugin-sdk.yml`；修改 `src/plugins/api.ts`（能力与错误码常量导出）、根 `package.json`（三个脚本）、`vitest.config.ts`（include packages 测试）、`.gitignore`、`docs/plugins/plugin-dev-guide.md`、`docs/plugins/plugin-authoring.md`、`skills/cyrene-plugin-dev/SKILL.md` 及 references、`docs/design/plugin-system/construction-progress.md`。
+- 注意：`README.md` 当前存在删除「常见问题」章节的本地改动（非插件系统施工内容，来源待与用户确认）；`docs/design/2026-09-03-*.md` 四个未跟踪文件属于其他主题设计文档，均不属于本次施工改动。
 
 后续智能体不得覆盖不属于当前小步骤的用户改动；发现工作区状态与本节不同，应以实时状态为准并先判断差异来源。

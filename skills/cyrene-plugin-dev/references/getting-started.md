@@ -178,7 +178,7 @@ ctx.registerPromptProvider({
 |---|---|
 | 启用报错“工具 id 必须以 xxx 开头” | 工具 id 没加 `<插件id>_` 前缀 |
 | 启用报错“version 不是 SemVer” | 要写 `1.0.0`，不能 `1.0` / `v1.0` |
-| 启用报错“deps 含未知值” | `deps` 只接受 `channels` / `llm` |
+| 启用报错“deps 含未知值” | `deps` 接受 `channels` / `llm` / `secrets` / `workspace` / `conversations` / `scheduler` / `speech-input` |
 | AI 不用我的工具 | description 没写清使用场景 |
 | 弹窗图片不显示 | 相对路径 + 文件确实打进包 |
 | 改了代码没生效 | 聊天窗口插件面板点“刷新插件”（清模块缓存） |

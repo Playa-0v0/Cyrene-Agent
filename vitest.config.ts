@@ -11,6 +11,7 @@ export default defineConfig({
       "src/cli/**/*.test.ts",
       "skills/**/tests/**/*.test.ts",
       "scripts/cline-poc/**/*.test.ts",
+      "packages/*/src/**/*.test.ts",
     ],
     // 单 fork 单 worker，避免 Windows 下 libuv fs-event 断言崩溃
     pool: "forks",

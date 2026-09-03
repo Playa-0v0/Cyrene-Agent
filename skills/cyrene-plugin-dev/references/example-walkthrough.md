@@ -132,3 +132,7 @@ async unregister() {
 2. 全文搜索旧 id（工具前缀、IPC 通道名都要跟着改）
 3. 替换 `collect()` 数据源和 ui.html 面板内容
 4. 版本号从 `0.1.0` 起步，每改一版递增
+
+## TypeScript + SDK 示例索引
+
+需要数据服务（Secrets、对话分页、调度任务）或语音输入租约时，参考 `examples/` 下四个 TypeScript 示例（`weather-tool`、`long-term-memory`、`scheduled-automation`、`local-asr-contract`）：它们用 `@cyrene/plugin-sdk` 的类型与测试工具编写，`npm run test:plugin-examples` 可从打包后的 SDK 编译并冒烟验证。

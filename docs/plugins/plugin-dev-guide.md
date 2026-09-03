@@ -19,6 +19,10 @@
 | **事件通信** | 监听宿主生命周期事件、和其他插件互通消息（收到"要关机了"提前收尾、天气更新通知别的插件） |
 | **注入动态上下文** | 让昔涟主动"知道"实时状态——天气、日程、番茄钟，不用用户开口问 |
 | **私有存储** | 自己的配置和数据，卸载插件也不丢 |
+| **安全密钥** | 把 API key 交给宿主安全存储保管，代码和日志里不出现明文 |
+| **读对话** | 只读地列出会话、按冻结边界翻页消息（长期记忆类插件的基础） |
+| **定时任务** | 创建自己的定时自动化任务，由宿主调度（用户确认后才启用） |
+| **语音输入** | 自带 ASR 模型的插件可接管语音输入：拿到独占租约后把识别文本提交进正常对话 |
 
 **重要认知**：插件和 Cyrene 本体运行在同一个进程里，拥有完整的 Node.js 权限（能读写文件、开进程、联网）。所以 Cyrene 只运行你信任的插件——这也意味着**你写的插件什么都能干**，不用被权限卡住。
 
@@ -108,6 +112,61 @@ my-first-plugin.zip
 
 ---
 
+---
+
+## 用 SDK 写 TypeScript 插件（推荐）
+
+上面的最小插件用纯 JavaScript 就能写。如果你的插件复杂一些，推荐用官方 SDK 开发——类型提示完整，不用翻宿主源码：
+
+```bash
+mkdir my-plugin && cd my-plugin
+npm init -y
+npm install @cyrene/plugin-sdk
+```
+
+manifest 里 `entry` 写编译产物名（如 `index.cjs`），源码用 TypeScript：
+
+```ts
+import type { CyrenePlugin, PluginTool } from "@cyrene/plugin-sdk";
+
+const hello: PluginTool = {
+  id: "my-plugin_hello",
+  name: "打招呼",
+  description: "用户让你打招呼时使用这个工具",
+  enabled: true,
+  risk: "safe",
+  effectKind: "read",
+  inputSchema: { type: "object", properties: {}, required: [] },
+  async execute() {
+    return "你好呀！这是来自插件的问候 ♪";
+  },
+};
+
+const plugin: CyrenePlugin = {
+  async register(ctx) {
+    ctx.registerTool(hello);
+  },
+};
+
+export = plugin;
+```
+
+用 tsc 编译（`module: commonjs`、`outDir` 指向插件目录）后，把 `manifest.json` 和编译产物一起打包。SDK 只是编译期依赖，**终端用户不需要安装 SDK**。
+
+发布前用 SDK 自带的测试工具验证契约，不需要启动 Cyrene：
+
+```ts
+import { createMockPluginContext, assertPluginTool } from "@cyrene/plugin-sdk/testing";
+
+const ctx = createMockPluginContext({ pluginId: "my-plugin" });
+await plugin.register(ctx);
+for (const tool of ctx.tools) {
+  assertPluginTool(tool, "my-plugin"); // 工具 id 前缀、必填字段等契约断言
+}
+await ctx.dispose(); // 模拟停止：验证清理回调
+```
+
+SDK 还导出 `validateManifestData()`（与宿主同一份 Schema 校验 manifest）和稳定错误码清单，详见 [plugin-authoring.md](./plugin-authoring.md)。
 ## 工具（Tool）写法详解
 
 工具是插件最常用的形态——给昔涟的能力清单加一行。
@@ -358,7 +417,7 @@ async register(ctx) {
 |---|---|
 | 启用报错“工具 id 必须以 xxx 开头” | 工具 id 没加 `<插件id>_` 前缀 |
 | 启用报错“version 不是 SemVer” | 版本号要写 `1.0.0`，不能是 `1.0` 或 `v1.0` |
-| 启用报错“deps 含未知值” | `deps` 只接受 `channels` / `llm`，检查拼写 |
+| 启用报错“deps 含未知值” | `deps` 接受 `channels` / `llm` / `secrets` / `workspace` / `conversations` / `scheduler` / `speech-input`，检查拼写 |
 | AI 不用我的工具 | description 没写清楚使用场景，AI 不知道何时该调 |
 | 弹窗图片不显示 | 用相对路径且文件确实打进了包里 |
 | 改了代码没生效 | 聊天窗口插件面板点“刷新插件”（会清模块缓存重新加载） |
@@ -366,4 +425,14 @@ async register(ctx) {
 
 ## 参考实现
 
-仓库 `examples/system-status/` 是一个完整的官方示例插件，覆盖了本指南全部知识点：多工具注册、带参数 schema、nvidia-smi 子进程调用、PowerShell 数据采集、无边框自绘标题栏窗口、私有 IPC 轮询刷新。写自己的插件前建议通读一遍。
+仓库 `examples/` 下有五个官方示例插件：
+
+| 示例 | 覆盖能力 | 不包含 |
+|---|---|---|
+| `system-status` | 多工具注册、带参数 schema、子进程调用、自绘窗口、私有 IPC | — |
+| `weather-tool` | 联网请求、工具、私有存储、Secrets 密钥 + 降级 | 第三方平台真实密钥 |
+| `long-term-memory` | 轮次事件、冻结分页、LLM、动态提示词 Provider | 用户画像业务规则 |
+| `scheduled-automation` | 调度任务的创建、列出、更新、删除 | 绕过用户启用和全部工具模式 |
+| `local-asr-contract` | 语音输入租约的接管、提交与释放 | ASR 模型、推理运行时和下载器 |
+
+后四个示例是 TypeScript 写的，用 `@cyrene/plugin-sdk` 编译；`npm run test:plugin-examples` 会从打包后的 SDK 编译并冒烟测试它们。

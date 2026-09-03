@@ -108,7 +108,7 @@ userData/plugin-data/<plugin-id>/
 | `entry` | string | 是 | 插件目录内裸文件名；支持 `.cjs`、`.js`、`.mjs` |
 | `icon` | string | 否 | 插件目录内裸文件名；支持 `.png`、`.jpg`、`.jpeg`、`.webp`、`.svg`；≤2MiB。在聊天窗口插件卡片左侧展示；不合法时静默忽略，不影响加载 |
 | `defaultEnabled` | boolean | 否 | 缺省 true，但只对内置插件生效 |
-| `deps` | string[] | 否 | 可选 `channels`、`llm` |
+| `deps` | string[] | 否 | 可选 `channels`、`llm`、`secrets`、`workspace`、`conversations`、`scheduler`、`speech-input` |
 
 以下情况会拒绝加载：
 
@@ -236,9 +236,11 @@ await ctx.events.emit("status", { online: true });
 
 - `host:plugins:ready`：启动扫描和自动启用完成，payload 为 `{ pluginIds: string[] }`；
 - `host:plugins:stopping`：全局插件停止开始、任何活动插件被注销之前，payload 为 `undefined`；
-- `host:turn:completed`：桌面或外部渠道的一轮对话成功完成并执行宿主收尾后发布。首版 payload
-  仅包含 `source`、`mode`、`conversationId` 和可选 `channel` / `runId`，不会广播对话原文，
-  也不会包含完整历史、模型配置或工具内部状态。
+- `host:turn:started`：一轮对话开始，payload 含 `eventId`、`timestamp`、`runId`、`mode` 和 `source`（desktop / channel / scheduler）及各来源的判别字段（desktop 携带 `conversationId` 与 `inputMessageId`；channel 携带 `channel`；scheduler 携带 `taskId` 与 `schedulerRunId`）；
+- `host:turn:finished`：一轮对话进入终态（success / cancelled / timeout / runtime_error），字段同上；desktop 分支在成功终态且 assistant 消息确认落盘后额外携带 `finalMessageId`。非成功终态不得用「当前最后一条消息」补齐该字段；
+- `host:tool:finished`：工具执行结果已确定后的只读观察通知，payload 含 `runId`、`toolId`、`toolCallId`、`status`（success / failure / unknown / not_executed）、`risk` 与可选 `durationMs`；不携带工具参数、输出正文与内部异常；
+- `host:scheduler:finished`：调度任务执行完成，payload 含 `taskId`、`schedulerRunId`、`status`、`durationMs` 与事件公共元数据，不含任务提示词与模型输出正文；
+- `host:turn:completed`：v1 兼容事件，仅成功终态发布；新代码请改用 `host:turn:started` / `host:turn:finished`。
 
 轮次完成事件属于旁路通知。宿主不会等待插件监听器，插件应自行排队处理持久化或网络同步，
 并在 `ctx.signal` 取消后尽快停止。若未来确需对话文本，应先单独评审权限和兼容边界。
@@ -330,6 +332,143 @@ LLM 请求使用当前默认模型档案，并统一经过 Cyrene 的 `LlmClient
 - `timeoutMs`：1000-300000；缺省使用聊天超时并封顶 120 秒；
 - `purpose`：只用于诊断标签，不影响模型选择。
 
+### Secrets（插件私有密钥）
+
+manifest 声明 `"deps": ["secrets"]` 后可用。密钥保存在宿主安全存储中，按插件命名空间隔离——插件无法读写其他插件的密钥；插件卸载后密钥默认保留。
+
+```js
+await ctx.deps.secrets.set("openweathermap_key", "...");
+const key = await ctx.deps.secrets.get("openweathermap_key"); // 不存在时 undefined
+const deleted = await ctx.deps.secrets.delete("openweathermap_key");
+```
+
+安全存储不可用（如系统钥匙串访问失败）时读写抛 `E_STORAGE_UNAVAILABLE`，插件应提供无密钥的降级路径或向用户提示配置问题。
+
+### Workspace（会话工作区只读绑定）
+
+manifest 声明 `"deps": ["workspace"]` 后可用。只读取会话已绑定的工作区描述，不提供绑定、解绑或选择目录的写接口。
+
+```js
+const binding = await ctx.deps.workspace.getBinding(conversationId);
+if (binding) {
+  ctx.log(`会话工作区: ${binding.root} (${binding.displayName})`);
+}
+```
+
+会话没有绑定工作区时返回 `null`，不是错误。
+
+### Conversations（会话只读服务）
+
+manifest 声明 `"deps": ["conversations"]` 后可用。只暴露插件需要的稳定投影：会话列表和消息分页，只含 user / assistant 角色和纯文本内容。
+
+```js
+const page = await ctx.deps.conversations.list({ cursor, limit: 20 });
+
+// 冻结边界分页：把桌面轮次事件的 inputMessageId / finalMessageId
+// 直接作为 fromMessageId / throughMessageId，翻页不会混入后续轮次的消息
+const messages = await ctx.deps.conversations.getMessages({
+  conversationId,
+  fromMessageId: turnEvent.inputMessageId,
+  throughMessageId: turnEvent.finalMessageId,
+  limit: 50,
+});
+```
+
+`getMessages()` 返回的 `range` 字段是本次分页实际冻结的包含式边界；后续页的游标携带同一组边界。非法游标（已删除的消息、越过终点的游标）抛 `E_INVALID_ARGUMENT`，会话不存在抛 `E_NOT_FOUND`。
+
+### Scheduler（插件调度任务）
+
+manifest 声明 `"deps": ["scheduler"]` 后可用。插件只能查看和修改自己创建的任务；接口不提供启用、立即运行或切换到全部工具模式的能力。
+
+```js
+const task = await ctx.deps.scheduler.createTask({
+  title: "每日站会提醒",
+  prompt: "提醒我写今日站会",
+  schedule: { kind: "daily", timeOfDay: "09:30" },
+  mode: "chat",
+  allowedToolIds: [], // 插件任务必须显式白名单，不允许 all-enabled
+});
+```
+
+宿主不变量：
+
+- 插件创建的任务一律以停用 + 白名单模式落盘，必须用户在宿主界面确认启用；
+- 计划、提示词、模式或工具白名单的任何变更都会撤销用户已有的授权并回到停用状态；仅改标题不影响授权；
+- 试图访问其他插件的任务统一返回 `E_NOT_OWNER`，不泄露任务存在性。
+
+### Speech-input（独占语音输入租约）
+
+manifest 声明 `"deps": ["speech-input"]` 后可用。适用于自带 ASR 模型的本地语音插件：Cyrene 只提供受控的最终文本提交入口，模型、运行时、麦克风采集和窗口都由插件自行维护。
+
+```js
+// target 二选一："active-chat"（普通聊天窗口）或 "active-call"（活动通话）
+const lease = await ctx.deps.speechInput.acquire({ target: "active-chat" });
+
+// 租约被宿主中止（页面重载、会话删除、通话结束、插件停止、应用退出）
+// 时 signal 触发，必须立即停止识别
+lease.signal.addEventListener("abort", stopRecognition, { once: true });
+
+// 提交最终识别文本：复用宿主正常用户输入路径，消息落盘后即返回，
+// 不等待模型回答；同一租约的多次 commit 串行执行
+await lease.commit("识别出的最终文本");
+
+// 幂等释放：把输入权还给宿主；释放后不得再 commit
+await lease.release();
+```
+
+租约语义：
+
+- 全局同一时刻只允许一个插件持有租约，占用中再 acquire 抛 `E_SPEECH_INPUT_BUSY`；
+- 取得租约时目标即被冻结：页面内切换会话不迁移租约；冻结目标失效时租约自动中止；
+- `active-chat` 目标要求有活动的聊天窗口，`active-call` 目标要求有进行中的通话，否则抛 `E_NO_ACTIVE_INPUT_TARGET`；`active-call` 会接管通话输入（停止内置 ASR），释放时归还；
+- commit 的失败按稳定错误码分支处理（如会话删除 `E_NOT_FOUND`、通话忙 `E_SPEECH_INPUT_BUSY`）。
+
+### 统一错误码
+
+宿主服务失败时抛出带稳定错误码的异常；插件只应依赖错误码做分支处理，不要匹配错误消息文案：
+
+```js
+import { isPluginHostError } from "@cyrene/plugin-sdk";
+
+try {
+  await lease.commit(text);
+} catch (error) {
+  if (isPluginHostError(error)) {
+    // error.code 是稳定错误码，error.message 仅供日志
+  }
+}
+```
+
+| 错误码 | 含义 |
+|---|---|
+| `E_CAPABILITY_UNAVAILABLE` | 声明的宿主服务不可用 |
+| `E_INVALID_ARGUMENT` | 参数非法（空文本、非法游标等） |
+| `E_NOT_FOUND` | 目标不存在（会话/任务已删除、通话已结束） |
+| `E_NOT_OWNER` | 试图访问其他插件拥有的资源 |
+| `E_STORAGE_UNAVAILABLE` | 安全存储不可用 |
+| `E_SPEECH_INPUT_BUSY` | 语音输入租约被占用或通话轮次进行中 |
+| `E_NO_ACTIVE_INPUT_TARGET` | 无可用的聊天窗口或活动通话 |
+| `E_PLUGIN_STOPPING` | 插件正在停止 |
+| `E_INTERNAL` | 宿主内部错误 |
+
+### SDK（@cyrene/plugin-sdk）
+
+外部开发者不需要阅读 Cyrene 宿主源码即可完成插件开发：
+
+```bash
+npm install @cyrene/plugin-sdk
+```
+
+```ts
+// TypeScript 插件：类型 + 常量 + Manifest 校验
+import type { CyrenePlugin, PluginTool } from "@cyrene/plugin-sdk";
+import { CURRENT_PLUGIN_API_VERSION, validateManifestData } from "@cyrene/plugin-sdk";
+
+// 测试工具（子路径导出）：脱离宿主验证插件契约
+import { createMockPluginContext, assertPluginTool } from "@cyrene/plugin-sdk/testing";
+```
+
+SDK 同时输出 ESM 和 CJS，不含 Electron、React 或宿主运行时依赖；插件编译期依赖 SDK，打包后的插件目录不要求终端用户安装 SDK。SDK 中带 Mock Context 的完整示例见仓库 `examples/` 下的四个示例插件。
 ## 生命周期和状态
 
 ```text

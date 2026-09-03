@@ -29,7 +29,7 @@
 | `entry` | string | 是 | 插件目录内裸文件名；支持 `.cjs`、`.js`、`.mjs`；不能含子目录或 `..` |
 | `icon` | string | 否 | 插件目录内裸文件名；支持 `.png`/`.jpg`/`.jpeg`/`.webp`/`.svg`；≤2MiB；聊天窗口插件卡片左侧展示；不合法时静默忽略，不影响加载 |
 | `defaultEnabled` | boolean | 否 | 缺省 true，**只对内置插件生效**；用户插件首次发现一律停用 |
-| `deps` | string[] | 否 | 可选值仅 `channels`、`llm`；未知值（含拼写错误）会让整个 manifest 失败 |
+| `deps` | string[] | 否 | 可选值 `channels`、`llm`、`secrets`、`workspace`、`conversations`、`scheduler`、`speech-input`；未知值（含拼写错误）会让整个 manifest 失败 |
 
 ## 拒绝加载的情况
 
@@ -109,6 +109,11 @@ async register(ctx) {
 | `ctx.registerChannelAdapter(adapter)` | 注册渠道适配器（需声明 `deps: ["channels"]`） |
 | `ctx.deps.llm.generateText(messages, opts)` | 调用宿主 LLM（需声明 `deps: ["llm"]`） |
 | `ctx.deps.channels.has(id)` | 只读查询渠道是否已存在 |
+| `ctx.deps.secrets.get/set/delete(key)` | 插件命名空间的安全密钥（需 `deps: ["secrets"]`） |
+| `ctx.deps.workspace.getBinding(convId)` | 会话工作区只读绑定（需 `deps: ["workspace"]`） |
+| `ctx.deps.conversations.list/getMessages(...)` | 会话只读分页（需 `deps: ["conversations"]`） |
+| `ctx.deps.scheduler.createTask/listTasks/updateTask/deleteTask` | 自有定时任务管理（需 `deps: ["scheduler"]`） |
+| `ctx.deps.speechInput.acquire({ target })` | 独占语音输入租约（需 `deps: ["speech-input"]`） |
 | `ctx.log(msg)` | 打日志 |
 
 ---
@@ -144,7 +149,13 @@ await ctx.events.emit("updated", { value: 1 });
 - `on()` 返回幂等退订函数；插件停用/刷新/卸载时自动退订，进入停止阶段后不能再新增订阅
 - 监听器按订阅顺序执行并等待异步结果；单个失败或超过 5 秒只跳过自己，不影响其他监听器
 - 事件名 segment 只允许字母数字 `.` `_` `-`，≤64 字符
-- 当前内置宿主事件：`host:plugins:ready`（payload `{ pluginIds: string[] }`）、`host:plugins:stopping`（无 payload）、`host:turn:completed`（详见下文）
+- 当前内置宿主事件：
+  - `host:plugins:ready`（payload `{ pluginIds: string[] }`）
+  - `host:plugins:stopping`（无 payload）
+  - `host:turn:started` / `host:turn:finished`（轮次开始与终态，详见下文）
+  - `host:tool:finished`（工具完成只读通知：`runId`/`toolId`/`toolCallId`/`status`/`risk`/`durationMs`，不含参数与输出正文）
+  - `host:scheduler:finished`（调度任务完成：`taskId`/`schedulerRunId`/`status`/`durationMs`）
+  - `host:turn:completed`（v1 兼容事件，详见下文）
 
 ---
 
@@ -169,20 +180,26 @@ ctx.registerPromptProvider({
 
 ---
 
-# 宿主对话轮次完成事件
+# 宿主对话轮次事件
+
+轮次事件按 `source`（desktop / channel / scheduler）判别，TypeScript 用户经 SDK 类型自动收窄各分支字段：
 
 ```js
-ctx.events.on("host:turn:completed", ({
-  source, mode, conversationId, channel, runId,
-}) => {
-  // 旁路通知不会阻塞主回复；耗时处理应自行排队，并响应 ctx.signal。
+ctx.events.on("host:turn:finished", (event) => {
+  // 公共字段：eventId、timestamp、runId、mode、source、status
+  if (event.source === "desktop" && event.status === "success") {
+    // desktop 分支：conversationId、inputMessageId 必有；
+    // finalMessageId 仅在本轮 assistant 消息确认落盘后存在
+    // 长期记忆插件标准用法：把 inputMessageId / finalMessageId 直接作为
+    // conversations.getMessages() 的 fromMessageId / throughMessageId 冻结读取范围
+  }
 });
 ```
 
-- 仅在桌面或外部渠道的一轮对话成功完成并执行宿主收尾后发布。
-- `source` 为 `desktop` 或 `channel`；`channel` 仅渠道来源提供，`runId` 仅可取得时提供。
-- 首版 payload 只含轮次元数据，不向插件广播用户或助手的对话原文。
-- 不含完整历史、模型配置或工具内部状态；如需文本字段，应另行评审权限与兼容边界。
+- `host:turn:started`：一轮对话开始；`host:turn:finished`：终态（success / cancelled / timeout / runtime_error 互斥，只发布其中一个）。
+- `host:turn:completed`：v1 兼容事件，仅成功终态发布；新代码请改用 started / finished。
+- 全部轮次事件都属于旁路通知，不阻塞主回复；耗时处理应自行排队，并响应 ctx.signal。
+- payload 只含轮次元数据，不向插件广播对话原文、完整历史、模型配置或工具内部状态。
 
 ---
 
@@ -232,6 +249,50 @@ const text = await ctx.deps.llm.generateText(
 
 ---
 
+# 五个数据服务速查
+
+| 依赖 | 入口 | 要点 |
+|---|---|---|
+| `secrets` | `ctx.deps.secrets.get/set/delete(key)` | 插件命名空间隔离；存储不可用抛 `E_STORAGE_UNAVAILABLE`；卸载默认保留 |
+| `workspace` | `ctx.deps.workspace.getBinding(conversationId)` | 只读；未绑定返回 `null` |
+| `conversations` | `ctx.deps.conversations.list(...)` / `getMessages(...)` | 只读稳定投影；`fromMessageId`/`throughMessageId` 冻结包含式边界；非法游标抛 `E_INVALID_ARGUMENT` |
+| `scheduler` | `ctx.deps.scheduler.createTask/listTasks/updateTask/deleteTask` | 创建即停用+白名单；执行规格变更撤销授权；访问他人任务抛 `E_NOT_OWNER` |
+| `speech-input` | `ctx.deps.speechInput.acquire({ target })` | 独占租约：`active-chat` / `active-call` 二选一；signal 中止即停识别；commit 复用宿主正常输入路径 |
+
+# 语音输入租约（本地 ASR 插件契约）
+
+Cyrene 只提供受控的最终文本提交入口；模型、运行时、麦克风采集和窗口全部由插件自行维护：
+
+```js
+const lease = await ctx.deps.speechInput.acquire({ target: "active-chat" });
+lease.signal.addEventListener("abort", stopRecognition, { once: true });
+await lease.commit("识别出的最终文本");  // 消息落盘后返回，不等模型回答
+await lease.release();                    // 幂等；归还输入权
+```
+
+- 全局唯一租约：占用中再 acquire 抛 `E_SPEECH_INPUT_BUSY`
+- 目标在取得时冻结：切会话不迁移租约；页面重载/会话删除/通话结束自动中止
+- `active-call` 会接管通话输入（内置 ASR 停止），释放时归还；通话结束立即中止租约
+
+# 统一错误码
+
+宿主服务失败抛稳定错误码异常；插件只依赖 `code` 分支，不要匹配消息文案：
+
+`E_CAPABILITY_UNAVAILABLE` / `E_INVALID_ARGUMENT` / `E_NOT_FOUND` / `E_NOT_OWNER` / `E_STORAGE_UNAVAILABLE` / `E_SPEECH_INPUT_BUSY` / `E_NO_ACTIVE_INPUT_TARGET` / `E_PLUGIN_STOPPING` / `E_INTERNAL`
+
+```js
+import { isPluginHostError } from "@cyrene/plugin-sdk";
+try { await lease.commit(text); }
+catch (error) { if (isPluginHostError(error)) { /* error.code 分支 */ } }
+```
+
+# SDK（@cyrene/plugin-sdk）
+
+- `npm install @cyrene/plugin-sdk`；同时输出 ESM 和 CJS；插件编译期依赖，终端用户不需要安装
+- 导出全部公开类型、`CURRENT_PLUGIN_API_VERSION`、`PLUGIN_CAPABILITIES`、`validateManifestData()`
+- `@cyrene/plugin-sdk/testing` 导出 `createMockPluginContext()` / `assertPluginTool()` / `assertValidManifest()`：脱离宿主验证插件契约
+
+---
 # 生命周期与状态
 
 ```text

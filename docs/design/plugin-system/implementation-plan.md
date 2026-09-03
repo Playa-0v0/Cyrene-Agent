@@ -1,6 +1,6 @@
 # Cyrene 插件系统扩展施工文档
 
-> **状态**：待实施
+> **状态**：阶段 1–7 已全部完成（2026-09-03），详见施工进度文档
 > **上游设计**：[architecture.md](./architecture.md)
 > **施工进度**：[construction-progress.md](./construction-progress.md)
 > **施工范围**：开放架构文档中的能力 1–8；不开放权限决策、Agent Loop（智能体循环）替换、核心热补丁和人格覆盖。

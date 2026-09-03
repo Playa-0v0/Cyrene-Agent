@@ -1,0 +1,36 @@
+{
+  "name": "@cyrene/plugin-sdk",
+  "version": "0.1.0",
+  "description": "Cyrene 插件开发工具包：公开契约类型、Manifest 校验与插件测试工具",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/esm/index.mjs"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "require": "./dist/testing/index.js",
+      "import": "./dist/esm/testing/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "ajv": "^8.17.1"
+  },
+  "keywords": [
+    "cyrene",
+    "plugin",
+    "sdk"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

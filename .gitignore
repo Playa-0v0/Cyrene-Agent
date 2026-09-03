@@ -21,6 +21,10 @@ dist/skills/
 release/
 release-*/
 .build-temp/
+
+# plugin-sdk 构建产物与 npm pack 临时包（发布时由 CI 重新构建）
+packages/*/dist/
+packages/**/*.tgz
 # electron-builder 在仓库根生成的产物（与 release/ 同款，不进 git）
 latest.yml
 *.js.map
