@@ -410,6 +410,7 @@ async register(ctx) {
 - 图片等资源直接放插件目录里随包分发，HTML 里用相对路径引用
 - **更新插件**：直接导入同名新版本 zip，Cyrene 会确认替换、自动备份旧版、保留你的私有数据和启用状态
 - 版本号记得改 manifest 的 `version`，方便用户区分
+- **公开分发**：想让插件被更多用户看到，提交 PR 到官方收录仓库 [Cyrene-Plugins](https://github.com/Playa-0v0/Cyrene-Plugins)：提交可直接安装的产物（不传 zip），审核通过后由维护者统一打包，用户即可从仓库下载 ZIP 导入，收录规则见仓库内 CONTRIBUTING.md
 
 ## 常见坑
 

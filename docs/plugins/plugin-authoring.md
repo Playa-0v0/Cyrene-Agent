@@ -469,6 +469,8 @@ import { createMockPluginContext, assertPluginTool } from "@playa0v0/cyrene-plug
 ```
 
 SDK 同时输出 ESM 和 CJS，不含 Electron、React 或宿主运行时依赖；插件编译期依赖 SDK，打包后的插件目录不要求终端用户安装 SDK。SDK 中带 Mock Context 的完整示例见仓库 `examples/` 下的四个示例插件。
+
+开发完成的插件想公开发布：提交 PR 到官方收录仓库 [Cyrene-Plugins](https://github.com/Playa-0v0/Cyrene-Plugins)，审核收录后用户可直接下载 ZIP 导入。
 ## 生命周期和状态
 
 ```text

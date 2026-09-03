@@ -1,7 +1,7 @@
 ---
 name: cyrene-plugin-dev
 description: 当用户想为 Cyrene 开发插件（扩展昔涟的工具、做插件弹窗、接入渠道）、调试插件报错，或询问插件怎么写时使用。涉及 Cyrene 本体源码的功能开发不使用本 Skill。
-version: 1.2.0
+version: 1.3.0
 effectKind: mutation
 modes:
   - code
@@ -118,6 +118,12 @@ await ctx.dispose();
 1. 聊天窗口插件卡片状态为 `running`
 2. 有弹窗的：点“打开”按钮窗口正常显示、关闭再开正常
 3. 有工具的：对话里问一个应触发工具的问题，确认 AI 调用并转述结果
+
+## 分发与收录
+
+- 插件装好后只在用户本机可用。**用户想让插件被更多人看到/使用时，主动提醒**：可提交 PR 到官方收录仓库 [Cyrene-Plugins](https://github.com/Playa-0v0/Cyrene-Plugins)，审核通过后其他用户可直接下载 ZIP 导入
+- 收录要求（完整规范见仓库 CONTRIBUTING.md）：`plugins/<插件id>/` 下放可直接安装的产物（manifest + 编译后入口 + README）+ `registry.json` 登记 + README「已收录插件」表格加一行；**不要上传 zip**，ZIP 由维护者从审核过的源码统一打包
+- 反过来，用户想安装别人开发的插件：从仓库 README「已收录插件」表格下载 ZIP，走上方导入流程即可
 
 ## 排查既有插件问题
 
