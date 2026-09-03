@@ -8,7 +8,7 @@
 
 ## 1. 施工目标
 
-本施工文档把架构边界落实为可执行的代码改动。完成后，第三方开发者只依赖 SDK（软件开发工具包）`@cyrene/plugin-sdk`，即可开发联网工具、外部服务写操作、本地知识库、代码工具、长期记忆、渠道、自有窗口、后台自动化、观察类扩展和外部 ASR（自动语音识别）输入插件。
+本施工文档把架构边界落实为可执行的代码改动。完成后，第三方开发者只依赖 SDK（软件开发工具包）`@playa0v0/cyrene-plugin-sdk`，即可开发联网工具、外部服务写操作、本地知识库、代码工具、长期记忆、渠道、自有窗口、后台自动化、观察类扩展和外部 ASR（自动语音识别）输入插件。
 
 宿主只负责稳定 API（应用程序编程接口）、内部适配、生命周期回收和契约测试。模型文件、推理运行时、插件窗口、跨平台兼容、下载器和业务实现均由插件作者维护。
 
@@ -149,7 +149,7 @@ scripts/plugin-sdk/
 ```text
 第三方插件
   ↓ 只依赖
-@cyrene/plugin-sdk / src/plugins/api.ts
+@playa0v0/cyrene-plugin-sdk / src/plugins/api.ts
   ↓ 由 Context 注入
 src/main/plugin-host/*
   ↓ 只在适配层内部使用
@@ -817,7 +817,7 @@ speech-input:commit-result
 
 建立 `packages/plugin-sdk`：
 
-- 包名 `@cyrene/plugin-sdk`；
+- 包名 `@playa0v0/cyrene-plugin-sdk`；
 - 同时输出 ESM 和 CJS；
 - 导出公开类型、版本常量、能力常量、Manifest 校验入口；
 - `testing` 子路径导出 `createMockPluginContext()` 和契约断言；

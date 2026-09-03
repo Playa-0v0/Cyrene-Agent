@@ -90,12 +90,12 @@ p.register({
 TypeScript 插件优先用官方 SDK 的测试工具（不需要启动 Cyrene）：
 
 ```bash
-npm install @cyrene/plugin-sdk
+npm install @playa0v0/cyrene-plugin-sdk
 ```
 
 ```js
 // 测试脚本：Mock Context 验证 register 契约、工具 id、清理回调
-const { createMockPluginContext, assertPluginTool } = require("@cyrene/plugin-sdk/testing");
+const { createMockPluginContext, assertPluginTool } = require("@playa0v0/cyrene-plugin-sdk/testing");
 const ctx = createMockPluginContext({ pluginId: "<plugin-id>" });
 await plugin.register(ctx);
 ctx.tools.forEach((t) => assertPluginTool(t, "<plugin-id>"));

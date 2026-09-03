@@ -9,7 +9,7 @@
  *    更新仅改标题时不影响授权
  * 4. storage 记录任务 id 清单，配合 listTasks 对账
  */
-import type { CyrenePlugin, PluginDeps, PluginTool } from "@cyrene/plugin-sdk";
+import type { CyrenePlugin, PluginDeps, PluginTool } from "@playa0v0/cyrene-plugin-sdk";
 
 let deps: PluginDeps = {};
 /** 自己创建的任务 id 清单。 */

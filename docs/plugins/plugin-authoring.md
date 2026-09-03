@@ -428,7 +428,7 @@ await lease.release();
 宿主服务失败时抛出带稳定错误码的异常；插件只应依赖错误码做分支处理，不要匹配错误消息文案：
 
 ```js
-import { isPluginHostError } from "@cyrene/plugin-sdk";
+import { isPluginHostError } from "@playa0v0/cyrene-plugin-sdk";
 
 try {
   await lease.commit(text);
@@ -451,21 +451,21 @@ try {
 | `E_PLUGIN_STOPPING` | 插件正在停止 |
 | `E_INTERNAL` | 宿主内部错误 |
 
-### SDK（@cyrene/plugin-sdk）
+### SDK（@playa0v0/cyrene-plugin-sdk）
 
 外部开发者不需要阅读 Cyrene 宿主源码即可完成插件开发：
 
 ```bash
-npm install @cyrene/plugin-sdk
+npm install @playa0v0/cyrene-plugin-sdk
 ```
 
 ```ts
 // TypeScript 插件：类型 + 常量 + Manifest 校验
-import type { CyrenePlugin, PluginTool } from "@cyrene/plugin-sdk";
-import { CURRENT_PLUGIN_API_VERSION, validateManifestData } from "@cyrene/plugin-sdk";
+import type { CyrenePlugin, PluginTool } from "@playa0v0/cyrene-plugin-sdk";
+import { CURRENT_PLUGIN_API_VERSION, validateManifestData } from "@playa0v0/cyrene-plugin-sdk";
 
 // 测试工具（子路径导出）：脱离宿主验证插件契约
-import { createMockPluginContext, assertPluginTool } from "@cyrene/plugin-sdk/testing";
+import { createMockPluginContext, assertPluginTool } from "@playa0v0/cyrene-plugin-sdk/testing";
 ```
 
 SDK 同时输出 ESM 和 CJS，不含 Electron、React 或宿主运行时依赖；插件编译期依赖 SDK，打包后的插件目录不要求终端用户安装 SDK。SDK 中带 Mock Context 的完整示例见仓库 `examples/` 下的四个示例插件。

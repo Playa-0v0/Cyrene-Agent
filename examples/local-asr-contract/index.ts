@@ -16,8 +16,8 @@ import type {
   PluginHostError,
   PluginSpeechInputLease,
   PluginTool,
-} from "@cyrene/plugin-sdk";
-import { isPluginHostError } from "@cyrene/plugin-sdk";
+} from "@playa0v0/cyrene-plugin-sdk";
+import { isPluginHostError } from "@playa0v0/cyrene-plugin-sdk";
 
 let deps: PluginDeps = {};
 /** 当前租约与识别状态：示例全局只允许一次进行中的识别。 */

@@ -502,7 +502,7 @@ Harness 只读回调（`src/main/orchestrator/harness/types.ts`、`tool-round.ts
 
 本步完成施工方案阶段 7 的全部改动：外部开发者不阅读宿主源码也能完成插件。
 
-SDK 包（`packages/plugin-sdk`，包名 `@cyrene/plugin-sdk`，版本独立维护）：
+SDK 包（`packages/plugin-sdk`，包名 `@playa0v0/cyrene-plugin-sdk`，版本独立维护）：
 
 - 契约单一事实来源：`scripts/plugin-sdk/build-sdk.mjs` 把 `src/plugins/api.ts` 与 `src/plugins/manifest.schema.json` 逐字节同步进 SDK 源码；`verify-package.mjs` 检查两份文件无漂移。
 - 双格式输出：tsc 产出 CJS 与 `.d.ts` 到 `dist/`，esbuild 产出 ESM 到 `dist/esm/`（JSON Schema 内联进产物，运行时唯一外部依赖为 ajv）；`package.json` exports 提供 types/require/import 映射，`./testing` 子路径导出 Mock Context。
@@ -594,6 +594,8 @@ SDK 包（`packages/plugin-sdk`，包名 `@cyrene/plugin-sdk`，版本独立维�
 ## 5. 下一步起点
 
 阶段 1–7 已全部完成（见 2.21），施工方案范围内的插件系统开发收尾。SDK 的首次发布流程：本地 `npm run check:plugin-sdk` 通过后，为 `packages/plugin-sdk` 更新版本号并打 `plugin-sdk-v*` 标签，由 `.github/workflows/plugin-sdk.yml` 自动发布到 npm（需先在 npm 侧配置 Trusted Publishing 或仓库 `NPM_TOKEN`）。
+
+包名变更（2026-09-03 首次发布时）：npm 的 `@cyrene` 命名空间已被第三方项目 Cyrene Framework 占用（其 `@cyrene/*` 系列包于 25 天前发布），非组织成员无法在该 scope 下发布。SDK 包名由 `@cyrene/plugin-sdk` 改为 `@playa0v0/cyrene-plugin-sdk`（发布者 npm 用户名 scope），全部文档、Skill、示例与脚本引用已同步更新。
 
 后续可选方向（均不在本次施工方案内）：官方插件仓库收录工具链（见第 4 节）、基于 `local-asr-contract` 示例的真实本地 ASR 插件（模型分发与推理运行时由插件仓库维护）。
 

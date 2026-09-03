@@ -110,7 +110,7 @@ Cyrene 当前已经具备 Plugin API（插件应用程序编程接口）v1，插
 ```text
 第三方插件
   │
-  │ 开发期依赖 @cyrene/plugin-sdk
+  │ 开发期依赖 @playa0v0/cyrene-plugin-sdk
   ▼
 PluginManager
   ├─ 校验 manifest / apiVersion / deps
@@ -686,7 +686,7 @@ CyreneHarness 执行模型与工具循环
 
 ### 11.1 包定位
 
-发布薄型 `@cyrene/plugin-sdk`，作为插件项目的开发依赖。插件构建产物不应要求用户另行安装 SDK。
+发布薄型 `@playa0v0/cyrene-plugin-sdk`，作为插件项目的开发依赖。插件构建产物不应要求用户另行安装 SDK。
 
 SDK 第一阶段只提供：
 
@@ -711,7 +711,7 @@ SDK 不提供：
 
 ```text
 src/plugins/api.ts
-  ├─ 构建 @cyrene/plugin-sdk 类型产物
+  ├─ 构建 @playa0v0/cyrene-plugin-sdk 类型产物
   ├─ 生成或校验 manifest schema
   ├─ 生成 API 字段清单
   └─ 供宿主自身编译使用
@@ -959,7 +959,7 @@ type PluginHostErrorCode =
 
 架构实现完成后应满足：
 
-1. 外部 TypeScript 插件只安装 `@cyrene/plugin-sdk` 即可获得完整类型提示；
+1. 外部 TypeScript 插件只安装 `@playa0v0/cyrene-plugin-sdk` 即可获得完整类型提示；
 2. 插件无需导入 `src/main/**` 即可实现案例 1–8；
 3. 长期记忆插件可以监听完成事件、分页读取会话、保存记忆并追加提示词；
 4. 长期记忆插件可以把桌面轮次事件边界直接传给 `getMessages()`，且不会误读后续轮次；

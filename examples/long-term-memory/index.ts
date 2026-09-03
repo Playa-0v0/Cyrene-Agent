@@ -15,7 +15,7 @@ import type {
   PluginDeps,
   PluginTool,
   PluginTurnFinishedEvent,
-} from "@cyrene/plugin-sdk";
+} from "@playa0v0/cyrene-plugin-sdk";
 
 /** 每个会话保留最近几条摘要。 */
 const MAX_MEMORIES_PER_CONVERSATION = 5;

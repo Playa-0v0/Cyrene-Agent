@@ -121,13 +121,13 @@ my-first-plugin.zip
 ```bash
 mkdir my-plugin && cd my-plugin
 npm init -y
-npm install @cyrene/plugin-sdk
+npm install @playa0v0/cyrene-plugin-sdk
 ```
 
 manifest 里 `entry` 写编译产物名（如 `index.cjs`），源码用 TypeScript：
 
 ```ts
-import type { CyrenePlugin, PluginTool } from "@cyrene/plugin-sdk";
+import type { CyrenePlugin, PluginTool } from "@playa0v0/cyrene-plugin-sdk";
 
 const hello: PluginTool = {
   id: "my-plugin_hello",
@@ -156,7 +156,7 @@ export = plugin;
 发布前用 SDK 自带的测试工具验证契约，不需要启动 Cyrene：
 
 ```ts
-import { createMockPluginContext, assertPluginTool } from "@cyrene/plugin-sdk/testing";
+import { createMockPluginContext, assertPluginTool } from "@playa0v0/cyrene-plugin-sdk/testing";
 
 const ctx = createMockPluginContext({ pluginId: "my-plugin" });
 await plugin.register(ctx);
@@ -435,4 +435,4 @@ async register(ctx) {
 | `scheduled-automation` | 调度任务的创建、列出、更新、删除 | 绕过用户启用和全部工具模式 |
 | `local-asr-contract` | 语音输入租约的接管、提交与释放 | ASR 模型、推理运行时和下载器 |
 
-后四个示例是 TypeScript 写的，用 `@cyrene/plugin-sdk` 编译；`npm run test:plugin-examples` 会从打包后的 SDK 编译并冒烟测试它们。
+后四个示例是 TypeScript 写的，用 `@playa0v0/cyrene-plugin-sdk` 编译；`npm run test:plugin-examples` 会从打包后的 SDK 编译并冒烟测试它们。

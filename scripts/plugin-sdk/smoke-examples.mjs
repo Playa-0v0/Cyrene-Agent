@@ -5,7 +5,7 @@ import path from "node:path";
 import { readdir, readFile } from "node:fs/promises";
 
 const require = createRequire(import.meta.url);
-const { createMockPluginContext, assertPluginTool, assertValidManifest } = require("@cyrene/plugin-sdk/testing");
+const { createMockPluginContext, assertPluginTool, assertValidManifest } = require("@playa0v0/cyrene-plugin-sdk/testing");
 
 const installRoot = process.argv[2];
 const pluginDirs = await readdir(installRoot);
