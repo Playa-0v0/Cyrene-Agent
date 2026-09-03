@@ -10,7 +10,8 @@ import type { PermissionApprovalRequest } from "./chat-page-bridge";
 import { recoverInterruptedMessage } from "./session-runtime-state";
 
 const CONVERSATION_MODES: readonly ConversationMode[] = ["chat", "work", "code", "learn"];
-const LAST_MODE_STORAGE_KEY = "cyrene-react-last-mode";
+/** 最后停留模式的 localStorage 键：写入方（ChatPage）与读取方（getInitialMode）共用同一常量。 */
+export const LAST_MODE_STORAGE_KEY = "cyrene-react-last-mode";
 
 export function isConversationMode(value: string): value is ConversationMode {
   return CONVERSATION_MODES.includes(value as ConversationMode);

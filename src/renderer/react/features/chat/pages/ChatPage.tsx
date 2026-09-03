@@ -41,6 +41,7 @@ import {
 import {
   getInitialMode,
   isConversationMode,
+  LAST_MODE_STORAGE_KEY,
   permissionInteraction,
   toUiMessages,
 } from "./chat-page-normalizers";
@@ -53,15 +54,18 @@ import {
 } from "./openSessionByDeps";
 import { AgentRunController, type AgentRunInput } from "./run/AgentRunController";
 import {
+  appendPendingQueueEntry,
   clearSessionInteraction,
   bindWorkspaceName,
   findSessionIdForRun,
   hasActiveRunForSession,
   hydrateSessionMessages,
   patchSessionMessage,
+  removePendingQueueEntry,
   sessionInteraction,
   setSessionInteraction,
   setSessionInteractionBusy,
+  type PendingQueueBySession,
   type SessionInteractionState,
   type TodoStateBySession,
 } from "./session-runtime-state";
@@ -214,7 +218,7 @@ export function ChatPage() {
   const activeAguiOffsRef = useRef(new Set<() => void>());
   const cancelRequestedSessionsRef = useRef(new Set<string>());
   // 外部提交（语音输入）入队的消息带 keepComposer，消费时不触碰用户草稿
-  const [pendingQueueBySession, setPendingQueueBySession] = useState<Record<string, { id: string; rawContent: string; visibleContent: string; attachments: ComposerAttachment[]; userSticker?: string; keepComposer?: boolean }[]>>({});
+  const [pendingQueueBySession, setPendingQueueBySession] = useState<PendingQueueBySession>({});
   const pendingQueueBySessionRef = useRef(pendingQueueBySession);
   useEffect(() => {
     pendingQueueBySessionRef.current = pendingQueueBySession;
@@ -1209,13 +1213,13 @@ export function ChatPage() {
 
     // 如果当前 session 正在跑模型，新消息进入 composer 上方队列，等当前 run 结束后自动发送
     if (isSessionBusy(sessionId)) {
-      const nextQueue = {
-        ...pendingQueueBySessionRef.current,
-        [sessionId]: [
-          ...(pendingQueueBySessionRef.current[sessionId] ?? []),
-          { id: userMessageId, rawContent: message, visibleContent, attachments: attachmentsForMessage, userSticker },
-        ],
-      };
+      const nextQueue = appendPendingQueueEntry(pendingQueueBySessionRef.current, sessionId, {
+        id: userMessageId,
+        rawContent: message,
+        visibleContent: visibleMessage,
+        attachments: attachmentsForMessage,
+        userSticker,
+      });
       pendingQueueBySessionRef.current = nextQueue;
       setPendingQueueBySession(nextQueue);
       setDrafts((current) => ({ ...current, [scopeKey]: "" }));
@@ -1367,19 +1371,13 @@ export function ChatPage() {
     }
     // 会话忙时进入同一消息队列，当前 run 结束后自动发送（视为已接受）
     if (isSessionBusy(input.sessionId)) {
-      const nextQueue = {
-        ...pendingQueueBySessionRef.current,
-        [input.sessionId]: [
-          ...(pendingQueueBySessionRef.current[input.sessionId] ?? []),
-          {
-            id: crypto.randomUUID(),
-            rawContent: text,
-            visibleContent: text,
-            attachments: [],
-            keepComposer: true,
-          },
-        ],
-      };
+      const nextQueue = appendPendingQueueEntry(pendingQueueBySessionRef.current, input.sessionId, {
+        id: crypto.randomUUID(),
+        rawContent: text,
+        visibleContent: text,
+        attachments: [],
+        keepComposer: true,
+      });
       pendingQueueBySessionRef.current = nextQueue;
       setPendingQueueBySession(nextQueue);
       return { ok: true };
@@ -1424,10 +1422,7 @@ export function ChatPage() {
   }
 
   function removeQueuedMessage(sessionId: string, id: string) {
-    const next = {
-      ...pendingQueueBySessionRef.current,
-      [sessionId]: (pendingQueueBySessionRef.current[sessionId] ?? []).filter((item) => item.id !== id),
-    };
+    const next = removePendingQueueEntry(pendingQueueBySessionRef.current, sessionId, id);
     pendingQueueBySessionRef.current = next;
     setPendingQueueBySession(next);
   }
@@ -1441,13 +1436,13 @@ export function ChatPage() {
     const visibleContent = parsedMessage.visibleContent;
     const attachmentsForMessage = attachments.map((attachment) => ({ ...attachment }));
     const userMessageId = crypto.randomUUID();
-    const nextQueue = {
-      ...pendingQueueBySessionRef.current,
-      [sessionId]: [
-        ...(pendingQueueBySessionRef.current[sessionId] ?? []),
-        { id: userMessageId, rawContent: parsedMessage.rawContent, visibleContent, attachments: attachmentsForMessage, userSticker },
-      ],
-    };
+    const nextQueue = appendPendingQueueEntry(pendingQueueBySessionRef.current, sessionId, {
+      id: userMessageId,
+      rawContent: parsedMessage.rawContent,
+      visibleContent,
+      attachments: attachmentsForMessage,
+      userSticker,
+    });
     pendingQueueBySessionRef.current = nextQueue;
     setPendingQueueBySession(nextQueue);
     setDrafts((current) => ({ ...current, [scopeKey]: "" }));
