@@ -13,6 +13,9 @@ interface PluginModePanelProps {
   api?: PluginManagementApi;
 }
 
+// Cyrene 官方插件收录仓库（GitHub），面板内展示并可在系统浏览器打开
+const PLUGIN_REGISTRY_URL = "https://github.com/Playa-0v0/Cyrene-Plugins";
+
 type HeaderAction = "refresh" | "import" | null;
 
 const STATUS_ORDER: Record<PluginRuntimeStatus, number> = {
@@ -170,6 +173,18 @@ export function PluginModePanel({ api: providedApi }: PluginModePanelProps) {
         <div className="plugin-panel__heading">
           <h1 className="plugin-panel__title">{t("pluginPanel.title")}</h1>
           <p className="plugin-panel__subtitle">{t("pluginPanel.subtitle")}</p>
+          <p className="plugin-panel__subtitle plugin-panel__registry">
+            {t("pluginPanel.registryPrefix")}
+            <a
+              className="plugin-panel__registry-link"
+              href={PLUGIN_REGISTRY_URL}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("pluginPanel.registryLink")}
+            </a>
+            {t("pluginPanel.registrySuffix")}
+          </p>
         </div>
         <div className="plugin-panel__header-actions">
           <button

@@ -215,6 +215,9 @@
   "pluginPanel": {
     "title": "功能插件",
     "subtitle": "管理已安装的功能插件；新导入的插件默认停用，请确认来源可信后再启用。",
+    "registryPrefix": "Cyrene 收录仓库:",
+    "registryLink": "Cyrene-Plugins",
+    "registrySuffix": "；昔涟已经配套具体的 SDK 与 Skill，可以直接让她帮你开发。",
     "searchPlaceholder": "搜索插件名称、描述或开发者…",
     "refresh": "刷新插件",
     "add": "添加插件",

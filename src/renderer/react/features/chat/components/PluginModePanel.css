@@ -38,6 +38,21 @@
   font-size: 12px;
 }
 
+/* 收录仓库链接行：链接用强调色，普通点击与辅助键点击均由主进程转交系统浏览器打开 */
+.plugin-panel__registry {
+  margin-top: 4px;
+}
+
+.plugin-panel__registry-link {
+  color: var(--cy-accent, #ff5b8a);
+  text-decoration: none;
+}
+
+.plugin-panel__registry-link:hover {
+  text-decoration: underline;
+}
+
+
 .plugin-panel__header-actions {
   display: flex;
   align-items: center;

@@ -72,6 +72,9 @@ export function createReactChatWindowShell(): BrowserWindow {
   });
   setReactChatWindow(window);
 
+  // 聊天窗口内出现外链（如插件收录仓库）时转交系统浏览器打开，不再派生新窗口
+  attachExternalLinkHandler(window);
+
   window.webContents.on("did-start-loading", () => {
     reactChatSession.markLoading();
   });
