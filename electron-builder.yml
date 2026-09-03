@@ -43,6 +43,19 @@ extraResources:
   # 第三方 skills 快照归档：首启解压到 userData/skills（见 src/main/skills/snapshot-install.ts）
   - from: vendor/cyrene-skills
     to: cyrene-skills
+  # 本地 ASR 配套服务端源码（纯 Python 源文件，约 20KB；模型与依赖由用户按需部署，
+  # 见 scripts/local-asr-server/README.md）。装进安装包让安装版用户也能拿到服务端，
+  # 开发版直接读仓库 scripts/ 目录。
+  - from: scripts/local-asr-server
+    to: scripts/local-asr-server
+    filter:
+      - "**/*"
+      - "!__pycache__/**"
+      - "!*.pyc"
+      - "!.venv/**"
+      - "!models/**"
+      - "!asr.log"
+      - "!asr_crash.log"
 win:
   icon: assets/tray-icon.ico
   target:

@@ -3,14 +3,23 @@ import { encodePcm16MonoWav } from "./mossland-asr-engine";
 /**
  * 本地 FunASR 服务默认基址。
  *
- * 配套服务端脚本：`skills/cyrene-local-asr/asr_server.py`
- *   （Flask，监听 8328，启动方式见该技能目录下的 start_asr.bat / start_asr_silent.bat）
+ * 配套服务端脚本随本仓库分发：`scripts/local-asr-server/asr_server.py`
+ *   （FastAPI，默认监听 127.0.0.1:8328，部署方式见同目录 README.md）
  *
  * 历史包袱：早期 `settings-facade.ts` 与 `asrEngine` 白名单已经把 `"local"` 列入合法值，
  * 但分发器一直没有 local 分支，UI 下拉框也长期挂着「占位，敬请期待」。
  * 本 PR 借 mossland 已有 `MosslandAsrStream` 的批量转写形态，把这个官方预留的「插座」接上电。
  */
 export const DEFAULT_LOCAL_ASR_URL = "http://127.0.0.1:8328";
+
+/**
+ * 规范化用户填写的服务地址：去掉末尾斜杠。
+ * `http://127.0.0.1:8328/` 与 `http://127.0.0.1:8328` 应指向同一个服务，
+ * 直接字符串拼接前先归一，避免拼出 `//v1/audio/transcriptions` 这种路径。
+ */
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, "");
+}
 
 /**
  * `GET /status` 探测超时：设置短（2s）即可，目的是给用户一个清楚的「服务未启动」
@@ -40,21 +49,37 @@ const TRANSCRIBE_TIMEOUT_MS = 30_000;
  *      这种上下文只有这里知道，本函数里 throw 更合适，不要污染 mossland 模块；
  *   3) 用原生 `fetch` 而不是项目内的统一 client，可以减少这个文件对外部模块的依赖。
  */
-async function transcribeLocal(baseUrl: string, wav: Buffer): Promise<string> {
+async function transcribeLocal(
+  baseUrl: string,
+  wav: Buffer,
+  token?: string,
+): Promise<string> {
   const form = new FormData();
   form.append("model", "moss-transcribe");  // 与 OpenAI 接口对齐；服务端忽略此字段
   form.append("response_format", "json");    // 服务端固定返回 JSON；保留以备将来
   form.append("file", new Blob([wav], { type: "audio/wav" }), "speech.wav");
 
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+    response = await fetch(`${normalizeBaseUrl(baseUrl)}/v1/audio/transcriptions`, {
       method: "POST",
+      headers,
       body: form,
       signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
     });
-  } catch {
-    // fetch reject 触发原因常见：服务未启动（ECONNREFUSED）、网络超时、AbortSignal timeout
+  } catch (err) {
+    // fetch reject 的两类常见原因要区分开，否则会把「转写超时」误报成「服务没开」，
+    // 用户跟着提示去重启一个正在正常推理的服务，越排查越乱：
+    //   - AbortSignal.timeout 触发 → DOMException (name === "TimeoutError") → 转写超时
+    //   - 连接拒绝/网络不可达     → TypeError → 服务未启动
+    if (err instanceof DOMException && err.name === "TimeoutError") {
+      throw new Error(
+        `本地 ASR 转写超时（>${TRANSCRIBE_TIMEOUT_MS / 1000}s）：音频过长或 CPU 推理较慢，请稍后重试`,
+      );
+    }
     throw new Error("本地 ASR 服务未启动：请先启动 127.0.0.1:8328 的 FunASR 服务再通话");
   }
   if (!response.ok) {
@@ -78,8 +103,10 @@ async function transcribeLocal(baseUrl: string, wav: Buffer): Promise<string> {
  *   ┌─────────────┬─────────────────────────────┬────────────────────────────┐
  *   │             │ MosslandAsrStream           │ LocalAsrStream（本类）       │
  *   ├─────────────┼─────────────────────────────┼────────────────────────────┤
- *   │ 鉴权        │ API Key（start 校验非空）      │ 无（本地服务信任调用方）       │
- *   │ 健康探测    │ 无（依赖配置非空）             │ start 时 GET /status        │
+ *   │ 鉴权        │ API Key（start 校验非空）      │ 可选 Bearer token（本机部署 │
+ *   │             │                             │ 默认不设，局域网共享时使用）   │
+ *   │ 健康探测    │ 无（依赖配置非空）             │ start 时 GET /status，       │
+ *   │             │                             │ 并校验 model_loaded          │
  *   │ 网络错误    │ mosslandFetch 归一化          │ 直接 throw，文案明确          │
  *   │ 转写超时    │ 来自 resolveTimeoutPolicy     │ 写死 30s（TRANSCRIBE_TIMEOUT_MS）│
  *   │ PCM 编码    │ 复用同一 encodePcm16MonoWav  │ 复用同一 encodePcm16MonoWav │
@@ -94,11 +121,14 @@ async function transcribeLocal(baseUrl: string, wav: Buffer): Promise<string> {
  *
  * 配套服务端契约（与本类共同维护，若改其中一者请同步另一者）：
  *   - `GET  {baseUrl}/status`
- *       响应：`{ "model_loaded": true }`（200）或任意非 200 视为不可用
- *       用途：`start()` 用来给用户一个明确的「服务未启动」错误，而不是等到 stop 才超时
+ *       响应：`{ "model_loaded": true, ... }`（200，模型就绪）
+ *             或同结构 body + HTTP 503（服务在、模型还在加载/预热中）
+ *       用途：`start()` 区分「服务未启动」（fetch 抛异常）与「模型未就绪」（503），
+ *             给用户不同文案，而不是都笼统报「未启动」
  *   - `POST {baseUrl}/v1/audio/transcriptions`
- *       入参：multipart/form-data，字段 `model/response_format/file`
- *       响应：`{ "text": "..." }`（200）/ 4xx-5xx 错误
+ *       入参：multipart/form-data，字段 `model/response_format/file`；
+ *             服务端设置 ASR_TOKEN 时要求 `Authorization: Bearer <token>`
+ *       响应：`{ "text": "..." }`（200）/ 401（token 错）/ 4xx-5xx 其他错误
  */
 export class LocalAsrStream {
   /** PCM 帧缓存：`sendAudio` 推入，`finish` 时一次性 concat。 */
@@ -109,31 +139,41 @@ export class LocalAsrStream {
    * 必须保证底层转写请求只发一次。
    */
   private stopPromise: Promise<string> | null = null;
+  /** 规范化后的服务基址（末尾斜杠已去）。 */
+  private readonly base: string;
 
   constructor(
-    private readonly baseUrl: string,
+    baseUrl: string,
     private readonly onFinal: (text: string) => void,
-  ) {}
+    /** 服务端设置 ASR_TOKEN 时传入，转写请求带 Bearer 头；本机默认部署可省略。 */
+    private readonly token?: string,
+  ) {
+    this.base = normalizeBaseUrl(baseUrl);
+  }
 
   /**
-   * 启动会话：探测本地服务是否存活。
+   * 启动会话：探测本地服务是否存活、模型是否就绪。
    * 失败时直接抛错（带明确文案），不会走到 sendAudio。
    *
-   * 注意：探测成功 ≠ 模型已加载。本服务目前没有强制等模型预热完成（`/status`
-   * 在模型未就绪时仍会返回 200 但 `model_loaded: false`）。如果将来发现用户
-   * 在首次预热窗口里直接拨打电话导致第一次识别出错，可以在 `transcribeLocal`
-   * 阶段强阻塞等候 `model_loaded` —— 配套服务端同时改 `/status` 的语义即可。
+   * 三种失败各给不同文案：
+   *   - fetch 抛异常 → 服务未启动（ECONNREFUSED 等）
+   *   - HTTP 503     → 服务在跑但模型还在加载（FunASR 首次加载 5~20s，预热窗口内拨入）
+   *   - 其他非 200   → 服务异常
    */
   async start(): Promise<void> {
+    let resp: Response;
     try {
-      const resp = await fetch(`${this.baseUrl}/status`, {
+      resp = await fetch(`${this.base}/status`, {
         signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
       });
-      if (!resp.ok) {
-        throw new Error("status " + resp.status);
-      }
     } catch {
       throw new Error("本地 ASR 服务未启动：请先启动 127.0.0.1:8328 的 FunASR 服务再通话");
+    }
+    if (resp.status === 503) {
+      throw new Error("本地 ASR 模型加载中：服务已启动但模型尚未就绪（首次加载约 5~20 秒），请稍后再试");
+    }
+    if (!resp.ok) {
+      throw new Error(`本地 ASR 服务异常 (HTTP ${resp.status})`);
     }
   }
 
@@ -179,7 +219,7 @@ export class LocalAsrStream {
   private async finish(): Promise<string> {
     if (this.frames.length === 0) return "";
     const wav = encodePcm16MonoWav(Buffer.concat(this.frames));
-    const text = await transcribeLocal(this.baseUrl, wav);
+    const text = await transcribeLocal(this.base, wav, this.token);
     if (text) this.onFinal(text);
     return text;
   }

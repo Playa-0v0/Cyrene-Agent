@@ -19,7 +19,7 @@ export function createAsrStream(
   }
 
   if (config.engine === "local") {
-    return new LocalAsrStream(config.baseUrl ?? DEFAULT_LOCAL_ASR_URL, onFinal);
+    return new LocalAsrStream(config.baseUrl ?? DEFAULT_LOCAL_ASR_URL, onFinal, config.token);
   }
 
   const stream = new VolcanoAsrStream(onPartial, onFinal);

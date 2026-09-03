@@ -7,9 +7,9 @@ Cyrene 本地 ASR 服务（FunASR 引擎配套服务端）
 监听 127.0.0.1:8328（可用环境变量覆盖）：
 
     GET  /                            网页控制台（服务状态/监听地址/识别模型/日志/测试识别）
-    GET  /api/status                  JSON 状态
-    GET  /api/logs                    最近日志
-    POST /api/logs/ingest             主进程日志聚合入口（Cyrene 通话链路日志转发）
+    GET  /status                      JSON 状态（模型未加载时返回 503，客户端据此区分"服务在但没就绪"）
+    GET  /api/status                  同上（控制台用）
+    GET  /api/logs                    最近日志（只读）
     POST /v1/audio/transcriptions     OpenAI 兼容转写（Cyrene 通话调用）
 
 模型：paraformer-large + fsmn-vad + punc（中文语音识别全家桶）
@@ -17,8 +17,9 @@ Cyrene 本地 ASR 服务（FunASR 引擎配套服务端）
   - 未提供时由 funasr/modelscope 自动下载（首次启动需联网，约 1-2 GB）
 
 环境变量（全部可选）：
-  ASR_HOST      监听地址，默认 127.0.0.1
+  ASR_HOST      监听地址，默认 127.0.0.1（仅本机）。监听 0.0.0.0 局域网共享时务必设置 ASR_TOKEN
   ASR_PORT      监听端口，默认 8328
+  ASR_TOKEN     访问令牌。设置后 /v1/audio/transcriptions 要求 Authorization: Bearer <token>
   ASR_MODEL_DIR 本地模型根目录（内含三个子模型目录），默认取脚本同目录 models/
   ASR_DEVICE    计算设备，默认自动检测（cuda:0 或 cpu）
   ASR_LOG_FILE  日志文件路径，默认脚本同目录 asr.log
@@ -160,17 +161,24 @@ def recognize(raw: bytes) -> str:
 
 
 # ================= FastAPI =================
-from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import JSONResponse, HTMLResponse
 
-app = FastAPI(title="Cyrene Local ASR", version="1.3.0")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="Cyrene Local ASR", version="1.4.0")
+
+# 可选访问令牌：默认监听 127.0.0.1（仅本机）无需鉴权；
+# 监听 0.0.0.0 局域网共享 GPU 时，设置 ASR_TOKEN 后写接口要求 Bearer 令牌。
+# 服务端不设 CORS 中间件——控制台与 API 同源，Cyrene 客户端是服务端调用（非浏览器），
+# 均不需要跨域；对外暴露写接口的场景用令牌而不是 CORS 白名单来兜底。
+ASR_TOKEN = os.environ.get("ASR_TOKEN", "").strip()
+
+
+def _require_token(request: Request) -> None:
+    if not ASR_TOKEN:
+        return
+    auth = request.headers.get("authorization", "")
+    if auth != f"Bearer {ASR_TOKEN}":
+        raise HTTPException(status_code=401, detail="invalid or missing ASR token")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -189,8 +197,9 @@ def api_status():
             device = "cuda:0" if torch.cuda.is_available() else "cpu"
         except Exception:
             device = "cpu"
-    return {
+    payload = {
         "status": "running",
+        "ready": _asr is not None,
         "model_loaded": _asr is not None,
         "device": device,
         "recognized": RECOG_COUNT[0],
@@ -198,6 +207,12 @@ def api_status():
         "model_dir": MODEL_DIR,
         "endpoint": f"http://{HOST}:{PORT}/v1/audio/transcriptions",
     }
+    # 模型未就绪时返回 503：客户端（local-asr-engine.ts getServerStatus）
+    # 据 HTTP 状态码区分"连不上服务"与"服务在但模型加载中"两种错误。
+    # 控制台 fetch 同样走这个接口，503 响应体仍是完整 JSON，页面显示"模型未加载"。
+    if _asr is None:
+        return JSONResponse(payload, status_code=503)
+    return payload
 
 
 @app.get("/api/logs")
@@ -205,36 +220,24 @@ def api_logs():
     return {"logs": list(LOG_RING)}
 
 
-@app.post("/api/logs/ingest")
-async def api_logs_ingest(payload: dict):
-    """主进程日志聚合入口：Cyrene 主进程把通话链路日志转发到这里，
-    写入 LOG_RING，设置页"查看日志"面板即可看到 ASR/LLM/TTS 全链路日志。"""
-    level = str(payload.get("level", "INFO")).upper()
-    message = str(payload.get("message", "")).strip()
-    source = str(payload.get("source", "main"))
-    if not message:
-        return JSONResponse({"ok": False, "reason": "empty message"}, status_code=400)
-    line = f"[{source}] {message}"
-    if level == "ERROR":
-        log.error(line)
-    elif level == "WARN":
-        log.warning(line)
-    else:
-        log.info(line)
-    return {"ok": True, "level": level, "log": line}
-
-
 @app.post("/v1/audio/transcriptions")
-async def transcriptions(
+def transcriptions(
+    request: Request,
     file: UploadFile = File(...),
     model: str = Form("moss-transcribe"),
     response_format: str = Form("json"),
 ):
     """OpenAI 兼容转写入口。请求体为 multipart/form-data：
     file=WAV 音频，返回 {"text": "..."}。结构与 OpenAI /v1/audio/transcriptions
-    对齐，local-asr-engine.ts 按此契约消费。"""
+    对齐，local-asr-engine.ts 按此契约消费。
+
+    注意：这里是普通 def 而非 async def。FastAPI 会把 def 路由丢进线程池执行，
+    不占用事件循环——模型推理（CPU 模式可达 3~25 秒）期间 /status 探活、
+    /api/logs 轮询仍能正常响应，避免"转写中探活超时误报服务未启动"。
+    """
+    _require_token(request)
     t0 = time.time()
-    raw = await file.read()
+    raw = file.file.read()
     log.info("[POST /v1/audio/transcriptions] file=%s size=%dB model=%s",
              file.filename, len(raw), model)
     if not raw:
@@ -298,6 +301,7 @@ input[type=file]{font-size:13px}
 <div class="sub">上传一段 WAV（16kHz 单声道）或直接对着麦克风录 3 秒</div>
 <div class="upload-row">
   <input type="file" id="wav" accept=".wav">
+  <input type="password" id="token" placeholder="访问令牌(未设置可留空)" style="font-size:13px;padding:7px;border-radius:6px;border:1px solid #d0d7de">
   <button class="btn" onclick="testRecognize()">识别这个文件</button>
 </div>
 <div class="result" id="result"><div class="label">识别结果</div><div class="text" id="result-text"></div></div>
@@ -331,10 +335,12 @@ async function testRecognize() {
   const fd = new FormData();
   fd.append('file', fileInput.files[0]);
   fd.append('model', 'moss-transcribe');
+  const token = document.getElementById('token').value.trim();
+  const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
   document.getElementById('result').style.display = 'block';
   document.getElementById('result-text').textContent = '识别中...';
   try {
-    const r = await fetch('/v1/audio/transcriptions', { method: 'POST', body: fd });
+    const r = await fetch('/v1/audio/transcriptions', { method: 'POST', body: fd, headers: headers });
     const d = await r.json();
     document.getElementById('result-text').textContent = d.text || ('错误: ' + JSON.stringify(d));
   } catch(e) {

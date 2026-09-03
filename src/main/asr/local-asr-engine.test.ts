@@ -11,6 +11,13 @@ afterEach(() => {
 function stubFetch(probeStatus: number, transcribeStatus: number, body: unknown) {
   const impl = async (url: string | URL | Request) => {
     if (String(url).includes("/status")) {
+      if (probeStatus === 503) {
+        // 服务在跑但模型未就绪：真实 503 响应（body 仍是完整 JSON）
+        return new Response(JSON.stringify({ model_loaded: false, ready: false }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
       if (probeStatus >= 500) {
         // 模拟服务未启动：连接失败（fetch reject）
         throw new TypeError("fetch failed");
@@ -111,5 +118,61 @@ describe("LocalAsrStream", () => {
 
     const fetches = vi.mocked(fetch).mock.calls;
     expect(fetches.some(([u]) => String(u).startsWith("http://127.0.0.1:9000/status"))).toBe(true);
+  });
+
+  it("strips trailing slashes from baseUrl before building request URLs", async () => {
+    stubFetch(200, 200, { text: "斜杠" });
+
+    const stream = new LocalAsrStream("http://127.0.0.1:8328/", () => {});
+    await stream.start();
+    stream.sendAudio(Buffer.from([1, 2]));
+    await expect(stream.stop()).resolves.toBe("斜杠");
+
+    const fetches = vi.mocked(fetch).mock.calls;
+    // 拼出来的路径不应出现双斜杠（//status / //v1/...）
+    expect(fetches.some(([u]) => String(u).includes("//status"))).toBe(false);
+    expect(fetches.some(([u]) => String(u).includes("//v1/audio/transcriptions"))).toBe(false);
+    expect(fetches.some(([u]) => String(u).endsWith("8328/v1/audio/transcriptions"))).toBe(true);
+  });
+
+  it("reports 'model loading' (not 'service not running') when /status returns 503", async () => {
+    stubFetch(503, 200, null);
+
+    const stream = new LocalAsrStream(DEFAULT_LOCAL_ASR_URL, () => {});
+    await expect(stream.start()).rejects.toThrow("模型加载中");
+  });
+
+  it("sends Authorization header when a token is configured", async () => {
+    stubFetch(200, 200, { text: "带令牌" });
+
+    const stream = new LocalAsrStream(DEFAULT_LOCAL_ASR_URL, () => {}, "s3cret");
+    await stream.start();
+    stream.sendAudio(Buffer.from([1, 2]));
+    await expect(stream.stop()).resolves.toBe("带令牌");
+
+    const transcribe = vi
+      .mocked(fetch)
+      .mock.calls.find(([u]) => String(u).endsWith("/v1/audio/transcriptions"));
+    expect(transcribe).toBeDefined();
+    const init = transcribe?.[1] as RequestInit | undefined;
+    const headers = init?.headers as Record<string, string> | undefined;
+    expect(headers?.Authorization).toBe("Bearer s3cret");
+  });
+
+  it("distinguishes transcribe timeout from service-not-running", async () => {
+    // 转写请求超时：AbortSignal.timeout 触发 DOMException TimeoutError
+    const impl = async (url: string | URL | Request) => {
+      if (String(url).includes("/status")) {
+        return new Response(JSON.stringify({ model_loaded: true }), { status: 200 });
+      }
+      throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    };
+    vi.stubGlobal("fetch", vi.fn(impl));
+
+    const stream = new LocalAsrStream(DEFAULT_LOCAL_ASR_URL, () => {});
+    await stream.start();
+    stream.sendAudio(Buffer.from([1, 2]));
+
+    await expect(stream.stop()).rejects.toThrow("转写超时");
   });
 });

@@ -33,21 +33,26 @@ python asr_server.py
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `ASR_HOST` | `127.0.0.1` | 监听地址 |
+| `ASR_HOST` | `127.0.0.1` | 监听地址（仅本机）。局域网共享请用 `0.0.0.0` 并**务必**设置 `ASR_TOKEN` |
 | `ASR_PORT` | `8328` | 监听端口 |
+| `ASR_TOKEN` | （空） | 访问令牌。设置后转写接口要求 `Authorization: Bearer <token>` |
 | `ASR_MODEL_DIR` | 脚本同目录 `models/` | 本地模型根目录（含三个子模型目录） |
 | `ASR_DEVICE` | 自动检测 | `cuda:0` / `cpu` |
 | `ASR_LOG_FILE` | 脚本同目录 `asr.log` | 日志文件路径 |
+
+> 安全说明：默认监听 `127.0.0.1`，只有本机能访问，无需令牌。服务端不启用 CORS
+> （控制台与 API 同源）。如果监听 `0.0.0.0` 给局域网其他机器（如另一台电脑的 Cyrene）
+> 使用，请设置 `ASR_TOKEN`，并在 Cyrene 设置页或配置文件里填同样的令牌。
 
 ## API
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/` | 网页控制台 |
-| GET | `/api/status` | JSON 状态 |
-| GET | `/api/logs` | 最近日志 |
-| POST | `/api/logs/ingest` | 主进程日志聚合入口 |
-| POST | `/v1/audio/transcriptions` | OpenAI 兼容转写（multipart，`file`=WAV） |
+| GET | `/status` | JSON 状态；模型未就绪时返回 **503**（客户端据此区分「服务未启动」与「模型加载中」） |
+| GET | `/api/status` | 同上（控制台轮询用） |
+| GET | `/api/logs` | 最近日志（只读） |
+| POST | `/v1/audio/transcriptions` | OpenAI 兼容转写（multipart，`file`=WAV；设置了 `ASR_TOKEN` 时要求 Bearer 头） |
 
 ## 开机自启（Windows，可选）
 
