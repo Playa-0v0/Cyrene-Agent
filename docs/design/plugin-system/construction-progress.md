@@ -1,7 +1,7 @@
 # Cyrene 插件系统扩展施工进度
 
 > **更新时间**：2026-09-03
-> **当前状态**：阶段 1（公开契约 + Schema + 资源跟踪器）、阶段 2（Secrets/Workspace/Conversations）、阶段 3（插件调度任务所有权，含用户确认 UI 与卸载清理）已完成；下一步从阶段 4（生命周期观察事件）开始，见第 5 节。
+> **当前状态**：阶段 1（公开契约 + Schema + 资源跟踪器）、阶段 2（Secrets/Workspace/Conversations）、阶段 3（插件调度任务所有权）、阶段 4 大步 1（事件总线旁路发布与生命周期屏障）已完成；下一步从阶段 4 大步 2（生命周期发布器 + 渠道与调度轮次）开始，见第 5 节。
 > **架构设计**：[architecture.md](./architecture.md)
 > **施工方案**：[implementation-plan.md](./implementation-plan.md)
 
@@ -319,6 +319,25 @@ Store 不变量（`src/main/scheduler/scheduler-store.ts`）：
 - 修改：`src/main/scheduler/execution-spec.ts`、`execution-spec.test.ts`、`scheduler-ipc.ts`、`scheduler-store.ts`、`scheduler-store.test.ts`、`src/plugins/manager.ts`、`src/main/plugin-runtime.ts`、`src/renderer/settings/scheduler/panel.ts`、`state.ts`
 - 测试补充：`manager.test.ts`（卸载调用清理钩子、清理失败中止卸载并保留目录）
 
+### 2.15 大步：事件总线旁路发布与生命周期屏障（阶段 4 大步 1）
+
+普通发布改为宏任务旁路（`src/plugins/events.ts`）：
+
+- `emit()` 内部用 `setImmediate` 调度派发：发布函数返回时不在当前调用栈进入任何第三方监听器；返回的 Promise 在全部监听器已被调用后兑现。事件名校验失败仍以 Promise 拒绝返回，保持既有调用方错误约定。
+- 派发循环对每个监听器同步调用：同步抛错立即隔离并记录；返回 Promise 的监听器不被派发路径等待，异步结果单独附加 5 秒超时（`unref`，不阻止进程退出）与错误日志，超时只忽略迟到结果。
+- 快照发布语义不变：回调中退订不影响本轮派发顺序。
+
+生命周期屏障（`src/plugins/events.ts`、`src/plugins/manager.ts`）：
+
+- 新增 `emitLifecycleBarrier()`：顺序等待每个监听器完成（含单个 5 秒超时与错误隔离），专供 `plugins:ready` / `plugins:stopping`。
+- `PluginManager` 新增 `publishHostLifecycleBarrier()`；start/stop 的两处屏障事件改走该入口，payload 与等待语义不变。普通宿主事件（runtime:ready、turn:completed 等）继续走 `publishHostEvent` 旁路，不等待监听器。
+
+涉及文件：
+
+- 修改：`src/plugins/events.ts`、`src/plugins/manager.ts`
+- 测试重写：`src/plugins/events.test.ts`（旁路不进当前调用栈、快照顺序、慢监听器不阻塞、异步超时/拒绝日志、屏障顺序等待与超时、事件名校验双入口）
+- 测试补充：`src/plugins/manager.test.ts`（真实插件链路上普通宿主事件不被未决监听器阻塞）、`src/plugins/context.test.ts`（mock 总线补齐新接口）
+
 ## 3. 已完成验证
 
 | 验证项 | 结果 |
@@ -347,6 +366,9 @@ Store 不变量（`src/main/scheduler/scheduler-store.ts`）：
 | `npx vitest run src/plugins/manager.test.ts src/main/scheduler/execution-spec.test.ts src/main/scheduler/scheduler-store.test.ts src/main/scheduler/scheduler-engine.test.ts`（调度大步 3 后定向） | 4 个文件 66 项测试全部通过 |
 | `npm run build:main`（调度大步 3 后） | 通过 |
 | `npm test`（调度大步 3 后） | 400 个文件 3130 项测试全部通过 |
+| `npx vitest run src/plugins/events.test.ts src/plugins/context.test.ts src/plugins/manager.test.ts src/main/orchestrator/agent-runtime.test.ts`（阶段 4 大步 1 后定向） | 4 个文件 65 项测试全部通过 |
+| `npm run build:main`（阶段 4 大步 1 后） | 通过 |
+| `npm test`（阶段 4 大步 1 后） | 400 个文件 3136 项测试全部通过 |
 | `git diff --check` | 通过，仅有 Git 换行符提示 |
 
 ## 4. 未完成项
@@ -382,7 +404,33 @@ Store 不变量（`src/main/scheduler/scheduler-store.ts`）：
 
 ## 5. 下一步起点
 
-阶段 3（插件调度任务所有权）已全部完成（见 2.12–2.14）。下一步进入施工方案阶段 4：生命周期观察事件（轮次事件按来源区分、工具完成与调度完成事件、异步旁路派发与至多一次语义）。
+阶段 3（插件调度任务所有权）已全部完成（见 2.12–2.14）。阶段 4（生命周期观察事件）按以下 4 大步推进（复杂度递增，每大步独立验证提交）；大步 1 已完成（见 2.15），下一步从大步 2 开始：
+
+### 大步 1：事件总线升级（4.1）——已完成（见 2.15）
+
+- `emit()` 改为 `setImmediate` 宏任务旁路：发布函数返回时不在当前调用栈进入任何第三方监听器；快照顺序派发，不等待监听器 Promise（fire-and-forget），每个监听器异步结果独立超时与错误日志。
+- 单独保留 `emitLifecycleBarrier()` 给 `plugins:ready` / `plugins:stopping`（沿用现有顺序等待 + 5 秒超时语义），普通宿主事件不得误用阻塞入口。
+- 宿主发布生成唯一 `eventId` 与 ISO 时间戳（落到新事件 payload，兼容事件不强行补入）。
+- 涉及：`src/plugins/events.ts`、`src/plugins/manager.ts`。
+
+### 大步 2：生命周期发布器 + 渠道与调度轮次（4.3）
+
+- 新增 `src/main/plugin-host/lifecycle-publisher.ts` 统一盖章 `eventId`/时间戳并发布。
+- 渠道在开始执行与规范终态后发布 `turn:started` / `turn:finished`；不写桌面会话 Store 时不提供消息边界。
+- 调度器发布 `turn:started` / `turn:finished` 与含任务 ID、历史 ID 的 `scheduler:finished`；无桌面会话时不伪造 `conversationId`。
+- 涉及：`src/main/channels/bootstrap.ts`、`src/main/scheduler/scheduler-runner.ts`。
+
+### 大步 3：桌面轮次（4.2）
+
+- `PendingTurnLifecycle` 协调器：runId + 终态 + 落盘确认双条件才发布一次；落盘确认 60 秒超时放弃（best-effort at-most-once）；计时器可注入时钟且 `unref()`；渲染进程销毁/重载/导航与应用关闭时清理。
+- 新增渲染端→主进程落盘确认内部 IPC（`ChatPage.tsx` 在 `checkpointRun("terminal", true)` 成功后上报）。
+- `host:turn:completed` 原样保留为 v1 兼容事件；新插件用 `host:turn:finished`；非成功终态只在真实落盘确认存在时携带 `finalMessageId`。
+- 涉及：`src/main/agui-bridge.ts`、`src/shared/ipc-channels.ts`、`src/preload/index.ts`、`src/renderer/react/features/chat/pages/ChatPage.tsx`（最小侵入）。
+
+### 大步 4：工具完成事件（4.4）
+
+- Harness 内部只读 `onToolFinished` 回调，放在工具结果已确定的位置；只读 toolId、toolCallId、runId、归一化状态、注册时声明的风险、耗时；不发布参数、输出、文件变更正文与内部异常；不参与权限判断、重试、提交或恢复。
+- 涉及：`src/main/orchestrator/harness/tool-round.ts`、`src/main/orchestrator/harness/types.ts`、`lifecycle-publisher.ts`。
 
 验证命令：`npx vitest run --maxWorkers=1 src/plugins src/main/plugin-host src/main/scheduler`、`npm run build:main`，每个大步合并前全量 `npm test`。
 

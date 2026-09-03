@@ -147,9 +147,20 @@ export class PluginManager {
     return { plugins: this.list(), issues: [...this.scanIssues] };
   }
 
-  /** 发布宿主事件并补全 host: 前缀；单个监听器失败不会中断其余监听器。 */
+  /**
+   * 发布普通宿主事件（旁路）：监听器在后续宏任务中派发，发布方不等待任何第三方监听器。
+   * 单个监听器同步抛错或异步失败只记录日志，不影响其余监听器。
+   */
   publishHostEvent<T = unknown>(event: string, payload: T): Promise<void> {
     return this.eventBus.emit(qualifyHostEvent(event), payload);
+  }
+
+  /**
+   * 发布插件系统启动/停止屏障事件：顺序等待每个监听器完成（含单个超时）后才返回。
+   * 仅用于 plugins:ready / plugins:stopping，其余宿主事件必须走旁路发布。
+   */
+  publishHostLifecycleBarrier<T = unknown>(event: string, payload: T): Promise<void> {
+    return this.eventBus.emitLifecycleBarrier(qualifyHostEvent(event), payload);
   }
 
   /** 插件当前是否处于运行状态（已完成注册激活）。 */
@@ -213,7 +224,7 @@ export class PluginManager {
         return this.uninstall(id);
       });
       await this.doRescan(false);
-      await this.publishHostEvent("plugins:ready", {
+      await this.publishHostLifecycleBarrier("plugins:ready", {
         pluginIds: this.list().filter((plugin) => plugin.enabled).map((plugin) => plugin.id),
       });
       this.opts.onListChanged?.();
@@ -405,7 +416,7 @@ export class PluginManager {
   stop(): Promise<void> {
     return this.enqueueOperation(async () => {
       if (!this.started) return;
-      await this.publishHostEvent("plugins:stopping", undefined);
+      await this.publishHostLifecycleBarrier("plugins:stopping", undefined);
       for (const id of Array.from(this.instances.keys())) {
         await this.deactivate(id);
       }

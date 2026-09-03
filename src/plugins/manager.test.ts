@@ -122,6 +122,30 @@ describe("PluginManager", () => {
     expect(readFileSync(marker, "utf8")).toBe("core");
   });
 
+  it("普通宿主事件旁路发布，不等待监听器的未决 Promise", async () => {
+    const h = harness();
+    const marker = path.join(tmp, "slow-listener-entered");
+    writeFileSync(
+      path.join(tmp, "demo", "index.cjs"),
+      `const fs = require("node:fs");
+      module.exports = { register(ctx) {
+        ctx.events.on("host:runtime:ready", () => {
+          fs.writeFileSync(${JSON.stringify(marker)}, "entered");
+          return new Promise(() => {});
+        });
+      } };`,
+      "utf8",
+    );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const mgr = new PluginManager(h.options);
+    await mgr.start();
+
+    // 监听器返回永不兑现的 Promise：若发布路径等待监听器，这里会一直挂起
+    await mgr.publishHostEvent("runtime:ready", { phase: "core" });
+
+    expect(readFileSync(marker, "utf8")).toBe("entered");
+  });
+
   it("在插件仍可接收时发布插件系统 ready 和 stopping 事件", async () => {
     const h = harness();
     const marker = path.join(tmp, "lifecycle-events");

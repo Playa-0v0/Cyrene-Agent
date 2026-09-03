@@ -182,6 +182,7 @@ describe("createContext", () => {
     const ctx = createContext("demo", tmp, runtime(), {
       on: () => () => { throw new Error("unsubscribe failed"); },
       emit: async () => {},
+      emitLifecycleBarrier: async () => {},
     });
     ctx.events.on("host:runtime:ready", () => {});
     ctx.onDispose(cleanup);
