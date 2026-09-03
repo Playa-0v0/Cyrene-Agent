@@ -38,6 +38,8 @@ import {
   type ModelSettingsLite,
 } from "./build-options";
 import { type CyreneRunResult, type CyreneRunOptions } from "./cyrene-agent";
+import type { HarnessToolFinishedEvent } from "./harness/types";
+import type { ToolFinishedInput } from "../plugin-host/lifecycle-publisher";
 import {
   buildToolSystemPrompt,
   buildSoulSystemBasePrompt,
@@ -85,6 +87,8 @@ export interface AgentRuntimeDeps {
   socialAtomStore: { listActive: (conversationId: string, now: number) => SocialAtom[] };
   buildPluginPromptContext: (input: PluginPromptBuildInput) => Promise<string>;
   publishPluginHostEvent: <T>(event: string, payload: T) => Promise<void>;
+  /** 工具完成事件发布入口；缺省不发布（早期装配与测试场景）。 */
+  publishToolFinished?: (event: ToolFinishedInput) => void;
 }
 
 type SchedulerRunOptions = Omit<CyreneRunOptions, "toolSystemContent" | "soulSystemBaseContent">;
@@ -260,10 +264,17 @@ export function createAgentRuntime(rawDeps: AgentRuntimeDeps): AgentRuntime {
     };
   }
 
+  // 工具完成观察回调：harness 事件结构与插件事件字段一一对应，直接透传；
+  // 未配置发布入口时不注入，harness 侧零开销。
+  const onToolFinished = rawDeps.publishToolFinished
+    ? (event: HarnessToolFinishedEvent) => rawDeps.publishToolFinished!(event)
+    : undefined;
+
   return {
     buildOptions: async (input) => {
       const buildOptionsDeps = buildBuildOptionsDeps();
-      return buildAgentRunOptions(input, buildOptionsDeps);
+      const { options, latestUserText } = await buildAgentRunOptions(input, buildOptionsDeps);
+      return { options: { ...options, onToolFinished }, latestUserText };
     },
 
     onRunFinished: async (result, latestUserText, context) => {
@@ -334,6 +345,7 @@ export function createAgentRuntime(rawDeps: AgentRuntimeDeps): AgentRuntime {
         messages: [{ role: "system" as const, content: systemContent }, ...messages],
         // 定时任务也不因整轮耗时被中断；仍保留单次模型/工具自身的超时。
         timeoutMs: 0,
+        onToolFinished,
       };
     },
   };

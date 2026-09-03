@@ -1,7 +1,7 @@
 # Cyrene 插件系统扩展施工进度
 
 > **更新时间**：2026-09-03
-> **当前状态**：阶段 1（公开契约 + Schema + 资源跟踪器）、阶段 2（Secrets/Workspace/Conversations）、阶段 3（插件调度任务所有权）、阶段 4 大步 1（事件总线旁路发布与生命周期屏障）、大步 2（生命周期发布器 + 渠道与调度轮次）、大步 3（桌面轮次）已完成；下一步从阶段 4 大步 4（工具完成事件）开始，见第 5 节。
+> **当前状态**：阶段 1（公开契约 + Schema + 资源跟踪器）、阶段 2（Secrets/Workspace/Conversations）、阶段 3（插件调度任务所有权）、阶段 4 全部四个大步（事件总线旁路与生命周期屏障、生命周期发布器与渠道/调度轮次、桌面轮次、工具完成事件）已完成；下一步从阶段 5（语音输入接管）开始，见第 5 节。
 > **架构设计**：[architecture.md](./architecture.md)
 > **施工方案**：[implementation-plan.md](./implementation-plan.md)
 
@@ -402,6 +402,33 @@ agui-bridge 接入（`src/main/agui-bridge.ts`）：
 - 修改：`src/main/agui-bridge.ts`（协调器接线 + 落盘确认监听）、`agui-bridge.test.ts`（electron mock 补 `ipcMain.on`；新增全链路集成测试：开始登记 → 终态结算 → 落盘确认后发布一次）
 - 修改：`src/shared/ipc-channels.ts`、`src/preload/index.ts`、`src/renderer/react/features/chat/pages/chat-page-bridge.ts`、`ChatPage.tsx`、`src/main/application/default-dependencies.ts`
 
+### 2.18 大步：工具完成事件（阶段 4 大步 4）
+
+本步完成阶段 4 的最后一块：Harness 工具执行的只读观察事件。桌面、渠道和调度三个来源的工具轮全部覆盖。
+
+公开契约（`src/plugins/api.ts`）：
+
+- 新增 `PluginToolStatus`（success / failure / unknown / not_executed，与宿主执行层四态 outcome 一致）、`PluginToolRisk`（safe / fs-read / fs-write / shell / network / input-control，与宿主工具注册表风险级一致）和 `PluginToolFinishedEvent`（runId、toolId、toolCallId、status、risk、durationMs?）。
+- 事件不携带工具参数、输出、文件变更正文与内部异常；`durationMs` 只在工具真正执行过时存在（not_executed 无耗时）。
+
+Harness 只读回调（`src/main/orchestrator/harness/types.ts`、`tool-round.ts`、`cyrene-harness.ts`）：
+
+- `HarnessInput` 新增可选 `onToolFinished`；`HarnessToolFinishedEvent` 只含稳定元数据（risk 类型来自 permission-policy 的 `ToolRiskLevel`）。
+- 发布点放在工具结果已确定的位置：普通工具在 `commitToolResult`（execute 收敛、notExecuted 合成、execution_error 合成三条路都经此提交）；ask_user 排他轮单独处理（被挤掉的调用发 not_executed，primaryAsk 按真实 outcome + 耗时）。
+- 耗时经 `HarnessRun.toolCallStartedAt` Map 跟踪（execute 开始记录、提交后即删）；risk 取工具注册表声明（未注册的 harness 内置工具视为 safe）；runId 取 `input.runId`，缺失时回退 `toolContext.runId`。
+- 回调只观察，不参与权限判断、重试、提交或恢复；未注入回调时零开销。
+
+接线与装配：
+
+- `CyreneRunOptions` 新增可选 `onToolFinished`；`harness-adapter.ts` 透传给 harnessInput。
+- `AgentRuntimeDeps` 新增可选 `publishToolFinished`；agent-runtime 在 `buildOptions`（桌面 + 渠道共用）与 `buildSchedulerOptions`（调度）统一注入，三来源全覆盖。
+- `lifecycle-publisher.ts` 新增 `publishToolFinished`（事件名 `tool:finished`，统一盖章 eventId/timestamp 走旁路发布）；组合根把 lifecyclePublisher 方法注入 agent-runtime。
+
+涉及文件：
+
+- 修改：`src/plugins/api.ts`、`src/main/orchestrator/harness/types.ts`、`tool-round.ts`、`cyrene-harness.ts`、`src/main/orchestrator/cyrene-agent.ts`、`harness-adapter.ts`、`agent-runtime.ts`、`src/main/plugin-host/lifecycle-publisher.ts`、`src/main/application/default-dependencies.ts`
+- 测试补充：`cyrene-harness.test.ts`（成功提交后的字段白名单断言、ask_user 排他轮 not_executed/耗时语义 2 项）、`lifecycle-publisher.test.ts`（tool:finished 盖章断言）、`agent-runtime.test.ts`（buildOptions 注入转发与未配置不注入）
+
 ## 3. 已完成验证
 
 | 验证项 | 结果 |
@@ -438,19 +465,18 @@ agui-bridge 接入（`src/main/agui-bridge.ts`）：
 | `npx vitest run --maxWorkers=1 src/main/plugin-host/pending-turn-lifecycle.test.ts src/main/agui-bridge.test.ts`（阶段 4 大步 3 后定向） | 2 个文件 42 项测试全部通过 |
 | `npm run build:main`（阶段 4 大步 3 后） | 通过 |
 | `npm test`（阶段 4 大步 3 后） | 402 个文件 3157 项测试全部通过 |
+| `npx vitest run --maxWorkers=1 src/main/orchestrator/harness src/main/orchestrator/agent-runtime.test.ts src/main/plugin-host src/plugins src/main/scheduler src/main/channels src/main/agui-bridge.test.ts`（阶段 4 大步 4 后定向） | 77 个文件 609 项测试全部通过 |
+| `npm run build:main`（阶段 4 大步 4 后） | 通过 |
+| `npm test`（阶段 4 大步 4 后） | 402 个文件 3160 项测试全部通过 |
 | `git diff --check` | 通过，仅有 Git 换行符提示 |
 
 ## 4. 未完成项
 
 以下项目均未开始实现，不能因为设计文档已经写好而标记为完成。
 
-（公开契约、Manifest Schema、统一资源跟踪器和宿主服务工厂已在 2.4–2.10 完成；Secrets、Workspace、Conversations 宿主数据服务已在 2.11 完成；调度数据模型、授权指纹与 scheduler-service 已在 2.12 完成；引擎运行条件、插件启停联动、渲染层投影已在 2.13 完成；用户确认 UI 与卸载清理已在 2.14 完成；事件总线旁路与生命周期屏障已在 2.15 完成；生命周期发布器与渠道/调度轮次事件已在 2.16 完成；桌面轮次协调与落盘确认已在 2.17 完成。）
+（公开契约、Manifest Schema、统一资源跟踪器和宿主服务工厂已在 2.4–2.10 完成；Secrets、Workspace、Conversations 宿主数据服务已在 2.11 完成；调度数据模型、授权指纹与 scheduler-service 已在 2.12 完成；引擎运行条件、插件启停联动、渲染层投影已在 2.13 完成；用户确认 UI 与卸载清理已在 2.14 完成；事件总线旁路与生命周期屏障已在 2.15 完成；生命周期发布器与渠道/调度轮次事件已在 2.16 完成；桌面轮次协调与落盘确认已在 2.17 完成；工具完成事件已在 2.18 完成，阶段 4 至此全部完成。）
 
-### 4.1 生命周期观察事件（剩余部分）
-
-- 工具完成事件（Harness 只读回调）。
-
-### 4.2 语音输入接管
+### 4.1 语音输入接管
 
 - 普通聊天语音输入目标登记。
 - 独占租约、内置 ASR 暂停和自动恢复。
@@ -459,7 +485,7 @@ agui-bridge 接入（`src/main/agui-bridge.ts`）：
 - 活动通话的语音输入接入。
 - 最小本地 ASR 契约示例；不把模型和推理运行时放入 Cyrene 安装包。
 
-### 4.3 开发者交付物
+### 4.2 开发者交付物
 
 - `@cyrene/plugin-sdk` 开发包。
 - 插件清单结构定义及校验命令。
@@ -469,7 +495,7 @@ agui-bridge 接入（`src/main/agui-bridge.ts`）：
 
 ## 5. 下一步起点
 
-阶段 3（插件调度任务所有权）已全部完成（见 2.12–2.14）。阶段 4（生命周期观察事件）按以下 4 大步推进（复杂度递增，每大步独立验证提交）；大步 1、大步 2、大步 3 已完成（见 2.15、2.16、2.17），下一步从大步 4 开始：
+阶段 3（插件调度任务所有权）已全部完成（见 2.12–2.14）。阶段 4（生命周期观察事件）四个大步已全部完成（见 2.15–2.18）。下一步从阶段 5（普通聊天语音输入租约）开始，见 implementation-plan.md 第 5 节。
 
 ### 大步 1：事件总线升级（4.1）——已完成（见 2.15）
 
@@ -492,7 +518,7 @@ agui-bridge 接入（`src/main/agui-bridge.ts`）：
 - `host:turn:completed` 原样保留为 v1 兼容事件；新插件用 `host:turn:finished`；非成功终态只在真实落盘确认存在时携带 `finalMessageId`。
 - 涉及：`src/main/agui-bridge.ts`、`src/shared/ipc-channels.ts`、`src/preload/index.ts`、`src/renderer/react/features/chat/pages/ChatPage.tsx`（最小侵入）。
 
-### 大步 4：工具完成事件（4.4）
+### 大步 4：工具完成事件（4.4）——已完成（见 2.18）
 
 - Harness 内部只读 `onToolFinished` 回调，放在工具结果已确定的位置；只读 toolId、toolCallId、runId、归一化状态、注册时声明的风险、耗时；不发布参数、输出、文件变更正文与内部异常；不参与权限判断、重试、提交或恢复。
 - 涉及：`src/main/orchestrator/harness/tool-round.ts`、`src/main/orchestrator/harness/types.ts`、`lifecycle-publisher.ts`。
@@ -518,6 +544,7 @@ agui-bridge 接入（`src/main/agui-bridge.ts`）：
 - `src/plugins/api.ts`：已修改（`PluginSchedulerFinishedEvent` 类型）；
 - `src/main/agui-bridge.ts`、`agui-bridge.test.ts`：已修改（阶段 4 大步 3：协调器接线 + 落盘确认监听 + 全链路集成测试）；
 - `src/shared/ipc-channels.ts`、`src/preload/index.ts`、`src/renderer/react/features/chat/pages/chat-page-bridge.ts`、`ChatPage.tsx`：已修改（阶段 4 大步 3：落盘确认 IPC 与渲染端上报）；
+- 阶段 4 大步 4（本次）：`src/plugins/api.ts`、`src/main/orchestrator/harness/types.ts`、`tool-round.ts`、`cyrene-harness.ts`、`cyrene-harness.test.ts`、`src/main/orchestrator/cyrene-agent.ts`、`harness-adapter.ts`、`agent-runtime.ts`、`agent-runtime.test.ts`、`src/main/plugin-host/lifecycle-publisher.ts`、`lifecycle-publisher.test.ts`、`src/main/application/default-dependencies.ts` 已修改；
 - `src/renderer/settings/scheduler/`：`types.ts` 已修改（补充 `ownerPluginId`）；`panel.ts`、`state.ts` 已修改（大步 3 的插件任务标注、启用确认弹窗与"等待插件启用"状态）；
 - `scripts/plugin-sdk/generate-schema.mjs`：新增；
 - `package.json`、`package-lock.json`：已修改（ajv 直接依赖、Schema 生成脚本、构建拷贝过滤器）。

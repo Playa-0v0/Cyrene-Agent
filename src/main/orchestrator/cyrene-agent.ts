@@ -189,6 +189,11 @@ export interface CyreneRunOptions {
    * - 一旦 abort，markAbort("user_cancelled") 触发，harness 收到 signal.aborted 后返回 cancelled。
    */
   signal?: AbortSignal;
+  /**
+   * 工具结果确定后的只读观察回调（透传给 harness 的 onToolFinished）。
+   * 只携带稳定元数据供插件事件旁路使用，不参与执行决策。
+   */
+  onToolFinished?: (event: import("./harness/types").HarnessToolFinishedEvent) => void;
 }
 
 /** Agent run 最终结果（供桥层做副作用用）。 */

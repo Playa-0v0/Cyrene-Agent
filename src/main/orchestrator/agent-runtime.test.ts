@@ -26,6 +26,7 @@ function createDeps(
     runtimeStateService: {
       getState: () => ({ status: "idle", expression: 0, updatedAt: 0 }),
     },
+    getSceneEmbeddingIndex: () => undefined,
     getStickerEmbeddingIndex: () => undefined,
     publishPluginHostEvent,
   } as unknown as AgentRuntimeDeps;
@@ -206,5 +207,40 @@ describe("AgentRuntime 插件宿主事件", () => {
       { source: "desktop", mode: "chat", conversationId: "conversation-listener-failed" },
     )).resolves.toEqual({ sticker: null });
     await expect.poll(() => warn.mock.calls.length).toBe(1);
+  });
+
+  it("buildOptions 注入工具完成观察回调并转发给发布入口", async () => {
+    const buildOptionsModule = await import("./build-options");
+    const spy = vi.spyOn(buildOptionsModule, "buildAgentRunOptions").mockResolvedValue({
+      options: { toolSystemContent: "", soulSystemBaseContent: "" },
+      latestUserText: "问题",
+    });
+    try {
+      const publishToolFinished = vi.fn();
+      const runtime = createAgentRuntime({
+        ...createDeps(vi.fn()),
+        publishToolFinished,
+      });
+
+      const built = await runtime.buildOptions({} as never);
+      expect(built.options.onToolFinished).toBeTypeOf("function");
+      const event = {
+        toolId: "write_file",
+        toolCallId: "call-1",
+        runId: "run-1",
+        status: "success",
+        risk: "fs-write",
+        durationMs: 5,
+      } as const;
+      built.options.onToolFinished!(event);
+      expect(publishToolFinished).toHaveBeenCalledWith(event);
+
+      // 未配置发布入口时不注入，harness 侧零开销
+      const runtimeWithoutPublisher = createAgentRuntime(createDeps(vi.fn()));
+      const builtWithoutPublisher = await runtimeWithoutPublisher.buildOptions({} as never);
+      expect(builtWithoutPublisher.options.onToolFinished).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

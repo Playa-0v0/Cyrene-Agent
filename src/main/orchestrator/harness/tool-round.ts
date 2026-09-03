@@ -16,7 +16,8 @@
 
 import type { ChatMessage, ToolCall } from "../vendors/types";
 import type { ToolCallResult } from "../types";
-import type { ToolObservation } from "./types";
+import type { HarnessToolFinishedEvent, ToolObservation } from "./types";
+import type { ToolRiskLevel } from "../../permission-policy";
 import { parseToolCallArgs, toolCallFingerprint } from "./types";
 import { dispatchToolCall, persistToolDispatchResult, type ToolDispatchResult } from "./tool-dispatcher";
 import { classifyToolExecutionMode, scheduleToolCalls, type ToolCallScheduleResult, type ToolScheduleCommitDecision } from "./tool-call-scheduler";
@@ -29,6 +30,28 @@ import type { HarnessRun } from "./cyrene-harness";
 
 /** 工具轮结果：completed = 结果已全部写回，继续下一轮；cancelled = 用户取消。 */
 export type ToolRoundOutcome = "completed" | "cancelled";
+
+/** 从工具注册表读取工具注册时声明的风险级；未注册（如 harness 内置工具）视为 safe。 */
+function toolRiskOf(run: HarnessRun, toolId: string): ToolRiskLevel {
+  return run.input.tools.find((t) => t.id === toolId)?.risk ?? "safe";
+}
+
+/** 发布工具完成观察事件：只读稳定元数据，未注入回调时零开销。 */
+function notifyToolFinished(
+  run: HarnessRun,
+  call: Pick<ToolCall, "id" | "name">,
+  status: HarnessToolFinishedEvent["status"],
+  startedAt?: number,
+): void {
+  run.input.onToolFinished?.({
+    toolId: call.name,
+    toolCallId: call.id,
+    runId: run.input.runId ?? run.input.toolContext?.runId ?? "",
+    status,
+    risk: toolRiskOf(run, call.name),
+    ...(startedAt !== undefined ? { durationMs: Math.max(0, Date.now() - startedAt) } : {}),
+  });
+}
 
 /**
  * 执行一轮工具调用。
@@ -116,6 +139,7 @@ async function runAskUserRound(
   // 其余 ask_user 返回 not_executed
   for (const call of askCalls.slice(1)) {
     input.onToolLifecycle?.({ toolCallId: call.id, toolName: call.name, toolSideEffect: "read_only", status: "not_executed" });
+    notifyToolFinished(run, call, "not_executed");
     run.messages.push(toolResultMessage(call, {
       outcome: "not_executed",
       reason: "not_executed_due_to_another_ask",
@@ -130,6 +154,7 @@ async function runAskUserRound(
       toolSideEffect: resolveSideEffect(input.tools.find((tool) => tool.id === call.name), parseToolCallArgs(call)),
       status: "not_executed",
     });
+    notifyToolFinished(run, call, "not_executed");
     run.messages.push(toolResultMessage(call, {
       outcome: "not_executed",
       reason: "not_executed_due_to_clarification",
@@ -139,6 +164,7 @@ async function runAskUserRound(
   // 执行 ask_user（等待期间不计入执行超时）
   run.clock.startUserWait();
   input.onToolLifecycle?.({ toolCallId: primaryAsk.id, toolName: primaryAsk.name, toolSideEffect: "read_only", status: "started" });
+  const askStartedAt = Date.now();
   let askResult: ToolDispatchResult;
   try {
     askResult = await raceWithSignal(
@@ -158,6 +184,7 @@ async function runAskUserRound(
     toolSideEffect: "read_only",
     status: askResult.outcome === "unknown" ? "unknown" : askResult.outcome === "not_executed" ? "not_executed" : "committed",
   });
+  notifyToolFinished(run, primaryAsk, askResult.outcome, askStartedAt);
 }
 
 /**
@@ -168,6 +195,7 @@ async function executeToolCallWithRetry(run: HarnessRun, call: ToolCall): Promis
   const { input } = run;
   const toolSideEffect = resolveSideEffect(input.tools.find((tool) => tool.id === call.name), parseToolCallArgs(call));
   input.onToolLifecycle?.({ toolCallId: call.id, toolName: call.name, toolSideEffect, status: "started" });
+  run.toolCallStartedAt.set(call.id, Date.now());
 
   let result = await raceWithSignal(dispatchToolCall(call, run.toolDispatchContext), input.signal);
   if (result.outcome === "failure") {
@@ -219,6 +247,10 @@ async function commitToolResult(
       ? "unknown"
       : result.outcome === "not_executed" ? "not_executed" : "committed",
   });
+  // 模型可见结果已确定：发布只读完成事件（正常执行有耗时；合成 not_executed 无）
+  const startedAt = run.toolCallStartedAt.get(call.id);
+  run.toolCallStartedAt.delete(call.id);
+  notifyToolFinished(run, call, result.outcome, startedAt);
 
   if (result.outcome === "unknown" && toolSideEffect === "non_idempotent_side_effect") {
     const fingerprint = toolCallFingerprint(call.name, parseToolCallArgs(call));

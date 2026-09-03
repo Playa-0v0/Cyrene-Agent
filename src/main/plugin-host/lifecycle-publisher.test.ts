@@ -40,8 +40,16 @@ describe("createLifecyclePublisher", () => {
       status: "success",
       durationMs: 1200,
     });
+    publisher.publishToolFinished({
+      runId: "run-1",
+      toolId: "write_file",
+      toolCallId: "call-1",
+      status: "success",
+      risk: "fs-write",
+      durationMs: 42,
+    });
 
-    await vi.waitFor(() => expect(published).toHaveLength(3));
+    await vi.waitFor(() => expect(published).toHaveLength(4));
     expect(published[0]).toEqual({
       event: "turn:started",
       payload: {
@@ -66,6 +74,19 @@ describe("createLifecyclePublisher", () => {
       taskId: "task-1",
       schedulerRunId: "hist-1",
       eventId: "evt-1",
+    });
+    expect(published[3]).toEqual({
+      event: "tool:finished",
+      payload: {
+        runId: "run-1",
+        toolId: "write_file",
+        toolCallId: "call-1",
+        status: "success",
+        risk: "fs-write",
+        durationMs: 42,
+        eventId: "evt-1",
+        timestamp: "2026-09-03T10:00:00.000Z",
+      },
     });
   });
 

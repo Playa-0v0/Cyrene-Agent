@@ -107,6 +107,7 @@ export async function runHarnessWithAdapter(
       });
     },
     onCompactionLifecycle: (event) => runStore.recordCompaction(runId, event),
+    ...(options.onToolFinished ? { onToolFinished: options.onToolFinished } : {}),
     requestUserClarification: options.requestUserClarification
       ? (card) => options.requestUserClarification!(card as never, signal)
       : undefined,

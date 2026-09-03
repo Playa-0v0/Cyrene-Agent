@@ -12,6 +12,7 @@ import type { ToolDefinition } from "../tools/registry/tool-registry";
 import type { CyreneRunTerminalResult } from "../../../shared/run-terminal";
 import type { TodoItem } from "../../../shared/task-session";
 import type { ToolErrorCategory } from "../tools/registry/tool-execution-error";
+import type { ToolRiskLevel } from "../../permission-policy";
 import type { ToolFileChange } from "../../../shared/chat-types";
 import type { ContextUsageSnapshot } from "../../../shared/context-usage";
 import type { ToolOutputRef, ToolOutputStore } from "./tool-output/tool-output-store";
@@ -170,6 +171,21 @@ export interface HarnessToolLifecycleEvent {
   status: "started" | "committed" | "unknown" | "not_executed";
 }
 
+/**
+ * 工具完成观察事件：工具结果已确定后的只读通知。
+ * 只携带稳定元数据（不含参数、输出与内部异常正文），供宿主旁路转发给插件；
+ * 观察者不得参与权限判断、重试、提交或恢复。
+ */
+export interface HarnessToolFinishedEvent {
+  toolId: string;
+  toolCallId: string;
+  runId: string;
+  status: ToolCallOutcome;
+  risk: ToolRiskLevel;
+  /** 工具开始执行到结果确定的耗时；未真正执行（not_executed）时不存在。 */
+  durationMs?: number;
+}
+
 /** 压缩事务边界；只有 committed 才表示 transcript 已被替换。 */
 export interface HarnessCompactionLifecycleEvent {
   status: "started" | "committed";
@@ -244,6 +260,8 @@ export interface HarnessInput {
   onCheckpoint?: (checkpoint: HarnessCheckpoint) => void;
   /** 工具执行前与模型可见结果提交后的持久化边界。 */
   onToolLifecycle?: (event: HarnessToolLifecycleEvent) => void;
+  /** 工具结果确定后的只读观察回调；只读稳定元数据，不参与执行决策。 */
+  onToolFinished?: (event: HarnessToolFinishedEvent) => void;
   /** 压缩前后持久化事务边界。 */
   onCompactionLifecycle?: (event: HarnessCompactionLifecycleEvent) => void;
   /** 每次模型请求前的非敏感缓存结构诊断。 */

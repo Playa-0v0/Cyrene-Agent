@@ -398,6 +398,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         publishPluginHostEvent: (event, payload) => pluginManager
           ? pluginManager.publishHostEvent(event, payload)
           : Promise.resolve(),
+        publishToolFinished: (event) => lifecyclePublisher.publishToolFinished(event),
       }),
 
       createChannels: (runtime, services) => createChannelsSubsystem({

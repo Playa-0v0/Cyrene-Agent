@@ -78,6 +78,8 @@ export interface HarnessRun {
   askDispatchContext: ToolDispatchContext;
   /** 普通工具的 dispatch 上下文（延迟输出持久化，重试收敛后统一落盘）。 */
   toolDispatchContext: ToolDispatchContext;
+  /** 工具调用开始时刻（toolCallId → epoch ms），供完成事件计算耗时；提交后即移除。 */
+  toolCallStartedAt: Map<string, number>;
 }
 
 // ═══ 主入口 ═══════════════════════════════════════════════
@@ -242,6 +244,7 @@ function createRun(input: HarnessInput): HarnessRun {
       taskExecutor: input.taskExecutor,
       deferOutputPersistence: true,
     },
+    toolCallStartedAt: new Map(),
   };
 }
 

@@ -64,7 +64,7 @@ import { runCyreneHarness } from "./cyrene-harness";
 import { getAdapterForConfig } from "../vendors";
 import { dispatchToolCall } from "./tool-dispatcher";
 import type { ToolDispatchResult } from "./tool-dispatcher";
-import type { HarnessCacheDiagnostic, HarnessCheckpoint, HarnessEvent } from "./types";
+import type { HarnessCacheDiagnostic, HarnessCheckpoint, HarnessEvent, HarnessToolFinishedEvent } from "./types";
 import type { ChatMessage, ChatResponse, ToolCall } from "../vendors/types";
 import type { ToolDefinition } from "../tools/registry/tool-registry";
 import { projectCacheRelevantChatRequest } from "../prompt-layers";
@@ -810,6 +810,72 @@ describe("CyreneHarness completion", () => {
       expect.objectContaining({ toolCallId: "durable-call", status: "started", toolSideEffect: "idempotent_mutation" }),
       expect.objectContaining({ toolCallId: "durable-call", status: "committed", toolSideEffect: "idempotent_mutation" }),
     ]);
+  });
+
+  it("emits a read-only tool finished observation after the model-visible result is committed", async () => {
+    const { fn: fetchMock } = fakeFetchSequencer([
+      assistantResponse({ toolCalls: [mutationToolCall("obs-call")] }),
+      assistantResponse({ text: "完成。" }),
+    ]);
+    vi.stubGlobal("fetch", fetchMock);
+    mockedDispatch.mockResolvedValue(successDispatchResult("obs-call"));
+    const finished: HarnessToolFinishedEvent[] = [];
+
+    await runCyreneHarness({
+      systemPrompt: "test",
+      messages: [{ role: "user", content: "写入文件" }],
+      tools: [{ ...mutationTool(), risk: "fs-write" }],
+      vendorConfig,
+      runId: "obs-run",
+      onToolFinished: (event) => finished.push(event),
+    });
+
+    expect(finished).toHaveLength(1);
+    expect(finished[0]).toMatchObject({
+      toolId: "write_file",
+      toolCallId: "obs-call",
+      runId: "obs-run",
+      status: "success",
+      risk: "fs-write",
+    });
+    expect(finished[0].durationMs).toBeGreaterThanOrEqual(0);
+    // 不携带参数与输出正文：事件字段集合是稳定白名单
+    expect(Object.keys(finished[0]).sort()).toEqual(
+      ["durationMs", "risk", "runId", "status", "toolCallId", "toolId"],
+    );
+  });
+
+  it("emits not_executed tool finished observations for calls displaced by ask_user", async () => {
+    const askCall: ToolCall = { id: "ask-1", name: "ask_user", arguments: JSON.stringify({ question: "继续吗" }) };
+    const readCall: ToolCall = { id: "read-1", name: "read_file", arguments: "{}" };
+    const { fn: fetchMock } = fakeFetchSequencer([
+      assistantResponse({ toolCalls: [askCall, readCall] }),
+      assistantResponse({ text: "好的，继续。" }),
+    ]);
+    vi.stubGlobal("fetch", fetchMock);
+    mockedDispatch.mockResolvedValue({
+      outcome: "success",
+      tool: "ask_user",
+      message: "继续",
+    } as ToolDispatchResult);
+    const finished: HarnessToolFinishedEvent[] = [];
+
+    await runCyreneHarness({
+      systemPrompt: "test",
+      messages: [{ role: "user", content: "执行任务" }],
+      tools: [safeReadTool("read_file")],
+      vendorConfig,
+      runId: "obs-run-2",
+      onToolFinished: (event) => finished.push(event),
+    });
+
+    // read_file 被 ask_user 排他挤掉：not_executed 且无耗时；ask_user 正常完成带耗时
+    expect(finished).toEqual([
+      expect.objectContaining({ toolId: "read_file", toolCallId: "read-1", status: "not_executed", risk: "safe" }),
+      expect.objectContaining({ toolId: "ask_user", toolCallId: "ask-1", status: "success", risk: "safe" }),
+    ]);
+    expect("durationMs" in finished[0]).toBe(false);
+    expect(finished[1].durationMs).toBeGreaterThanOrEqual(0);
   });
 
   it("settles as a runtime error when a required checkpoint cannot be persisted", async () => {

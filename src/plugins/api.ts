@@ -286,6 +286,31 @@ export interface PluginSchedulerFinishedEvent extends PluginHostEventBase {
   durationMs?: number;
 }
 
+/** 工具完成事件的归一化状态（与宿主执行层四态 outcome 一致）。 */
+export type PluginToolStatus = "success" | "failure" | "unknown" | "not_executed";
+
+/** 工具风险级投影；取值与宿主工具注册表声明的风险级一致。 */
+export type PluginToolRisk =
+  | "safe"
+  | "fs-read"
+  | "fs-write"
+  | "shell"
+  | "network"
+  | "input-control";
+
+/**
+ * 工具完成事件：结果已确定后的只读观察通知。
+ * 不携带工具参数、输出、文件变更正文与内部异常；只反映宿主视角的归一化结果。
+ */
+export interface PluginToolFinishedEvent extends PluginHostEventBase {
+  runId: string;
+  toolId: string;
+  toolCallId: string;
+  status: PluginToolStatus;
+  risk: PluginToolRisk;
+  durationMs?: number;
+}
+
 /** 会话列表的稳定投影；只暴露插件需要的字段，不透出内部索引和存储细节。 */
 export interface PluginConversationSummary {
   id: string;

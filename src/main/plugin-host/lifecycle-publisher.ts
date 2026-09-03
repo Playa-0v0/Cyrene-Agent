@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   PluginSchedulerFinishedEvent,
+  PluginToolFinishedEvent,
   PluginTurnFinishedEvent,
   PluginTurnStartedEvent,
 } from "../../plugins/api";
@@ -11,6 +12,7 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 export type TurnStartedInput = DistributiveOmit<PluginTurnStartedEvent, "eventId" | "timestamp">;
 export type TurnFinishedInput = DistributiveOmit<PluginTurnFinishedEvent, "eventId" | "timestamp">;
 export type SchedulerFinishedInput = Omit<PluginSchedulerFinishedEvent, "eventId" | "timestamp">;
+export type ToolFinishedInput = Omit<PluginToolFinishedEvent, "eventId" | "timestamp">;
 
 export interface LifecyclePublisherDeps {
   /** 事件发布入口：接 PluginManager.publishHostEvent（旁路发布，不等待监听器）。 */
@@ -24,6 +26,7 @@ export interface LifecyclePublisher {
   publishTurnStarted(event: TurnStartedInput): void;
   publishTurnFinished(event: TurnFinishedInput): void;
   publishSchedulerFinished(event: SchedulerFinishedInput): void;
+  publishToolFinished(event: ToolFinishedInput): void;
 }
 
 /**
@@ -52,6 +55,9 @@ export function createLifecyclePublisher(deps: LifecyclePublisherDeps): Lifecycl
     },
     publishSchedulerFinished(event) {
       publish("scheduler:finished", { ...event });
+    },
+    publishToolFinished(event) {
+      publish("tool:finished", { ...event });
     },
   };
 }
