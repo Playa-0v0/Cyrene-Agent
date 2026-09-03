@@ -747,6 +747,12 @@ export function ChatPage() {
       }, 350);
       return checkpointChain;
     };
+    // 落盘确认：终态快照写入会话存储后上报主进程，
+    // 是插件桌面轮次结束事件（turn:finished）发布的双条件之一
+    const reportRunPersisted = (): void => {
+      const runId = activeRunsBySession.current[input.sessionId]?.runId;
+      if (runId) api.reportRunPersisted?.({ runId, finalMessageId: input.assistantId });
+    };
     runCheckpointBySessionRef.current = {
       ...runCheckpointBySessionRef.current,
       [input.sessionId]: (status) => {
@@ -1168,6 +1174,7 @@ export function ChatPage() {
         toolExecutions,
       });
       const savedAssistant = await checkpointRun("terminal", true);
+      reportRunPersisted();
       if (savedAssistant && formalAnswerCommitted) {
         finishEarlyTtsQueue(earlyTtsQueue, finalContent);
       } else earlyTtsQueue.cancel();
@@ -1233,6 +1240,8 @@ export function ChatPage() {
       });
       persistedFinalContent = "";
       await checkpointRun("terminal", true);
+      // 错误终态的快照也已落盘：上报落盘确认（runId 未知时静默跳过）
+      reportRunPersisted();
     } finally {
       if (checkpointTimer !== undefined) window.clearTimeout(checkpointTimer);
       const checkpointCallbacks = { ...runCheckpointBySessionRef.current };

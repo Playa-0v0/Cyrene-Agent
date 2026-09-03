@@ -7,6 +7,7 @@ import { IPC } from "../shared/ipc-channels";
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (...args: any[]) => unknown>(),
+  listeners: new Map<string, (...args: any[]) => void>(),
   getSession: vi.fn(),
   runCyreneAgent: vi.fn(),
   requestUserClarification: vi.fn(),
@@ -28,6 +29,10 @@ vi.mock("electron", () => ({
     handle: vi.fn((channel: string, handler: (...args: any[]) => unknown) => {
       mocks.handlers.set(channel, handler);
     }),
+    on: vi.fn((channel: string, listener: (...args: any[]) => void) => {
+      mocks.listeners.set(channel, listener);
+    }),
+    removeListener: vi.fn(),
   },
 }));
 
@@ -152,6 +157,74 @@ describe("agui-bridge sticker event ordering", () => {
         runId: ack.runId,
       },
     );
+  });
+
+  it("桌面轮次事件走协调器：开始登记、终态结算、落盘确认后发布一次", async () => {
+    vi.resetModules();
+    mocks.handlers.clear();
+    mocks.listeners.clear();
+    mocks.getSession.mockReturnValue({ id: "chat-pending", mode: "chat" });
+    const { registerAgUiIpc } = await import("./agui-bridge");
+    const { createPendingTurnLifecycle } = await import("./plugin-host/pending-turn-lifecycle");
+    const publisher = {
+      publishTurnStarted: vi.fn(),
+      publishTurnFinished: vi.fn(),
+      publishSchedulerFinished: vi.fn(),
+    };
+    // 真实协调器全链路：beginTurn（桥内）→ settleTerminal（complete 路径）→ confirmPersistence（落盘确认 IPC）
+    const pendingTurns = createPendingTurnLifecycle({ publisher: publisher as never, now: () => 0 });
+    registerAgUiIpc(async () => ({
+      options: {
+        settings: { provider: "test", baseUrl: "", model: "", apiKey: "", contextWindowTokens: 256000 },
+        messages: [],
+        timeoutMs: 1000,
+        toolSystemContent: "TOOL",
+        soulSystemBaseContent: "SOUL",
+      },
+      latestUserText: "你好",
+    }), async () => ({}), () => null, undefined, undefined, pendingTurns);
+
+    const handler = mocks.handlers.get(IPC.AGUI_RUN);
+    const persistListener = mocks.listeners.get(IPC.AGUI_RUN_PERSISTED);
+    if (!handler || !persistListener) throw new Error("AGUI_RUN / AGUI_RUN_PERSISTED 未注册");
+    const sender = {
+      isDestroyed: () => false,
+      send: () => {},
+      once: vi.fn(),
+      removeListener: vi.fn(),
+    };
+    const ack = await handler({ sender }, {
+      messages: [{ role: "user", content: "你好" }],
+      sessionId: "chat-pending",
+      userTurnId: "msg-user-1",
+      assistantTurnId: "msg-assistant-1",
+    }) as { runId: string };
+
+    // turn:started 立即发布；终态结算后等待落盘确认（条目仍待结算）
+    expect(publisher.publishTurnStarted).toHaveBeenCalledTimes(1);
+    expect(publisher.publishTurnStarted).toHaveBeenCalledWith({
+      source: "desktop",
+      runId: ack.runId,
+      mode: "chat",
+      conversationId: "chat-pending",
+      inputMessageId: "msg-user-1",
+    });
+    await vi.waitFor(() => expect(pendingTurns.pendingCount()).toBe(1));
+    expect(publisher.publishTurnFinished).not.toHaveBeenCalled();
+
+    // 渲染端落盘确认（单向通知）→ 终态 + 落盘确认双条件满足，发布一次
+    persistListener({}, { runId: ack.runId, finalMessageId: "msg-assistant-1" });
+    await vi.waitFor(() => expect(publisher.publishTurnFinished).toHaveBeenCalledTimes(1));
+    expect(publisher.publishTurnFinished).toHaveBeenCalledWith(expect.objectContaining({
+      source: "desktop",
+      runId: ack.runId,
+      mode: "chat",
+      conversationId: "chat-pending",
+      inputMessageId: "msg-user-1",
+      finalMessageId: "msg-assistant-1",
+      status: "success",
+    }));
+    expect(pendingTurns.pendingCount()).toBe(0);
   });
 
   it("routes structured Ask cards to the AG-UI run sender", async () => {

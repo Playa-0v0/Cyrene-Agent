@@ -32,6 +32,7 @@ import { registerObsidianTools, unregisterObsidianTools } from "./learn/obsidian
 import { getAdapterForConfig } from "./orchestrator/vendors";
 import { perf } from "./perf-trace";
 import type { StyleId } from "../shared/style-sampling";
+import type { PendingTurnLifecycle } from "./plugin-host/pending-turn-lifecycle";
 import * as chatsStore from "./chats/chats-store";
 import type { ConversationMode } from "../shared/chat-types";
 import { requestUserClarification, cancelPendingChoicesForRun } from "./user-choice";
@@ -303,6 +304,7 @@ function startPlanReviewFlow(params: {
  * @param buildOptions 把渲染进程输入转成 agent options（含上下文构建）
  * @param onRunFinished agent 跑完的副作用（记忆/sticker 等）
  * @param getChatWindow 聊天窗口（事件要发到这里）
+ * @param pendingTurns 桌面轮次生命周期协调器；缺省不发布轮次事件（测试与早期装配）
  */
 export function registerAgUiIpc(
   buildOptions: BuildOptionsFn,
@@ -310,10 +312,25 @@ export function registerAgUiIpc(
   getChatWindow: GetChatWindowFn,
   lifecycle?: AguiConversationLifecycle,
   ipcOption?: IpcScope,
+  pendingTurns?: PendingTurnLifecycle,
 ): void {
   const ipc = ipcOption ?? createIpcScope();
   buildOptionsFn = buildOptions;
   getChatWindowFn = getChatWindow;
+
+  // 渲染端落盘确认（单向通知）：ChatPage 在 checkpointRun("terminal", true) 成功后上报。
+  // 协调器据此在"终态 + 落盘确认"双条件满足时发布桌面 turn:finished。
+  if (pendingTurns) {
+    ipc.on(IPC.AGUI_RUN_PERSISTED, (_event, payload: unknown) => {
+      const ack = payload as { runId?: unknown; finalMessageId?: unknown };
+      if (typeof ack?.runId !== "string" || !ack.runId) return;
+      pendingTurns.confirmPersistence(ack.runId, {
+        ...(typeof ack.finalMessageId === "string" && ack.finalMessageId
+          ? { finalMessageId: ack.finalMessageId }
+          : {}),
+      });
+    });
+  }
 
   ipc.handle(IPC.HARNESS_GET_INTERRUPTED_RUN, (_event, conversationId: unknown) => {
     if (typeof conversationId !== "string" || !conversationId) return null;
@@ -339,6 +356,7 @@ export function registerAgUiIpc(
     // 事件转发目标：优先用 invoke 的 sender（发起 run 的窗口），兜底用聊天窗口
     const sender = event.sender;
     const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const turnStartedAt = Date.now();
 
     const send = (baseEvent: unknown): void => {
       // CyreneAgent 的 RUN_STARTED / RUN_FINISHED 自带 runId，但 ChatLoop 等内部
@@ -482,6 +500,29 @@ export function registerAgUiIpc(
     const threadId = `thread-${Date.now()}`;
     const agent = new CyreneAgent({ threadId, description: "Cyrene 主聊天" });
 
+    // 桌面轮次事件：run 真正开跑时登记协调器（立即发布 turn:started）。
+    // turn:finished 由协调器在"终态 + 渲染端落盘确认"双条件满足后发布一次。
+    let detachPendingTurnWatchers: (() => void) | null = null;
+    if (pendingTurns) {
+      pendingTurns.beginTurn({
+        runId,
+        conversationId: sessionId,
+        mode,
+        inputMessageId: input.userTurnId ?? "",
+        ...(input.assistantTurnId ? { assistantMessageId: input.assistantTurnId } : {}),
+        startedAt: turnStartedAt,
+        runTimeoutMs: options.timeoutMs,
+      });
+      // 发起 run 的渲染进程销毁 / 重载 / 导航后，落盘确认永远不会到达，直接清理
+      const disposePendingTurn = (): void => { pendingTurns?.disposeEntry(runId); };
+      sender.once("destroyed", disposePendingTurn);
+      sender.once("did-start-navigation", disposePendingTurn);
+      detachPendingTurnWatchers = () => {
+        sender.removeListener("destroyed", disposePendingTurn);
+        sender.removeListener("did-start-navigation", disposePendingTurn);
+      };
+    }
+
     let pendingRunFinishedEvent: unknown | null = null;
     // exactly-once settlement gate。
     // complete / error 两条 RxJS 回调都会先 trySettle，只有第一次进入的那条会真正发出终态事件。
@@ -495,6 +536,8 @@ export function registerAgUiIpc(
       activeRuns.delete(runId);
       cancelPendingChoicesForRun(runId);
       cancelPendingApprovalsForRun(runId);
+      detachPendingTurnWatchers?.();
+      detachPendingTurnWatchers = null;
     };
     const endLifecycle = (): void => {
       if (lifecycleEnded) return;
@@ -670,10 +713,23 @@ export function registerAgUiIpc(
             send(pendingRunFinishedEvent);
             pendingRunFinishedEvent = null;
           }
+          // 终态在 next(RUN_FINISHED) 已结算（success/cancelled/timeout），complete 可能不再被调用
+          const settled = settlementGate.get();
+          if (settled) {
+            pendingTurns?.settleTerminal(runId, {
+              status: settled.status,
+              durationMs: Date.now() - turnStartedAt,
+            });
+          }
           cleanupRunState();
           endLifecycle();
           return;
         }
+        // 桌面轮次终态登记（协调器内幂等：首个终态生效）
+        pendingTurns?.settleTerminal(runId, {
+          status: "runtime_error",
+          durationMs: Date.now() - turnStartedAt,
+        });
         // 补发 RUN_ERROR 事件，渲染端据此收尾（invoke 早已 resolve，靠事件驱动）
         send({ type: "RUN_ERROR", message, code, threadId, runId });
         cleanupRunState();
@@ -701,6 +757,13 @@ export function registerAgUiIpc(
         }
         const settlement = settlementGate.get();
         const isSuccessfulCompletion = settlement?.status === "success";
+        // 桌面轮次终态登记：complete 与 error 双路径都会调用，协调器只认首个终态
+        if (settlement) {
+          pendingTurns?.settleTerminal(runId, {
+            status: settlement.status,
+            durationMs: Date.now() - turnStartedAt,
+          });
+        }
         try {
           // cancelled / timeout / runtime_error 不跑成功收尾副作用
           // （sticker / memory / learn-progress / 历史召回）。

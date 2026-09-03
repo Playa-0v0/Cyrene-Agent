@@ -63,6 +63,8 @@ export interface AguiApi {
   }) => Promise<{ success: boolean; runId: string; error?: string }>;
   onEvent: (callback: (event: AguiEvent) => void) => () => void;
   cancel: (runId?: string) => Promise<unknown>;
+  // 落盘确认（单向通知）：终态消息写入会话存储后上报，供插件轮次事件使用
+  reportRunPersisted?: (payload: { runId: string; finalMessageId?: string }) => void;
   getInterruptedRun?: (sessionId: string) => Promise<{ runId: string; rounds: number; todoCount: number; updatedAt: number } | null>;
 }
 

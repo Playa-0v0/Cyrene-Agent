@@ -93,6 +93,7 @@ import { initSkills, skillRegistry } from "../skills";
 import { createSchedulerSubsystem } from "../scheduler/bootstrap";
 import { createChannelsSubsystem } from "../channels/bootstrap";
 import { createLifecyclePublisher } from "../plugin-host/lifecycle-publisher";
+import { createPendingTurnLifecycle } from "../plugin-host/pending-turn-lifecycle";
 import { startPluginRuntime } from "../plugin-runtime";
 import { createAgentRuntime } from "../orchestrator/agent-runtime";
 import { createRuntimeStateService } from "../orchestrator/runtime-state-service";
@@ -163,6 +164,17 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     publish: (event, payload) => pluginManager
       ? pluginManager.publishHostEvent(event, payload)
       : Promise.resolve(),
+  });
+  // 桌面轮次协调器：turn:finished 等待"终态 + 渲染端落盘确认"双条件；
+  // 计时器均 unref，应用退出前统一清理，不发布任何事件
+  const pendingTurnLifecycle = createPendingTurnLifecycle({
+    publisher: lifecyclePublisher,
+    onAbandon: (runId, reason) => {
+      console.warn(`[plugins] 桌面轮次事件放弃发布: runId=${runId} reason=${reason}`);
+    },
+  });
+  app.on("will-quit", () => {
+    pendingTurnLifecycle.disposeAll();
   });
   const readiness = createStartupReadiness();
   const activation = createWindowActivationBroker();
@@ -464,6 +476,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
           () => reactChatWindow,
           services.proactive.proactiveConversationLifecycle,
           ipc,
+          pendingTurnLifecycle,
         );
 
         // 应用更新 IPC：安装走受控退出；autoUpdater 兜底路径进入同一协调器

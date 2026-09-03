@@ -141,6 +141,11 @@ const aguiApi = {
     return () => ipcRenderer.off(IPC.AGUI_EVENT, listener);
   },
   cancel: (runId?: string) => ipcRenderer.invoke(IPC.AGUI_CANCEL, runId),
+  // 落盘确认（单向通知）：本轮 run 的终态消息已写入会话存储，
+  // 主进程据此发布桌面轮次结束事件（插件生命周期观察）。
+  reportRunPersisted: (payload: { runId: string; finalMessageId?: string }) => {
+    ipcRenderer.send(IPC.AGUI_RUN_PERSISTED, payload);
+  },
   getInterruptedRun: (sessionId: string) => ipcRenderer.invoke(IPC.HARNESS_GET_INTERRUPTED_RUN, sessionId) as Promise<{
     runId: string; rounds: number; todoCount: number; updatedAt: number;
   } | null>,

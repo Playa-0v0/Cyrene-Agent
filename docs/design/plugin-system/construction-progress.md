@@ -1,7 +1,7 @@
 # Cyrene 插件系统扩展施工进度
 
 > **更新时间**：2026-09-03
-> **当前状态**：阶段 1（公开契约 + Schema + 资源跟踪器）、阶段 2（Secrets/Workspace/Conversations）、阶段 3（插件调度任务所有权）、阶段 4 大步 1（事件总线旁路发布与生命周期屏障）已完成；下一步从阶段 4 大步 2（生命周期发布器 + 渠道与调度轮次）开始，见第 5 节。
+> **当前状态**：阶段 1（公开契约 + Schema + 资源跟踪器）、阶段 2（Secrets/Workspace/Conversations）、阶段 3（插件调度任务所有权）、阶段 4 大步 1（事件总线旁路发布与生命周期屏障）、大步 2（生命周期发布器 + 渠道与调度轮次）、大步 3（桌面轮次）已完成；下一步从阶段 4 大步 4（工具完成事件）开始，见第 5 节。
 > **架构设计**：[architecture.md](./architecture.md)
 > **施工方案**：[implementation-plan.md](./implementation-plan.md)
 
@@ -338,6 +338,70 @@ Store 不变量（`src/main/scheduler/scheduler-store.ts`）：
 - 测试重写：`src/plugins/events.test.ts`（旁路不进当前调用栈、快照顺序、慢监听器不阻塞、异步超时/拒绝日志、屏障顺序等待与超时、事件名校验双入口）
 - 测试补充：`src/plugins/manager.test.ts`（真实插件链路上普通宿主事件不被未决监听器阻塞）、`src/plugins/context.test.ts`（mock 总线补齐新接口）
 
+### 2.16 大步：生命周期发布器 + 渠道与调度轮次（阶段 4 大步 2）
+
+生命周期发布器（新增 `src/main/plugin-host/lifecycle-publisher.ts`）：
+
+- `createLifecyclePublisher({ publish, eventId?, now? })` 统一盖章 `eventId` 与 ISO 时间戳后走旁路发布（接 `PluginManager.publishHostEvent`，不等待监听器）。
+- 元数据放在 payload 最后展开，调用方输入无法覆盖 `eventId`/`timestamp`；发布失败只记录告警，不影响宿主主流程。
+- `TurnStartedInput` / `TurnFinishedInput` 用分布 Omit 从 `api.ts` 的可辨识联合派生（直接 `Omit<联合, K>` 只剩公共字段，会丢失各来源分支的必填字段）；时钟与事件 id 可注入以便测试。
+
+渠道轮次事件（`src/main/channels/bootstrap.ts`）：
+
+- 渠道消息执行前发布 `turn:started`（source=channel，携带 channel、conversationId、runId、mode）；runId 为本轮生成的随机 UUID。
+- finally 路径发布 `turn:finished`：成功、超时、异常退出都各发布一次，status 取 agent 真实终态（异常退出为 runtime_error）。
+- 渠道不写桌面会话 Store，事件不提供 inputMessageId/finalMessageId 消息边界。
+
+调度轮次事件（`src/main/scheduler/scheduler-runner.ts`）：
+
+- 任务开跑前发布 `turn:started`（source=scheduler，携带 taskId、schedulerRunId、任务冻结的 mode）；runId 复用历史记录 ID。
+- 成功/异常路径都发布 `turn:finished` 与 `scheduler:finished`；成功路径的 status 以 agent 终态为准（Observable 在超时等非成功终态下也会正常 complete），异常路径为 runtime_error。
+- 调度执行没有桌面会话，事件负载不伪造 conversationId。
+
+装配（`src/main/application/default-dependencies.ts`、`src/main/scheduler/bootstrap.ts`）：
+
+- 组合根创建单一 lifecyclePublisher（无插件管理器时发布为 no-op），注入 channels 与 scheduler 子系统；两个子系统的发布器依赖均为可选，早期装配与纯策略测试不受影响。
+
+涉及文件：
+
+- 新增：`src/main/plugin-host/lifecycle-publisher.ts`、`lifecycle-publisher.test.ts`（4 项）
+- 修改：`src/main/channels/bootstrap.ts`、`bootstrap.test.ts`（成功/超时/异常三路径的事件断言）
+- 修改：`src/main/scheduler/scheduler-runner.ts`、`scheduler-runner.test.ts`（新增 runScheduledTask 生命周期测试 5 项）
+- 修改：`src/main/scheduler/bootstrap.ts`、`src/main/application/default-dependencies.ts`、`src/plugins/api.ts`（`PluginSchedulerFinishedEvent` 类型）
+
+### 2.17 大步：桌面轮次（阶段 4 大步 3）
+
+桌面轮次协调器（新增 `src/main/plugin-host/pending-turn-lifecycle.ts`）：
+
+- `createPendingTurnLifecycle({ publisher, now?, ackTimeoutMs?, graceMs?, onAbandon? })`：`beginTurn` 在 run 开始时立即发布 `turn:started`（desktop 分支必填 inputMessageId）；`settleTerminal` 只登记终态不发布；`confirmPersistence` 登记渲染端落盘确认；"终态 + 落盘确认"双条件满足才发布一次 `turn:finished`（best-effort at-most-once）。
+- `finalMessageId` 只在落盘确认携带时存在；确认缺失（如纯终态快照确认）不补齐，绝不用会话当前最后一条消息代替。
+- 清理全部经同一 `disposeEntry(runId)` 收口：发布后清理、终态后 60 秒无落盘确认（诊断 + 放弃）、整体期限（runTimeoutMs + 60 秒宽限）到期、渲染进程销毁/导航、应用关闭（`disposeAll`）。
+- 所有计时器 `unref()` 不阻止主进程退出；时钟可注入（`now`），测试用 fake timers。终态登记幂等：complete/error 双路径重复调用只认首个终态。
+- 缺失 inputMessageId 时整轮跳过并输出诊断（无法构造事件边界）。
+
+agui-bridge 接入（`src/main/agui-bridge.ts`）：
+
+- `registerAgUiIpc` 新增可选参数 `pendingTurns`（第 6 位）；缺省不发布轮次事件，既有测试与早期装配不受影响。
+- run 真正开跑前 `beginTurn`（userTurnId/assistantTurnId 来自渲染端已落库的稳定 turn ID，runTimeoutMs 取 options.timeoutMs）；发起 run 的 sender 上监听 `destroyed` / `did-start-navigation`，渲染进程失效即清理条目；`cleanupRunState` 统一摘除监听。
+- complete 与 error 双路径都调用 `settleTerminal`（含 error 路径中 gate 已被 next(RUN_FINISHED) 结算的分支——此时 complete 可能不再被调用）；status 以 settlement gate 为准，durationMs 自 run 开始计时。
+
+落盘确认 IPC：
+
+- `src/shared/ipc-channels.ts` 新增 `AGUI_RUN_PERSISTED`（渲染端→主进程单向通知）。
+- `src/preload/index.ts` 的 aguiApi 新增 `reportRunPersisted({ runId, finalMessageId? })`；主进程在注册桥时用 `ipc.on` 监听并转发给协调器（payload 做 runId/finalMessageId 字符串校验）。
+- `ChatPage.tsx` 最小侵入：`checkpointRun("terminal", true)` 成功后的成功路径与错误路径各上报一次落盘确认（runId 未知时静默跳过，如会话守卫冲突路径）；守卫冲突卡路径不上报（run 从未被主进程接受）。
+- `host:turn:completed` v1 兼容事件保持原发布点不动（agent-runtime 成功收尾后），不绑定新协调器。
+
+装配（`src/main/application/default-dependencies.ts`）：
+
+- 组合根创建单一 pendingTurnLifecycle（复用大步 2 的 lifecyclePublisher，放弃发布走 console.warn 诊断），作为第 6 参传给 `registerAgUiIpc`；`app.on("will-quit")` 时 `disposeAll()`。
+
+涉及文件：
+
+- 新增：`src/main/plugin-host/pending-turn-lifecycle.ts`、`pending-turn-lifecycle.test.ts`（11 项）
+- 修改：`src/main/agui-bridge.ts`（协调器接线 + 落盘确认监听）、`agui-bridge.test.ts`（electron mock 补 `ipcMain.on`；新增全链路集成测试：开始登记 → 终态结算 → 落盘确认后发布一次）
+- 修改：`src/shared/ipc-channels.ts`、`src/preload/index.ts`、`src/renderer/react/features/chat/pages/chat-page-bridge.ts`、`ChatPage.tsx`、`src/main/application/default-dependencies.ts`
+
 ## 3. 已完成验证
 
 | 验证项 | 结果 |
@@ -369,21 +433,22 @@ Store 不变量（`src/main/scheduler/scheduler-store.ts`）：
 | `npx vitest run src/plugins/events.test.ts src/plugins/context.test.ts src/plugins/manager.test.ts src/main/orchestrator/agent-runtime.test.ts`（阶段 4 大步 1 后定向） | 4 个文件 65 项测试全部通过 |
 | `npm run build:main`（阶段 4 大步 1 后） | 通过 |
 | `npm test`（阶段 4 大步 1 后） | 400 个文件 3136 项测试全部通过 |
+| `npx vitest run --maxWorkers=1 src/main/plugin-host src/main/scheduler src/main/channels src/plugins`（阶段 4 大步 2 后定向） | 49 个文件 381 项测试全部通过 |
+| `npm run build:main`（阶段 4 大步 2 后） | 通过（过程中修复 `Omit` 联合类型不分布导致渠道/调度分支字段丢失的类型错误） |
+| `npx vitest run --maxWorkers=1 src/main/plugin-host/pending-turn-lifecycle.test.ts src/main/agui-bridge.test.ts`（阶段 4 大步 3 后定向） | 2 个文件 42 项测试全部通过 |
+| `npm run build:main`（阶段 4 大步 3 后） | 通过 |
+| `npm test`（阶段 4 大步 3 后） | 402 个文件 3157 项测试全部通过 |
 | `git diff --check` | 通过，仅有 Git 换行符提示 |
 
 ## 4. 未完成项
 
 以下项目均未开始实现，不能因为设计文档已经写好而标记为完成。
 
-（公开契约、Manifest Schema、统一资源跟踪器和宿主服务工厂已在 2.4–2.10 完成；Secrets、Workspace、Conversations 宿主数据服务已在 2.11 完成；调度数据模型、授权指纹与 scheduler-service 已在 2.12 完成；引擎运行条件、插件启停联动、渲染层投影已在 2.13 完成；用户确认 UI 与卸载清理已在 2.14 完成，阶段 3 至此收尾，见"已完成项"。）
+（公开契约、Manifest Schema、统一资源跟踪器和宿主服务工厂已在 2.4–2.10 完成；Secrets、Workspace、Conversations 宿主数据服务已在 2.11 完成；调度数据模型、授权指纹与 scheduler-service 已在 2.12 完成；引擎运行条件、插件启停联动、渲染层投影已在 2.13 完成；用户确认 UI 与卸载清理已在 2.14 完成；事件总线旁路与生命周期屏障已在 2.15 完成；生命周期发布器与渠道/调度轮次事件已在 2.16 完成；桌面轮次协调与落盘确认已在 2.17 完成。）
 
-### 4.1 生命周期观察事件
+### 4.1 生命周期观察事件（剩余部分）
 
-- 按桌面、渠道和调度来源区分的轮次事件。
-- 工具完成和调度完成事件。
-- 普通事件的异步旁路派发和至多一次语义。
-- 现有插件启动、停止屏障事件的兼容行为。
-- 桌面轮次消息边界协调和超时清理。
+- 工具完成事件（Harness 只读回调）。
 
 ### 4.2 语音输入接管
 
@@ -404,7 +469,7 @@ Store 不变量（`src/main/scheduler/scheduler-store.ts`）：
 
 ## 5. 下一步起点
 
-阶段 3（插件调度任务所有权）已全部完成（见 2.12–2.14）。阶段 4（生命周期观察事件）按以下 4 大步推进（复杂度递增，每大步独立验证提交）；大步 1 已完成（见 2.15），下一步从大步 2 开始：
+阶段 3（插件调度任务所有权）已全部完成（见 2.12–2.14）。阶段 4（生命周期观察事件）按以下 4 大步推进（复杂度递增，每大步独立验证提交）；大步 1、大步 2、大步 3 已完成（见 2.15、2.16、2.17），下一步从大步 4 开始：
 
 ### 大步 1：事件总线升级（4.1）——已完成（见 2.15）
 
@@ -413,14 +478,14 @@ Store 不变量（`src/main/scheduler/scheduler-store.ts`）：
 - 宿主发布生成唯一 `eventId` 与 ISO 时间戳（落到新事件 payload，兼容事件不强行补入）。
 - 涉及：`src/plugins/events.ts`、`src/plugins/manager.ts`。
 
-### 大步 2：生命周期发布器 + 渠道与调度轮次（4.3）
+### 大步 2：生命周期发布器 + 渠道与调度轮次（4.3）——已完成（见 2.16）
 
 - 新增 `src/main/plugin-host/lifecycle-publisher.ts` 统一盖章 `eventId`/时间戳并发布。
 - 渠道在开始执行与规范终态后发布 `turn:started` / `turn:finished`；不写桌面会话 Store 时不提供消息边界。
 - 调度器发布 `turn:started` / `turn:finished` 与含任务 ID、历史 ID 的 `scheduler:finished`；无桌面会话时不伪造 `conversationId`。
 - 涉及：`src/main/channels/bootstrap.ts`、`src/main/scheduler/scheduler-runner.ts`。
 
-### 大步 3：桌面轮次（4.2）
+### 大步 3：桌面轮次（4.2）——已完成（见 2.17）
 
 - `PendingTurnLifecycle` 协调器：runId + 终态 + 落盘确认双条件才发布一次；落盘确认 60 秒超时放弃（best-effort at-most-once）；计时器可注入时钟且 `unref()`；渲染进程销毁/重载/导航与应用关闭时清理。
 - 新增渲染端→主进程落盘确认内部 IPC（`ChatPage.tsx` 在 `checkpointRun("terminal", true)` 成功后上报）。
@@ -447,7 +512,12 @@ Store 不变量（`src/main/scheduler/scheduler-store.ts`）：
 - `src/main/plugin-runtime.ts`、`src/main/orchestrator/agent-runtime.ts`、`agent-runtime.test.ts`：已修改；
 - `src/main/application/`：`core-bootstrap.ts`、`core-bootstrap.test.ts`、`default-dependencies.ts` 已修改（scheduler 先于插件初始化、`canRunTask` 注入、启停联动接线）；
 - `src/main/plugin-host/`：新增 `errors.ts`、`secrets-service.ts`、`secrets-service.test.ts`、`workspace-service.ts`、`workspace-service.test.ts`、`conversations-service.ts`、`conversations-service.test.ts`、`host-services.ts`、`host-services.test.ts`、`scheduler-service.ts`、`scheduler-service.test.ts`；`host-services.ts`/`host-services.test.ts` 含大步 2 的 `schedulerStore` 接入；
-- `src/main/scheduler/`：`types.ts`、`scheduler-store.ts`、`scheduler-store.test.ts`、`scheduler-engine.ts`、`scheduler-engine.test.ts`、`scheduler-ipc.ts`、`scheduler-runner.ts`、`bootstrap.ts` 已修改；新增 `execution-spec.ts`、`execution-spec.test.ts`（含 `isTaskEnabled`、授权 patch 与引擎运行条件测试）；
+- `src/main/scheduler/`：`types.ts`、`scheduler-store.ts`、`scheduler-store.test.ts`、`scheduler-engine.ts`、`scheduler-engine.test.ts`、`scheduler-ipc.ts`、`scheduler-runner.ts`、`scheduler-runner.test.ts`、`bootstrap.ts` 已修改；新增 `execution-spec.ts`、`execution-spec.test.ts`（含 `isTaskEnabled`、授权 patch 与引擎运行条件测试）；
+- `src/main/plugin-host/`：新增 `lifecycle-publisher.ts`、`lifecycle-publisher.test.ts`（阶段 4 大步 2）；新增 `pending-turn-lifecycle.ts`、`pending-turn-lifecycle.test.ts`（阶段 4 大步 3）；
+- `src/main/channels/`：`bootstrap.ts`、`bootstrap.test.ts` 已修改（渠道轮次事件发布与断言）；
+- `src/plugins/api.ts`：已修改（`PluginSchedulerFinishedEvent` 类型）；
+- `src/main/agui-bridge.ts`、`agui-bridge.test.ts`：已修改（阶段 4 大步 3：协调器接线 + 落盘确认监听 + 全链路集成测试）；
+- `src/shared/ipc-channels.ts`、`src/preload/index.ts`、`src/renderer/react/features/chat/pages/chat-page-bridge.ts`、`ChatPage.tsx`：已修改（阶段 4 大步 3：落盘确认 IPC 与渲染端上报）；
 - `src/renderer/settings/scheduler/`：`types.ts` 已修改（补充 `ownerPluginId`）；`panel.ts`、`state.ts` 已修改（大步 3 的插件任务标注、启用确认弹窗与"等待插件启用"状态）；
 - `scripts/plugin-sdk/generate-schema.mjs`：新增；
 - `package.json`、`package-lock.json`：已修改（ajv 直接依赖、Schema 生成脚本、构建拷贝过滤器）。
