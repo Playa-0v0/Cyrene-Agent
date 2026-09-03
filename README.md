@@ -29,6 +29,7 @@
 - 🌱 **条目生命周期** — 自研DMAE算法（v4.0未实现最新v5.1）负责管理prompt在上下文中的生命周期
 - 🔊 **语音交互** — 集成 TTS、ASR 与语音通话，让昔涟能够听见并回应用户
 - 🧰 **丰富工具生态** — 覆盖联网搜索、文件处理、文档生成、生活服务、音乐与 MCP 扩展
+- 🧩 **插件系统** — 本地插件包扩展 AI 工具、聊天渠道、自有窗口与语音输入，配套 npm SDK 与开发指南
 - 🔌 **多模型厂商适配** — 针对不同厂商提供分级 Structured Output 与 Function Calling 兼容方案
 - 🎨 **个性化外观** — 支持多套界面风格、主题外观与聊天字体选择
 - 📱 **多平台接入** — 支持桌面端、飞书、微信 iLink 与 QQ（NapCat / OneBot 11），共享角色能力与对话体验
@@ -388,6 +389,14 @@ Cyrene 内置和扩展的工具较多，主要覆盖以下类别：
 - 支持 `invoke_skill`、参考资料读取与 Slash Command。
 - 包含路径防护、重复读取限制与大文本截断机制。
 
+#### 🧩 插件系统
+
+- **本地插件包** — 一个文件夹（`manifest.json` + JS 入口文件）就是一个插件，在设置页统一管理启停；支持 ZIP 导入，安装走 staging 隔离校验 + 原子替换 + 失败自动回滚，内置路径穿越与压缩炸弹防护。
+- **开放能力** — 插件可以注册 AI 工具、弹出自有窗口、调用宿主 LLM、接入新聊天渠道、监听生命周期事件、注入每轮动态上下文，并可申请私有存储、安全密钥、只读会话分页、自有定时任务与语音输入租约等宿主服务。
+- **信任边界** — 用户插件首次发现一律停用，需在设置页手动启用；插件创建的定时任务必须用户核对配置后才生效；语音输入通过独占租约避免双输入源冲突。
+- **开发者工具链** — npm 包 [`@playa0v0/cyrene-plugin-sdk`](https://www.npmjs.com/package/@playa0v0/cyrene-plugin-sdk) 提供全部公开类型、Manifest 校验与 Mock Context 测试工具，运行时仅依赖 `ajv`；配套《[插件开发指南](docs/plugins/plugin-dev-guide.md)》与 `cyrene-plugin-dev` Skill，无需阅读宿主源码即可完成开发。
+- **官方示例** — 仓库 [`examples/`](./examples) 提供天气查询、长期记忆、定时自动化与本地 ASR 契约四个示例，均可直接作为开发起点。
+
 #### 🌙 主动聊天
 
 - **状态感知** — 根据时间、用户活跃状态、会话状态和角色心情判断是否适合主动交流。
@@ -404,8 +413,9 @@ Cyrene 内置和扩展的工具较多，主要覆盖以下类别：
 
 #### 🧪 单元测试
 - Vitest 4 覆盖 asr / tts / channels / chats / game-bot / memory /
-  opener / orchestrator / rag / scheduler / skills 等核心模块。
+  opener / orchestrator / plugins / plugin-host / rag / scheduler / skills 等核心模块。
 - `npm test` 一次性 / `npm run test:watch` 监听模式。
+- 插件开发：`npm run check:plugin-sdk` 校验 SDK 打包，`npm run test:plugin-examples` 端到端验证官方示例。
 
 #### 🎬 场景模拟
 - `npm run sim` 默认场景 / `sim:coffee` / `sim:mix` / `sim:rescue` 单场景调试。
@@ -439,6 +449,7 @@ Cyrene 内置和扩展的工具较多，主要覆盖以下类别：
 | ✨ Skill 系统 | ✅ 可用 | 支持内置 Skill、用户自定义 Skill、Slash 命令与参考资料读取 |
 | 📚 RAG 文档知识库 | 🧪 实验性 | 支持多格式文档导入、向量与 BM25 混合检索、Reranker 和来源追溯 |
 | 🔌 MCP 扩展生态 | 🧪 实验性 | 支持 stdio、SSE 与 HTTP Transport，实际兼容性取决于第三方 MCP Server |
+| 🧩 插件系统 | ✅ 可用 | 本地插件 + ZIP 导入 + npm SDK（`@playa0v0/cyrene-plugin-sdk`），开放工具、渠道、窗口、存储、调度与语音输入等宿主能力 |
 | 📱 飞书 Lark | ✅ 可用 | 支持长连接消息接入与多种媒体类型 |
 | 📱 微信 iLink | 🧪 实验性 | 支持长轮询消息收发、媒体处理与手机端对话 |
 | 📱 QQ / NapCat | 🧪 实验性 | OneBot 11 反向 WebSocket、私聊/群聊白名单、引用/@ 与跨 WSL 多媒体传输 |
@@ -464,6 +475,7 @@ Cyrene 内置和扩展的工具较多，主要覆盖以下类别：
 | 沙箱执行（Windows） | `@anthropic-ai/sandbox-runtime`（SRT）— 非可信命令走 SandboxManager.wrapWithSandboxArgv；未安装时回退直接 spawn，workspace_mutation 命令仍被拒绝 |
 | LSP 客户端 | 自研 `LspManager` + `vscode-jsonrpc` 协议，进程按 serverId 复用，stdio pipe 与 `shell:false` 启动 |
 | 工具扩展 | `@modelcontextprotocol/sdk`（stdio / SSE / StreamableHTTP transport） |
+| 插件系统 | [`@playa0v0/cyrene-plugin-sdk`](https://www.npmjs.com/package/@playa0v0/cyrene-plugin-sdk)（npm 发布的插件开发包：公开类型 + Manifest Schema 校验 + Mock Context 测试工具） |
 | 记忆与检索 | Embedding（`@xenova/transformers`）+ BM25 + 自研 Cross-Encoder Reranker + 自研索引管线 |
 | 上下文条目调度 | 自研 DMAE V5.1（关键词命中召回 + 激活度衰减 + active/dormant/archived 三态可逆） |
 | 中文检索 | `@node-rs/jieba` |
@@ -516,6 +528,7 @@ src/
 │   │   ├── model-config/  # 模型配置（按 provider/model 分级）
 │   │   └── config/   # 超时 / 上下文窗口等全局配置
 │   ├── permission/   # 权限模块（checkPermission / risk 等级 / permission-policy）
+│   ├── plugin-host/  # 插件宿主服务（secrets / workspace / conversations / scheduler / 语音输入租约 / 生命周期发布器）
 │   ├── proactive/    # 主动对话：模型 / 策略 / 路由 / 服务
 │   ├── prompts/      # Prompt 文件加载（system prompt / persona / Runtime Policy）
 │   ├── protocols/    # 协议层（与外部组件的 IPC / 数据格式约定）
@@ -535,8 +548,10 @@ src/
 │   ├── tts/          # 语音合成（多引擎：MiniMax / Mossland / MiMo / GPT-SoVITS / 自定义）
 │   ├── windows/      # Windows 原生相关（窗口布局 / 位置 / 可见性）
 │   ├── agui-bridge.ts # AG-UI 事件桥（主进程 ↔ 渲染进程）
+│   ├── plugin-runtime.ts # 插件运行时装配（向插件注入宿主服务工厂）
 │   ├── sync-mcp-builtin.ts  # 内置 MCP 同步（Playwright / 飞书等）
 │   └── sticker-*.ts  # 贴纸语义匹配（协议 / 存储 / 描述 / embedder）
+├── plugins/          # 插件系统核心（manifest 校验 / 加载器 / 生命周期 / 资源跟踪 / 事件总线）
 ├── preload/          # Electron preload 桥接
 ├── renderer/         # Vite 渲染层
 │   ├── call/         # 语音通话窗口
@@ -565,6 +580,10 @@ dist/renderer/        # Vite 构建产物（构建产物 gitignore，产品资�
 ├── react/            # React 主入口（构建产物，gitignore）
 ├── status/           # 角色状态图片（工作中/思考中/提醒/离线/聆听中…，已跟踪）
 └── stickers/         # 贴纸图片资源（已跟踪）
+
+examples/              # 插件开发示例（weather-tool / long-term-memory / scheduled-automation / local-asr-contract）
+packages/
+└── plugin-sdk/       # @playa0v0/cyrene-plugin-sdk 源码（构建时从宿主同步公开契约，防漂移）
 ```
 
 > `dist/renderer/assets/`、各窗口的 `index.html`、`dist/renderer/live2dcubismcore.min.js` 为 Vite 构建产物
