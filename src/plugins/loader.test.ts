@@ -78,6 +78,39 @@ describe("readManifest", () => {
     expect(readManifest(dir)).toBeNull();
   });
 
+  it("接受五项新能力作为 deps", () => {
+    const dir = fixture("new-deps", {
+      "manifest.json": JSON.stringify({
+        ...validManifest,
+        deps: ["secrets", "workspace", "conversations", "scheduler", "speech-input"],
+      }),
+      "index.cjs": `module.exports = { register() {} };`,
+    });
+    expect(readManifest(dir)?.deps).toEqual([
+      "secrets",
+      "workspace",
+      "conversations",
+      "scheduler",
+      "speech-input",
+    ]);
+  });
+
+  it("拒绝未知顶层字段（Schema 字段白名单）", () => {
+    const dir = fixture("unknown-field", {
+      "manifest.json": JSON.stringify({ ...validManifest, experimental: true }),
+      "index.cjs": `module.exports = { register() {} };`,
+    });
+    expect(readManifest(dir)).toBeNull();
+  });
+
+  it("deps 数组去重后仍然合法", () => {
+    const dir = fixture("dedup-deps", {
+      "manifest.json": JSON.stringify({ ...validManifest, deps: ["llm", "llm"] }),
+      "index.cjs": `module.exports = { register() {} };`,
+    });
+    expect(readManifest(dir)?.deps).toEqual(["llm"]);
+  });
+
   it("拒绝不兼容 apiVersion 和非 SemVer 版本", () => {
     const badApi = fixture("bad-api", {
       "manifest.json": JSON.stringify({ ...validManifest, apiVersion: 2 }),
@@ -147,6 +180,26 @@ describe("loadPlugin", () => {
     const dir = fixture("cjs", {
       "manifest.json": JSON.stringify(validManifest),
       "index.cjs": `module.exports = { register(ctx) { ctx.log("hi"); } };`,
+    });
+    const record = scanPluginDir(path.dirname(dir)).find((item) => item.dir === dir)!;
+    const plugin = await loadPlugin(record);
+    expect(typeof plugin.register).toBe("function");
+  });
+
+  it("加载 ESM 插件的默认导出", async () => {
+    const dir = fixture("esm-default", {
+      "manifest.json": JSON.stringify({ ...validManifest, entry: "index.mjs" }),
+      "index.mjs": `export default { register() {} };`,
+    });
+    const record = scanPluginDir(path.dirname(dir)).find((item) => item.dir === dir)!;
+    const plugin = await loadPlugin(record);
+    expect(typeof plugin.register).toBe("function");
+  });
+
+  it("加载 ESM 插件的命名导出", async () => {
+    const dir = fixture("esm-named", {
+      "manifest.json": JSON.stringify({ ...validManifest, entry: "index.mjs" }),
+      "index.mjs": `export function register() {}`,
     });
     const record = scanPluginDir(path.dirname(dir)).find((item) => item.dir === dir)!;
     const plugin = await loadPlugin(record);

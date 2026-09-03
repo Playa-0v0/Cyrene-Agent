@@ -388,10 +388,13 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         ipc: shell.ipc,
       }),
 
-      startPlugins: async (services) => {
+      startPlugins: async (services, scheduler) => {
         pluginManager = await startPluginRuntime({
           llmClient: services.llm,
           ipc: shell.ipc,
+          schedulerStore: scheduler.store,
+          // 插件启停后让调度引擎重新归一化逾期任务并重排计时器（不补跑）。
+          onPluginRunningStateChange: () => scheduler.engine.refreshPluginTasks(),
         });
         return pluginManager;
       },
@@ -400,6 +403,9 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         agentRuntime: runtime,
         getReactChatWindow: () => reactChatWindow,
         ipc: shell.ipc,
+        // 插件任务只有在所属插件运行中才允许触发；用户任务不受影响。
+        canRunTask: (task) => !task.ownerPluginId
+          || (pluginManager?.isRunning(task.ownerPluginId) ?? false),
       }),
 
       registerCoreIpc: ({ ipc, runtime, services }) => {

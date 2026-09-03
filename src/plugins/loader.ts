@@ -4,6 +4,7 @@ import type { Dirent } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { CURRENT_PLUGIN_API_VERSION } from "./api";
+import { validateManifestData } from "./manifest-validation";
 import type {
   CyrenePlugin,
   PluginCapability,
@@ -15,11 +16,13 @@ import type {
 const MANIFEST_FILE = "manifest.json";
 const ID_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
-const DEPS_ALLOWED = new Set(["channels", "llm"]);
 const ENTRY_EXTENSIONS = new Set([".cjs", ".js", ".mjs"]);
 const ICON_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".svg"]);
 const ICON_MAX_BYTES = 2 * 1024 * 1024;
 let esmImportGeneration = 0;
+const importEsmModule = require("./native-import.cjs") as (
+  specifier: string,
+) => Promise<Record<string, unknown>>;
 
 export interface PluginScanIssue {
   root: string;
@@ -71,45 +74,40 @@ export function inspectPluginDir(dir: string): ManifestInspection {
   if (!existsSync(manifestPath)) return { manifest: null, error: "缺少 manifest.json" };
   try {
     const manifestText = readFileSync(manifestPath, "utf8");
-    const raw = JSON.parse(manifestText) as Partial<PluginManifest> | null;
-    if (!raw || typeof raw !== "object") return { manifest: null, error: "manifest 必须是对象" };
-    if (raw.apiVersion !== CURRENT_PLUGIN_API_VERSION) {
+    const raw = JSON.parse(manifestText) as unknown;
+    // 第一层：Schema 校验结构、类型、枚举和必填字段（含 deps 能力白名单）。
+    const validated = validateManifestData(raw);
+    if (!validated.ok || !validated.value) {
+      return { manifest: null, error: validated.error ?? "manifest 结构不合法" };
+    }
+    const input = validated.value;
+    // 第二层：格式与文件系统校验，Schema 无法表达的部分。
+    if (input.apiVersion !== CURRENT_PLUGIN_API_VERSION) {
       return {
         manifest: null,
-        error: `不兼容的 apiVersion: ${String(raw.apiVersion)}（当前支持 ${CURRENT_PLUGIN_API_VERSION}）`,
+        error: `不兼容的 apiVersion: ${String(input.apiVersion)}（当前支持 ${CURRENT_PLUGIN_API_VERSION}）`,
       };
     }
-    if (typeof raw.id !== "string" || !ID_RE.test(raw.id)) {
+    if (typeof input.id !== "string" || !ID_RE.test(input.id)) {
       return { manifest: null, error: "id 不符合小写连字符格式" };
     }
-    if (typeof raw.name !== "string" || !raw.name.trim()) return { manifest: null, error: "name 不能为空" };
-    if (typeof raw.version !== "string" || !SEMVER_RE.test(raw.version)) {
+    if (typeof input.name !== "string" || !input.name.trim()) return { manifest: null, error: "name 不能为空" };
+    if (typeof input.version !== "string" || !SEMVER_RE.test(input.version)) {
       return { manifest: null, error: "version 必须是合法 SemVer" };
     }
-    if (typeof raw.description !== "string" || !raw.description.trim()) {
-      return { manifest: null, error: "description 不能为空" };
-    }
-    if (typeof raw.author !== "string" || !raw.author.trim()) return { manifest: null, error: "author 不能为空" };
-    if (typeof raw.entry !== "string" || !raw.entry) return { manifest: null, error: "entry 不能为空" };
-    if (path.basename(raw.entry) !== raw.entry) return { manifest: null, error: "entry 必须是插件目录内的裸文件名" };
-    if (!ENTRY_EXTENSIONS.has(path.extname(raw.entry).toLowerCase())) {
+    if (typeof input.entry !== "string" || !input.entry) return { manifest: null, error: "entry 不能为空" };
+    if (path.basename(input.entry) !== input.entry) return { manifest: null, error: "entry 必须是插件目录内的裸文件名" };
+    if (!ENTRY_EXTENSIONS.has(path.extname(input.entry).toLowerCase())) {
       return { manifest: null, error: "entry 扩展名仅支持 .cjs/.js/.mjs" };
     }
-    if (raw.defaultEnabled !== undefined && typeof raw.defaultEnabled !== "boolean") {
-      return { manifest: null, error: "defaultEnabled 必须是布尔值" };
-    }
-    let deps: PluginCapability[] | undefined;
-    if (raw.deps !== undefined) {
-      if (!Array.isArray(raw.deps)) return { manifest: null, error: "deps 必须是数组" };
-      if (raw.deps.some((dep) => typeof dep !== "string" || !DEPS_ALLOWED.has(dep))) {
-        return { manifest: null, error: "deps 包含未知主程序能力" };
-      }
-      deps = Array.from(new Set(raw.deps)) as PluginCapability[];
-    }
+    // deps 枚举合法性已由 Schema 保证，这里只做去重归一化。
+    const deps: PluginCapability[] | undefined = input.deps
+      ? (Array.from(new Set(input.deps)) as PluginCapability[])
+      : undefined;
 
-    const entryPath = path.join(dir, raw.entry);
+    const entryPath = path.join(dir, input.entry);
     if (!existsSync(entryPath) || !statSync(entryPath).isFile()) {
-      return { manifest: null, error: `入口文件不存在: ${raw.entry}` };
+      return { manifest: null, error: `入口文件不存在: ${input.entry}` };
     }
     const realDir = realpathSync(dir);
     const realEntry = realpathSync(entryPath);
@@ -120,14 +118,14 @@ export function inspectPluginDir(dir: string): ManifestInspection {
 
     const manifest: PluginManifest = {
       apiVersion: CURRENT_PLUGIN_API_VERSION,
-      id: raw.id,
-      name: raw.name.trim(),
-      version: raw.version,
-      description: raw.description.trim(),
-      author: raw.author.trim(),
-      entry: raw.entry,
-      icon: resolveIcon(dir, raw.icon),
-      defaultEnabled: raw.defaultEnabled !== false,
+      id: input.id,
+      name: input.name.trim(),
+      version: input.version,
+      description: input.description.trim(),
+      author: input.author.trim(),
+      entry: input.entry,
+      icon: resolveIcon(dir, input.icon),
+      defaultEnabled: input.defaultEnabled !== false,
       deps,
     };
     const fingerprint = createHash("sha256")
@@ -206,19 +204,13 @@ export async function loadPlugin(record: PluginRecord): Promise<CyrenePlugin> {
   let mod: Record<string, unknown>;
   clearPluginModuleCache(record.dir);
   if (ext === ".mjs") {
-    // commonjs 编译会把 import() 改写为 require()，require 无法加载 file:// URL，
-    // 因此 ESM 入口经运行时 import 加载（new Function 避开 tsc 改写）。
-    const dynamicImport = new Function(
-      "specifier",
-      "return import(specifier)",
-    ) as (specifier: string) => Promise<Record<string, unknown>>;
     const specifier = new URL(pathToFileURL(entry).href);
     esmImportGeneration += 1;
     specifier.searchParams.set(
       "cyreneReload",
       `${record.fingerprint}-${Date.now()}-${esmImportGeneration}`,
     );
-    mod = await dynamicImport(specifier.href);
+    mod = await importEsmModule(specifier.href);
   } else {
     mod = require(entry) as Record<string, unknown>;
   }

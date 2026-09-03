@@ -1,3 +1,5 @@
+import type { PluginPromptMode } from "../../plugins/api";
+
 export type ScheduleKind = "once" | "daily" | "weekly" | "interval";
 
 export type ScheduleConfig =
@@ -20,6 +22,14 @@ export interface ScheduledTask {
   allowedToolIds: string[];
   createdAt: string;
   updatedAt: string;
+  /** 创建该任务的插件 id；缺失表示用户任务。插件任务的磁盘 enabled 永远为 false。 */
+  ownerPluginId?: string;
+  /** 插件任务的用户授权状态：用户在宿主界面确认后才允许运行，插件无法写入。 */
+  pluginUserEnabled?: boolean;
+  /** 插件任务冻结的会话模式；缺失时按 work 执行。 */
+  mode?: PluginPromptMode;
+  /** 用户确认执行规格时写入的 SHA-256 授权指纹；执行前必须重新计算并匹配。 */
+  approvalFingerprint?: string;
 }
 
 export interface NewScheduledTaskInput {
@@ -29,11 +39,15 @@ export interface NewScheduledTaskInput {
   schedule: ScheduleConfig;
   toolMode?: SchedulerToolMode;
   allowedToolIds?: string[];
+  ownerPluginId?: string;
+  pluginUserEnabled?: boolean;
+  mode?: PluginPromptMode;
+  approvalFingerprint?: string;
 }
 
 export type ScheduledTaskPatch = Partial<Pick<
   ScheduledTask,
-  "title" | "prompt" | "enabled" | "schedule" | "nextFireAt" | "lastFiredAt" | "toolMode" | "allowedToolIds"
+  "title" | "prompt" | "enabled" | "schedule" | "nextFireAt" | "lastFiredAt" | "toolMode" | "allowedToolIds" | "pluginUserEnabled" | "approvalFingerprint" | "mode"
 >>;
 
 export interface ScheduledTaskHistoryEntry {

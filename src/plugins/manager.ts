@@ -43,6 +43,12 @@ export interface PluginManagerOptions {
   saveEnabledMap: (map: Record<string, boolean>) => void;
   selectPluginZip?: () => Promise<string | undefined>;
   confirmPluginReplace?: (plugin: { id: string; name: string; version: string }) => Promise<boolean>;
+  /**
+   * 用户真正卸载插件时清理其拥有的持久化宿主资源（如插件创建的定时任务）。
+   * 抛错会中止卸载：宁可保留插件目录等用户重试，也不能留下仍会执行的孤儿任务。
+   * 热重载、扫描更新、启停和安装替换都不调用。
+   */
+  cleanupPersistentResources?: (pluginId: string) => Promise<void>;
   onListChanged?: () => void;
 }
 
@@ -96,6 +102,8 @@ export class PluginManager {
   private scanIssues: PluginScanIssue[] = [];
   private enabledMap: Record<string, boolean>;
   private started = false;
+  /** 宿主模块订阅的插件运行状态监听器（调度引擎等）。 */
+  private runningStateListeners = new Set<(pluginId: string, running: boolean) => void>();
   /** All lifecycle mutations are serialized to prevent enable/disable/rescan races. */
   private operationTail: Promise<void> = Promise.resolve();
 
@@ -142,6 +150,30 @@ export class PluginManager {
   /** 发布宿主事件并补全 host: 前缀；单个监听器失败不会中断其余监听器。 */
   publishHostEvent<T = unknown>(event: string, payload: T): Promise<void> {
     return this.eventBus.emit(qualifyHostEvent(event), payload);
+  }
+
+  /** 插件当前是否处于运行状态（已完成注册激活）。 */
+  isRunning(pluginId: string): boolean {
+    return this.instances.has(pluginId);
+  }
+
+  /**
+   * 订阅插件运行状态变化（激活完成 → running，停用完成 → 非 running）。
+   * 调度引擎据此暂停/恢复插件任务；单个监听器失败只告警不中断。
+   */
+  onRunningStateChange(listener: (pluginId: string, running: boolean) => void): () => void {
+    this.runningStateListeners.add(listener);
+    return () => { this.runningStateListeners.delete(listener); };
+  }
+
+  private notifyRunningState(pluginId: string, running: boolean): void {
+    for (const listener of this.runningStateListeners) {
+      try {
+        listener(pluginId, running);
+      } catch (error) {
+        console.warn(`[plugins] 运行状态监听器执行失败 (${pluginId})`, error);
+      }
+    }
   }
 
   start(): Promise<void> {
@@ -351,10 +383,13 @@ export class PluginManager {
       try {
         // unregister() 属于第三方代码，执行后再次校验，避免它在清理阶段替换目标目录。
         await this.assertSafeUserPluginDirectory(record);
+        await this.opts.cleanupPersistentResources?.(id);
         clearPluginModuleCache(record.dir);
         await rm(record.dir, { recursive: true, force: false });
       } catch (error) {
-        const message = `删除插件目录失败: ${errorMessage(error)}`;
+        // 任务清理失败与目录删除失败同一处理：插件保持停用、目录保留，
+        // 避免出现"程序已删、定时任务还在跑"的孤儿状态。
+        const message = `卸载插件失败（目录未删除）: ${errorMessage(error)}`;
         this.statuses.set(id, "disabled");
         this.errors.set(id, message);
         this.opts.onListChanged?.();
@@ -563,6 +598,7 @@ export class PluginManager {
       this.instances.set(id, plugin);
       this.contexts.set(id, ctx);
       this.statuses.set(id, "running");
+      this.notifyRunningState(id, true);
       console.log(`[plugins] 已启用 ${id}@${record.manifest.version}`);
     } catch (error) {
       const message = errorMessage(error);
@@ -595,6 +631,7 @@ export class PluginManager {
       }
     }
     this.statuses.set(id, "disabled");
+    this.notifyRunningState(id, false);
     console.log(`[plugins] 已禁用 ${id}`);
   }
 }

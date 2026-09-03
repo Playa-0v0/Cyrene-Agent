@@ -8,7 +8,18 @@
 
 export const CURRENT_PLUGIN_API_VERSION = 1 as const;
 
-export type PluginCapability = "channels" | "llm";
+/**
+ * 插件可向宿主申请的宿主服务。deps 只是服务可用性声明，不是安全权限：
+ * 未声明的服务不会注入，声明的服务也只是获得该服务的稳定接口。
+ */
+export type PluginCapability =
+  | "channels"
+  | "llm"
+  | "secrets"
+  | "workspace"
+  | "conversations"
+  | "scheduler"
+  | "speech-input";
 
 export interface PluginManifest {
   /** Plugin API major version required by this plugin. */
@@ -27,6 +38,25 @@ export interface PluginManifest {
   /** Honored only for bundled plugins. User plugins always require opt-in. */
   defaultEnabled: boolean;
   /** Host services requested from Cyrene. This is not a security sandbox. */
+  deps?: PluginCapability[];
+}
+
+/**
+ * 插件作者提交的 manifest 原始形状，是 Manifest JSON Schema 的生成目标。
+ * 与 PluginManifest 的区别：defaultEnabled 可省略（宿主归一化为 true），
+ * 字段格式约束（id 连字符、SemVer、entry 裸文件名等）由加载器的文件
+ * 与格式校验补充完成，Schema 只负责结构、类型和枚举。
+ */
+export interface PluginManifestInput {
+  apiVersion: number;
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  author: string;
+  entry: string;
+  icon?: string;
+  defaultEnabled?: boolean;
   deps?: PluginCapability[];
 }
 
@@ -182,10 +212,251 @@ export interface PluginTurnCompletedEvent {
   runId?: string;
 }
 
+/** 轮次统一终态：成功、用户取消、超时和运行错误互斥，只发布其中一个。 */
+export type PluginTurnStatus = "success" | "cancelled" | "timeout" | "runtime_error";
+
+/** 所有宿主事件的公共元数据；eventId 用于诊断关联，不承诺 exactly-once 投递。 */
+export interface PluginHostEventBase {
+  eventId: string;
+  timestamp: string;
+}
+
+interface PluginTurnEventBase extends PluginHostEventBase {
+  runId: string;
+  mode: PluginPromptMode;
+}
+
+/**
+ * 轮次开始事件。以 source 为判别字段：插件按 event.source 分支后，
+ * TypeScript 自动收窄出各来源的必填字段，不需要猜测可选字段是否合法。
+ */
+export type PluginTurnStartedEvent =
+  | (PluginTurnEventBase & {
+      source: "desktop";
+      conversationId: string;
+      inputMessageId: string;
+    })
+  | (PluginTurnEventBase & {
+      source: "channel";
+      channel: string;
+      conversationId?: string;
+    })
+  | (PluginTurnEventBase & {
+      source: "scheduler";
+      taskId: string;
+      schedulerRunId: string;
+    });
+
+interface PluginTurnFinishedBase extends PluginTurnEventBase {
+  status: PluginTurnStatus;
+  durationMs?: number;
+}
+
+/**
+ * 轮次结束事件。finalMessageId 只有宿主确认本轮 assistant 消息
+ * 已作为最终边界持久化后才存在；非成功终态不得用"当前最后一条
+ * assistant 消息"补齐该字段。
+ */
+export type PluginTurnFinishedEvent =
+  | (PluginTurnFinishedBase & {
+      source: "desktop";
+      conversationId: string;
+      inputMessageId: string;
+      finalMessageId?: string;
+    })
+  | (PluginTurnFinishedBase & {
+      source: "channel";
+      channel: string;
+      conversationId?: string;
+    })
+  | (PluginTurnFinishedBase & {
+      source: "scheduler";
+      taskId: string;
+      schedulerRunId: string;
+    });
+
+/** 会话列表的稳定投影；只暴露插件需要的字段，不透出内部索引和存储细节。 */
+export interface PluginConversationSummary {
+  id: string;
+  title: string;
+  mode: PluginPromptMode;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 会话消息的稳定投影；只含 user/assistant 两种角色和纯文本内容。 */
+export interface PluginConversationMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  at: string;
+}
+
+export interface PluginConversationListInput {
+  cursor?: string;
+  limit?: number;
+}
+
+export interface PluginConversationPage {
+  items: PluginConversationSummary[];
+  nextCursor?: string;
+}
+
+export interface PluginMessagePageInput {
+  conversationId: string;
+  cursor?: string;
+  limit?: number;
+  /** 可选的包含式起点；与 throughMessageId 一起冻结读取范围。 */
+  fromMessageId?: string;
+  /** 可选的包含式终点；分页过程中不得越过该消息。 */
+  throughMessageId?: string;
+}
+
+export interface PluginMessagePage {
+  items: PluginConversationMessage[];
+  nextCursor?: string;
+  /** 本次分页实际冻结的包含式边界；后续页的游标携带同一组边界。 */
+  range: {
+    fromMessageId?: string;
+    throughMessageId?: string;
+  };
+}
+
+/**
+ * 会话只读服务。长期记忆插件的标准用法：把桌面轮次结束事件中的
+ * inputMessageId / finalMessageId 直接作为 fromMessageId / throughMessageId
+ * 传入 getMessages()，冻结读取范围后翻页不会混入后续轮次的消息。
+ */
+export interface PluginConversationsService {
+  list(input?: PluginConversationListInput): Promise<PluginConversationPage>;
+  getMessages(input: PluginMessagePageInput): Promise<PluginMessagePage>;
+}
+
+/**
+ * 插件私有密钥服务。Key 在插件命名空间内解析，插件无法读写其他
+ * 插件的密钥；密钥仅保存在宿主安全存储中，插件卸载后默认保留。
+ */
+export interface PluginSecretsService {
+  get(key: string): Promise<string | undefined>;
+  set(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<boolean>;
+}
+
+/** 会话工作区绑定的稳定投影。 */
+export interface PluginWorkspaceBinding {
+  conversationId: string;
+  root: string;
+  displayName: string;
+}
+
+/**
+ * 受控的工作区访问：只读取会话已绑定的工作区描述，
+ * 不提供绑定、解绑或选择目录的写接口。
+ */
+export interface PluginWorkspaceService {
+  getBinding(conversationId: string): Promise<PluginWorkspaceBinding | null>;
+}
+
+/** 定时计划：一次性、每日、每周（0=周日）和固定间隔。 */
+export type PluginScheduleConfig =
+  | { kind: "once"; runAt: string }
+  | { kind: "daily"; timeOfDay: string }
+  | { kind: "weekly"; dayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6; timeOfDay: string }
+  | { kind: "interval"; every: number; unit: "minutes" | "hours" };
+
+/**
+ * 完整执行规格：计划、提示词、会话模式和工具白名单共同决定任务行为，
+ * 也是用户授权指纹的计算输入。未来新增影响行为的字段必须先加入本规格，
+ * 标题等展示元数据不属于执行规格。
+ */
+export interface PluginScheduledExecutionSpec {
+  schedule: PluginScheduleConfig;
+  prompt: string;
+  mode: PluginPromptMode;
+  /** 显式工具白名单；插件任务不允许 all-enabled 模式。 */
+  allowedToolIds: string[];
+}
+
+export interface PluginScheduledTaskInput extends PluginScheduledExecutionSpec {
+  title: string;
+}
+
+export interface PluginScheduledTaskPatch {
+  title?: string;
+  schedule?: PluginScheduleConfig;
+  prompt?: string;
+  mode?: PluginPromptMode;
+  allowedToolIds?: string[];
+}
+
+export interface PluginScheduledTask extends PluginScheduledTaskInput {
+  id: string;
+  /** 宿主计算后的有效启用状态；插件不能写入，创建后必须由用户在宿主界面确认启用。 */
+  enabled: boolean;
+  nextFireAt: string | null;
+  lastFiredAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * 插件调度任务服务。插件只能查看和修改自己创建的任务；接口不提供
+ * 启用、立即运行或切换到全部工具模式的能力，任何执行规格变化都会
+ * 撤销用户已有的授权并回到停用状态。
+ */
+export interface PluginSchedulerService {
+  createTask(input: PluginScheduledTaskInput): Promise<PluginScheduledTask>;
+  listTasks(): Promise<PluginScheduledTask[]>;
+  updateTask(id: string, patch: PluginScheduledTaskPatch): Promise<PluginScheduledTask>;
+  deleteTask(id: string): Promise<boolean>;
+  getHistory(id: string, limit?: number): Promise<PluginScheduledTaskHistory[]>;
+}
+
+/** 任务执行历史摘要；只保留诊断信息，不含完整模型输出。 */
+export interface PluginScheduledTaskHistory {
+  id: string;
+  taskId: string;
+  status: string;
+  startedAt: string;
+  finishedAt?: string;
+  summary?: string;
+}
+
+/** 语音输入目标：普通聊天窗口或活动通话，二选一。 */
+export type PluginSpeechInputTarget = "active-chat" | "active-call";
+
+export interface PluginSpeechInputAcquireOptions {
+  target: PluginSpeechInputTarget;
+}
+
+/**
+ * 语音输入租约。取得时目标即被冻结：切换会话不会迁移租约，
+ * 原渲染目标失效时租约自动中止（signal 触发）。
+ * commit() 复用宿主正常用户输入路径，不等待模型完整回答。
+ */
+export interface PluginSpeechInputLease {
+  /** 提交最终识别文本；用户消息被接受并落盘后即返回。 */
+  commit(text: string): Promise<void>;
+  /** 幂等释放；释放后不得再 commit。 */
+  release(): Promise<void>;
+  /** 租约中止信号（目标失效、插件停止、应用退出等）。 */
+  signal: AbortSignal;
+}
+
+/** 独占语音输入服务：全局同一时刻只允许一个插件持有租约。 */
+export interface PluginSpeechInputService {
+  acquire(options: PluginSpeechInputAcquireOptions): Promise<PluginSpeechInputLease>;
+}
+
 export interface PluginDeps {
   /** Read-only channel discovery. Registration must use PluginContext methods. */
   channels?: { has(id: string): boolean };
   llm?: PluginLlmService;
+  conversations?: PluginConversationsService;
+  secrets?: PluginSecretsService;
+  workspace?: PluginWorkspaceService;
+  scheduler?: PluginSchedulerService;
+  speechInput?: PluginSpeechInputService;
 }
 
 export type PluginCleanup = () => void | Promise<void>;
@@ -240,4 +511,42 @@ export interface CyrenePlugin {
   open?(): void | Promise<void>;
   register(ctx: PluginContext): void | Promise<void>;
   unregister?(): void | Promise<void>;
+}
+
+/**
+ * 宿主服务的稳定错误码。插件只应依赖错误码做分支处理，
+ * 不要匹配错误消息文案；内部异常只进宿主日志，不透传给插件。
+ */
+export type PluginHostErrorCode =
+  | "E_CAPABILITY_UNAVAILABLE"
+  | "E_INVALID_ARGUMENT"
+  | "E_NOT_FOUND"
+  | "E_NOT_OWNER"
+  | "E_STORAGE_UNAVAILABLE"
+  | "E_SPEECH_INPUT_BUSY"
+  | "E_NO_ACTIVE_INPUT_TARGET"
+  | "E_PLUGIN_STOPPING"
+  | "E_INTERNAL";
+
+export interface PluginHostError extends Error {
+  code: PluginHostErrorCode;
+}
+
+const PLUGIN_HOST_ERROR_CODES: ReadonlySet<string> = new Set([
+  "E_CAPABILITY_UNAVAILABLE",
+  "E_INVALID_ARGUMENT",
+  "E_NOT_FOUND",
+  "E_NOT_OWNER",
+  "E_STORAGE_UNAVAILABLE",
+  "E_SPEECH_INPUT_BUSY",
+  "E_NO_ACTIVE_INPUT_TARGET",
+  "E_PLUGIN_STOPPING",
+  "E_INTERNAL",
+]);
+
+export function isPluginHostError(value: unknown): value is PluginHostError {
+  return (
+    value instanceof Error
+    && PLUGIN_HOST_ERROR_CODES.has((value as PluginHostError).code)
+  );
 }

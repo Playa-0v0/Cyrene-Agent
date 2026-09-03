@@ -79,8 +79,8 @@ export interface CoreDependencies {
   initRag(): Promise<void>;
   createRuntime(services: CoreServices): AgentRuntime;
   createChannels(runtime: AgentRuntime, services: CoreServices): ChannelsSubsystem;
-  /** 必须在内置渠道适配器注册完成后调用。 */
-  startPlugins(services: CoreServices): Promise<PluginManager>;
+  /** 必须在内置渠道适配器注册完成后调用；scheduler 先于本步完成 initialize。 */
+  startPlugins(services: CoreServices, scheduler: SchedulerSubsystem): Promise<PluginManager>;
   createScheduler(runtime: AgentRuntime, services: CoreServices): SchedulerSubsystem;
   registerCoreIpc(input: RegisterCoreIpcInput): void;
   loadGeneralSettings(): GeneralSettings;
@@ -140,11 +140,13 @@ export async function startCore(deps: CoreDependencies): Promise<CoreResult> {
   channels.initialize();
   await channels.adaptersRegistered;
 
-  // 插件严格晚于内置 adapter id 预留，避免插件抢占 feishu/wechat/qq 等内置 id。
-  const plugins = await deps.startPlugins(services);
-
+  // scheduler store 先加载并注册 IPC，再启动插件：插件调度服务写入的是
+  // 已加载的 store，不会覆盖磁盘任务；插件启停联动也在此时接线。
   const scheduler = deps.createScheduler(runtime, services);
   scheduler.initialize();
+
+  // 插件严格晚于内置 adapter id 预留，避免插件抢占 feishu/wechat/qq 等内置 id。
+  const plugins = await deps.startPlugins(services, scheduler);
 
   // 注册聊天渲染进程可能调用的全部 IPC 处理器 —— 必须先于 chat.load()
   deps.registerCoreIpc({ ipc: shell.ipc, runtime, services, channels, scheduler });

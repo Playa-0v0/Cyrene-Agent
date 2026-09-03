@@ -71,6 +71,29 @@ describe("AgentRuntime 插件宿主事件", () => {
     releaseListener();
   });
 
+  it("渠道来源的成功轮次事件携带 channel 字段", async () => {
+    const publishPluginHostEvent = vi.fn(async () => {});
+    const runtime = createAgentRuntime(createDeps(publishPluginHostEvent));
+
+    await runtime.onRunFinished(
+      { reply: "回复", toolResults: [] },
+      "问题",
+      {
+        source: "channel",
+        mode: "chat",
+        conversationId: "conversation-channel",
+        channel: "wechat",
+      },
+    );
+
+    expect(publishPluginHostEvent).toHaveBeenCalledWith("turn:completed", {
+      source: "channel",
+      mode: "chat",
+      conversationId: "conversation-channel",
+      channel: "wechat",
+    });
+  });
+
   it.each(["timeout", "cancelled", "runtime_error"] as const)(
     "非成功终态 %s 不发布轮次完成事件",
     async (status) => {

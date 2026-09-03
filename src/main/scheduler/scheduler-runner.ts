@@ -1,5 +1,6 @@
 import type { WebContents } from "electron";
 import { IPC } from "../../shared/ipc-channels";
+import type { PluginPromptMode } from "../../plugins/api";
 import { AgentRuntimeError } from "../orchestrator/agent-runtime-error";
 import { CyreneAgent, type CyreneRunOptions } from "../orchestrator/cyrene-agent";
 import { toolRegistry } from "../orchestrator/tools/registry/tool-registry";
@@ -24,12 +25,16 @@ interface RunnerDeps {
   now: () => Date;
 }
 
-/** 定时任务是无人值守的 Work Harness：不询问、不审批，直接执行已分配工具。 */
-export function applyScheduledExecutionPolicy(options: CyreneRunOptions): CyreneRunOptions {
+/**
+ * 定时任务是无人值守的 Work Harness：不询问、不审批，直接执行已分配工具。
+ * 会话模式来自任务冻结的 mode 字段（旧任务默认 work）；执行循环沿用现有
+ * 映射：chat 走 chat loop，其余模式走 work harness。
+ */
+export function applyScheduledExecutionPolicy(options: CyreneRunOptions, mode: PluginPromptMode = "work"): CyreneRunOptions {
   return {
     ...options,
-    executionMode: "work",
-    conversationMode: "work",
+    executionMode: mode === "chat" ? "chat" : "work",
+    conversationMode: mode,
     harnessInteractiveTools: false,
     permissionMode: "allow_all",
   };
@@ -90,7 +95,7 @@ export function createSchedulerRunner(deps: RunnerDeps) {
         messages,
         toolSystemContent,
         soulSystemBaseContent,
-      });
+      }, task.mode ?? "work");
 
       const agent = new CyreneAgent({ threadId: `scheduler-${task.id}`, description: `Scheduled task: ${task.title}` });
 

@@ -107,6 +107,8 @@ describe("startCore", () => {
     expect(calls.indexOf("register-core-ipc")).toBeLessThan(calls.indexOf("chat-load"));
     expect(calls.indexOf("channels-initialize")).toBeLessThan(calls.indexOf("chat-load"));
     expect(calls.indexOf("channels-initialize")).toBeLessThan(calls.indexOf("plugins-start"));
+    // scheduler store 必须先于插件初始化：插件调度服务写入的是已加载的 store
+    expect(calls.indexOf("scheduler-initialize")).toBeLessThan(calls.indexOf("plugins-start"));
     expect(calls.indexOf("plugins-start")).toBeLessThan(calls.indexOf("chat-load"));
     expect(calls).not.toContain("channels-start");
     expect(calls).not.toContain("scheduler-start");

@@ -300,20 +300,23 @@ export function createAgentRuntime(rawDeps: AgentRuntimeDeps): AgentRuntime {
       const settings = resolveModelSettingsProfile(rawDeps.loadModelSettings());
       const profile = rawDeps.loadUserProfile();
       const generalSettings = rawDeps.loadGeneralSettings();
+      // 会话模式取任务冻结字段（旧任务默认 work）：skill 过滤、模式提示词
+      // 和插件提示词上下文都跟随该模式。
+      const mode = task.mode ?? "work";
       const messages = [{ role: "user" as const, content: task.prompt }];
-      // 定时任务默认按 work 模式过滤 skill，并尊重 skill-模式覆盖层。
-      const scheduledSkills = rawDeps.skillRegistry.getEnabledForMode(
-        "work",
-        generalSettings.skillModeOverrides,
-      );
+      // 定时任务按任务模式过滤 skill，并尊重 skill-模式覆盖层；
+      // 与聊天路径同约定：chat 模式不暴露 skill。
+      const scheduledSkills = mode === "chat"
+        ? []
+        : rawDeps.skillRegistry.getEnabledForMode(mode, generalSettings.skillModeOverrides);
       const systemContent = [
-        buildModePrompt("work"),
+        buildModePrompt(mode),
         buildEnvironmentContext({ provider: settings.provider, model: settings.model }, profile),
         buildSkillCatalog(scheduledSkills),
         await buildAlwaysOnContext(task.prompt, messages),
         await rawDeps.buildPluginPromptContext({
           source: "scheduler",
-          mode: "work",
+          mode,
           userText: task.prompt,
         }),
       ].join("\n\n---\n\n");
