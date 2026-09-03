@@ -17,9 +17,16 @@ import type {
   PluginSpeechInputLease,
   PluginTool,
 } from "@playa0v0/cyrene-plugin-sdk";
-import { isPluginHostError } from "@playa0v0/cyrene-plugin-sdk";
 
 let deps: PluginDeps = {};
+
+/**
+ * 判断是否宿主稳定错误（带 E_ 前缀错误码的 Error）。
+ * 插件运行时不依赖 SDK 包，错误形状判断内联实现即可。
+ */
+function isPluginHostError(error: unknown): error is PluginHostError {
+  return error instanceof Error && typeof (error as PluginHostError).code === "string";
+}
 /** 当前租约与识别状态：示例全局只允许一次进行中的识别。 */
 let activeLease: PluginSpeechInputLease | null = null;
 let recognizing = false;
