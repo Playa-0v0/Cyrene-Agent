@@ -3,6 +3,7 @@
 import type { ReviewSnapshot } from "../shared/review-types";
 import type { AppUpdateApi } from "../shared/app-update";
 import type { PluginManagementApi } from "../shared/plugin-management";
+import type { MomentsApi } from "../shared/moments-types";
 
 interface SystemApi {
   openExternal: (url: string) => Promise<{ ok: boolean; error?: string }>;
@@ -18,6 +19,7 @@ declare global {
     review?: ReviewApi;
     appUpdate?: AppUpdateApi;
     plugins?: PluginManagementApi;
+    moments?: MomentsApi;
   }
 }
 

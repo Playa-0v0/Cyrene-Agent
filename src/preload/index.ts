@@ -218,6 +218,22 @@ const tasksApi = {
 contextBridge.exposeInMainWorld("sidebar", sidebarApi);
 contextBridge.exposeInMainWorld("tasks", tasksApi);
 
+// Moments（动态 / 朋友圈）API：renderer 只能提交内容字段，author/id/createdAt 由主进程强制生成
+const momentsApi: import("../shared/moments-types").MomentsApi = {
+  list: (options) => ipcRenderer.invoke(IPC.MOMENTS_LIST, options),
+  getPost: (postId) => ipcRenderer.invoke(IPC.MOMENTS_GET_POST, postId),
+  createPost: (input) => ipcRenderer.invoke(IPC.MOMENTS_CREATE_POST, input),
+  deletePost: (postId) => ipcRenderer.invoke(IPC.MOMENTS_DELETE_POST, postId),
+  createComment: (input) => ipcRenderer.invoke(IPC.MOMENTS_CREATE_COMMENT, input),
+  toggleLike: (postId) => ipcRenderer.invoke(IPC.MOMENTS_TOGGLE_LIKE, postId),
+  onChanged: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on(IPC.MOMENTS_CHANGED, handler);
+    return () => ipcRenderer.removeListener(IPC.MOMENTS_CHANGED, handler);
+  },
+};
+contextBridge.exposeInMainWorld("moments", momentsApi);
+
 // 通话窗口 API
 const callApi = {
   start: () => ipcRenderer.send(IPC.CALL_START),

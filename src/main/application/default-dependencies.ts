@@ -79,6 +79,7 @@ import {
 import { memoryStore } from "../memory/memory-store";
 import { backupMemoryRagFiles, reconcileMemoryRag } from "../memory/memory-rag-reconciliation";
 import { registerChatsIpc } from "../chats/chats-ipc";
+import { registerMomentsIpc } from "../moments/moments-ipc";
 import { registerChatUiIpc } from "../chats/chat-ui-ipc";
 import * as chatsStore from "../chats/chats-store";
 import { flush as flushTokenUsage } from "../token-usage-store";
@@ -468,6 +469,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
 
         // 聊天会话存储 IPC（chats-store.initialize 建好 cyrene-chats 目录并加载 index）
         registerChatsIpc(ipc);
+        registerMomentsIpc(ipc);
         registerCodeGitIpc({ ipc, service: services.git });
 
         // AG-UI 事件流桥：渲染进程 invoke(AGUI_RUN) → CyreneAgent 跑 Agent 循环 → 事件透传

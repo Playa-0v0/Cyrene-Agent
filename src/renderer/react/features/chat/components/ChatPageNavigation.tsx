@@ -2,6 +2,7 @@ import React from "react";
 import type { ChatSessionMeta, ConversationMode } from "../../../../../shared/chat-types";
 import { ModeSwitch } from "../../../components/ui/ModeSwitch";
 import { ModelModeButton } from "../../../components/ui/ModelModeButton";
+import { MomentsModeButton } from "../../../components/ui/MomentsModeButton";
 import { NewTaskButton } from "../../../components/ui/NewTaskButton";
 import { PluginModeButton } from "../../../components/ui/PluginModeButton";
 import { SettingsButton } from "../../../components/ui/SettingsButton";
@@ -13,7 +14,7 @@ import { WindowControls } from "../../../components/ui/WindowControls";
 import { AppUpdateEntry } from "./AppUpdateEntry";
 import { ConversationSidebar } from "./ConversationSidebar";
 
-export type ChatPagePanel = "tool" | "skill" | "model" | "plugin";
+export type ChatPagePanel = "tool" | "skill" | "model" | "plugin" | "moments";
 
 export interface ChatPageNavigationProps {
   collapsed: boolean;
@@ -76,6 +77,7 @@ export function ChatPageNavigation({
           <SkillModeButton active={activePanel === "skill"} onClick={() => onTogglePanel("skill")} />
           <ModelModeButton active={activePanel === "model"} onClick={() => onTogglePanel("model")} />
           <PluginModeButton active={activePanel === "plugin"} onClick={() => onTogglePanel("plugin")} />
+          <MomentsModeButton active={activePanel === "moments"} onClick={() => onTogglePanel("moments")} />
         </div>
         <div className="cy-page-conversations">
           <ConversationSidebar

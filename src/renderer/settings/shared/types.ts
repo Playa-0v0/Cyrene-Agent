@@ -105,6 +105,8 @@ export interface GeneralSettings extends ChatAppearanceSettings {
   citaEnabled: boolean;
   citaSemanticEngine: "remote" | "local";
   chatSocialContextEnabled: boolean;
+  momentsEnabled: boolean;
+  cyreneMomentsReactionsEnabled: boolean;
   petAlwaysOnTop: boolean;
   petVisible: boolean;
   petZoom: number;

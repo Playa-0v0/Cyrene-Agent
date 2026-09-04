@@ -540,9 +540,51 @@
     "tools": "工具",
     "skills": "技能",
     "plugins": "插件",
+    "moments": "动态",
     "modelNotConnected": "模型未连接",
     "userAlt": "用户",
     "settings": "设置",
     "newButton": "新建"
+  },
+  "moments": {
+    "title": "动态",
+    "subtitle": "记录你和昔涟的生活瞬间",
+    "postCount": "{{count}} 条动态",
+    "composerTitlePlaceholder": "标题（可选）",
+    "composerPlaceholder": "分享此刻…",
+    "addImages": "添加图片",
+    "imagesCount": "{{count}}/9",
+    "publish": "发表",
+    "publishing": "发表中…",
+    "publishFailed": "发布失败，请稍后重试",
+    "empty": "还没有动态，来发第一条吧",
+    "loadFailed": "动态加载失败",
+    "apiUnavailable": "动态服务暂不可用",
+    "cyreneName": "昔涟",
+    "userFallbackName": "我",
+    "like": "赞",
+    "comment": "评论",
+    "commentPlaceholder": "评论…",
+    "replyPlaceholder": "回复 {{name}}…",
+    "send": "发送",
+    "cancel": "取消",
+    "delete": "删除",
+    "confirmDelete": "确定删除这条动态吗？评论和点赞会一起删除。",
+    "replyPrefix": "回复",
+    "time": {
+      "justNow": "刚刚",
+      "minutesAgo": "{{count}} 分钟前",
+      "yesterday": "昨天"
+    },
+    "error": {
+      "invalid_input": "内容为空或超出长度限制",
+      "too_many_images": "最多添加 9 张图片",
+      "image_too_large": "图片过大或为空（单张不超过 15MB）",
+      "unsupported_mime": "仅支持 PNG / JPEG / WebP 图片",
+      "post_not_found": "这条动态已不存在",
+      "reply_to_not_found": "要回复的评论已不存在",
+      "reaction_exists": "已经赞过了",
+      "moments_disabled": "动态功能已关闭"
+    }
   }
 }

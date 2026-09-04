@@ -95,6 +95,15 @@ export const IPC = {
   TASKS_CLOSE: "tasks:close",
   TASKS_MINIMIZE: "tasks:minimize",
 
+  // Moments（动态 / 朋友圈）
+  MOMENTS_LIST: "moments:list",
+  MOMENTS_GET_POST: "moments:get-post",
+  MOMENTS_CREATE_POST: "moments:create-post",
+  MOMENTS_DELETE_POST: "moments:delete-post",
+  MOMENTS_CREATE_COMMENT: "moments:create-comment",
+  MOMENTS_TOGGLE_LIKE: "moments:toggle-like",
+  MOMENTS_CHANGED: "moments:changed",
+
   // settings window
   SETTINGS_MINIMIZE: "settings:minimize",
   SETTINGS_CLOSE: "settings:close",
