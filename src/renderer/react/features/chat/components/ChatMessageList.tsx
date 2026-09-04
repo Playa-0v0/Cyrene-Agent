@@ -563,9 +563,19 @@ function UserAttachments({ attachments }: { attachments: ChatMessageAttachment[]
 
 function AttachmentImage({ attachment }: { attachment: ChatMessageAttachment }) {
   const [src, setSrc] = useState(attachment.previewUrl);
+  // blob: 预览 URL 只在当前页面有效，聊天记录持久化后刷新必失效；只允许一次磁盘重读兜底
+  const diskFallbackTriedRef = useRef(false);
+
+  function readFromDisk(): void {
+    if (!attachment.filePath) return;
+    void window.chat?.getImagePreview?.(attachment.filePath).then((result) => {
+      if (result.ok && result.dataUrl) setSrc(result.dataUrl);
+    });
+  }
 
   useEffect(() => {
     setSrc(attachment.previewUrl);
+    diskFallbackTriedRef.current = false;
     if ((!attachment.previewUrl || attachment.previewUrl.startsWith("file:")) && attachment.filePath) {
       let active = true;
       void window.chat?.getImagePreview?.(attachment.filePath).then((result) => {
@@ -577,7 +587,14 @@ function AttachmentImage({ attachment }: { attachment: ChatMessageAttachment }) 
     }
   }, [attachment.filePath, attachment.previewUrl]);
 
-  return <img src={src} alt={attachment.name} draggable={false} />;
+  // 历史 blob: URL 加载失败时从磁盘重读，修复刷新后的存量裂图
+  function handleImageError(): void {
+    if (diskFallbackTriedRef.current) return;
+    diskFallbackTriedRef.current = true;
+    readFromDisk();
+  }
+
+  return <img src={src} alt={attachment.name} draggable={false} onError={handleImageError} />;
 }
 
 function UserContent({
