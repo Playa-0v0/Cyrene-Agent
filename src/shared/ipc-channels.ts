@@ -352,6 +352,17 @@ export const IPC = {
   // renderer → main：回传用户选择
   CHOICE_RESOLVE: "choice:resolve",
 
+  // pop_quiz 抽查测试（learn 模式）
+  // 与审批流同构：不设超时、10s 幂等重播、结算统一广播
+  // main → renderer：推送抽查卡片（重复推送同 id 覆盖，用于渲染端恢复）
+  POP_QUIZ_REQUEST: "pop-quiz:request",
+  // renderer → main：提交作答（返回值带判分结果，渲染端切展示态）
+  POP_QUIZ_RESOLVE: "pop-quiz:resolve",
+  // renderer → main：跳过整次抽查
+  POP_QUIZ_SKIP: "pop-quiz:skip",
+  // main → renderer：结算广播（提交/跳过/run 取消），渲染端据此清卡
+  POP_QUIZ_SETTLED: "pop-quiz:settled",
+
   // call window (voice call)
   CALL_OPEN: "call:open",                 // sidebar → main：打开通话窗口
   CALL_START: "call:start",               // renderer → main：开始通话（初始化 ASR）
