@@ -13,7 +13,10 @@ import { loadGeneralSettings } from "../settings/settings-facade";
 import { loadModelSettings } from "../settings/model-settings";
 import { loadPromptFile } from "../prompts/prompt-loader";
 import type { ChatMessage, VendorConfig } from "../orchestrator/vendors";
+import * as path from "path";
 import { getEmbeddingProvider } from "../rag/embedding";
+import { getKeywordMatchedWorldbookEntries, getPermanentWorldbookEntries } from "../rag";
+import { validateCaptionImagePath } from "../chat/image-caption";
 import { matchSticker, type StickerEmbeddingEntry } from "../sticker-embedder";
 import { resolveMomentStickerMedia } from "./moment-media-matcher";
 import * as momentsStore from "./moments-store";
@@ -22,6 +25,7 @@ import {
   runMomentsModel,
   type MomentsAgent,
   type MomentsModelOutput,
+  type MomentPostImage,
 } from "./moments-agent";
 import {
   buildConversationSummary,
@@ -104,6 +108,10 @@ export interface MomentsServiceDeps {
   savePolicyState?: (state: MomentsPolicyState) => void;
   /** 后置配图匹配（未注入或未命中时纯文字发帖） */
   matchMedia?: (query: string) => Promise<MomentMedia | null>;
+  /** 关键词命中 worldbook 设定块（未注入时降级空串，不注入设定） */
+  buildWorldbookContext?: (text: string) => string;
+  /** 读取用户动态图片转 base64（未注入时不带图） */
+  loadPostImages?: (post: MomentPost) => MomentPostImage[];
   log?: (event: string, detail?: unknown) => void;
 }
 
@@ -116,6 +124,8 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     commitPost: (input) => deps.store.createCyrenePost(input),
     loadFeedItem: (postId) => deps.store.getFeedItem(postId),
     matchMedia: deps.matchMedia ?? (async () => null),
+    buildWorldbookContext: deps.buildWorldbookContext,
+    loadPostImages: deps.loadPostImages,
     log: deps.log,
   });
 
@@ -291,11 +301,48 @@ export function createMomentsMediaMatcher(): (query: string) => Promise<MomentMe
   };
 }
 
+/**
+ * 具体 worldbook 注入闭包：常驻条目全量 + 文本关键词命中条目，按优先级合并。
+ * 供 Moments 各 LLM 调用注入设定（纯关键词触发，不走 DMAE 打分）。
+ */
+export function buildMomentsWorldbookContext(text: string): string {
+  const parts = [...getPermanentWorldbookEntries(), ...getKeywordMatchedWorldbookEntries(text)];
+  if (parts.length === 0) return "";
+  return `[相关设定]\n${parts.join("\n\n")}`;
+}
+
+/**
+ * 具体图片读取闭包：用户动态的 user_attachment 副本转 base64 dataUrl，
+ * 直发多模态主模型；读取失败降级文字说明，不阻断反应流程。
+ * character_asset 是昔涟自己的配图素材，不作为视觉输入。
+ */
+export function loadUserMomentPostImages(post: MomentPost): MomentPostImage[] {
+  // 与主会话同一条规矩：multimodal=false 表示用户明确不把图片字节发给主模型，此时跳过读图
+  if (loadModelSettings()?.multimodal === false) return [];
+  const images: MomentPostImage[] = [];
+  for (const media of post.media) {
+    if (media.origin !== "user_attachment") continue;
+    const filePath = path.join(momentsStore.getMomentsMediaRootDir(), post.id, media.ref);
+    const validated = validateCaptionImagePath(filePath);
+    if (validated.ok) {
+      images.push({
+        name: media.ref,
+        dataUrl: `data:${validated.mime};base64,${validated.buffer.toString("base64")}`,
+      });
+    } else {
+      images.push({ name: media.ref, error: validated.error });
+    }
+  }
+  return images;
+}
+
 export const momentsService: MomentsService = createMomentsService({
   store: momentsStore,
   loadGeneralSettings,
   loadVendorConfig: loadMomentsVendorConfig,
   matchMedia: createMomentsMediaMatcher(),
+  buildWorldbookContext: buildMomentsWorldbookContext,
+  loadPostImages: loadUserMomentPostImages,
   buildPersona: buildMomentsPersonaPrompt,
   enqueueTask: (label, task) => enqueueLLMTask(label, task),
   runModel: async (messages) => {

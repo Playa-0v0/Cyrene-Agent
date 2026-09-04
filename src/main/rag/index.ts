@@ -284,6 +284,22 @@ export function getPermanentWorldbookEntries(): string[] {
   return worldbook.getPermanentEntries();
 }
 
+// ── Worldbook 关键词直查：后台轻量调用（Moments 反应/发帖等）用，不经 DMAE 状态机 ──
+// 文本命中任一触发词即注入该条目，调用方自行决定合并常驻条目。
+export function getKeywordMatchedWorldbookEntries(text: string): string[] {
+  if (!worldbook) return [];
+  const t = text ?? "";
+  if (!t.trim()) return [];
+  return worldbook.getEntries()
+    .filter((e) => e.enabled && !e.permanent && e.keywords.length > 0)
+    .filter((e) => e.keywords.some((kw) => t.includes(kw)))
+    .sort((a, b) => b.priority - a.priority)
+    .map((e) => {
+      const title = e.id.replace(/^wb_[^_]+_/, "").replace(/_/g, " ");
+      return `【${title}】\n${e.content}`;
+    });
+}
+
 // ── Import document ──
 export type ImportedDocumentResult = {
   importId: string;

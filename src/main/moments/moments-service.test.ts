@@ -1,5 +1,6 @@
 // moments-service 调度测试：反应闸门前置、任务入队、评论触发范围与错误隔离；
 // 主动发帖调度：设置/去重闸门前置、执行时复核冷却、成功落库与记账。
+import * as path from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { VendorConfig } from "../orchestrator/vendors";
 import type { MomentsModelOutput } from "./moments-agent";
@@ -22,6 +23,9 @@ const mocks = vi.hoisted(() => ({
   loadModelSettings: vi.fn(),
   loadPromptFile: vi.fn(),
   getEmbeddingProvider: vi.fn(),
+  getPermanentWorldbookEntries: vi.fn(),
+  getKeywordMatchedWorldbookEntries: vi.fn(),
+  validateCaptionImagePath: vi.fn(),
 }));
 
 vi.mock("../llm-queue", () => ({ enqueueLLMTask: mocks.enqueueLLMTask }));
@@ -47,11 +51,22 @@ vi.mock("./moments-store", () => ({
   toggleLike: vi.fn(),
   createCyreneLike: vi.fn(),
   createCyrenePost: vi.fn(),
+  getMomentsMediaRootDir: () => "/moments-media",
+}));
+// worldbook 关键词直查 + 图片校验都 mock 掉，只测 moments 侧接线
+vi.mock("../rag", () => ({
+  getPermanentWorldbookEntries: mocks.getPermanentWorldbookEntries,
+  getKeywordMatchedWorldbookEntries: mocks.getKeywordMatchedWorldbookEntries,
+}));
+vi.mock("../chat/image-caption", () => ({
+  validateCaptionImagePath: mocks.validateCaptionImagePath,
 }));
 
 import {
+  buildMomentsWorldbookContext,
   createMomentsMediaMatcher,
   createMomentsService,
+  loadUserMomentPostImages,
   registerMomentsMediaMatcher,
   type MomentsTurnInput,
 } from "./moments-service";
@@ -130,7 +145,7 @@ function createFakeStore() {
         author: "user",
         title: input.title,
         text: input.text,
-        media: [],
+        media: input.media ?? [],
         createdAt: 1_000,
       };
       state.posts.push(post);
@@ -197,7 +212,18 @@ interface HarnessOptions {
   modelResponse?: string;
   /** 配图匹配（未注入时走默认闭包恒 null，纯文字落库） */
   matchMedia?: (query: string) => Promise<MomentMedia | null>;
+  /** worldbook 注入（缺省用真闭包，配合 mocked rag 断言全链路） */
+  buildWorldbookContext?: (text: string) => string;
+  /** 图片读取（缺省用真闭包，配合 mocked 校验函数断言全链路） */
+  loadPostImages?: (post: MomentPost) => MomentPostImage[];
 }
+
+// 全局默认：worldbook / 图片校验 mock 返回空，真闭包安全降级；个别用例按需覆盖
+beforeEach(() => {
+  mocks.getPermanentWorldbookEntries.mockReset().mockReturnValue([]);
+  mocks.getKeywordMatchedWorldbookEntries.mockReset().mockReturnValue([]);
+  mocks.validateCaptionImagePath.mockReset();
+});
 
 /** enqueueTask 默认内联执行，便于断言反应链路完整生效。 */
 function createHarness(options: HarnessOptions = {}) {
@@ -230,6 +256,8 @@ function createHarness(options: HarnessOptions = {}) {
         ? ({ provider: "test", baseUrl: "https://example.test", model: "m", apiKey: "k" } as VendorConfig)
         : options.vendorConfig,
     matchMedia: options.matchMedia,
+    buildWorldbookContext: options.buildWorldbookContext ?? buildMomentsWorldbookContext,
+    loadPostImages: options.loadPostImages ?? loadUserMomentPostImages,
     buildPersona: () => "测试人设",
     enqueueTask,
     runModel,
@@ -585,5 +613,105 @@ describe("createMomentsMediaMatcher 具体闭包", () => {
     mocks.loadModelSettings.mockReturnValue({ stickerSimilarityThreshold: 0.55 });
 
     expect(await createMomentsMediaMatcher()("深夜")).toBeNull();
+  });
+});
+
+describe("moments worldbook 注入与图片读取", () => {
+  beforeEach(() => {
+    mocks.getPermanentWorldbookEntries.mockReset().mockReturnValue([]);
+    mocks.getKeywordMatchedWorldbookEntries.mockReset().mockReturnValue([]);
+    mocks.validateCaptionImagePath.mockReset();
+    mocks.loadModelSettings.mockReset();
+  });
+
+  describe("buildMomentsWorldbookContext", () => {
+    it("常驻条目全量 + 关键词命中条目按序合并", () => {
+      mocks.getPermanentWorldbookEntries.mockReturnValue(["【常驻设定】全局背景"]);
+      mocks.getKeywordMatchedWorldbookEntries.mockReturnValue(["【风堇】黄金裔"]);
+
+      const result = buildMomentsWorldbookContext("提到风堇的文本");
+      expect(result).toContain("[相关设定]");
+      expect(result).toContain("【常驻设定】全局背景");
+      expect(result).toContain("【风堇】黄金裔");
+      expect(mocks.getKeywordMatchedWorldbookEntries).toHaveBeenCalledWith("提到风堇的文本");
+    });
+    it("两边都无内容时返回空串（不注入）", () => {
+      expect(buildMomentsWorldbookContext("无关文本")).toBe("");
+    });
+  });
+
+  describe("loadUserMomentPostImages", () => {
+    it("user_attachment 副本读取成功时转 base64 dataUrl", () => {
+      mocks.validateCaptionImagePath.mockReturnValue({
+        ok: true,
+        filePath: "/moments-media/moment_p1/1.jpg",
+        buffer: Buffer.from("ABC"),
+        mime: "image/jpeg",
+      });
+
+      const images = loadUserMomentPostImages(makePost({
+        media: [{ id: "m1", type: "image", origin: "user_attachment", ref: "1.jpg" }],
+      }));
+
+      expect(mocks.validateCaptionImagePath).toHaveBeenCalledWith(path.join("/moments-media", "moment_p1", "1.jpg"));
+      expect(images).toEqual([{ name: "1.jpg", dataUrl: "data:image/jpeg;base64,QUJD" }]);
+    });
+
+    it("读取失败时降级错误说明，不阻断", () => {
+      mocks.validateCaptionImagePath.mockReturnValue({ ok: false, error: "文件不存在" });
+
+      const images = loadUserMomentPostImages(makePost({
+        media: [{ id: "m1", type: "image", origin: "user_attachment", ref: "1.jpg" }],
+      }));
+
+      expect(images).toEqual([{ name: "1.jpg", error: "文件不存在" }]);
+    });
+
+    it("character_asset 配图不作为视觉输入", () => {
+      const images = loadUserMomentPostImages(makePost({
+        media: [{ id: "m1", type: "image", origin: "character_asset", ref: "stickers/peek.gif" }],
+      }));
+
+      expect(images).toEqual([]);
+      expect(mocks.validateCaptionImagePath).not.toHaveBeenCalled();
+    });
+
+    it("multimodal=false 时不读图（与主会话同一条开关规矩）", () => {
+      mocks.loadModelSettings.mockReturnValue({ multimodal: false });
+
+      const images = loadUserMomentPostImages(makePost({
+        media: [{ id: "m1", type: "image", origin: "user_attachment", ref: "1.jpg" }],
+      }));
+
+      expect(images).toEqual([]);
+      expect(mocks.validateCaptionImagePath).not.toHaveBeenCalled();
+    });
+  });
+  it("注入链路：反应调用携带 worldbook 与图片进 prompt", async () => {
+    mocks.getKeywordMatchedWorldbookEntries.mockReturnValue(["【风堇】黄金裔"]);
+    mocks.validateCaptionImagePath.mockReturnValue({
+      ok: true,
+      filePath: "/moments-media/moment_p1/1.jpg",
+      buffer: Buffer.from("ABC"),
+      mime: "image/jpeg",
+    });
+    const h = createHarness({
+      cyreneMomentsReactionsEnabled: true,
+      modelResponse: '{"like":false,"comment":{"shouldComment":false}}',
+    });
+    const result = await h.service.createUserPost({
+      text: "见到风堇了",
+      media: [{ id: "m1", type: "image", origin: "user_attachment", ref: "1.jpg" }],
+    });
+
+    expect(result.applied).toBe(true);
+    await flush();
+
+    const messages = h.runModel.mock.calls[0][0] as Array<{ role: string; content?: unknown }>;
+    expect(mocks.getKeywordMatchedWorldbookEntries).toHaveBeenCalledWith("见到风堇了");
+    expect(messages[0].content).toContain("【风堇】黄金裔");
+    const blocks = messages[1].content as Array<{ type: string; image_url?: { url: string } }>;
+    expect(Array.isArray(blocks)).toBe(true);
+    expect(blocks.some((block) => block.type === "image_url" && block.image_url?.url === "data:image/jpeg;base64,QUJD")).toBe(true);
   });
 });

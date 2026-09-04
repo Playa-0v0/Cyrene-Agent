@@ -12,6 +12,7 @@ import {
   type ChatMessage,
   type VendorConfig,
 } from "../orchestrator/vendors";
+import type { ChatMessageContent, OpenAIContentBlock } from "../orchestrator/vendors/types";
 import {
   MOMENT_MAX_COMMENT_TEXT_LENGTH,
   type MomentComment,
@@ -73,6 +74,30 @@ const MOMENTS_POST_SYSTEM = `[moments_post_system]
 不要提及系统、规则、评分或决策机制，不要在文案里使用"对话""用户"这类词。
 不要暴露用户的隐私细节，不要大段复述用户原话。`;
 
+/** 用户动态图片读取结果：dataUrl 直发多模态模型；读取失败带 error 降级文字说明 */
+export interface MomentPostImage {
+  name: string;
+  dataUrl?: string;
+  error?: string;
+}
+
+/** 用户动态图片挂到 user 消息尾部：成功转 image_url block 直发，失败降级"无法读取"文字块 */
+function appendImageBlocks(text: string, images?: readonly MomentPostImage[]): ChatMessageContent {
+  if (!images || images.length === 0) return text;
+  const blocks: OpenAIContentBlock[] = [{ type: "text", text }];
+  for (const image of images) {
+    if (image.dataUrl) {
+      blocks.push({ type: "image_url", image_url: { url: image.dataUrl } });
+    } else {
+      blocks.push({
+        type: "text",
+        text: `图片 ${image.name} 无法读取：${image.error ?? "未知原因"}。请诚实说明暂时无法看清这张图，不要编造图片内容。`,
+      });
+    }
+  }
+  return blocks;
+}
+
 const MAX_THREAD_COMMENTS = 20;
 const MAX_THREAD_CHARS = 4000;
 const MAX_EXCERPT_CHARS = 2000;
@@ -126,12 +151,14 @@ function buildThreadLines(comments: readonly MomentComment[], replyTargetId: str
 }
 export interface BuildReactionMessagesInput {
   persona: string;
-  post: { title?: string; text: string; imageCount: number };
+  /** 关键词命中的 worldbook 设定块（含常驻）；空串表示无命中不注入 */
+  worldbook?: string;
+  post: { title?: string; text: string; imageCount: number; images?: MomentPostImage[] };
   localNow: Date;
 }
 
 export function buildReactionMessages(input: BuildReactionMessagesInput): ChatMessage[] {
-  const system = [input.persona.trim(), MOMENTS_REACT_SYSTEM].filter(Boolean).join("\n\n---\n\n");
+  const system = [input.persona.trim(), input.worldbook?.trim(), MOMENTS_REACT_SYSTEM].filter(Boolean).join("\n\n---\n\n");
 
   const lines = ["[用户发布的朋友圈动态]"];
   if (input.post.title?.trim()) lines.push(`标题：${input.post.title.trim()}`);
@@ -150,13 +177,17 @@ export function buildReactionMessages(input: BuildReactionMessagesInput): ChatMe
 
   return [
     { role: "system", content: system },
-    { role: "user", content: user },
+    { role: "user", content: appendImageBlocks(user, input.post.images) },
   ];
 }
 
 export interface BuildReplyMessagesInput {
   persona: string;
+  /** 关键词命中的 worldbook 设定块（含常驻）；空串表示无命中不注入 */
+  worldbook?: string;
   post: MomentPost;
+  /** 用户动态图片（原始动态带图时直发多模态模型，帮助理解评论区在聊什么） */
+  postImages?: MomentPostImage[];
   comments: readonly MomentComment[];
   /** 触发本次回复的用户评论 id，其回复链必须完整保留 */
   replyTargetId: string;
@@ -166,7 +197,7 @@ export interface BuildReplyMessagesInput {
 }
 
 export function buildReplyMessages(input: BuildReplyMessagesInput): ChatMessage[] {
-  const system = [input.persona.trim(), MOMENTS_REPLY_SYSTEM].filter(Boolean).join("\n\n---\n\n");
+  const system = [input.persona.trim(), input.worldbook?.trim(), MOMENTS_REPLY_SYSTEM].filter(Boolean).join("\n\n---\n\n");
 
   const postLines = [
     "[原始动态]",
@@ -205,12 +236,14 @@ export function buildReplyMessages(input: BuildReplyMessagesInput): ChatMessage[
 
   return [
     { role: "system", content: system },
-    { role: "user", content: user },
+    { role: "user", content: appendImageBlocks(user, input.postImages) },
   ];
 }
 
 export interface BuildPostGenerationMessagesInput {
   persona: string;
+  /** 关键词命中的 worldbook 设定块（含常驻）；空串表示无命中不注入 */
+  worldbook?: string;
   /** 触发摘录：ring buffer 组装的会话原文 */
   summary: string;
   /** 最近昔涟动态（供新颖性判断） */
@@ -219,7 +252,7 @@ export interface BuildPostGenerationMessagesInput {
 }
 
 export function buildPostGenerationMessages(input: BuildPostGenerationMessagesInput): ChatMessage[] {
-  const system = [input.persona.trim(), MOMENTS_POST_SYSTEM].filter(Boolean).join("\n\n---\n\n");
+  const system = [input.persona.trim(), input.worldbook?.trim(), MOMENTS_POST_SYSTEM].filter(Boolean).join("\n\n---\n\n");
   const packet = buildPostGenerationPacket({
     summary: input.summary,
     recentCyrenePosts: input.recentCyrenePosts,
@@ -397,6 +430,10 @@ export interface MomentsAgentDeps {
   commitPost: (input: { text: string; media: MomentMedia[]; source: MomentPostSource }) => Promise<{ applied: boolean }>;
   /** 后置配图匹配：wantImage 时按文案+摘录选官方素材；未命中返回 null（纯文字降级） */
   matchMedia: (query: string) => Promise<MomentMedia | null>;
+  /** 关键词命中 worldbook 设定（含常驻）；未注入或无命中时返回空串 */
+  buildWorldbookContext?: (text: string) => string;
+  /** 读取用户动态图片（user_attachment 副本）转 base64 直发多模态模型；未注入时不带图 */
+  loadPostImages?: (post: MomentPost) => MomentPostImage[];
   /** 执行时重读动态与评论线程：AI 思考期间世界可能已变 */
   loadFeedItem: (postId: string) => MomentFeedItem | null;
   log?: (event: string, detail?: unknown) => void;
@@ -413,7 +450,14 @@ export function createMomentsAgent(deps: MomentsAgentDeps): MomentsAgent {
   async function evaluateUserPost(post: MomentPost): Promise<void> {
     const output = await deps.runModel(buildReactionMessages({
       persona: deps.buildPersona(),
-      post: { title: post.title, text: post.text, imageCount: post.media.length },
+      // 用户动态文本扫 worldbook 关键词，命中注入设定防幻觉
+      worldbook: deps.buildWorldbookContext?.([post.title ?? "", post.text].filter(Boolean).join("\n")) ?? "",
+      post: {
+        title: post.title,
+        text: post.text,
+        imageCount: post.media.length,
+        images: deps.loadPostImages?.(post),
+      },
       localNow: new Date(),
     }));
     if (output.kind !== "text") return;
@@ -438,7 +482,15 @@ export function createMomentsAgent(deps: MomentsAgentDeps): MomentsAgent {
 
     const output = await deps.runModel(buildReplyMessages({
       persona: deps.buildPersona(),
+      // 动态正文 + 评论文本 + 触发摘录合并扫 worldbook 关键词
+      worldbook: deps.buildWorldbookContext?.([
+        feed.post.title ?? "",
+        feed.post.text,
+        ...feed.comments.map((comment) => comment.content),
+        feed.post.source?.triggerExcerpt ?? "",
+      ].filter(Boolean).join("\n")) ?? "",
       post: feed.post,
+      postImages: deps.loadPostImages?.(feed.post),
       comments: feed.comments,
       replyTargetId,
       triggerExcerpt: feed.post.source?.triggerExcerpt,
@@ -458,6 +510,8 @@ export function createMomentsAgent(deps: MomentsAgentDeps): MomentsAgent {
   async function generatePost(input: { summary: string; recentCyrenePosts: readonly MomentPost[] }): Promise<boolean> {
     const output = await deps.runModel(buildPostGenerationMessages({
       persona: deps.buildPersona(),
+      // 会话摘录扫 worldbook 关键词，发帖文案才能贴合设定
+      worldbook: deps.buildWorldbookContext?.(input.summary) ?? "",
       summary: input.summary,
       recentCyrenePosts: input.recentCyrenePosts,
       localNow: new Date(),

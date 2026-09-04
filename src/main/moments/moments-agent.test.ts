@@ -34,6 +34,7 @@ import {
   parseReactionDecision,
   parseReplyDecision,
   runMomentsModel,
+  type MomentPostImage,
 } from "./moments-agent";
 
 const PERSONA = "测试人设";
@@ -289,6 +290,10 @@ describe("createMomentsAgent", () => {
     modelText?: string;
     modelOutput?: { kind: "error"; reason: string };
     feed?: MomentFeedItem | null;
+    /** buildWorldbookContext 的返回值；缺省 undefined（未注入链路） */
+    worldbookText?: string;
+    /** loadPostImages 的返回值；缺省 undefined（未注入链路） */
+    postImages?: MomentPostImage[];
   }) {
     const runModel = vi.fn(
       async () => overrides.modelOutput ?? { kind: "text", text: overrides.modelText ?? "" },
@@ -297,6 +302,8 @@ describe("createMomentsAgent", () => {
     const commitComment = vi.fn(async () => undefined);
     const commitPost = vi.fn(async () => ({ applied: true }));
     const loadFeedItem = vi.fn(() => overrides.feed ?? null);
+    const buildWorldbookContext = overrides.worldbookText === undefined ? undefined : vi.fn(() => overrides.worldbookText!);
+    const loadPostImages = overrides.postImages === undefined ? undefined : vi.fn(() => overrides.postImages!);
     const log = vi.fn();
     const agent = createMomentsAgent({
       buildPersona: () => PERSONA,
@@ -305,10 +312,111 @@ describe("createMomentsAgent", () => {
       commitComment,
       commitPost,
       loadFeedItem,
+      matchMedia: async () => null,
+      buildWorldbookContext,
+      loadPostImages,
       log,
     });
-    return { agent, runModel, commitLike, commitComment, loadFeedItem, log };
+    return { agent, runModel, commitLike, commitComment, loadFeedItem, buildWorldbookContext, loadPostImages, log };
   }
+
+describe("moments worldbook 注入与图片直发", () => {
+  const WORLDBOOK = "[相关设定]\n【风堇】\n风堇是黄金裔，掌握雷电力量的战士。";
+
+  describe("worldbook 注入", () => {
+    it("evaluateUserPost 用动态文本扫关键词，命中注入 system", async () => {
+      const h = makeHarness({
+        modelText: '{"like":true,"comment":{"shouldComment":false}}',
+        worldbookText: WORLDBOOK,
+      });
+      await h.agent.evaluateUserPost(makePost({ text: "今天见到风堇了！" }));
+
+      expect(h.buildWorldbookContext).toHaveBeenCalledWith(expect.stringContaining("风堇"));
+      const messages = h.runModel.mock.calls[0][0] as Array<{ role: string; content?: unknown }>;
+      expect(messages[0].content).toContain("【风堇】");
+      expect(messages[0].content).toContain("黄金裔");
+    });
+
+    it("generateCommentReply 合并动态正文与评论内容扫描", async () => {
+      const h = makeHarness({
+        modelText: '{"shouldReply":true,"text":"好"}',
+        worldbookText: WORLDBOOK,
+        feed: {
+          post: makePost({ author: "cyrene", text: "昔涟动态" }),
+          comments: [
+            makeComment({ id: "c1", author: "user", content: "你知道风堇吗", createdAt: 100 }),
+          ],
+          likes: [],
+        },
+      });
+      await h.agent.generateCommentReply("moment_p1", "c1");
+
+      const scanned = h.buildWorldbookContext!.mock.calls[0][0] as string;
+      expect(scanned).toContain("昔涟动态");
+      expect(scanned).toContain("风堇");
+    });
+
+    it("generatePost 用会话摘录扫描，命中注入 system", async () => {
+      const h = makeHarness({
+        modelText: '{"shouldPost":false,"text":""}',
+        worldbookText: WORLDBOOK,
+      });
+      await h.agent.generatePost({ summary: "聊到了风堇的往世乐土剧情", recentCyrenePosts: [] });
+
+      expect(h.buildWorldbookContext).toHaveBeenCalledWith("聊到了风堇的往世乐土剧情");
+      const messages = h.runModel.mock.calls[0][0] as Array<{ role: string; content?: unknown }>;
+      expect(messages[0].content).toContain("【风堇】");
+    });
+
+    it("未注入 buildWorldbookContext 时不注入设定，链路照常", async () => {
+      const h = makeHarness({ modelText: '{"like":false,"comment":{"shouldComment":false}}' });
+      await h.agent.evaluateUserPost(makePost());
+      const messages = h.runModel.mock.calls[0][0] as Array<{ role: string; content?: unknown }>;
+      expect(messages[0].content).not.toContain("【");
+    });
+  });
+
+  describe("图片直发", () => {
+    it("用户动态带图时 user 消息转 content blocks 直发", async () => {
+      const h = makeHarness({
+        modelText: '{"like":true,"comment":{"shouldComment":false}}',
+        postImages: [{ name: "1.jpg", dataUrl: "data:image/jpeg;base64,QUJD" }],
+      });
+      await h.agent.evaluateUserPost(makePost());
+
+      const messages = h.runModel.mock.calls[0][0] as Array<{ role: string; content?: unknown }>;
+      const blocks = messages[1].content as Array<{ type: string; text?: string; image_url?: { url: string } }>;
+      expect(Array.isArray(blocks)).toBe(true);
+      expect(blocks[0]).toEqual({ type: "text", text: expect.stringContaining("正文") });
+      expect(blocks[1]).toEqual({ type: "image_url", image_url: { url: "data:image/jpeg;base64,QUJD" } });
+    });
+
+    it("图片读取失败时降级文字说明，不编造图片内容", async () => {
+      const h = makeHarness({
+        modelText: '{"like":false,"comment":{"shouldComment":false}}',
+        postImages: [{ name: "1.jpg", error: "文件不存在" }],
+      });
+      await h.agent.evaluateUserPost(makePost());
+
+      const messages = h.runModel.mock.calls[0][0] as Array<{ role: string; content?: unknown }>;
+      const blocks = messages[1].content as Array<{ type: string; text?: string }>;
+      expect(blocks[1].type).toBe("text");
+      expect(blocks[1].text).toContain("1.jpg 无法读取");
+      expect(blocks[1].text).toContain("不要编造图片内容");
+    });
+
+    it("无图动态 user 消息保持纯文本", async () => {
+      const h = makeHarness({
+        modelText: '{"like":false,"comment":{"shouldComment":false}}',
+        postImages: [],
+      });
+      await h.agent.evaluateUserPost(makePost());
+
+      const messages = h.runModel.mock.calls[0][0] as Array<{ role: string; content?: unknown }>;
+      expect(typeof messages[1].content).toBe("string");
+    });
+  });
+});
 
   describe("evaluateUserPost", () => {
     it("点赞与评论决策分别提交", async () => {
