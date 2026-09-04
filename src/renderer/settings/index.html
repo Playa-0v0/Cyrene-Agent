@@ -1217,6 +1217,34 @@
 
           <div class="channels-card channels-card--global">
             <div class="channels-card__header">
+              <h2>上下文绑定</h2>
+            </div>
+            <div class="channels-card__body">
+              <p class="channels-card__hint">选择一个最近收到消息的外部聊天和一个已有桌面对话。绑定后，两边会继续使用同一段文字上下文；不会改变外部渠道的工具权限。</p>
+              <div class="form-row">
+                <label class="form-label" for="channels-context-source">外部聊天</label>
+                <select id="channels-context-source" class="form-input form-input--wide">
+                  <option value="">暂无最近聊天</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label class="form-label" for="channels-context-target">桌面对话</label>
+                <select id="channels-context-target" class="form-input form-input--wide">
+                  <option value="">暂无可用对话</option>
+                </select>
+              </div>
+              <div class="channels-card__actions">
+                <button type="button" class="btn-secondary" id="channels-context-bind">绑定上下文</button>
+              </div>
+              <div class="channels-feedback" id="channels-context-feedback"></div>
+              <div class="channels-context-bindings" id="channels-context-bindings-list">
+                <p class="empty-hint">暂无绑定。</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="channels-card channels-card--global">
+            <div class="channels-card__header">
               <h2>全局</h2>
             </div>
             <div class="channels-card__body">

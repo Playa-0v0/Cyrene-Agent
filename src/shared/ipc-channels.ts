@@ -355,6 +355,10 @@ export const IPC = {
   // Phase 3.4：消息日志
   CHANNELS_LOG_GET: "channels:log:get",
   CHANNELS_LOG_CLEAR: "channels:log:clear",
+  // 渠道上下文绑定：设置页选择外部聊天继续使用某个桌面会话
+  CHANNELS_CONTEXT_BINDINGS_GET: "channels:context-bindings:get",
+  CHANNELS_CONTEXT_BIND: "channels:context-bindings:bind",
+  CHANNELS_CONTEXT_UNBIND: "channels:context-bindings:unbind",
 
   // Music
   MUSIC_GET_STATUS: "music:get-status",

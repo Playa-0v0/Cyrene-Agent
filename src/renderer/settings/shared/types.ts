@@ -291,6 +291,20 @@ export interface SettingsApi {
   channelsQqBotTestConnection: () => Promise<{ ok: boolean; error?: string; detail?: Record<string, unknown> }>;
   channelsLogGet: (limit?: number) => Promise<unknown[]>;
   channelsLogClear: () => Promise<{ ok: boolean }>;
+  channelsContextBindingsGet: () => Promise<{
+    externalChats: Array<{
+      sessionId: string;
+      channel: string;
+      chatId: string;
+      chatType: "private" | "group";
+      senderName?: string;
+      lastAt: number;
+    }>;
+    bindings: Array<{ sessionId: string; conversationId: string; updatedAt: number }>;
+    conversations: Array<{ id: string; title: string; mode: string; updatedAt: number }>;
+  }>;
+  channelsContextBind: (payload: { sessionId: string; conversationId: string }) => Promise<{ ok: boolean; error?: string }>;
+  channelsContextUnbind: (sessionId: string) => Promise<{ ok: boolean; error?: string }>;
   onChannelsInstallProgress: (callback: (progress: { channel: string; phase: string; pct: number }) => void) => (() => void) | void;
   onChannelsWechatQrcode: (callback: (dataUrl: string) => void) => (() => void) | void;
   onChannelsWechatLoginDone: (callback: (payload: { ok: boolean; botId?: string; error?: string }) => void) => (() => void) | void;

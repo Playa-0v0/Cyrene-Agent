@@ -23,6 +23,10 @@ vi.mock("./dispatcher", () => ({
   setDispatcherBroadcastChat: vi.fn(),
   setDispatcherLoadGeneralSettings: vi.fn(),
   setDispatcherLoadRecentHistory: vi.fn(),
+  setDispatcherObserveExternalChat: vi.fn(),
+  setDispatcherResolveBoundConversation: vi.fn(),
+  setDispatcherLoadBoundConversationHistory: vi.fn(),
+  setDispatcherAppendBoundConversationMessage: vi.fn(),
   setDispatcherSynthesizeTts: vi.fn(),
   formatChannelUserText: vi.fn(() => ""),
 }));

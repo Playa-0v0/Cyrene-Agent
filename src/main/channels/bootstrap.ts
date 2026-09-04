@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { BrowserWindow } from "electron";
 import type { IpcScope } from "../application/ipc-scope";
 import { IPC } from "../../shared/ipc-channels";
@@ -16,11 +17,17 @@ import type { TtsSynthesisService } from "../services/tts/tts-synthesis-service"
 import { buildChannelAttachmentInputs } from "./agent-input";
 import { loadChannelsSettings } from "./settings-store";
 import { enforceChannelAgentPolicy, resolveChannelAgentPolicy } from "./agent-policy";
+import { appendMessage, getSession } from "../chats/chats-store";
+import { getChannelConversationBindingStore } from "./conversation-binding-store";
 import {
   setDispatcherBuildAndRunAgent,
   setDispatcherBroadcastChat,
   setDispatcherLoadGeneralSettings,
   setDispatcherLoadRecentHistory,
+  setDispatcherObserveExternalChat,
+  setDispatcherResolveBoundConversation,
+  setDispatcherLoadBoundConversationHistory,
+  setDispatcherAppendBoundConversationMessage,
   setDispatcherSynthesizeTts,
   formatChannelUserText,
 } from "./dispatcher";
@@ -63,6 +70,52 @@ export function createChannelsSubsystem(
     return loadRecentHistory(sessionId, limit);
   });
   setDispatcherLoadGeneralSettings(loadGeneralSettings);
+
+  setDispatcherObserveExternalChat((sessionId, msg) => {
+    getChannelConversationBindingStore().observe({
+      sessionId,
+      channel: msg.channel,
+      chatId: msg.chatId,
+      chatType: msg.chatType ?? "private",
+      ...(msg.senderName ? { senderName: msg.senderName } : {}),
+      lastAt: msg.at.getTime(),
+    });
+  });
+
+  setDispatcherResolveBoundConversation((sessionId) => {
+    const conversationId = getChannelConversationBindingStore().resolve(sessionId);
+    return conversationId && getSession(conversationId) ? conversationId : null;
+  });
+
+  setDispatcherLoadBoundConversationHistory(async (conversationId, limit) => {
+    const session = getSession(conversationId);
+    if (!session) return [];
+    return session.messages
+      .filter((message) => (message.role === "user" || message.role === "model") && message.content.trim().length > 0)
+      .slice(-limit)
+      .map((message) => ({
+        role: message.role === "model" ? "assistant" as const : "user" as const,
+        content: message.content,
+      }));
+  });
+
+  setDispatcherAppendBoundConversationMessage((conversationId, role, content) => {
+    const session = appendMessage(conversationId, {
+      id: randomUUID(),
+      role: role === "assistant" ? "model" : "user",
+      content,
+      at: Date.now(),
+    });
+    if (!session) throw new Error("Bound conversation no longer exists");
+    const win = deps.getReactChatWindow();
+    if (win && !win.isDestroyed()) {
+      try {
+        win.webContents.send(IPC.CHATS_CHANGED);
+      } catch (err) {
+        console.warn("[Channels] bound conversation refresh failed:", err);
+      }
+    }
+  });
 
   setDispatcherBuildAndRunAgent(async (msg, sessionId, priorMessages) => {
     const channelResult: { text: string; sticker: string | null } = { text: "", sticker: null };
@@ -121,6 +174,8 @@ export function createChannelsSubsystem(
       ],
       style: "01_default.md",
       sessionId,
+      // 渠道绑定只共享文字上下文，不继承桌面对话的工作区权限。
+      workspaceBindingSessionId: null,
       attachments: attachmentInputs.attachments,
       imageAttachments: attachmentInputs.imageAttachments,
       channel: msg.channel,

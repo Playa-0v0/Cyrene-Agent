@@ -19,6 +19,8 @@ import {
   channelsQqBotEnabledEl, channelsQqBotStatusEl, channelsQqBotAppIdEl, channelsQqBotAppSecretEl,
   channelsQqBotAllowAnyPrivateEl, channelsQqBotUserAllowlistEl, channelsQqBotGroupAllowlistEl,
   channelsQqBotSaveBtn, channelsQqBotTestBtn, channelsQqBotFeedbackEl,
+  channelsContextSourceEl, channelsContextTargetEl, channelsContextBindBtn,
+  channelsContextBindingsListEl, channelsContextFeedbackEl,
 } from "./dom";
 import { proactiveDeliverySelect } from "../general/dom";
 import { normalizeProactiveDeliveryTarget } from "../../../shared/preferences";
@@ -161,8 +163,102 @@ export async function refreshChannelsLog(): Promise<void> {
   }
 }
 
+type ContextBindingSnapshot = Awaited<ReturnType<NonNullable<Window["settings"]>["channelsContextBindingsGet"]>>;
+
+function setContextFeedback(kind: "info" | "ok" | "err", message: string): void {
+  if (!channelsContextFeedbackEl) return;
+  channelsContextFeedbackEl.textContent = message;
+  channelsContextFeedbackEl.className = "channels-feedback";
+  channelsContextFeedbackEl.classList.add(kind === "ok" ? "channels-feedback--ok" : kind === "err" ? "channels-feedback--err" : "channels-feedback--info");
+}
+
+function appendOption(select: HTMLSelectElement, value: string, label: string): void {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = label;
+  select.append(option);
+}
+
+function renderContextBindingOptions(snapshot: ContextBindingSnapshot): void {
+  if (channelsContextSourceEl) {
+    channelsContextSourceEl.replaceChildren();
+    if (snapshot.externalChats.length === 0) {
+      appendOption(channelsContextSourceEl, "", "暂无最近聊天");
+    } else {
+      for (const chat of snapshot.externalChats) {
+        const kind = chat.chatType === "group" ? "群聊" : "私聊";
+        const name = chat.senderName || chat.chatId;
+        appendOption(channelsContextSourceEl, chat.sessionId, `${chat.channel} · ${kind} · ${name} (${chat.chatId})`);
+      }
+    }
+  }
+  if (channelsContextTargetEl) {
+    channelsContextTargetEl.replaceChildren();
+    if (snapshot.conversations.length === 0) {
+      appendOption(channelsContextTargetEl, "", "暂无可用对话");
+    } else {
+      for (const conversation of snapshot.conversations) {
+        appendOption(channelsContextTargetEl, conversation.id, `${conversation.title || "新对话"} · ${conversation.mode}`);
+      }
+    }
+  }
+}
+
+function renderContextBindings(snapshot: ContextBindingSnapshot): void {
+  if (!channelsContextBindingsListEl) return;
+  channelsContextBindingsListEl.replaceChildren();
+  if (snapshot.bindings.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty-hint";
+    empty.textContent = "暂无绑定。";
+    channelsContextBindingsListEl.append(empty);
+    return;
+  }
+  const chats = new Map(snapshot.externalChats.map((chat) => [chat.sessionId, chat]));
+  const conversations = new Map(snapshot.conversations.map((conversation) => [conversation.id, conversation]));
+  for (const binding of snapshot.bindings) {
+    const chat = chats.get(binding.sessionId);
+    const conversation = conversations.get(binding.conversationId);
+    const row = document.createElement("div");
+    row.className = "channels-context-binding";
+    const text = document.createElement("span");
+    text.textContent = `${chat?.channel ?? "外部聊天"} · ${chat?.senderName || chat?.chatId || binding.sessionId} → ${conversation?.title || binding.conversationId}`;
+    row.append(text);
+    const unbind = document.createElement("button");
+    unbind.type = "button";
+    unbind.className = "btn-secondary";
+    unbind.textContent = "解除";
+    unbind.addEventListener("click", async () => {
+      setContextFeedback("info", "解除中...");
+      try {
+        const result = await window.settings!.channelsContextUnbind(binding.sessionId);
+        if (!result.ok) throw new Error(result.error ?? "解除失败");
+        setContextFeedback("ok", "已解除上下文绑定");
+        await refreshContextBindings();
+      } catch (err) {
+        setContextFeedback("err", err instanceof Error ? err.message : String(err));
+      }
+    });
+    row.append(unbind);
+    channelsContextBindingsListEl.append(row);
+  }
+}
+
+export async function refreshContextBindings(): Promise<void> {
+  try {
+    const snapshot = await window.settings!.channelsContextBindingsGet();
+    renderContextBindingOptions(snapshot);
+    renderContextBindings(snapshot);
+  } catch (err) {
+    setContextFeedback("err", err instanceof Error ? err.message : String(err));
+  }
+}
+
 export async function loadChannelsPanel(): Promise<void> {
-  if (channelsState.initialized) return;
+  if (channelsState.initialized) {
+    await refreshContextBindings();
+    return;
+  }
   channelsState.initialized = true;
   try {
     const cfg = await window.settings.channelsGetConfig();
@@ -220,6 +316,7 @@ export async function loadChannelsPanel(): Promise<void> {
     renderQqBotDetail(status.qqbot);
     // Phase 3.4：拉一次消息日志
     void refreshChannelsLog();
+    void refreshContextBindings();
   } catch (err) {
     console.warn("[Channels] loadChannelsPanel 失败:", err);
   }
@@ -259,6 +356,24 @@ export async function loadChannelsPanel(): Promise<void> {
   ]) {
     el?.addEventListener("change", scheduleSave);
   }
+
+  channelsContextBindBtn?.addEventListener("click", async () => {
+    const sessionId = channelsContextSourceEl?.value ?? "";
+    const conversationId = channelsContextTargetEl?.value ?? "";
+    if (!sessionId || !conversationId) {
+      setContextFeedback("err", "请先选择外部聊天和桌面对话");
+      return;
+    }
+    setContextFeedback("info", "绑定中...");
+    try {
+      const result = await window.settings!.channelsContextBind({ sessionId, conversationId });
+      if (!result.ok) throw new Error(result.error ?? "绑定失败");
+      setContextFeedback("ok", "上下文绑定已保存");
+      await refreshContextBindings();
+    } catch (err) {
+      setContextFeedback("err", err instanceof Error ? err.message : String(err));
+    }
+  });
 
   // 监听安装进度（Phase 1+ 才会收到）
   window.settings.onChannelsInstallProgress((progress) => {
