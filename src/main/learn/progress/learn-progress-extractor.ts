@@ -10,6 +10,7 @@
 import type { ChatMessage, ChatVendorAdapter } from "../../orchestrator/vendors/types";
 import type { VendorConfig } from "../../orchestrator/vendors/types";
 import { extractJsonCandidates } from "../../orchestrator/structured-output/json-candidates";
+import type { QuizAnswerResult } from "../../../shared/pop-quiz";
 import type { LearnProgressUpdate } from "./learn-progress-types";
 
 const EXTRACTOR_PROMPT = `你是一个学习进度追踪助手。根据以下对话，提取学习进度增量。
@@ -34,6 +35,10 @@ const EXTRACTOR_PROMPT = `你是一个学习进度追踪助手。根据以下对
 - masteryDelta 范围 -100 到 100，表示知识掌握度变化
 - status 可选值：learning（学习中）、reviewing（复习中）、mastered（已掌握）
 - 不要编造信息，只提取对话中确实出现的
+- 若对话附带「本轮抽查实测数据」：这是已判分的确定事实，优先级高于对话推断——
+  答错的知识点必须体现为负向 masteryDelta 并加入 unresolvedQuestionsAdded（描述里带上"抽查答错"）；
+  答对的知识点可给正向 masteryDelta；简答题"待讲评"不算答对也不算答错，按讲评内容判断；
+  这类轮次 hasMeaningfulChange 通常应为 true
 `;
 
 export interface ProgressExtractDeps {
@@ -43,6 +48,25 @@ export interface ProgressExtractDeps {
   userMessage: string;
   assistantMessage: string;
   modelId?: string;
+  /** 本轮 pop_quiz 抽查的实测作答（已本地判分）；跳过的抽查不进来。 */
+  quizEvidence?: QuizAnswerResult[];
+}
+
+/** 把实测作答压成给提取模型的紧凑文本：知识点 + 判分 + 原始作答证据。 */
+export function formatQuizEvidence(evidence: QuizAnswerResult[]): string {
+  return evidence
+    .map((item) => {
+      const answer = Array.isArray(item.userAnswer)
+        ? `[${item.userAnswer.join(",")}]`
+        : String(item.userAnswer);
+      const verdict = item.grading === "correct"
+        ? "答对"
+        : item.grading === "incorrect"
+          ? `答错（作答 ${answer}）`
+          : "简答待讲评";
+      return `- 知识点「${item.learningObjective}」：${verdict}`;
+    })
+    .join("\n");
 }
 
 /**
@@ -53,6 +77,11 @@ export async function extractProgress(
   deps: ProgressExtractDeps,
 ): Promise<LearnProgressUpdate | null> {
   try {
+    // 抽查实测数据是用户侧的客观作答记录，拼在用户消息后面，让提取模型优先采信
+    const userContent = deps.quizEvidence && deps.quizEvidence.length > 0
+      ? deps.userMessage + "\n\n【本轮抽查实测数据】\n" + formatQuizEvidence(deps.quizEvidence)
+      : deps.userMessage;
+
     const messages: ChatMessage[] = [
       {
         role: "system",
@@ -60,7 +89,7 @@ export async function extractProgress(
       },
       {
         role: "user",
-        content: deps.userMessage,
+        content: userContent,
       },
       {
         role: "assistant",
