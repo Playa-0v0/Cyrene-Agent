@@ -35,6 +35,7 @@ import { TaskDelegationRow } from "./TaskDelegationRow";
 import { extractFileChanges, FileChangeCard } from "./FileChangeCard";
 import { ReviewPanel } from "./ReviewPanel";
 import { MermaidBlock } from "./MermaidBlock";
+import { SvgCardBlock } from "./SvgCardBlock";
 
 export interface ChatMessageItem {
   id: string;
@@ -107,6 +108,9 @@ function MarkdownCode({ children, lang, block }: ComponentProps<{ children?: Rea
   const source = String(children ?? "").replace(/\n$/, "");
   if ((lang ?? "").split(/\s+/)[0] === "mermaid") {
     return <MermaidBlock code={source} streaming={streaming} />;
+  }
+  if ((lang ?? "").split(/\s+/)[0] === "svg") {
+    return <SvgCardBlock code={source} streaming={streaming} />;
   }
   return (
     <CodeHighlighter lang={(lang ?? "text").split(/\s+/)[0]} prismLightMode={false}>

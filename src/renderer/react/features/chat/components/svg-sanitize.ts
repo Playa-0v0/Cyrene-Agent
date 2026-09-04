@@ -13,9 +13,17 @@ import DOMPurify from "dompurify";
 /** 源码长度熔断阈值（字符数）：千节点级流程图源码约 23KB / 渲染 265ms，再大就该降级 */
 export const SVG_SOURCE_LIMIT = 20000;
 
+/** 手写 SVG 围栏的熔断阈值：每个节点都是显式标签，比 Mermaid 源码更冗长，放宽到 3 倍 */
+export const HANDWRITTEN_SVG_SOURCE_LIMIT = 60000;
+
 /** 判断源码是否超过熔断阈值 */
 export function isOverSourceLimit(source: string): boolean {
   return source.length > SVG_SOURCE_LIMIT;
+}
+
+/** 判断手写 SVG 是否超过熔断阈值 */
+export function isOverHandwrittenSvgLimit(source: string): boolean {
+  return source.length > HANDWRITTEN_SVG_SOURCE_LIMIT;
 }
 
 /**
