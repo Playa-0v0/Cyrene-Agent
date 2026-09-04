@@ -4080,6 +4080,29 @@ body {
 .channels-feedback--ok { color: rgba(74, 222, 128, 0.95); }
 .channels-feedback--err { color: rgba(248, 113, 113, 0.92); }
 .channels-feedback--info { color: rgba(250, 204, 21, 0.92); }
+.channels-context-bindings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.channels-context-binding {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(254, 247, 255, 0.78);
+  font-size: 12px;
+}
+.channels-context-binding > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* 微信扫码登录 QR 弹窗（modal overlay） */
 .channels-qr-modal {

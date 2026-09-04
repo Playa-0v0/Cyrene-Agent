@@ -91,6 +91,8 @@ export interface AguiRunInput {
   /** 本轮表达风格，与 executionMode 正交。 */
   styleId?: StyleId | string;
   sessionId?: string;    // 会话 ID；桌面运行模式只信任该会话持久化的 mode
+  /** 主进程内部使用：为共享上下文指定工作区绑定来源；null 表示本轮不加载任何工作区。 */
+  workspaceBindingSessionId?: string | null;
   /** 外部渠道入口。桌面聊天不传；微信/飞书用于注入渠道语气规则。 */
   channel?: RelationshipChannel;
   /** @deprecated 仅保留 Renderer 兼容；主进程按 ChatSession.mode 分流并忽略该值。 */

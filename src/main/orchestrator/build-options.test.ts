@@ -317,6 +317,27 @@ describe("build-options", () => {
     expect(result.options.toolSystemContent).toContain("不得写入桌面")
   })
 
+  it("does not load a workspace when the main-process caller disables workspace inheritance", async () => {
+    const deps = createBuildDeps()
+    deps.getWorkspaceBinding = vi.fn(() => ({
+      workspaceRoot: "C:\\projects\\desktop",
+      displayName: "desktop",
+      boundAt: 1,
+    }))
+
+    const result = await buildAgentRunOptions({
+      sessionId: "conversation-bound",
+      workspaceBindingSessionId: null,
+      messages: [{ role: "user", content: "继续对话" }],
+      style: "01_default.md",
+      executionMode: "work",
+    }, deps)
+
+    expect(deps.getWorkspaceBinding).not.toHaveBeenCalled()
+    expect(result.options.resolvedWorkspaceRoot).toBeUndefined()
+    expect(result.options.toolSystemContent).not.toContain("可信根目录")
+  })
+
   it("adds a bounded social background only to enabled Chat runs", async () => {
     const deps = createBuildDeps()
     const retrievedAtom: SocialAtom = {

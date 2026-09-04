@@ -475,9 +475,14 @@ export async function buildAgentRunOptions(
   const isChatMode = executionMode === "chat";
   const conversationId = input.sessionId || "default";
 
-  // 读取可信工作区绑定（来自 Conversation Workspace Binding）
-  const workspaceBinding = conversationId
-    ? deps.getWorkspaceBinding?.(conversationId)
+  // 读取可信工作区绑定（来自 Conversation Workspace Binding）。
+  // 某些主进程入口（例如外部渠道共享上下文）只应复用文字历史，
+  // 必须显式传 null，避免把桌面对话的工作区权限带入渠道运行。
+  const workspaceBindingSessionId = input.workspaceBindingSessionId === null
+    ? undefined
+    : (input.workspaceBindingSessionId ?? conversationId);
+  const workspaceBinding = workspaceBindingSessionId
+    ? deps.getWorkspaceBinding?.(workspaceBindingSessionId)
     : undefined;
   const resolvedWorkspaceRoot = workspaceBinding?.workspaceRoot;
   const workspaceMeta = resolvedWorkspaceRoot ? readWorkspaceMeta(resolvedWorkspaceRoot) : undefined;
