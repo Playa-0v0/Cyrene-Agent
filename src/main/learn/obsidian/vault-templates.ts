@@ -129,6 +129,33 @@ topic:
 ## Next steps
 `;
 
+/** 导学大纲骨架：首次课程式学习时按此结构生成 learn/outline.md */
+export const OUTLINE_TEMPLATE_MD = `---
+created: {{date}}
+material:
+---
+
+# 学习大纲
+
+## 这份材料讲什么
+
+- （三句话概括）
+
+## 章节与依赖
+
+- 第 1 节：（解决什么问题）
+- 第 2 节：（解决什么问题；依赖第 1 节的什么）
+- （依赖关系写"建议先掌握 XX"，不写预计时间——用户学多久没人知道）
+
+## 先修检测
+
+- （出题时用 pop_quiz，3 道快速题判断用户基础）
+
+## 建议起点
+
+- 从第几节开始、为什么
+`;
+
 export const PROGRESS_MD = `---
 updated: {{date}}
 ---
