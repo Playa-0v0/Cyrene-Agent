@@ -285,7 +285,7 @@ export class ChannelDispatcher {
     }
     const hasBoundContext = Boolean(requestedBoundConversationId && this.deps.loadBoundConversationHistory);
     const boundConversationId = hasBoundContext ? requestedBoundConversationId : null;
-    const agentSessionId = boundConversationId ?? sessionId;
+    // 绑定只选择历史与消息镜像目标，Agent 运行身份始终属于原渠道。
     // 兼容旧版按 senderId 键控的历史：飞书 p2p 的 chatId(oc_) 与 senderId(ou_) 不同，
     // 升级后迁移旧滑窗文件到新键，避免既有渠道用户上下文一次性丢失（微信两者同值、QQ 为新增渠道，均无影响）
     migrateHistory(makeSessionId(msg.channel, msg.senderId), sessionId);
@@ -371,7 +371,7 @@ export class ChannelDispatcher {
       // 拼接最近 16 条历史（同桌面端 buildModelMessages 行为）。
       // 加载失败/未注入 → 不拼历史（兼容旧实现）。
       try {
-        const result = await this.deps.buildAndRunAgent(msg, agentSessionId, priorMessages);
+        const result = await this.deps.buildAndRunAgent(msg, sessionId, priorMessages);
         replyText = result.text;
         sticker = result.sticker;
       } catch (err) {

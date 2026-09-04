@@ -1,8 +1,12 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChannelConversationBindingStore } from "./conversation-binding-store";
+
+vi.mock("node:fs", async (importOriginal) => ({
+  ...await importOriginal<typeof import("node:fs")>(),
+}));
 
 describe("ChannelConversationBindingStore", () => {
   let root: string;
@@ -14,7 +18,66 @@ describe("ChannelConversationBindingStore", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("coalesces timestamp writes while keeping the live list current", () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(10_000);
+    const store = new ChannelConversationBindingStore(filePath);
+    const chat = { sessionId: "channel:qq:a", channel: "qq" as const,
+      chatId: "a", chatType: "private" as const, lastAt: 100 };
+    const writes = vi.spyOn(fs, "renameSync");
+    store.observe(chat);
+    for (let i = 1; i <= 100; i++) {
+      clock.mockReturnValue(10_000 + i * 10);
+      store.observe({ ...chat, lastAt: 100 + i });
+    }
+    expect(store.list().externalChats[0].lastAt).toBe(200);
+    expect(writes).toHaveBeenCalledTimes(1);
+    expect(new ChannelConversationBindingStore(filePath).list().externalChats[0].lastAt).toBe(100);
+    clock.mockReturnValue(15_000);
+    store.observe({ ...chat, lastAt: 300 });
+    expect(writes).toHaveBeenCalledTimes(2);
+    expect(new ChannelConversationBindingStore(filePath).list().externalChats[0].lastAt).toBe(300);
+  });
+
+  it("flushes pending timestamps and keeps metadata and binding changes immediately durable", () => {
+    vi.spyOn(Date, "now").mockReturnValue(10_000);
+    const store = new ChannelConversationBindingStore(filePath);
+    const chat = { sessionId: "channel:qq:a", channel: "qq" as const,
+      chatId: "a", chatType: "private" as const, lastAt: 100 };
+    store.observe(chat);
+    store.observe({ ...chat, lastAt: 200 });
+    store.flush();
+    expect(new ChannelConversationBindingStore(filePath).list().externalChats[0].lastAt).toBe(200);
+    const writes = vi.spyOn(fs, "renameSync");
+    store.flush();
+    expect(writes).not.toHaveBeenCalled();
+    store.observe({ ...chat, lastAt: 300 });
+    store.bind(chat.sessionId, "desktop-1");
+    expect(new ChannelConversationBindingStore(filePath).resolve(chat.sessionId)).toBe("desktop-1");
+    expect(new ChannelConversationBindingStore(filePath).list().externalChats[0].lastAt).toBe(300);
+    store.unbind(chat.sessionId);
+    expect(new ChannelConversationBindingStore(filePath).resolve(chat.sessionId)).toBeNull();
+    store.observe({ ...chat, senderName: "new name", lastAt: 400 });
+    expect(new ChannelConversationBindingStore(filePath).list().externalChats[0].senderName).toBe("new name");
+  });
+
+  it("persists on clock rollback and retains a failed flush for retry", () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(10_000);
+    const store = new ChannelConversationBindingStore(filePath);
+    const chat = { sessionId: "channel:qq:a", channel: "qq" as const,
+      chatId: "a", chatType: "private" as const, lastAt: 100 };
+    store.observe(chat);
+    clock.mockReturnValue(9_000);
+    store.observe({ ...chat, lastAt: 200 });
+    expect(new ChannelConversationBindingStore(filePath).list().externalChats[0].lastAt).toBe(200);
+    store.observe({ ...chat, lastAt: 300 });
+    vi.spyOn(fs, "renameSync").mockImplementationOnce(() => { throw new Error("disk unavailable"); });
+    expect(() => store.flush()).toThrow("disk unavailable");
+    store.flush();
+    expect(new ChannelConversationBindingStore(filePath).list().externalChats[0].lastAt).toBe(300);
   });
 
   it("persists a binding and resolves it after restart", () => {

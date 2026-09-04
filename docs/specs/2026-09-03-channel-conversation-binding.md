@@ -15,6 +15,7 @@ This is the first, deliberately small slice of #61. It does not attempt full mul
 - For a bound chat, load recent user/assistant messages from the selected Cyrene conversation before a model run.
 - Append the external user message and generated assistant reply to both the existing channel history and the selected Cyrene conversation.
 - Keep the existing channel tool policy authoritative. A binding shares context only and never inherits the selected conversation's tool permissions or execution mode.
+- Keep the original channel session ID for Agent execution, lifecycle events, and runtime-associated state. The bound desktop conversation ID is used only to load text history and mirror messages, not as the Agent session ID.
 - Do not inherit the selected conversation's workspace binding; an external-channel run receives no desktop workspace root through this feature.
 - Leave unbound channel chats unchanged.
 
@@ -33,6 +34,8 @@ This is the first, deliberately small slice of #61. It does not attempt full mul
 - Main-process IPC exposes list, bind, and unbind operations to the trusted settings preload API.
 - Bind requests are validated in the main process. The channel and chat must be known from a recent inbound message, and the target conversation must exist.
 - Persistence uses an atomic temporary-file replacement and a bounded collection.
+- Binding target existence is checked using the existing in-memory session index; history is still read fresh before each run.
+- Timestamp-only observations are coalesced during traffic (at most one write every five seconds). New chats, changed display metadata, binding and unbinding persist immediately. Shutdown flushes pending timestamps; there is no background timer, so an abrupt exit can lose the final unsaved display timestamp, but not acknowledged bindings or mirrored messages.
 
 ## Testing strategy
 

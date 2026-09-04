@@ -5,6 +5,7 @@ import type { ChannelChatType, ChannelId } from "./types";
 
 const STORE_VERSION = 1;
 const DEFAULT_MAX_EXTERNAL_CHATS = 200;
+const OBSERVATION_WRITE_INTERVAL_MS = 5_000;
 
 export interface ExternalChannelChat {
   sessionId: string;
@@ -71,6 +72,8 @@ function isBinding(value: unknown): value is ChannelConversationBinding {
 
 export class ChannelConversationBindingStore {
   private state: PersistedBindingState | null = null;
+  private dirty = false;
+  private lastPersistAt = 0;
 
   constructor(
     private readonly filePath: string,
@@ -80,6 +83,12 @@ export class ChannelConversationBindingStore {
   observe(chat: ExternalChannelChat): void {
     if (!isExternalChat(chat)) throw new Error("Invalid external chat");
     const state = this.load();
+    const previous = state.externalChats.find((item) => item.sessionId === chat.sessionId);
+    const metadataChanged = !previous
+      || previous.channel !== chat.channel
+      || previous.chatId !== chat.chatId
+      || previous.chatType !== chat.chatType
+      || previous.senderName !== chat.senderName;
     const externalChats = state.externalChats.filter((item) => item.sessionId !== chat.sessionId);
     externalChats.push({ ...chat });
     externalChats.sort((a, b) => b.lastAt - a.lastAt);
@@ -91,7 +100,16 @@ export class ChannelConversationBindingStore {
     const maxUnbound = Math.max(0, this.maxExternalChats - boundChats.length);
     state.externalChats = [...boundChats, ...unboundChats.slice(0, maxUnbound)]
       .sort((a, b) => b.lastAt - a.lastAt);
-    this.persist();
+    this.dirty = true;
+    const now = Date.now();
+    // 仅合并显示时间戳；新聊天、元数据及绑定变更仍立即落盘。
+    if (metadataChanged || now < this.lastPersistAt || now - this.lastPersistAt >= OBSERVATION_WRITE_INTERVAL_MS) {
+      this.persist();
+    }
+  }
+
+  flush(): void {
+    if (this.dirty) this.persist();
   }
 
   bind(sessionId: string, conversationId: string, updatedAt = Date.now()): void {
@@ -167,11 +185,14 @@ export class ChannelConversationBindingStore {
   }
 
   private persist(): void {
+    this.dirty = true;
     const state = this.load();
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
     const temporaryPath = `${this.filePath}.tmp`;
     fs.writeFileSync(temporaryPath, JSON.stringify(state, null, 2), "utf8");
     fs.renameSync(temporaryPath, this.filePath);
+    this.dirty = false;
+    this.lastPersistAt = Date.now();
   }
 }
 

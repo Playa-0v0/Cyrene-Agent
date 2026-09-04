@@ -104,8 +104,8 @@ describe("channels/dispatcher", () => {
     expect(buildAndRunAgent).toHaveBeenCalledOnce();
   });
 
-  it("uses bound desktop history while keeping external routing session separate", async () => {
-    const channelSessionId = makeSessionId("qq", "chat-1");
+  it.each(["qq", "wechat"] as const)("uses bound desktop history while keeping %s runtime identity separate", async (channel) => {
+    const channelSessionId = makeSessionId(channel, "chat-1");
     const loadRecentChannelHistory = vi.fn(async () => [{ role: "user" as const, content: "不应读取" }]);
     const loadBoundConversationHistory = vi.fn(async (conversationId: string, limit: number) => {
       expect(conversationId).toBe("conversation-7");
@@ -114,7 +114,7 @@ describe("channels/dispatcher", () => {
     });
     const appendBoundConversationMessage = vi.fn();
     const buildAndRunAgent = vi.fn(async (_msg: IncomingMessage, sessionId: string, prior?: Array<{ role: string; content?: string }>) => {
-      expect(sessionId).toBe("conversation-7");
+      expect(sessionId).toBe(channelSessionId);
       expect(prior).toEqual([{ role: "user", content: "桌面旧消息" }]);
       return { text: "共享回复", sticker: null };
     });
@@ -127,7 +127,7 @@ describe("channels/dispatcher", () => {
       buildAndRunAgent,
     });
 
-    const result = await dispatcher.handleIncoming(makeIncoming());
+    const result = await dispatcher.handleIncoming(makeIncoming({ channel }));
 
     expect(result?.targetId).toBe("chat-1");
     expect(loadRecentChannelHistory).not.toHaveBeenCalled();
@@ -142,7 +142,7 @@ describe("channels/dispatcher", () => {
     const loadRecentChannelHistory = vi.fn(async () => [{ role: "user" as const, content: "渠道回退" }]);
     const loadBoundConversationHistory = vi.fn(async () => { throw new Error("桌面对话已删除"); });
     const buildAndRunAgent = vi.fn(async (_msg: IncomingMessage, sessionId: string, prior?: Array<{ role: string; content?: string }>) => {
-      expect(sessionId).toBe("conversation-7");
+      expect(sessionId).toBe(channelSessionId);
       expect(prior).toEqual([{ role: "user", content: "渠道回退" }]);
       return { text: "回复", sticker: null };
     });
@@ -157,6 +157,7 @@ describe("channels/dispatcher", () => {
     await dispatcher.handleIncoming(makeIncoming());
 
     expect(loadRecentChannelHistory).toHaveBeenCalledWith(channelSessionId, 16);
+    expect(buildAndRunAgent).toHaveBeenCalledWith(expect.anything(), channelSessionId, [{ role: "user", content: "渠道回退" }]);
   });
 
   it("falls back to the unbound channel path when binding lookup fails", async () => {

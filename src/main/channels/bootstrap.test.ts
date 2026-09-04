@@ -4,6 +4,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const channelMocks = vi.hoisted(() => ({
+  resolveBoundConversation: undefined as ((sessionId: string) => string | null) | undefined,
+  bindingResolve: vi.fn(),
+  flush: vi.fn(),
+  listSessions: vi.fn(),
+  getSession: vi.fn(),
   buildAndRunAgent: undefined as ((...args: unknown[]) => Promise<unknown>) | undefined,
   agentError: undefined as Error | undefined,
   agentResult: { reply: "渠道回复", toolResults: [] } as {
@@ -38,11 +43,20 @@ vi.mock("./dispatcher", () => ({
   setDispatcherLoadGeneralSettings: vi.fn(),
   setDispatcherLoadRecentHistory: vi.fn(),
   setDispatcherObserveExternalChat: vi.fn(),
-  setDispatcherResolveBoundConversation: vi.fn(),
+  setDispatcherResolveBoundConversation: vi.fn((handler) => { channelMocks.resolveBoundConversation = handler; }),
   setDispatcherLoadBoundConversationHistory: vi.fn(),
   setDispatcherAppendBoundConversationMessage: vi.fn(),
   setDispatcherSynthesizeTts: vi.fn(),
   formatChannelUserText: vi.fn(() => "渠道问题"),
+}));
+
+vi.mock("./conversation-binding-store", () => ({
+  getChannelConversationBindingStore: () => ({ resolve: channelMocks.bindingResolve, flush: channelMocks.flush }),
+}));
+vi.mock("../chats/chats-store", () => ({
+  listSessions: channelMocks.listSessions,
+  getSession: channelMocks.getSession,
+  appendMessage: vi.fn(),
 }));
 
 // 避免拉起真实 tool registry（会级联 import RAG 等重依赖）
@@ -127,6 +141,27 @@ beforeEach(() => {
 });
 
 describe("createChannelsSubsystem lifecycle", () => {
+  it("resolves bindings from metadata without reading the full conversation", () => {
+    channelMocks.bindingResolve.mockReturnValue("desktop-1");
+    channelMocks.listSessions.mockReturnValue([{ id: "desktop-1" }]);
+    createChannelsSubsystem(makeChannelsDeps());
+    expect(channelMocks.resolveBoundConversation?.("channel:qq:a")).toBe("desktop-1");
+    channelMocks.listSessions.mockReturnValue([]);
+    expect(channelMocks.resolveBoundConversation?.("channel:qq:a")).toBeNull();
+    expect(channelMocks.getSession).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("flushes binding observations after shutdown (failure=%s)", async (fail) => {
+    const lifecycle = { initialize: vi.fn(), start: vi.fn(), shutdown: vi.fn(async () => {
+      expect(channelMocks.flush).not.toHaveBeenCalled();
+      if (fail) throw new Error("shutdown failed");
+    }) };
+    const subsystem = createChannelsSubsystem(makeChannelsDeps(), lifecycle);
+    if (fail) await expect(subsystem.shutdown()).rejects.toThrow("shutdown failed");
+    else await subsystem.shutdown();
+    expect(channelMocks.flush).toHaveBeenCalledOnce();
+  });
+
   it("does not initialize or start channels during construction", () => {
     const lifecycle = { initialize: vi.fn(), start: vi.fn(), shutdown: vi.fn() };
     const subsystem = createChannelsSubsystem(makeChannelsDeps(), lifecycle);

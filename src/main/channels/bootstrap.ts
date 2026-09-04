@@ -19,7 +19,7 @@ import type { TtsSynthesisService } from "../services/tts/tts-synthesis-service"
 import { buildChannelAttachmentInputs } from "./agent-input";
 import { loadChannelsSettings } from "./settings-store";
 import { enforceChannelAgentPolicy, resolveChannelAgentPolicy } from "./agent-policy";
-import { appendMessage, getSession } from "../chats/chats-store";
+import { appendMessage, getSession, listSessions } from "../chats/chats-store";
 import { getChannelConversationBindingStore } from "./conversation-binding-store";
 import {
   setDispatcherBuildAndRunAgent,
@@ -90,7 +90,7 @@ export function createChannelsSubsystem(
 
   setDispatcherResolveBoundConversation((sessionId) => {
     const conversationId = getChannelConversationBindingStore().resolve(sessionId);
-    return conversationId && getSession(conversationId) ? conversationId : null;
+    return conversationId && listSessions().some((session) => session.id === conversationId) ? conversationId : null;
   });
 
   setDispatcherLoadBoundConversationHistory(async (conversationId, limit) => {
@@ -295,6 +295,12 @@ export function createChannelsSubsystem(
     },
     start: (signal?: AbortSignal) => adapter.start(signal),
     adaptersRegistered,
-    shutdown: () => adapter.shutdown(),
+    shutdown: async () => {
+      try {
+        await adapter.shutdown();
+      } finally {
+        getChannelConversationBindingStore().flush();
+      }
+    },
   };
 }
