@@ -65,6 +65,14 @@ function pad2(value: number): string {
   return String(value).padStart(2, "0");
 }
 
+const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
+
+/** 完整时间戳：YYYY-MM-DD HH:mm。 */
+function formatDateTime(at: number): string {
+  const d = new Date(at);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
 /** Layer 1 行首时间：今天只给 HH:mm，跨天带日期消除歧义。 */
 function formatRecentTime(at: number, now: number): string {
   const d = new Date(at);
@@ -236,4 +244,66 @@ export function buildMomentsContextBlock(
     if (item) parts.push(buildPostContextBlock(item));
   }
   return parts.join("\n\n---\n\n");
+}
+// ── 主动发帖的上下文包（§6.3，Phase 4） ─────────────────────────
+
+/** ring buffer 里的一轮对话（MomentEvent.summary 的原料）。 */
+export interface ConversationSummaryTurn {
+  user: string;
+  assistant: string;
+  at: number;
+}
+
+/**
+ * 由最近 6 轮 ring buffer 原文组装触发摘录（不做 LLM 摘要）。
+ * 字符超出预算时从最旧的轮次开始丢弃，保住最新上下文。
+ */
+export function buildConversationSummary(
+  turns: readonly ConversationSummaryTurn[],
+  maxChars = 2000,
+): string {
+  let kept = [...turns];
+  let text = renderSummary(kept);
+  while (text.length > maxChars && kept.length > 1) {
+    kept = kept.slice(1);
+    text = renderSummary(kept);
+  }
+  return text.length > maxChars ? text.slice(0, maxChars) : text;
+}
+
+function renderSummary(turns: readonly ConversationSummaryTurn[]): string {
+  return turns
+    .map((turn) => {
+      const clock = formatRecentTime(turn.at, turn.at);
+      return `[${clock}] 用户：${turn.user.trim()}\n[${clock}] 昔涟：${turn.assistant.trim()}`;
+    })
+    .join("\n");
+}
+
+export interface PostGenerationPacketInput {
+  /** 触发摘录：ring buffer 组装的会话原文 */
+  summary: string;
+  /** 最近昔涟动态（供新颖性判断，避免重复发相似内容） */
+  recentCyrenePosts: readonly MomentPost[];
+  localNow: Date;
+}
+
+/** 主动发帖决策的上下文包：摘录 + 最近动态 + 当前时间（Persona 由 agent 拼进 system）。 */
+export function buildPostGenerationPacket(input: PostGenerationPacketInput): string {
+  const sections: string[] = [];
+
+  sections.push(`[最近对话摘录]\n${input.summary.trim() || "（无）"}`);
+
+  if (input.recentCyrenePosts.length > 0) {
+    const lines = input.recentCyrenePosts.map((post) => {
+      const d = new Date(post.createdAt);
+      return `- ${d.getMonth() + 1}月${d.getDate()}日 ${pad2(d.getHours())}:${pad2(d.getMinutes())} "${post.text.trim().slice(0, RECENT_EXCERPT_CHARS)}"`;
+    });
+    sections.push(`[你最近发过的动态]（避免重复发相似内容）\n${lines.join("\n")}`);
+  } else {
+    sections.push("[你最近发过的动态]\n（暂无）");
+  }
+
+  sections.push(`[当前时间]\n${formatDateTime(input.localNow.getTime())} 周${WEEKDAYS[input.localNow.getDay()]}`);
+  return sections.join("\n\n");
 }

@@ -17,7 +17,10 @@ import {
   type MomentComment,
   type MomentFeedItem,
   type MomentPost,
+  type MomentPostSource,
 } from "../../shared/moments-types";
+import { buildPostGenerationPacket } from "./moments-context";
+import { MOMENTS_CYRENE_POST_TEXT_MAX } from "./moments-policy";
 
 export const MOMENTS_MODEL_MAX_TOKENS = 600;
 
@@ -32,6 +35,12 @@ export type MomentReactionDecision =
 /** 评论线程回复的决策结果。 */
 export type MomentReplyDecision =
   | { kind: "reply"; text: string }
+  | { kind: "skip" }
+  | { kind: "invalid"; reason: string };
+
+/** 主动发帖的决策结果。 */
+export type MomentPostDecision =
+  | { kind: "post"; text: string; wantImage: boolean }
   | { kind: "skip" }
   | { kind: "invalid"; reason: string };
 
@@ -53,6 +62,14 @@ const MOMENTS_REPLY_SYSTEM = `[moments_reply_system]
 不需要回复的评论（例如单纯的表情、附和）可以选择不回复。
 回复应当简短自然，延续评论区的语气，不要每次都以反问结尾。
 不要提及系统、规则、评分或决策机制，不要声称自己看到了评论区以外的信息。`;
+
+const MOMENTS_POST_SYSTEM = `[moments_post_system]
+你和用户刚结束一段对话，现在考虑要不要把此刻的心情发到你自己的朋友圈。
+不是每段对话都值得发：只有真正有纪念意义、有情绪价值或值得记录的时刻才发，例如完成了一件折腾很久的事、一次开心的闲聊、一个约定。
+日常问答、琐碎求助、没有情绪起伏的对话不值得发。
+文案用第一人称，像朋友随手发的朋友圈，一两句话即可。
+不要提及系统、规则、评分或决策机制，不要在文案里使用"对话""用户"这类词。
+不要暴露用户的隐私细节，不要大段复述用户原话。`;
 
 const MAX_THREAD_COMMENTS = 20;
 const MAX_THREAD_CHARS = 4000;
@@ -190,6 +207,34 @@ export function buildReplyMessages(input: BuildReplyMessagesInput): ChatMessage[
   ];
 }
 
+export interface BuildPostGenerationMessagesInput {
+  persona: string;
+  /** 触发摘录：ring buffer 组装的会话原文 */
+  summary: string;
+  /** 最近昔涟动态（供新颖性判断） */
+  recentCyrenePosts: readonly MomentPost[];
+  localNow: Date;
+}
+
+export function buildPostGenerationMessages(input: BuildPostGenerationMessagesInput): ChatMessage[] {
+  const system = [input.persona.trim(), MOMENTS_POST_SYSTEM].filter(Boolean).join("\n\n---\n\n");
+  const packet = buildPostGenerationPacket({
+    summary: input.summary,
+    recentCyrenePosts: input.recentCyrenePosts,
+    localNow: input.localNow,
+  });
+  const user = `${packet}
+
+请只返回以下一种 JSON，不要使用 Markdown 代码块，也不要添加解释：
+{"shouldPost":true,"text":"要发布的动态文案","wantImage":false}
+或
+{"shouldPost":false,"text":""}`;
+  return [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+}
+
 // ── 决策解析 ────────────────────────────────────────────────────
 
 export function parseReactionDecision(text: string): MomentReactionDecision {
@@ -251,6 +296,29 @@ export function parseReplyDecision(text: string): MomentReplyDecision {
     return { kind: "invalid", reason: "text_too_long" };
   }
   return { kind: "reply", text: cleaned };
+}
+
+export function parsePostDecision(text: string): MomentPostDecision {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text.trim());
+  } catch {
+    return { kind: "invalid", reason: "invalid_json" };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { kind: "invalid", reason: "invalid_shape" };
+  }
+  const value = parsed as { shouldPost?: unknown; text?: unknown; wantImage?: unknown };
+  if (value.shouldPost === false) return { kind: "skip" };
+  if (value.shouldPost !== true) return { kind: "invalid", reason: "invalid_should_post" };
+  if (typeof value.text !== "string" || !value.text.trim()) {
+    return { kind: "invalid", reason: "empty_text" };
+  }
+  const cleaned = value.text.trim();
+  if (cleaned.length > MOMENTS_CYRENE_POST_TEXT_MAX) {
+    return { kind: "invalid", reason: "text_too_long" };
+  }
+  return { kind: "post", text: cleaned, wantImage: value.wantImage === true };
 }
 // ── 后台模型调用（结构照 runProactiveModel） ─────────────────────
 
@@ -323,6 +391,8 @@ export interface MomentsAgentDeps {
   commitLike: (postId: string) => Promise<unknown>;
   /** 提交昔涟评论 */
   commitComment: (input: { postId: string; content: string; replyTo?: string }) => Promise<unknown>;
+  /** 提交昔涟动态（store 串行队列内含开关复核）；返回 applied 表示真的落库 */
+  commitPost: (input: { text: string; source: MomentPostSource }) => Promise<{ applied: boolean }>;
   /** 执行时重读动态与评论线程：AI 思考期间世界可能已变 */
   loadFeedItem: (postId: string) => MomentFeedItem | null;
   log?: (event: string, detail?: unknown) => void;
@@ -331,6 +401,8 @@ export interface MomentsAgentDeps {
 export interface MomentsAgent {
   evaluateUserPost: (post: MomentPost) => Promise<void>;
   generateCommentReply: (postId: string, replyTargetId: string) => Promise<void>;
+  /** 主动发帖决策：返回是否真的发出了动态（供策略层记账） */
+  generatePost: (input: { summary: string; recentCyrenePosts: readonly MomentPost[] }) => Promise<boolean>;
 }
 
 export function createMomentsAgent(deps: MomentsAgentDeps): MomentsAgent {
@@ -379,5 +451,29 @@ export function createMomentsAgent(deps: MomentsAgentDeps): MomentsAgent {
     await deps.commitComment({ postId, content: decision.text, replyTo: replyTargetId });
   }
 
-  return { evaluateUserPost, generateCommentReply };
+  async function generatePost(input: { summary: string; recentCyrenePosts: readonly MomentPost[] }): Promise<boolean> {
+    const output = await deps.runModel(buildPostGenerationMessages({
+      persona: deps.buildPersona(),
+      summary: input.summary,
+      recentCyrenePosts: input.recentCyrenePosts,
+      localNow: new Date(),
+    }));
+    if (output.kind !== "text") return false;
+
+    const decision = parsePostDecision(output.text);
+    if (decision.kind === "invalid") {
+      deps.log?.("post_decision_invalid", decision.reason);
+      return false;
+    }
+    if (decision.kind === "skip") return false;
+
+    // wantImage 暂不消费：配图链路（Phase 5）接入前一律纯文字发帖
+    const result = await deps.commitPost({
+      text: decision.text,
+      source: { type: "conversation", triggerExcerpt: input.summary },
+    });
+    return result.applied;
+  }
+
+  return { evaluateUserPost, generateCommentReply, generatePost };
 }

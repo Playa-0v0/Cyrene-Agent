@@ -198,6 +198,8 @@ export interface OnRunFinishedDeps {
     reply: string,
   ) => Promise<void>;
   recordRelationshipTurn: (input: RelationshipTurnInput) => Promise<unknown> | unknown;
+  /** run 成功收尾时调度昔涟朋友圈主动发帖评估（缺省不启用）。 */
+  scheduleMomentsTurn?: (input: import("../moments/moments-service").MomentsTurnInput) => void;
 }
 
 export interface ModelSettingsLite {
@@ -920,6 +922,7 @@ export async function onAgentRunFinished(
   deps: OnRunFinishedDeps,
   channel?: ChannelId,
   conversationId?: string,
+  finishedContext?: { runId?: string; source?: "desktop" | "channel"; mode?: string },
 ): Promise<{ sticker: string | null }> {
   const chatContent = result.reply;
   const sideEffectUserText = stripTurnModelContextForSideEffects(latestUserText);
@@ -946,6 +949,18 @@ export async function onAgentRunFinished(
   } else {
     deps.scheduleMemoryWrite(sideEffectUserText, chatContent, conversationId);
   }
+
+  // 朋友圈主动发帖评估：输入是事件产生时冻结的快照（runId/source/mode 由 agent-runtime 透传）
+  deps.scheduleMomentsTurn?.({
+    conversationId: conversationId ?? "default",
+    runId: finishedContext?.runId,
+    source: finishedContext?.source ?? "desktop",
+    mode: finishedContext?.mode ?? "chat",
+    channel,
+    userText: sideEffectUserText,
+    assistantReply: chatContent,
+    finishedAt: Date.now(),
+  });
 
   const settings = deps.loadModelSettings();
   const inferredStatus = deps.inferRuntimeState(sideEffectUserText, chatContent, false);

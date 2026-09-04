@@ -25,9 +25,11 @@ vi.mock("../token-usage-store", () => ({ recordUsage: mocks.recordUsage, recordR
 
 import {
   MOMENTS_MODEL_MAX_TOKENS,
+  buildPostGenerationMessages,
   buildReactionMessages,
   buildReplyMessages,
   createMomentsAgent,
+  parsePostDecision,
   parseReactionDecision,
   parseReplyDecision,
   runMomentsModel,
@@ -292,6 +294,7 @@ describe("createMomentsAgent", () => {
     );
     const commitLike = vi.fn(async () => undefined);
     const commitComment = vi.fn(async () => undefined);
+    const commitPost = vi.fn(async () => ({ applied: true }));
     const loadFeedItem = vi.fn(() => overrides.feed ?? null);
     const log = vi.fn();
     const agent = createMomentsAgent({
@@ -299,6 +302,7 @@ describe("createMomentsAgent", () => {
       runModel,
       commitLike,
       commitComment,
+      commitPost,
       loadFeedItem,
       log,
     });
@@ -382,5 +386,139 @@ describe("createMomentsAgent", () => {
       await h.agent.generateCommentReply("moment_p1", "c2");
       expect(h.commitComment).not.toHaveBeenCalled();
     });
+  });
+});
+// ── 主动发帖（Phase 4） ─────────────────────────────────────────
+
+describe("parsePostDecision", () => {
+  it("解析发帖决策（含 wantImage），文本 trim 后生效", () => {
+    expect(parsePostDecision('{"shouldPost":true,"text":" 某个人终于收工啦 ","wantImage":true}'))
+      .toEqual({ kind: "post", text: "某个人终于收工啦", wantImage: true });
+    expect(parsePostDecision('{"shouldPost":true,"text":"今天很开心"}'))
+      .toEqual({ kind: "post", text: "今天很开心", wantImage: false });
+  });
+
+  it("shouldPost=false 是 skip 而非错误", () => {
+    expect(parsePostDecision('{"shouldPost":false,"text":""}')).toEqual({ kind: "skip" });
+  });
+
+  it("结构非法返回 invalid 并给出原因", () => {
+    expect(parsePostDecision("oops")).toEqual({ kind: "invalid", reason: "invalid_json" });
+    expect(parsePostDecision("[]")).toEqual({ kind: "invalid", reason: "invalid_shape" });
+    expect(parsePostDecision('{"shouldPost":"maybe"}')).toEqual({ kind: "invalid", reason: "invalid_should_post" });
+    expect(parsePostDecision('{"shouldPost":true,"text":"   "}')).toEqual({ kind: "invalid", reason: "empty_text" });
+    expect(parsePostDecision(`{"shouldPost":true,"text":"${"长".repeat(301)}"}`))
+      .toEqual({ kind: "invalid", reason: "text_too_long" });
+  });
+});
+
+describe("buildPostGenerationMessages", () => {
+  it("system 由人设与发帖指令拼接，user 携带摘录/最近动态/时间与 JSON 约定", () => {
+    const recent = makePost({
+      id: "moment_cy",
+      author: "cyrene",
+      text: "之前发过的动态",
+      createdAt: new Date("2026-09-03T22:10:00").getTime(),
+    });
+    const messages = buildPostGenerationMessages({
+      persona: PERSONA,
+      summary: "[19:00] 用户：折腾好久了\n[19:01] 昔涟：快好了",
+      recentCyrenePosts: [recent],
+      localNow: new Date("2026-09-04T19:02:00"),
+    });
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0].role).toBe("system");
+    expect(messages[0].content).toContain(PERSONA);
+    expect(messages[0].content).toContain("[moments_post_system]");
+    const user = String(messages[1].content);
+    expect(user).toContain("[最近对话摘录]");
+    expect(user).toContain("[19:00] 用户：折腾好久了");
+    expect(user).toContain("[你最近发过的动态]");
+    expect(user).toContain("之前发过的动态");
+    expect(user).toContain("[当前时间]");
+    expect(user).toContain("2026-09-04 19:02 周五");
+    expect(user).toContain('"shouldPost"');
+  });
+
+  it("无历史动态时显示（暂无）", () => {
+    const messages = buildPostGenerationMessages({
+      persona: PERSONA,
+      summary: "对话摘录",
+      recentCyrenePosts: [],
+      localNow: new Date("2026-09-04T19:02:00"),
+    });
+    expect(String(messages[1].content)).toContain("[你最近发过的动态]\n（暂无）");
+  });
+});
+describe("createMomentsAgent 主动发帖", () => {
+  function makePostHarness(overrides: {
+    modelText?: string;
+    modelOutput?: { kind: "error"; reason: string };
+    commitApplied?: boolean;
+  }) {
+    const runModel = vi.fn(
+      async () => overrides.modelOutput ?? { kind: "text", text: overrides.modelText ?? "" },
+    );
+    const commitPost = vi.fn(async () => ({ applied: overrides.commitApplied ?? true }));
+    const log = vi.fn();
+    const agent = createMomentsAgent({
+      buildPersona: () => PERSONA,
+      runModel,
+      commitLike: vi.fn(async () => undefined),
+      commitComment: vi.fn(async () => undefined),
+      commitPost,
+      loadFeedItem: vi.fn(() => null),
+      log,
+    });
+    return { agent, runModel, commitPost, log };
+  }
+
+  it("发帖决策成功时提交动态并把摘录固化为 triggerExcerpt", async () => {
+    const h = makePostHarness({ modelText: '{"shouldPost":true,"text":"有人终于肯收工啦","wantImage":true}' });
+    const posted = await h.agent.generatePost({
+      summary: "[23:30] 用户：修完了\n[23:30] 昔涟：太棒了",
+      recentCyrenePosts: [],
+    });
+
+    expect(posted).toBe(true);
+    expect(h.commitPost).toHaveBeenCalledWith({
+      text: "有人终于肯收工啦",
+      source: { type: "conversation", triggerExcerpt: "[23:30] 用户：修完了\n[23:30] 昔涟：太棒了" },
+    });
+  });
+
+  it("wantImage=true 也只提交纯文字（Phase 4 无图版本，配图链路未接入）", async () => {
+    const h = makePostHarness({ modelText: '{"shouldPost":true,"text":"文案","wantImage":true}' });
+    await h.agent.generatePost({ summary: "摘录", recentCyrenePosts: [] });
+    expect(h.commitPost).toHaveBeenCalledTimes(1);
+    expect(h.commitPost.mock.calls[0][0]).not.toHaveProperty("media");
+  });
+
+  it("skip 决策不提交且返回 false", async () => {
+    const h = makePostHarness({ modelText: '{"shouldPost":false,"text":""}' });
+    const posted = await h.agent.generatePost({ summary: "摘录", recentCyrenePosts: [] });
+    expect(posted).toBe(false);
+    expect(h.commitPost).not.toHaveBeenCalled();
+  });
+
+  it("决策无效时记录日志并返回 false", async () => {
+    const h = makePostHarness({ modelText: "乱七八糟" });
+    const posted = await h.agent.generatePost({ summary: "摘录", recentCyrenePosts: [] });
+    expect(posted).toBe(false);
+    expect(h.log).toHaveBeenCalledWith("post_decision_invalid", "invalid_json");
+  });
+
+  it("模型调用失败时静默返回 false", async () => {
+    const h = makePostHarness({ modelOutput: { kind: "error", reason: "timeout" } });
+    const posted = await h.agent.generatePost({ summary: "摘录", recentCyrenePosts: [] });
+    expect(posted).toBe(false);
+    expect(h.commitPost).not.toHaveBeenCalled();
+  });
+
+  it("提交被拒绝（开关关闭等）时返回 false", async () => {
+    const h = makePostHarness({ modelText: '{"shouldPost":true,"text":"文案"}', commitApplied: false });
+    const posted = await h.agent.generatePost({ summary: "摘录", recentCyrenePosts: [] });
+    expect(posted).toBe(false);
   });
 });

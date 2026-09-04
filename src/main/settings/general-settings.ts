@@ -31,6 +31,8 @@ export interface GeneralSettings extends ChatAppearanceSettings {
   momentsEnabled: boolean;
   /** Chat 模式注入近期朋友圈动态背景；默认开启（只读本地数据，无额外 LLM 调用）。 */
   chatMomentsContextEnabled: boolean;
+  /** 昔涟主动发帖；默认关闭（审慎，与 proactiveChatMode 默认 off 一致）。 */
+  cyreneMomentsPostingEnabled: boolean;
   /** 昔涟对朋友圈动态的点赞/评论反应；默认开启（Feed 内被动行为，不打扰）。 */
   cyreneMomentsReactionsEnabled: boolean;
   petAlwaysOnTop: boolean;

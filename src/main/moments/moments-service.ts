@@ -20,6 +20,19 @@ import {
   type MomentsAgent,
   type MomentsModelOutput,
 } from "./moments-agent";
+import {
+  buildConversationSummary,
+  type ConversationSummaryTurn,
+} from "./moments-context";
+import {
+  buildMomentsEventKey,
+  canPost,
+  loadMomentsPolicyState,
+  recordEventKey,
+  recordPost,
+  saveMomentsPolicyState,
+  type MomentsPolicyState,
+} from "./moments-policy";
 import type {
   MomentComment,
   MomentCommitResult,
@@ -31,6 +44,23 @@ import type {
 
 const MOMENTS_MODEL_TIMEOUT_MS = 45_000;
 
+/** ring buffer 保留的最近轮数（§7.1 契约 3：MomentEvent.summary 的原料） */
+const RING_BUFFER_MAX_TURNS = 6;
+/** 供新颖性判断的最近昔涟动态条数（§6.3） */
+const RECENT_CYRENE_POSTS_FOR_NOVELTY = 5;
+
+/** Moments 一次 run 收尾的输入（§7.1：事件产生时冻结的不可变快照）。 */
+export interface MomentsTurnInput {
+  conversationId: string;
+  runId?: string;
+  source: "desktop" | "channel";
+  mode: string;
+  channel?: string;
+  userText: string;
+  assistantReply: string;
+  finishedAt: number;
+}
+
 export interface MomentsService {
   listFeed: (options?: { limit?: number; before?: number }) => MomentFeedItem[];
   getFeedItem: (postId: string) => MomentFeedItem | null;
@@ -38,6 +68,8 @@ export interface MomentsService {
   deletePost: (postId: string) => Promise<MomentCommitResult<null>>;
   createUserComment: (input: MomentCreateCommentInput) => Promise<MomentCommitResult<MomentComment>>;
   toggleUserLike: (postId: string) => Promise<MomentCommitResult<{ liked: boolean }>>;
+  /** run 成功收尾时调用：记录 ring buffer 并按策略调度昔涟主动发帖。 */
+  scheduleTurn: (input: MomentsTurnInput) => void;
 }
 
 interface MomentsStoreFacade {
@@ -48,16 +80,24 @@ interface MomentsStoreFacade {
   createComment: typeof momentsStore.createComment;
   toggleLike: typeof momentsStore.toggleLike;
   createCyreneLike: typeof momentsStore.createCyreneLike;
+  createCyrenePost: typeof momentsStore.createCyrenePost;
 }
 
 export interface MomentsServiceDeps {
   store: MomentsStoreFacade;
-  loadGeneralSettings: () => { momentsEnabled: boolean; cyreneMomentsReactionsEnabled: boolean };
+  loadGeneralSettings: () => {
+    momentsEnabled: boolean;
+    cyreneMomentsReactionsEnabled: boolean;
+    cyreneMomentsPostingEnabled: boolean;
+  };
   /** 返回 null 表示模型未配置（缺 API key 等），反应调度直接跳过 */
   loadVendorConfig: () => VendorConfig | null;
   buildPersona: () => string;
   enqueueTask: (label: string, task: () => Promise<void>) => Promise<void>;
   runModel: (messages: ChatMessage[]) => Promise<MomentsModelOutput>;
+  /** 策略状态存取（默认读写 moments-state.json；测试注入内存版） */
+  loadPolicyState?: () => MomentsPolicyState;
+  savePolicyState?: (state: MomentsPolicyState) => void;
   log?: (event: string, detail?: unknown) => void;
 }
 
@@ -67,9 +107,21 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     runModel: deps.runModel,
     commitLike: (postId) => deps.store.createCyreneLike(postId),
     commitComment: (input) => deps.store.createComment(input, "cyrene"),
+    commitPost: (input) => deps.store.createCyrenePost(input),
     loadFeedItem: (postId) => deps.store.getFeedItem(postId),
     log: deps.log,
   });
+
+  const loadPolicyState = deps.loadPolicyState ?? loadMomentsPolicyState;
+  const savePolicyState = deps.savePolicyState ?? saveMomentsPolicyState;
+
+  // per-conversation ring buffer：MomentEvent.summary 的原料（内存态，V1 从简不落盘）
+  const conversationTurns = new Map<string, ConversationSummaryTurn[]>();
+
+  function postingEnabled(): boolean {
+    const settings = deps.loadGeneralSettings();
+    return settings.momentsEnabled && settings.cyreneMomentsPostingEnabled;
+  }
 
   function reactionsEnabled(): boolean {
     const settings = deps.loadGeneralSettings();
@@ -101,6 +153,46 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     scheduleReaction("MomentsReply", () => agent.generateCommentReply(input.postId, committed.id));
   }
 
+  /** run 成功收尾：记录 ring buffer → 设置/去重闸门（LLM 前）→ 入队生成。 */
+  function scheduleTurn(input: MomentsTurnInput): void {
+    // ring buffer 永远记录：后续事件的摘录需要这段上下文，与发帖闸门无关
+    const turns = [...(conversationTurns.get(input.conversationId) ?? []), {
+      user: input.userText,
+      assistant: input.assistantReply,
+      at: input.finishedAt,
+    }].slice(-RING_BUFFER_MAX_TURNS);
+    conversationTurns.set(input.conversationId, turns);
+
+    // 设置闸门前置（省 token）：总开关 + 主动发帖开关 + 模型配置
+    if (!postingEnabled()) return;
+    if (deps.loadVendorConfig() === null) return;
+
+    // run 粒度去重：同一事件重复到达直接丢弃，键在到达时立即记录
+    const eventKey = buildMomentsEventKey(input);
+    const state = loadPolicyState();
+    if (state.recentEventKeys.includes(eventKey)) return;
+    savePolicyState(recordEventKey(state, eventKey));
+
+    // 摘要在事件到达时冻结（快照语义，契约 1）
+    const summary = buildConversationSummary(turns);
+    deps.enqueueTask("MomentsPost", async () => {
+      // 执行时复核冷却与日上限：闸门通过到任务执行之间，世界可能已变
+      const gate = canPost(loadPolicyState(), Date.now());
+      if (!gate.ok) {
+        deps.log?.("post_gated", gate.reason);
+        return;
+      }
+      const recentCyrenePosts = deps.store.listFeed({ limit: 100 })
+        .map((item) => item.post)
+        .filter((post) => post.author === "cyrene")
+        .slice(0, RECENT_CYRENE_POSTS_FOR_NOVELTY);
+      const posted = await agent.generatePost({ summary, recentCyrenePosts });
+      if (posted) savePolicyState(recordPost(loadPolicyState(), Date.now()));
+    }).catch((error) => {
+      deps.log?.("post_task_failed", error instanceof Error ? error.message : String(error));
+    });
+  }
+
   return {
     listFeed: (options) => deps.store.listFeed(options),
     getFeedItem: (postId) => deps.store.getFeedItem(postId),
@@ -120,6 +212,8 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
       }),
 
     toggleUserLike: (postId) => deps.store.toggleLike(postId, "user"),
+
+    scheduleTurn,
   };
 }
 // ── 具体装配（组合根 / IPC 直接使用） ───────────────────────────

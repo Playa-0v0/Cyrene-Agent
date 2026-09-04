@@ -18,6 +18,7 @@ import { matchSticker } from "../sticker-embedder";
 import { buildRelationshipContext, recordRelationshipTurn } from "../relationship/relationship-log";
 import { compileSocialContextBlock } from "../social-context/context";
 import * as momentsStore from "../moments/moments-store";
+import { momentsService } from "../moments/moments-service";
 import { buildMomentsContextBlock } from "../moments/moments-context";
 import { rankSocialAtoms } from "../social-context/retrieval";
 import {
@@ -251,6 +252,7 @@ export function createAgentRuntime(rawDeps: AgentRuntimeDeps): AgentRuntime {
       loadModelSettings: () => rawDeps.loadModelSettings(),
       scheduleMemoryWrite,
       scheduleSocialAtomExtraction: (input) => rawDeps.socialContextScheduler.schedule(input),
+      scheduleMomentsTurn: (input) => momentsService.scheduleTurn(input),
       inferRuntimeState: ((userText, reply, flag) =>
         runtimeStateService.inferFromText(userText, reply, flag)) as OnRunFinishedDeps["inferRuntimeState"],
       runtimeState: runtimeStateService.getState(),
@@ -292,6 +294,7 @@ export function createAgentRuntime(rawDeps: AgentRuntimeDeps): AgentRuntime {
         onRunFinishedDeps,
         context.channel as ChannelId | undefined,
         context.conversationId,
+        { runId: context.runId, source: context.source, mode: context.mode },
       );
       // 调用方应只在成功终态进入收尾；此处再守住插件事件契约，避免未来新增入口误报完成。
       const terminalStatus = result.terminal?.status;

@@ -43,6 +43,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   chatSocialContextEnabled: false,
   momentsEnabled: true,
   chatMomentsContextEnabled: true,
+  cyreneMomentsPostingEnabled: false,
   cyreneMomentsReactionsEnabled: true,
   petAlwaysOnTop: true,
   petVisible: true,
@@ -188,6 +189,9 @@ export function normalizeGeneralSettings(
     chatMomentsContextEnabled: input?.chatMomentsContextEnabled === undefined
       ? DEFAULT_GENERAL_SETTINGS.chatMomentsContextEnabled
       : Boolean(input.chatMomentsContextEnabled),
+    cyreneMomentsPostingEnabled: input?.cyreneMomentsPostingEnabled === undefined
+      ? DEFAULT_GENERAL_SETTINGS.cyreneMomentsPostingEnabled
+      : Boolean(input.cyreneMomentsPostingEnabled),
     cyreneMomentsReactionsEnabled: input?.cyreneMomentsReactionsEnabled === undefined
       ? DEFAULT_GENERAL_SETTINGS.cyreneMomentsReactionsEnabled
       : Boolean(input.cyreneMomentsReactionsEnabled),

@@ -1,7 +1,9 @@
-// moments-service 调度测试：反应闸门前置、任务入队、评论触发范围与错误隔离。
+// moments-service 调度测试：反应闸门前置、任务入队、评论触发范围与错误隔离；
+// 主动发帖调度：设置/去重闸门前置、执行时复核冷却、成功落库与记账。
 import { describe, expect, it, vi } from "vitest";
 import type { VendorConfig } from "../orchestrator/vendors";
 import type { MomentsModelOutput } from "./moments-agent";
+import { defaultMomentsPolicyState, type MomentsPolicyState } from "./moments-policy";
 import type {
   MomentAuthor,
   MomentComment,
@@ -9,7 +11,9 @@ import type {
   MomentCreateCommentInput,
   MomentCreatePostInput,
   MomentFeedItem,
+  MomentMedia,
   MomentPost,
+  MomentPostSource,
 } from "../../shared/moments-types";
 
 const mocks = vi.hoisted(() => ({
@@ -36,7 +40,7 @@ vi.mock("./moments-store", () => ({
   createCyrenePost: vi.fn(),
 }));
 
-import { createMomentsService } from "./moments-service";
+import { createMomentsService, type MomentsTurnInput } from "./moments-service";
 
 function makePost(overrides: Partial<MomentPost> = {}): MomentPost {
   return {
@@ -60,12 +64,27 @@ function makeComment(overrides: Partial<MomentComment> = {}): MomentComment {
   };
 }
 
+function makeTurnInput(overrides: Partial<MomentsTurnInput> = {}): MomentsTurnInput {
+  return {
+    conversationId: "chat-main",
+    runId: "run-1",
+    source: "desktop",
+    mode: "chat",
+    userText: "终于把构建修好了",
+    assistantReply: "太好了，辛苦啦",
+    finishedAt: new Date("2026-09-04T19:00:00").getTime(),
+    ...overrides,
+  };
+}
+
 interface FakeStoreState {
   posts: MomentPost[];
   comments: MomentComment[];
   cyreneLikes: string[];
   cyreneComments: Array<{ postId: string; content: string; replyTo?: string }>;
+  cyrenePosts: Array<{ text: string; source?: MomentPostSource }>;
   rejectNextPost: boolean;
+  rejectNextCyrenePost: boolean;
 }
 
 /** 内存版 store：记录昔涟提交，可预置动态与评论、可制造下一次发帖失败。 */
@@ -75,7 +94,9 @@ function createFakeStore() {
     comments: [],
     cyreneLikes: [],
     cyreneComments: [],
+    cyrenePosts: [],
     rejectNextPost: false,
+    rejectNextCyrenePost: false,
   };
 
   const store = {
@@ -128,12 +149,35 @@ function createFakeStore() {
       state.cyreneLikes.push(postId);
       return { applied: true, value: { liked: true } };
     },
+    createCyrenePost: async (input: {
+      title?: string;
+      text: string;
+      media?: MomentMedia[];
+      source?: MomentPostSource;
+    }): Promise<MomentCommitResult<MomentPost>> => {
+      if (state.rejectNextCyrenePost) {
+        state.rejectNextCyrenePost = false;
+        return { applied: false, reason: "moments_disabled" };
+      }
+      const post: MomentPost = {
+        id: `moment_cy${state.posts.length + 1}`,
+        author: "cyrene",
+        text: input.text,
+        media: input.media ?? [],
+        createdAt: 3_000,
+        source: input.source,
+      };
+      state.posts.push(post);
+      state.cyrenePosts.push({ text: input.text, source: input.source });
+      return { applied: true, value: post };
+    },
   };
   return { store, state };
 }
 interface HarnessOptions {
   momentsEnabled?: boolean;
   cyreneMomentsReactionsEnabled?: boolean;
+  cyreneMomentsPostingEnabled?: boolean;
   /** null 表示模型未配置；缺省为已配置 */
   vendorConfig?: VendorConfig | null;
   modelResponse?: string;
@@ -154,12 +198,17 @@ function createHarness(options: HarnessOptions = {}) {
     await task();
   });
   const fake = createFakeStore();
+  // 设置做成可变对象：同一 harness 内可中途打开开关，模拟"先关后开"的调度行为
+  const settings = {
+    momentsEnabled: options.momentsEnabled ?? true,
+    cyreneMomentsReactionsEnabled: options.cyreneMomentsReactionsEnabled ?? true,
+    cyreneMomentsPostingEnabled: options.cyreneMomentsPostingEnabled ?? false,
+  };
+  // 策略状态用内存版，测试不落盘也不碰 electron
+  const policy: { current: MomentsPolicyState } = { current: defaultMomentsPolicyState() };
   const service = createMomentsService({
     store: fake.store,
-    loadGeneralSettings: () => ({
-      momentsEnabled: options.momentsEnabled ?? true,
-      cyreneMomentsReactionsEnabled: options.cyreneMomentsReactionsEnabled ?? true,
-    }),
+    loadGeneralSettings: () => settings,
     loadVendorConfig: () =>
       options.vendorConfig === undefined
         ? ({ provider: "test", baseUrl: "https://example.test", model: "m", apiKey: "k" } as VendorConfig)
@@ -167,9 +216,18 @@ function createHarness(options: HarnessOptions = {}) {
     buildPersona: () => "测试人设",
     enqueueTask,
     runModel,
+    loadPolicyState: () => policy.current,
+    savePolicyState: (state: MomentsPolicyState) => {
+      policy.current = state;
+    },
     log,
   });
-  return { service, fake, labels, runModel, log, enqueueTask };
+  return { service, fake, labels, runModel, log, enqueueTask, settings, policy };
+}
+
+/** scheduleTurn 是同步入口，任务体里的 await 需要等一拍再断言。 */
+async function flush() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 describe("moments service 反应调度", () => {
@@ -271,6 +329,118 @@ describe("moments service 评论回复调度", () => {
   });
 });
 
+describe("moments service 主动发帖调度", () => {
+  it("主动发帖开关关闭时不调度，但 ring buffer 仍记录历史轮次", async () => {
+    const h = createHarness({
+      cyreneMomentsPostingEnabled: false,
+      modelResponse: '{"shouldPost":true,"text":"值得记录"}',
+    });
+    h.service.scheduleTurn(makeTurnInput({ runId: "run-1", userText: "第一轮内容" }));
+    expect(h.enqueueTask).not.toHaveBeenCalled();
+
+    // 中途打开开关：后续轮次的摘录应包含关闭期间记录的对话
+    h.settings.cyreneMomentsPostingEnabled = true;
+    h.service.scheduleTurn(makeTurnInput({ runId: "run-2", userText: "第二轮内容", finishedAt: new Date("2026-09-04T19:30:00").getTime() }));
+    await flush();
+
+    expect(h.labels).toEqual(["MomentsPost"]);
+    const committed = h.fake.state.cyrenePosts[0];
+    expect(committed.source?.triggerExcerpt).toContain("第一轮内容");
+    expect(committed.source?.triggerExcerpt).toContain("第二轮内容");
+  });
+
+  it("模型未配置时不调度任务", async () => {
+    const h = createHarness({ cyreneMomentsPostingEnabled: true, vendorConfig: null });
+    h.service.scheduleTurn(makeTurnInput());
+    expect(h.enqueueTask).not.toHaveBeenCalled();
+  });
+
+  it("完整链路：入队生成、落库动态并记录策略状态", async () => {
+    const h = createHarness({
+      cyreneMomentsPostingEnabled: true,
+      modelResponse: '{"shouldPost":true,"text":"收工啦，值得纪念"}',
+    });
+    h.service.scheduleTurn(makeTurnInput());
+    await flush();
+
+    expect(h.labels).toEqual(["MomentsPost"]);
+    expect(h.runModel).toHaveBeenCalledTimes(1);
+    expect(h.fake.state.cyrenePosts).toHaveLength(1);
+    expect(h.fake.state.cyrenePosts[0]).toMatchObject({
+      text: "收工啦，值得纪念",
+      source: { type: "conversation" },
+    });
+    // 发帖成功后记账：冷却起点刷新、当日计数 +1
+    expect(h.policy.current.lastPostAt).not.toBeNull();
+    expect(h.policy.current.postsToday.count).toBe(1);
+  });
+
+  it("run 粒度去重：同一 runId 重复到达直接丢弃", async () => {
+    const h = createHarness({ cyreneMomentsPostingEnabled: true });
+    h.service.scheduleTurn(makeTurnInput({ runId: "run-dup" }));
+    await flush();
+    h.service.scheduleTurn(makeTurnInput({ runId: "run-dup" }));
+    await flush();
+
+    expect(h.labels).toEqual(["MomentsPost"]);
+    expect(h.runModel).toHaveBeenCalledTimes(1);
+  });
+
+  it("不同 runId 各自有效，但执行时复核冷却只放行第一条", async () => {
+    const h = createHarness({
+      cyreneMomentsPostingEnabled: true,
+      modelResponse: '{"shouldPost":true,"text":"第一条"}',
+    });
+    h.service.scheduleTurn(makeTurnInput({ runId: "run-1" }));
+    await flush();
+    h.service.scheduleTurn(makeTurnInput({ runId: "run-2" }));
+    await flush();
+
+    expect(h.labels).toEqual(["MomentsPost", "MomentsPost"]);
+    // 第二条任务因冷却被复核拦截，只有一条动态落库
+    expect(h.fake.state.cyrenePosts).toHaveLength(1);
+    expect(h.log).toHaveBeenCalledWith("post_gated", "cooldown");
+  });
+
+  it("任务执行时处于冷却期则不调用模型，仅记录日志", async () => {
+    const h = createHarness({ cyreneMomentsPostingEnabled: true });
+    h.policy.current = { ...defaultMomentsPolicyState(), lastPostAt: Date.now() - 60_000 };
+    h.service.scheduleTurn(makeTurnInput());
+    await flush();
+
+    expect(h.labels).toEqual(["MomentsPost"]);
+    expect(h.runModel).not.toHaveBeenCalled();
+    expect(h.fake.state.cyrenePosts).toHaveLength(0);
+    expect(h.log).toHaveBeenCalledWith("post_gated", "cooldown");
+  });
+
+  it("skip 决策不提交动态也不记账", async () => {
+    const h = createHarness({
+      cyreneMomentsPostingEnabled: true,
+      modelResponse: '{"shouldPost":false,"text":""}',
+    });
+    h.service.scheduleTurn(makeTurnInput());
+    await flush();
+
+    expect(h.fake.state.cyrenePosts).toHaveLength(0);
+    expect(h.policy.current.lastPostAt).toBeNull();
+    expect(h.policy.current.postsToday.count).toBe(0);
+  });
+
+  it("提交被拒（开关在提交时刻关闭）时不记账", async () => {
+    const h = createHarness({
+      cyreneMomentsPostingEnabled: true,
+      modelResponse: '{"shouldPost":true,"text":"文案"}',
+    });
+    h.fake.state.rejectNextCyrenePost = true;
+    h.service.scheduleTurn(makeTurnInput());
+    await flush();
+
+    expect(h.fake.state.cyrenePosts).toHaveLength(0);
+    expect(h.policy.current.lastPostAt).toBeNull();
+  });
+});
+
 describe("moments service 错误隔离", () => {
   it("入队失败被记录且不影响用户操作返回", async () => {
     const h = createHarness();
@@ -282,5 +452,15 @@ describe("moments service 错误隔离", () => {
     // catch 在微任务里结算，等一拍再断言日志
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(h.log).toHaveBeenCalledWith("reaction_task_failed", "队列炸了");
+  });
+
+  it("主动发帖任务失败被记录且不记账", async () => {
+    const h = createHarness({ cyreneMomentsPostingEnabled: true });
+    h.enqueueTask.mockRejectedValue(new Error("发帖队列炸了"));
+    h.service.scheduleTurn(makeTurnInput());
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(h.log).toHaveBeenCalledWith("post_task_failed", "发帖队列炸了");
+    expect(h.policy.current.lastPostAt).toBeNull();
   });
 });

@@ -32,11 +32,12 @@ export function registerMomentsIpc(ipcOption?: IpcScope): void {
 
   // 昔涟行为的提交时开关复核：AI 思考期间关闭开关时，迟到的结果被 moments_disabled 拒绝。
   // 反应（点赞/评论）受 cyreneMomentsReactionsEnabled 约束；
-  // 主动发帖的子开关随发帖能力接入，此前只受总开关约束。
+  // 主动发帖受 cyreneMomentsPostingEnabled 约束（提交时二道闸，与 service 前置闸互补）。
   momentsStore.setCyreneBehaviorGate((behavior) => {
     const settings = loadGeneralSettings();
     if (!settings.momentsEnabled) return false;
     if (behavior === "reaction") return settings.cyreneMomentsReactionsEnabled;
+    if (behavior === "posting") return settings.cyreneMomentsPostingEnabled;
     return true;
   });
 
