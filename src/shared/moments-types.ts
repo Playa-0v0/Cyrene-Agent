@@ -13,10 +13,14 @@ export interface MomentMedia {
   /**
    * user_attachment — 用户发朋友圈时上传，副本存 userData/moments-media/<postId>/，
    *                   生命周期与 post 绑定，删 post 时删副本；
-   * character_asset — 官方角色素材（Phase 5 才接入），只存 assetId。
+   * character_asset — 配图复用贴图素材（Phase 5）：贴图 embedding 匹配命中后固化媒体引用。
    */
   origin: "user_attachment" | "character_asset";
-  /** user_attachment 时为副本文件名（如 "1.jpg"）；character_asset 时为官方素材文件名（如 "desk-night-01.jpg"，位于 renderer public/moments/） */
+  /**
+   * user_attachment 时为副本文件名（如 "1.jpg"）；
+   * character_asset 时为渲染端可直接消费的引用——内置贴图存 public 相对路径
+   * （如 "stickers/peek.gif"，渲染端 resolveAsset 解析），用户贴图存 local-sticker:// 完整 URL。
+   */
   ref: string;
 }
 

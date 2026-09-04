@@ -1,30 +1,20 @@
-// Moments 后置配图匹配（设计文档 §7.5）：动态文本 → 官方素材。
+// Moments 后置配图匹配（设计文档 §7.5）：动态文本 → 贴图素材。
 //
-// 复用 sticker 系列验证过的链路（余弦匹配 + 文本清洗），但独立实现：
-// 独立索引、独立阈值，不出现 MomentImage extends Sticker 这类领域混血。
-// 匹配失败（无索引 / 无 provider / 低于阈值）一律返回 null——纯文字发帖，
-// 不硬凑图。
+// 直接复用贴图系统已有资产（描述表、embedding 索引、相似度阈值），
+// 不为 Moments 单独维护素材库：匹配命中 sticker id 后解析成
+// 渲染端可直接消费的媒体引用（内置贴图 = public 相对路径，用户贴图 = local-sticker:// 协议）。
+// 匹配失败（无索引 / 无 provider / 低于阈值 / id 解析不出）一律返回 null——
+// 纯文字发帖，不硬凑图。
 
-import type { EmbeddingProvider } from "../rag/embedding";
 import { extractStickerEmbeddingText } from "../sticker-query";
-import { BUILT_IN_MOMENT_ASSET_DESCRIPTIONS } from "./moment-asset-descriptions";
-
-/** Moment 素材索引中的一条（与 sticker 索引同构但独立）。 */
-export interface MomentAssetEmbeddingEntry {
-  id: string;
-  embedding: number[];
-}
-
-export interface MomentAssetMatch {
-  id: string;
-  /** 命中素材的文件名（public/moments/ 下），作为 MomentMedia.ref */
-  file: string;
-  score: number;
-}
+import { BUILT_IN_STICKER_FILES } from "../sticker-descriptions";
+import { buildLocalStickerUrl } from "../sticker-protocol";
+import { loadUserStickerManifest } from "../sticker-storage";
+import type { MomentMedia } from "../../shared/moments-types";
 
 // ── 查询构建 ─────────────────────────────────────────────────────
 
-/** 时间上下文给 embedding 的场景提示（素材覆盖昼夜/天气等场景）。 */
+/** 时间上下文给 embedding 的场景提示（贴图覆盖昼夜/情绪等场景）。 */
 function timeOfDayContext(hour: number): string {
   if (hour >= 23 || hour < 5) return "深夜";
   if (hour < 8) return "清晨";
@@ -53,47 +43,32 @@ export function buildMomentImageQuery(
   return parts.join("\n").slice(0, maxLength);
 }
 
-// ── 余弦匹配（照 sticker-embedder.ts 复制，模块独立） ─────────────
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  if (normA === 0 || normB === 0) return 0;
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-}
+// ── sticker id → MomentMedia ─────────────────────────────────────
 
 /**
- * 查询文本 → 素材匹配：取余弦最高的素材，低于阈值返回 null。
- * 索引为空直接返回 null（纯文字降级，不硬凑图）。
+ * 把匹配命中的 sticker id 解析成 MomentMedia：
+ * 内置贴图存 public 相对路径（渲染端 resolveAsset），用户贴图存 local-sticker:// 完整 URL。
+ * id 两边都查不到（已删除的贴图）返回 null——调用方降级纯文字。
  */
-export async function matchMomentAsset(
-  query: string,
-  provider: EmbeddingProvider,
-  index: readonly MomentAssetEmbeddingEntry[],
-  threshold: number,
-): Promise<MomentAssetMatch | null> {
-  if (!query.trim() || index.length === 0) return null;
-
-  const queryEmbedding = await provider.embed(query);
-  let bestId: string | null = null;
-  let bestScore = -1;
-  for (const entry of index) {
-    const score = cosineSimilarity(queryEmbedding, entry.embedding);
-    if (score > bestScore) {
-      bestScore = score;
-      bestId = entry.id;
-    }
+export function resolveMomentStickerMedia(stickerId: string): MomentMedia | null {
+  const builtInFile = BUILT_IN_STICKER_FILES[stickerId];
+  if (builtInFile) {
+    return {
+      id: `media_sticker_${stickerId}`,
+      type: "image",
+      origin: "character_asset",
+      ref: `stickers/${builtInFile}`,
+    };
   }
 
-  if (bestId === null || bestScore < threshold) return null;
-  const description = BUILT_IN_MOMENT_ASSET_DESCRIPTIONS[bestId];
-  // 索引里有 id 但描述表缺失（素材被移除）：视为未命中
-  if (!description) return null;
-  return { id: description.id, file: description.file, score: bestScore };
+  const meta = loadUserStickerManifest()[stickerId];
+  if (meta?.file) {
+    return {
+      id: `media_sticker_${stickerId}`,
+      type: "image",
+      origin: "character_asset",
+      ref: buildLocalStickerUrl(meta.file),
+    };
+  }
+  return null;
 }

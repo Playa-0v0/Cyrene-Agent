@@ -31,6 +31,10 @@ vi.mock("../rag/embedding", () => ({
   getEmbeddingProvider: mocks.getEmbeddingProvider,
   getEmbeddingProviderIdentity: async () => ({ provider: "local", model: "test", dimensions: 2 }),
 }));
+// sticker-storage 引 electron，且 resolveMomentStickerMedia 要读用户贴图 manifest——mock 掉
+vi.mock("../sticker-storage", () => ({
+  loadUserStickerManifest: () => ({ "my-cat": { file: "my-cat.png" } }),
+}));
 vi.mock("../prompts/prompt-loader", () => ({ loadPromptFile: mocks.loadPromptFile }));
 vi.mock("../orchestrator/vendors", () => ({ getAdapterForConfig: vi.fn() }));
 vi.mock("../token-usage-store", () => ({ recordUsage: vi.fn(), recordRequest: vi.fn() }));
@@ -518,7 +522,7 @@ describe("moments service 配图接线", () => {
 });
 
 describe("createMomentsMediaMatcher 具体闭包", () => {
-  /** 查询向量恒为 [1,0]，与素材向量算余弦便于构造精确分数 */
+  /** 查询向量恒为 [1,0]，与贴图向量算余弦便于构造精确分数 */
   const provider = {
     name: "test-provider",
     dims: 2,
@@ -530,31 +534,46 @@ describe("createMomentsMediaMatcher 具体闭包", () => {
     mocks.getEmbeddingProvider.mockReset();
     mocks.loadModelSettings.mockReset();
     // 复位晚绑定索引：避免上一条用例注册的索引泄漏到下一条
-    registerMomentsMediaMatcher({ getMomentAssetIndex: () => null });
+    registerMomentsMediaMatcher({ getStickerIndex: () => null });
   });
 
-  it("provider 与索引就绪且达阈值时产出 character_asset 媒体", async () => {
+  it("provider 与贴图索引就绪且达阈值时产出内置贴图媒体", async () => {
     mocks.getEmbeddingProvider.mockReturnValue(provider);
-    registerMomentsMediaMatcher({ getMomentAssetIndex: () => [{ id: "desk-night-01", embedding: [1, 0] }] });
-    mocks.loadModelSettings.mockReturnValue({ momentSimilarityThreshold: 0.55 });
+    registerMomentsMediaMatcher({ getStickerIndex: () => [{ id: "sleepynow", embedding: [1, 0] }] });
+    mocks.loadModelSettings.mockReturnValue({ stickerSimilarityThreshold: 0.55 });
 
-    const media = await createMomentsMediaMatcher()("深夜赶工");
+    const media = await createMomentsMediaMatcher()("深夜好困");
 
     expect(media).toEqual({
-      id: "media_asset_desk-night-01",
+      id: "media_sticker_sleepynow",
       type: "image",
       origin: "character_asset",
-      ref: "desk-night-01.jpg",
+      ref: "stickers/sleepynow.jpg",
+    });
+  });
+
+  it("命中用户贴图时产出 local-sticker 媒体引用", async () => {
+    mocks.getEmbeddingProvider.mockReturnValue(provider);
+    registerMomentsMediaMatcher({ getStickerIndex: () => [{ id: "my-cat", embedding: [1, 0] }] });
+    mocks.loadModelSettings.mockReturnValue({ stickerSimilarityThreshold: 0.55 });
+
+    const media = await createMomentsMediaMatcher()("看看猫猫");
+
+    expect(media).toEqual({
+      id: "media_sticker_my-cat",
+      type: "image",
+      origin: "character_asset",
+      ref: "local-sticker:///my-cat.png",
     });
   });
 
   it("embedding provider 未就绪时降级 null", async () => {
-    registerMomentsMediaMatcher({ getMomentAssetIndex: () => [{ id: "desk-night-01", embedding: [1, 0] }] });
+    registerMomentsMediaMatcher({ getStickerIndex: () => [{ id: "sleepynow", embedding: [1, 0] }] });
 
     expect(await createMomentsMediaMatcher()("深夜")).toBeNull();
   });
 
-  it("索引未注册 / 未就绪时降级 null", async () => {
+  it("贴图索引未注册 / 未就绪时降级 null", async () => {
     mocks.getEmbeddingProvider.mockReturnValue(provider);
 
     expect(await createMomentsMediaMatcher()("深夜")).toBeNull();
@@ -562,8 +581,8 @@ describe("createMomentsMediaMatcher 具体闭包", () => {
 
   it("最高分低于设置阈值时降级 null", async () => {
     mocks.getEmbeddingProvider.mockReturnValue(provider);
-    registerMomentsMediaMatcher({ getMomentAssetIndex: () => [{ id: "desk-night-01", embedding: [0, 1] }] });
-    mocks.loadModelSettings.mockReturnValue({ momentSimilarityThreshold: 0.55 });
+    registerMomentsMediaMatcher({ getStickerIndex: () => [{ id: "sleepynow", embedding: [0, 1] }] });
+    mocks.loadModelSettings.mockReturnValue({ stickerSimilarityThreshold: 0.55 });
 
     expect(await createMomentsMediaMatcher()("深夜")).toBeNull();
   });

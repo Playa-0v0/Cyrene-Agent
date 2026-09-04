@@ -270,9 +270,9 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         const llmClient = createLlmClient();
         const ttsSynthesisService = createTtsSynthesisService();
         const embeddingIndexService = createEmbeddingIndexService();
-        // Moments 配图：素材 embedding 索引 getter 晚绑定给 moments-service 模块单例（索引未就绪时纯文字降级）
+        // Moments 配图：贴图 embedding 索引 getter 晚绑定给 moments-service 模块单例（索引未就绪时纯文字降级）
         registerMomentsMediaMatcher({
-          getMomentAssetIndex: () => embeddingIndexService.getMomentAssetEmbeddingIndex(),
+          getStickerIndex: () => embeddingIndexService.getStickerEmbeddingIndex(),
         });
         const citaService = createCitaService({ llmClient });
         const socialContextService = createSocialContextService({ llmClient, enqueueLLMTask });

@@ -97,11 +97,11 @@ export function MomentPostCard({
             {post.media.map((media) => (
               <img
                 key={media.id}
-                src={media.origin === "character_asset"
-                  ? resolveAsset(`moments/${media.ref}`)
-                  : buildMomentMediaUrl(post.id, media.ref)}
-                alt=""
-                loading="lazy"
+                src={media.origin !== "character_asset"
+                  ? buildMomentMediaUrl(post.id, media.ref)
+                  : media.ref.startsWith("local-sticker:")
+                    ? media.ref
+                    : resolveAsset(media.ref)}
                 draggable={false}
               />
             ))}

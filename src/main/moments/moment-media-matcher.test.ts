@@ -1,22 +1,17 @@
 // moment-media-matcher 契约测试：配图查询构建（清洗 + 时间上下文 + 截断）与
-// 余弦匹配（阈值 / 最高分 / 描述缺失降级）。
-import { describe, expect, it, vi } from "vitest";
-import type { EmbeddingProvider } from "../rag/embedding";
-import {
-  buildMomentImageQuery,
-  matchMomentAsset,
-  type MomentAssetEmbeddingEntry,
-} from "./moment-media-matcher";
+// 贴图 id → 媒体引用解析（内置贴图 / 用户贴图 / 未知 id 降级）。
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-/** 查询向量恒为 [1,0]：素材向量与之算余弦，方便构造精确分数。 */
-function fakeProvider(): EmbeddingProvider {
-  return {
-    name: "test-provider",
-    dims: 2,
-    embed: vi.fn(async () => [1, 0]),
-    embedBatch: vi.fn(async (texts: string[]) => texts.map(() => [1, 0])),
-  };
-}
+const { manifest } = vi.hoisted(() => ({
+  manifest: { current: {} as Record<string, { file: string }> },
+}));
+
+// sticker-storage 引 electron（app.getPath），测试环境直接 mock 掉
+vi.mock("../sticker-storage", () => ({
+  loadUserStickerManifest: () => manifest.current,
+}));
+
+import { buildMomentImageQuery, resolveMomentStickerMedia } from "./moment-media-matcher";
 
 describe("buildMomentImageQuery", () => {
   it("拼接动态文案、触发摘录与时间上下文", () => {
@@ -54,42 +49,32 @@ describe("buildMomentImageQuery", () => {
   });
 });
 
-describe("matchMomentAsset", () => {
-  it("空查询不调用 provider 直接返回 null", async () => {
-    const provider = fakeProvider();
-    const index: MomentAssetEmbeddingEntry[] = [{ id: "desk-night-01", embedding: [1, 0] }];
-
-    expect(await matchMomentAsset("   ", provider, index, 0.55)).toBeNull();
-    expect(provider.embed).not.toHaveBeenCalled();
+describe("resolveMomentStickerMedia", () => {
+  beforeEach(() => {
+    manifest.current = {};
   });
 
-  it("索引为空直接返回 null", async () => {
-    expect(await matchMomentAsset("深夜", fakeProvider(), [], 0.55)).toBeNull();
+  it("内置贴图解析为 public 相对路径（渲染端 resolveAsset 消费）", () => {
+    expect(resolveMomentStickerMedia("sleepynow")).toEqual({
+      id: "media_sticker_sleepynow",
+      type: "image",
+      origin: "character_asset",
+      ref: "stickers/sleepynow.jpg",
+    });
   });
 
-  it("余弦最高且达阈值的素材命中并带出文件名", async () => {
-    const index: MomentAssetEmbeddingEntry[] = [
-      { id: "night-sky-01", embedding: [0, 1] },
-      { id: "desk-night-01", embedding: [1, 0] },
-    ];
+  it("用户贴图解析为 local-sticker:// 完整 URL", () => {
+    manifest.current = { "my-cat": { file: "my-cat.png" } };
 
-    const matched = await matchMomentAsset("深夜赶工", fakeProvider(), index, 0.55);
-
-    expect(matched).toMatchObject({ id: "desk-night-01", file: "desk-night-01.jpg" });
-    expect(matched?.score).toBe(1);
+    expect(resolveMomentStickerMedia("my-cat")).toEqual({
+      id: "media_sticker_my-cat",
+      type: "image",
+      origin: "character_asset",
+      ref: "local-sticker:///my-cat.png",
+    });
   });
 
-  it("最高分低于阈值返回 null（纯文字降级）", async () => {
-    const index: MomentAssetEmbeddingEntry[] = [
-      { id: "desk-night-01", embedding: [0, 1] }, // 与查询向量 [1,0] 余弦为 0
-    ];
-
-    expect(await matchMomentAsset("深夜", fakeProvider(), index, 0.55)).toBeNull();
-  });
-
-  it("索引 id 不在描述表（素材已移除）时视为未命中", async () => {
-    const index: MomentAssetEmbeddingEntry[] = [{ id: "ghost-01", embedding: [1, 0] }];
-
-    expect(await matchMomentAsset("深夜", fakeProvider(), index, 0.55)).toBeNull();
+  it("未知 id（贴图已删除）返回 null 降级纯文字", () => {
+    expect(resolveMomentStickerMedia("ghost-sticker")).toBeNull();
   });
 });

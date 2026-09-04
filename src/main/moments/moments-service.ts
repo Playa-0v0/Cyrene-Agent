@@ -14,7 +14,8 @@ import { loadModelSettings } from "../settings/model-settings";
 import { loadPromptFile } from "../prompts/prompt-loader";
 import type { ChatMessage, VendorConfig } from "../orchestrator/vendors";
 import { getEmbeddingProvider } from "../rag/embedding";
-import { matchMomentAsset, type MomentAssetEmbeddingEntry } from "./moment-media-matcher";
+import { matchSticker, type StickerEmbeddingEntry } from "../sticker-embedder";
+import { resolveMomentStickerMedia } from "./moment-media-matcher";
 import * as momentsStore from "./moments-store";
 import {
   createMomentsAgent,
@@ -222,19 +223,19 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     scheduleTurn,
   };
 }
-// ── 配图匹配（Phase 5）：embedding 索引由组合根晚绑定 ──────────
+// ── 配图匹配（Phase 5）：贴图 embedding 索引由组合根晚绑定 ──────
 
-let getMomentAssetIndex: () => MomentAssetEmbeddingEntry[] | null = () => null;
+let getStickerEmbeddingIndex: () => StickerEmbeddingEntry[] | null = () => null;
 
 /**
- * 组合根注册 moment 素材索引 getter（EmbeddingIndexService 实例在
+ * 组合根注册贴图索引 getter（EmbeddingIndexService 实例在
  * default-dependencies 内创建，模块单例无法静态引用，启动时注入）。
  * 未注册 / 索引未就绪时 matchMedia 返回 null——纯文字降级。
  */
 export function registerMomentsMediaMatcher(deps: {
-  getMomentAssetIndex: () => MomentAssetEmbeddingEntry[] | null;
+  getStickerIndex: () => StickerEmbeddingEntry[] | null;
 }): void {
-  getMomentAssetIndex = deps.getMomentAssetIndex;
+  getStickerEmbeddingIndex = deps.getStickerIndex;
 }
 
 // ── 具体装配（组合根 / IPC 直接使用） ───────────────────────────
@@ -270,27 +271,23 @@ function loadMomentsVendorConfig(): VendorConfig | null {
 }
 
 /**
- * 具体配图匹配闭包：embedding provider + 晚绑定素材索引 + 设置里的相似度阈值。
+ * 具体配图匹配闭包：embedding provider + 晚绑定贴图索引 + 设置里的相似度阈值。
  * provider / 索引任一未就绪或分数未达阈值都返回 null——纯文字降级，不硬凑图。
  */
 export function createMomentsMediaMatcher(): (query: string) => Promise<MomentMedia | null> {
   return async (query) => {
     const provider = getEmbeddingProvider();
-    const index = getMomentAssetIndex();
+    const index = getStickerEmbeddingIndex();
     if (!provider || !index) return null;
-    const matched = await matchMomentAsset(
+    const matched = await matchSticker(
       query,
       provider,
       index,
-      loadModelSettings().momentSimilarityThreshold,
+      loadModelSettings().stickerSimilarityThreshold,
     );
     if (!matched) return null;
-    return {
-      id: `media_asset_${matched.id}`,
-      type: "image",
-      origin: "character_asset",
-      ref: matched.file,
-    };
+    // 命中贴图后解析成渲染端可消费的媒体引用；贴图已被删除时降级纯文字
+    return resolveMomentStickerMedia(matched.id);
   };
 }
 
