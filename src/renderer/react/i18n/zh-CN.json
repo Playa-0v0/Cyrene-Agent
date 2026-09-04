@@ -91,7 +91,9 @@
     "attachmentDirect": "已交给主模型查看",
     "attachmentDone": "视觉分析完成",
     "editLastMessageAria": "编辑最后一条消息",
-    "saveAndRegenerate": "保存并重新生成"
+    "saveAndRegenerate": "保存并重新生成",
+    "mermaidPending": "图表生成中…",
+    "mermaidFallback": "该图类型暂不支持或内容过长，已降级为源码显示"
   },
   "contextRing": {
     "categorySystemPrompt": "系统提示词",

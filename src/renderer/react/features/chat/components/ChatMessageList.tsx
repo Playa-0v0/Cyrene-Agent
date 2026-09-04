@@ -1,7 +1,7 @@
 import { Bubble, CodeHighlighter, Think, ThoughtChain, type BubbleItemType } from "@ant-design/x";
 import { XMarkdown, type ComponentProps } from "@ant-design/x-markdown";
 import Latex from "@ant-design/x-markdown/plugins/Latex";
-import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type KeyboardEvent, type ReactNode } from "react";
+import { Component, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ErrorInfo, type KeyboardEvent, type ReactNode } from "react";
 import { t, useTranslation } from "../../../i18n";
 import { resolveAsset } from "../../../../../shared/renderer-base";
 import type { AgentRoundRecord, ConversationMode, ProcessMessageRecord, ReasoningBlock, RunActivityRecord, TaskDelegationDisplayRecord, ToolExecutionRecord, ToolFileChange } from "../../../../../shared/chat-types";
@@ -34,6 +34,7 @@ import { countRoundChangedFiles, describeToolExecution, resolveAgentRoundTitle }
 import { TaskDelegationRow } from "./TaskDelegationRow";
 import { extractFileChanges, FileChangeCard } from "./FileChangeCard";
 import { ReviewPanel } from "./ReviewPanel";
+import { MermaidBlock } from "./MermaidBlock";
 
 export interface ChatMessageItem {
   id: string;
@@ -96,11 +97,20 @@ interface ChatMessageListProps {
 const markdownConfig = { extensions: Latex() };
 const cyreneAvatarUrl = resolveAsset("avatars/cyrene-avatar.png");
 
+// 消息是否正在流式输出。code 渲染器收不到 MarkdownContent 的 props，用 context 传下去，
+// mermaid 块靠它在流式期间显示占位而不是渲染半截语法
+const MessageStreamingContext = createContext(false);
+
 function MarkdownCode({ children, lang, block }: ComponentProps<{ children?: ReactNode }>) {
+  const streaming = useContext(MessageStreamingContext);
   if (!block) return <code>{children}</code>;
+  const source = String(children ?? "").replace(/\n$/, "");
+  if ((lang ?? "").split(/\s+/)[0] === "mermaid") {
+    return <MermaidBlock code={source} streaming={streaming} />;
+  }
   return (
     <CodeHighlighter lang={(lang ?? "text").split(/\s+/)[0]} prismLightMode={false}>
-      {String(children ?? "").replace(/\n$/, "")}
+      {source}
     </CodeHighlighter>
   );
 }
@@ -134,18 +144,20 @@ class MarkdownRenderBoundary extends Component<{
   }
 }
 
-export function MarkdownContent({ content }: { content: string; streaming?: boolean }) {
+export function MarkdownContent({ content, streaming }: { content: string; streaming?: boolean }) {
   return (
     <MarkdownRenderBoundary content={content}>
-      <XMarkdown
-        content={content}
-        config={markdownConfig}
-        components={markdownComponents}
-        openLinksInNewTab
-        escapeRawHtml
-        rootClassName="cy-message-markdown"
-        streaming={completedMarkdownOptions}
-      />
+      <MessageStreamingContext.Provider value={Boolean(streaming)}>
+        <XMarkdown
+          content={content}
+          config={markdownConfig}
+          components={markdownComponents}
+          openLinksInNewTab
+          escapeRawHtml
+          rootClassName="cy-message-markdown"
+          streaming={completedMarkdownOptions}
+        />
+      </MessageStreamingContext.Provider>
     </MarkdownRenderBoundary>
   );
 }

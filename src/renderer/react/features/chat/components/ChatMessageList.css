@@ -653,6 +653,48 @@
   overflow-x: auto;
 }
 
+/* Mermaid 图卡片：自适应宽度、横向滚动兜底 */
+.cy-mermaid {
+  max-width: 100%;
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid #f0d4dc;
+  border-radius: 12px;
+  background: #fffafc;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.cy-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.cy-mermaid--pending {
+  padding: 18px 12px;
+  color: #9a8a91;
+  font-size: 13px;
+}
+
+.cy-mermaid--fallback .cy-mermaid__hint {
+  margin-bottom: 8px;
+  color: #9a8a91;
+  font-size: 12px;
+  text-align: left;
+}
+
+.cy-mermaid--fallback .cy-mermaid__source {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f7f2f4;
+  color: var(--cy-text);
+  font: 12px/1.6 Consolas, "Cascadia Code", monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: left;
+}
+
 .cy-message-markdown-fallback {
   max-width: min(760px, 100%);
   margin: 0;
