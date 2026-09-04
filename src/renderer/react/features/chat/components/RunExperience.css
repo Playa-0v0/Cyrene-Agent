@@ -160,7 +160,8 @@
 .cy-composer-slot__composer { opacity: 1; transform: translateY(0); }
 .cy-composer-slot__interaction { z-index: 1; animation: cy-interaction-enter 220ms ease both; }
 .cy-composer-slot.is-ask .cy-composer-slot__composer,
-.cy-composer-slot.is-permission .cy-composer-slot__composer {
+.cy-composer-slot.is-permission .cy-composer-slot__composer,
+.cy-composer-slot.is-quiz .cy-composer-slot__composer {
   pointer-events: none;
   opacity: 0;
   transform: translateY(18px);
@@ -263,6 +264,93 @@
 .cy-interaction-panel__actions button { min-width: 64px; padding: 8px 12px; border: 1px solid var(--cy-border, #e7e2e5); border-radius: 9px; background: #fff; color: var(--cy-text, #2f2d31); font: 500 13px/1.2 var(--rb-font-sans, sans-serif); cursor: pointer; }
 .cy-interaction-panel__actions button.is-primary { border-color: var(--cy-accent, #ff5b8a); background: var(--cy-accent, #ff5b8a); color: #fff; }
 .cy-interaction-panel__actions button:disabled { cursor: wait; opacity: .58; }
+
+/* ── pop_quiz 抽查卡片 ─────────────────────────────────── */
+
+/* 考察知识点标签：弱化呈现，不与题干抢视觉 */
+.cy-quiz-objective {
+  margin: -8px 0 10px;
+  color: var(--cy-text-muted, #999199);
+  font: 500 11px/1.4 var(--rb-font-sans, sans-serif);
+}
+
+.cy-quiz-objective::before {
+  content: "◈";
+  margin-right: 5px;
+  color: var(--cy-accent, #ff5b8a);
+}
+
+/* 简答题输入框：与 ask 自定义回答同款观感 */
+.cy-quiz-short-answer {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid var(--cy-border, #e7e2e5);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--cy-text, #2f2d31);
+  font: 400 13px/1.5 var(--rb-font-sans, sans-serif);
+  resize: vertical;
+  outline: none;
+}
+
+.cy-quiz-short-answer:focus { border-color: rgba(255, 91, 138, .5); box-shadow: 0 0 0 3px rgb(255 91 138 / 10%); }
+
+/* 提交失败提示：红字但不刺眼 */
+.cy-quiz-error { margin: 9px 0 0; color: #c25454; font: 400 12px/1.5 var(--rb-font-sans, sans-serif); }
+
+/* 跳过按钮：弱化样式靠左，别和主提交键抢注意力 */
+.cy-interaction-panel__actions .cy-quiz-skip {
+  margin-right: auto;
+  border-color: transparent;
+  background: transparent;
+  color: var(--cy-text-muted, #999199);
+}
+
+.cy-interaction-panel__actions .cy-quiz-skip:hover:not(:disabled) { color: var(--cy-text, #2f2d31); }
+
+/* 展示态：逐题判分结果 */
+.cy-quiz-graded { display: grid; gap: 11px; margin-top: 10px; }
+
+.cy-quiz-graded__item {
+  padding: 10px 12px;
+  border: 1px solid #eee9ec;
+  border-left-width: 3px;
+  border-left-color: var(--cy-border, #e7e2e5);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 65%);
+}
+
+.cy-quiz-graded__item.is-correct { border-left-color: #54a56d; }
+.cy-quiz-graded__item.is-incorrect { border-left-color: #d06969; }
+.cy-quiz-graded__item.is-pending_model { border-left-color: #d9a83f; }
+
+.cy-quiz-graded__item .cy-interaction-panel__question { margin: 0 0 8px; }
+
+.cy-quiz-graded__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+
+.cy-quiz-badge {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font: 600 11px/1.5 var(--rb-font-sans, sans-serif);
+}
+
+.cy-quiz-badge.is-correct { background: #e9f5ed; color: #2f7d4a; }
+.cy-quiz-badge.is-incorrect { background: #fdeeee; color: #b04848; }
+.cy-quiz-badge.is-pending_model { background: #fdf5e5; color: #9a7222; }
+
+.cy-quiz-graded__answer { color: var(--cy-text-muted, #817b82); font: 400 12px/1.5 var(--rb-font-sans, sans-serif); }
+
+.cy-quiz-graded__explanation {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f7f4f6;
+  color: var(--cy-text, #4a444b);
+  font: 400 12px/1.6 var(--rb-font-sans, sans-serif);
+}
+
+.cy-quiz-graded__pending { margin: 8px 0 0; color: var(--cy-text-muted, #999199); font: 400 12px/1.5 var(--rb-font-sans, sans-serif); }
 
 /* ── Diff Review 卡片（工具变更审查） ───────────────────── */
 

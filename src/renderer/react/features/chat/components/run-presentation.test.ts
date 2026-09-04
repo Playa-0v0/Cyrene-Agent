@@ -7,6 +7,7 @@ import {
   isAskComplete,
   normalizeChoiceInteraction,
   normalizeDeferredPlanChoice,
+  normalizePopQuizCard,
   normalizeTaskPlanPresentation,
   resolveComposerSlot,
   selectAskOption,
@@ -319,5 +320,101 @@ describe("work run presentation", () => {
         { id: "s3", title: "清理旧文件", status: "pending" },
       ],
     });
+  });
+
+  it("normalizes a valid pop quiz card and gives it its own composer slot", () => {
+    const card = {
+      quizId: "quiz-1-1",
+      runId: "run-quiz",
+      intro: "答完这几题看看掌握没有。",
+      questions: [
+        {
+          id: "q1",
+          type: "choice",
+          question: "true + true 的结果是？",
+          options: [
+            { id: "q1-opt-1", label: "2" },
+            { id: "q1-opt-2", label: "true" },
+          ],
+          learningObjective: "布尔值的隐式类型转换",
+        },
+        {
+          id: "q2",
+          type: "short_answer",
+          question: "用自己的话说说什么是闭包。",
+          options: [],
+          learningObjective: "闭包的概念",
+        },
+      ],
+    };
+    const interaction = normalizePopQuizCard(card)!;
+    expect(interaction).toEqual({
+      kind: "quiz",
+      id: "quiz-1-1",
+      runId: "run-quiz",
+      intro: "答完这几题看看掌握没有。",
+      questions: [
+        {
+          id: "q1",
+          type: "choice",
+          question: "true + true 的结果是？",
+          options: [
+            { id: "q1-opt-1", label: "2" },
+            { id: "q1-opt-2", label: "true" },
+          ],
+          learningObjective: "布尔值的隐式类型转换",
+        },
+        {
+          id: "q2",
+          type: "short_answer",
+          question: "用自己的话说说什么是闭包。",
+          options: [],
+          learningObjective: "闭包的概念",
+        },
+      ],
+    });
+    expect(resolveComposerSlot(interaction)).toBe("quiz");
+  });
+
+  it("rejects malformed pop quiz payloads instead of rendering half a card", () => {
+    const valid = {
+      quizId: "quiz-2-1",
+      runId: "run-quiz",
+      intro: "",
+      questions: [{
+        id: "q1",
+        type: "true_false",
+        question: "1 + 1 === 2",
+        options: [],
+        learningObjective: "",
+      }],
+    };
+    // 完整合法的卡片本身可以通过
+    expect(normalizePopQuizCard(valid)).toBeDefined();
+    // 缺 quizId / runId / questions：直接失效
+    expect(normalizePopQuizCard({ ...valid, quizId: "" })).toBeUndefined();
+    expect(normalizePopQuizCard({ ...valid, runId: "" })).toBeUndefined();
+    expect(normalizePopQuizCard({ ...valid, questions: "not-array" })).toBeUndefined();
+    // 题型不在四种之内：整卡失效
+    expect(normalizePopQuizCard({
+      ...valid,
+      questions: [{ ...valid.questions[0], type: "fill_blank" }],
+    })).toBeUndefined();
+    // 选择题选项不足 2 个：整卡失效（渲染出来也没法答）
+    expect(normalizePopQuizCard({
+      ...valid,
+      questions: [{
+        id: "q1",
+        type: "choice",
+        question: "选一个",
+        options: [{ id: "q1-opt-1", label: "唯一选项" }],
+        learningObjective: "",
+      }],
+    })).toBeUndefined();
+    // 题目数组里有任何一题废掉，不能只渲染剩下那半张卡
+    expect(normalizePopQuizCard({
+      ...valid,
+      questions: [valid.questions[0], { id: "q2", type: "choice", question: "", options: [] }],
+    })).toBeUndefined();
   });
 });
