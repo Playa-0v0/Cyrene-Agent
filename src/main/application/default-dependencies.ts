@@ -115,6 +115,7 @@ import { resolveMusicPaths } from "../music/paths";
 import { initializeScreenshotService } from "../screenshot/screenshot-lifecycle";
 import { bootstrapConfigGetters } from "../startup/bootstrap-config";
 import { bootstrapPermission } from "../permission/bootstrap";
+import { registerPopQuizIpc, registerPopQuizTool } from "../orchestrator/pop-quiz";
 
 import { createIpcScope } from "./ipc-scope";
 import { createShutdownCoordinator } from "./shutdown";
@@ -528,6 +529,9 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
 
         // 权限模块：磁盘加载 + 权限/选择卡片 IPC（必须在 createWindow 之后、任意工具调用之前）
         bootstrapPermission(ipc);
+        // pop_quiz 抽查工具：IPC（提交/跳过）与工具注册（learn 模式可见）
+        registerPopQuizIpc(ipc);
+        registerPopQuizTool();
         registerCallIpc(ipc);
       },
 
