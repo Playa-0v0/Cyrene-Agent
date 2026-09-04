@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "../../../i18n";
 import { DownOutlined } from "@ant-design/icons";
 import { ChatComposer, parseComposerMessage, type ComposerAttachment } from "../components/ChatComposer";
@@ -28,7 +28,7 @@ import { ChatPagePanelHost } from "../components/ChatPagePanelHost";
 import { useUserCallPreference } from "../../../hooks/useUserNickname";
 import { resolveRevisableLastTurn } from "../components/last-turn-actions";
 import { shouldListenForDeferredPlanEvents } from "./conversation-run-policy";
-import { arrayBufferToBase64, containsFiles, PASTE_IMAGE_MAX_BYTES } from "./attachment-utils";
+
 import {
   aguiApi,
   chatStore,
@@ -52,6 +52,7 @@ import {
   type OpenSessionArgs,
   type ReactSessionMode,
 } from "./openSessionByDeps";
+import { useComposerAttachments } from "../hooks/useComposerAttachments";
 import { AgentRunController, type AgentRunInput } from "./run/AgentRunController";
 import {
   appendPendingQueueEntry,
@@ -114,16 +115,15 @@ export function ChatPage() {
   const [pendingModelProfileByMode, setPendingModelProfileByMode] = useState<
     Partial<Record<ConversationMode, string>>
   >({});
-  const [attachmentsByScope, setAttachmentsByScope] = useState<Record<string, ComposerAttachment[]>>({});
   const [sessionsByMode, setSessionsByMode] = useState<Partial<Record<ConversationMode, ChatSessionMeta[]>>>({});
   const [activeSessionIds, setActiveSessionIds] = useState<Partial<Record<ConversationMode, string>>>({});
-  const [attachmentBusy, setAttachmentBusy] = useState(false);
+
   const [modelBusyByMode, setModelBusyByMode] = useState<Partial<Record<ConversationMode, boolean>>>({});
   const [isCompressingContext, setIsCompressingContext] = useState(false);
   const [interactionsBySession, setInteractionsBySession] = useState<SessionInteractionState>({});
   const [lastTurnRevisionStarting, setLastTurnRevisionStarting] = useState(false);
   const [stickerSize, setStickerSize] = useState<"small" | "standard" | "large">("standard");
-  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+
   const [todoStateBySession, setTodoStateBySession] = useState<TodoStateBySession>({});
   // 计划模式（Plan Mode 二期）：会话级计划面板内容与阶段（review → executing → completed）。
   const [planReviewBySession, setPlanReviewBySession] = useState<
@@ -142,8 +142,7 @@ export function ChatPage() {
   const activeSessionIdsRef = useRef(activeSessionIds);
   const activeScopeRef = useRef(`mode:${mode}`);
   const sessionSelectionGeneration = useRef(0);
-  const dragDepthRef = useRef(0);
-  const localPreviewUrlsRef = useRef(new Set<string>());
+
   const activeRunsBySession = useRef<Record<string, { assistantId: string; runId?: string; mode: ConversationMode }>>({});
   const runCheckpointBySessionRef = useRef<Record<string, (status: "running" | "waiting_user") => void>>({});
   // bootstrap 标志：只由 cold-start finally 写入；模式切换 effect 仅检查
@@ -238,7 +237,23 @@ export function ChatPage() {
   const composerInteraction = activeInteraction?.interaction;
   const interactionBusy = activeInteraction?.busy ?? false;
   const hasMessages = messages.length > 0;
-  const attachments = attachmentsByScope[scopeKey] ?? [];
+  const {
+    attachments,
+    attachmentBusy,
+    isDraggingFiles,
+    chooseFiles,
+    handlePastedImage,
+    handleScreenshot,
+    removeAttachment,
+    prepareImageAttachments,
+    clearScopeAttachments,
+    deleteScopeAttachments,
+    dragHandlers,
+  } = useComposerAttachments({
+    scopeKey,
+    getActiveScope: () => activeScopeRef.current,
+    patchMessageAttachments: updateMessageAttachments,
+  });
   const sessions = sessionsByMode[mode] ?? [];
   const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
   // 会话级最新上下文快照（环形图优先读取点）：run 事件实时写入；
@@ -263,25 +278,7 @@ export function ChatPage() {
     activeAguiOffsRef.current.clear();
     activeEarlyTtsRef.current?.queue.cancel();
     activeEarlyTtsRef.current = null;
-    for (const url of localPreviewUrlsRef.current) URL.revokeObjectURL(url);
-    localPreviewUrlsRef.current.clear();
   }, []);
-
-  useEffect(() => window.chat?.onScreenshotInsert?.((data) => {
-    const targetScope = activeScopeRef.current;
-    const attachment: ComposerAttachment = {
-      kind: "image",
-      name: t("chatPage.screenshotAttachmentName", { ts: Date.now() }),
-      filePath: data.filePath,
-      mime: data.mime,
-      previewUrl: data.previewUrl,
-      hasAnnotations: data.hasAnnotations,
-    };
-    setAttachmentsByScope((current) => ({
-      ...current,
-      [targetScope]: [...(current[targetScope] ?? []), attachment],
-    }));
-  }), []);
 
   useEffect(() => {
     const store = chatStore();
@@ -932,11 +929,7 @@ export function ChatPage() {
       delete next[`mode:${targetMode}`];
       return next;
     });
-    setAttachmentsByScope((current) => {
-      const next = { ...current };
-      delete next[`mode:${targetMode}`];
-      return next;
-    });
+    deleteScopeAttachments(`mode:${targetMode}`);
     setPendingWorkspaceByMode((current) => {
       const next = { ...current };
       if (inheritedWorkspace) {
@@ -980,97 +973,6 @@ export function ChatPage() {
     await refreshSessionsRef.current(mode, false);
   }
 
-  async function chooseFiles(files: File[]) {
-    const targetScope = scopeKey;
-    if (!window.chat || files.length === 0) return;
-    setAttachmentBusy(true);
-    const previewsByName = new Map<string, string[]>();
-    for (const file of files) {
-      if (!file.type.startsWith("image/") && !/\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name)) continue;
-      const previewUrl = URL.createObjectURL(file);
-      localPreviewUrlsRef.current.add(previewUrl);
-      previewsByName.set(file.name, [...(previewsByName.get(file.name) ?? []), previewUrl]);
-    }
-    try {
-      const results = await window.chat.ingestDroppedFiles(files);
-      if (results.length > 0) {
-        const hydratedResults = results.map((attachment) => {
-          if (attachment.kind !== "image") return attachment;
-          const previews = previewsByName.get(attachment.name);
-          const localPreview = previews?.shift();
-          return localPreview ? { ...attachment, previewUrl: localPreview } : attachment;
-        });
-        setAttachmentsByScope((current) => ({
-          ...current,
-          [targetScope]: [...(current[targetScope] ?? []), ...hydratedResults],
-        }));
-      }
-    } catch (error) {
-      window.alert(t("chatPage.ingestFilesFailed", { error: error instanceof Error ? error.message : String(error) }));
-    } finally {
-      setAttachmentBusy(false);
-    }
-  }
-
-  /**
-   * Ctrl+V 粘贴图片：落主进程 screenshots/ 临时文件（复用截图链路），
-   * 构造与按钮截图相同的 ComposerAttachment 追加进当前 scope。
-   */
-  async function handlePastedImage(file: File) {
-    const targetScope = scopeKey;
-    if (!window.chat?.saveScreenshotTemp) return;
-    if (file.size > PASTE_IMAGE_MAX_BYTES) {
-      window.alert(t("chatPage.pastedImageTooLargeSkipped"));
-      return;
-    }
-    setAttachmentBusy(true);
-    try {
-      const base64 = arrayBufferToBase64(await file.arrayBuffer());
-      const { filePath } = await window.chat.saveScreenshotTemp(base64, file.type);
-      const previewUrl = URL.createObjectURL(file);
-      localPreviewUrlsRef.current.add(previewUrl);
-      const attachment: ComposerAttachment = {
-        kind: "image",
-        name: file.name && file.name !== "image.png" ? file.name : t("chatPage.pastedImageAttachmentName", { ts: Date.now() }),
-        filePath,
-        mime: file.type,
-        previewUrl,
-      };
-      setAttachmentsByScope((current) => ({
-        ...current,
-        [targetScope]: [...(current[targetScope] ?? []), attachment],
-      }));
-    } catch (error) {
-      const raw = error instanceof Error ? error.message : String(error);
-      const text = raw === "SCREENSHOT_TOO_LARGE"
-        ? t("chatPage.pastedImageTooLarge")
-        : raw === "INVALID_SCREENSHOT_IMAGE"
-          ? t("chatPage.pastedImageInvalid")
-          : t("chatPage.pastedImageFailed", { error: raw });
-      window.alert(text);
-    } finally {
-      setAttachmentBusy(false);
-    }
-  }
-
-  /** 截图按钮：失败不再静默，按 reason 给可读提示（known-issues 问题 4）。 */
-  async function handleScreenshot() {
-    const result = await window.chat?.startScreenshot();
-    if (!result || result.ok) return;
-    const reason = typeof result.reason === "string" ? result.reason : "";
-    let text: string;
-    if (reason.startsWith("HELPER_")) {
-      text = t("chatPage.screenshotHelperNotReady");
-    } else if (reason.startsWith("SCREENSHOT_CANCELLED")) {
-      text = t("chatPage.screenshotCancelled");
-    } else if (reason === "SCREENSHOT_FILE_PATH_REQUIRED") {
-      text = t("chatPage.screenshotFileMissing");
-    } else {
-      text = t("chatPage.screenshotFailed", { reason: reason || t("chatPage.unknownError") });
-    }
-    window.alert(text);
-  }
-
   function updateMessageAttachments(
     sessionId: string,
     messageId: string,
@@ -1084,91 +986,6 @@ export function ChatPage() {
           : item
       )),
     }));
-  }
-
-  async function prepareImageAttachments(
-    sessionId: string,
-    messageId: string,
-    attachments: ComposerAttachment[],
-  ) {
-    const images = attachments.filter((attachment) => attachment.kind === "image" && attachment.filePath);
-    if (images.length === 0 || !window.chat) return;
-
-    let strategy: { mode: "direct" | "caption" } = { mode: "caption" };
-    try {
-      // 传 sessionId：会话绑定的档案若声明 multimodal 则按档案裁决，否则回退全局
-      strategy = await window.chat.getImageSendStrategy(sessionId);
-    } catch (error) {
-      console.warn("[Cyrene React] 获取图片发送策略失败，回退视觉描述:", error);
-    }
-
-    if (strategy.mode === "direct") {
-      const paths = new Set(images.map((image) => image.filePath));
-      updateMessageAttachments(sessionId, messageId, (current) => current.map((attachment) => (
-        paths.has(attachment.filePath)
-          ? { ...attachment, imageSendMode: "direct", status: "done" }
-          : attachment
-      )));
-      return;
-    }
-
-    for (const image of images) {
-      updateMessageAttachments(sessionId, messageId, (current) => current.map((attachment) => (
-        attachment.filePath === image.filePath
-          ? { ...attachment, imageSendMode: "caption", status: "processing" }
-          : attachment
-      )));
-      let result: { ok: boolean; caption?: string; error?: string };
-      try {
-        result = await window.chat.captionImage(image.filePath!, image.hasAnnotations === true);
-      } catch (error) {
-        result = { ok: false, error: error instanceof Error ? error.message : String(error) };
-      }
-      updateMessageAttachments(sessionId, messageId, (current) => current.map((attachment) => (
-        attachment.filePath === image.filePath
-          ? result.ok && result.caption
-            ? { ...attachment, imageSendMode: "caption", status: "done", caption: result.caption, reason: undefined }
-            : { ...attachment, imageSendMode: "caption", status: "error", reason: result.error ?? t("chatPage.imageCaptionFailed") }
-          : attachment
-      )));
-    }
-  }
-
-  function removeAttachment(index: number) {
-    const targetScope = scopeKey;
-    setAttachmentsByScope((current) => ({
-      ...current,
-      [targetScope]: (current[targetScope] ?? []).filter((_, itemIndex) => itemIndex !== index),
-    }));
-  }
-
-  function handleDragEnter(event: DragEvent<HTMLElement>) {
-    if (!containsFiles(event.dataTransfer)) return;
-    event.preventDefault();
-    dragDepthRef.current += 1;
-    setIsDraggingFiles(true);
-  }
-
-  function handleDragOver(event: DragEvent<HTMLElement>) {
-    if (!containsFiles(event.dataTransfer)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-  }
-
-  function handleDragLeave(event: DragEvent<HTMLElement>) {
-    if (!containsFiles(event.dataTransfer)) return;
-    event.preventDefault();
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-    if (dragDepthRef.current === 0) setIsDraggingFiles(false);
-  }
-
-  function handleDrop(event: DragEvent<HTMLElement>) {
-    if (!containsFiles(event.dataTransfer)) return;
-    event.preventDefault();
-    dragDepthRef.current = 0;
-    setIsDraggingFiles(false);
-    const files = Array.from(event.dataTransfer.files);
-    if (files.length > 0) void chooseFiles(files);
   }
 
   async function sendMessage(content: string, resumeFromRunId?: string) {
@@ -1223,7 +1040,7 @@ export function ChatPage() {
       pendingQueueBySessionRef.current = nextQueue;
       setPendingQueueBySession(nextQueue);
       setDrafts((current) => ({ ...current, [scopeKey]: "" }));
-      setAttachmentsByScope((current) => ({ ...current, [scopeKey]: [] }));
+      clearScopeAttachments();
       return;
     }
     await dispatchUserMessage({
@@ -1279,7 +1096,7 @@ export function ChatPage() {
     }));
     if (!keepComposer) {
       setDrafts((current) => ({ ...current, [scopeKey]: "" }));
-      setAttachmentsByScope((current) => ({ ...current, [scopeKey]: [] }));
+      clearScopeAttachments();
     }
     const updatedSession = await chatStore()?.append(sessionId, {
       id: userMessageId,
@@ -1446,7 +1263,7 @@ export function ChatPage() {
     pendingQueueBySessionRef.current = nextQueue;
     setPendingQueueBySession(nextQueue);
     setDrafts((current) => ({ ...current, [scopeKey]: "" }));
-    setAttachmentsByScope((current) => ({ ...current, [scopeKey]: [] }));
+    clearScopeAttachments();
   }
 
   const isCurrentScopeRunning = Boolean(activeSessionId && activeRunsBySession.current[activeSessionId]);
@@ -1494,10 +1311,10 @@ export function ChatPage() {
       />
       <main
         className={`cy-page-main cy-workspace ${hasMessages ? "has-messages" : "is-empty"} ${isDraggingFiles ? "is-dragging-files" : ""}`}
-        onDragEnter={handleDragEnter}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
+        onDragEnter={dragHandlers.onDragEnter}
+        onDragOver={dragHandlers.onDragOver}
+        onDragLeave={dragHandlers.onDragLeave}
+        onDrop={dragHandlers.onDrop}
       >
         <FileDropOverlay visible={isDraggingFiles} />
         {activePanel ? (
