@@ -42,6 +42,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   citaSemanticEngine: "remote",
   chatSocialContextEnabled: false,
   momentsEnabled: true,
+  chatMomentsContextEnabled: true,
   cyreneMomentsReactionsEnabled: true,
   petAlwaysOnTop: true,
   petVisible: true,
@@ -184,6 +185,9 @@ export function normalizeGeneralSettings(
     momentsEnabled: input?.momentsEnabled === undefined
       ? DEFAULT_GENERAL_SETTINGS.momentsEnabled
       : Boolean(input.momentsEnabled),
+    chatMomentsContextEnabled: input?.chatMomentsContextEnabled === undefined
+      ? DEFAULT_GENERAL_SETTINGS.chatMomentsContextEnabled
+      : Boolean(input.chatMomentsContextEnabled),
     cyreneMomentsReactionsEnabled: input?.cyreneMomentsReactionsEnabled === undefined
       ? DEFAULT_GENERAL_SETTINGS.cyreneMomentsReactionsEnabled
       : Boolean(input.cyreneMomentsReactionsEnabled),

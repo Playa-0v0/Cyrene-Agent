@@ -877,3 +877,95 @@ describe("build-options", () => {
     })
   })
 })
+
+describe("moments context 注入（Phase 3 Chat Awareness）", () => {
+  function momentsDeps(overrides: {
+    momentsEnabled?: boolean;
+    chatMomentsContextEnabled?: boolean;
+    blockText?: string;
+    throwInBuild?: boolean;
+  }) {
+    const deps = createBuildDeps()
+    deps.loadGeneralSettings = () => ({
+      currentStyleId: "default",
+      customStyle: { diversity: { driver: "model-default" }, repetition: "model-default" },
+      chatSocialContextEnabled: false,
+      momentsEnabled: overrides.momentsEnabled ?? true,
+      chatMomentsContextEnabled: overrides.chatMomentsContextEnabled ?? true,
+    })
+    deps.buildMomentsContext = vi.fn((query: string) => {
+      if (overrides.throwInBuild) throw new Error("moments store 未初始化")
+      return overrides.blockText ?? `【近期朋友圈动态】\n${query}`
+    })
+    return deps
+  }
+
+  it("Chat 模式且双开关开启时注入 momentsContextBlock，并把最新用户文本传给门控检索", async () => {
+    const deps = momentsDeps({})
+    const result = await buildAgentRunOptions({
+      sessionId: "moments-chat",
+      executionMode: "chat",
+      messages: [{ role: "user", content: "你刚才朋友圈发的是什么意思" }],
+    }, deps)
+
+    expect(deps.buildMomentsContext).toHaveBeenCalledWith("你刚才朋友圈发的是什么意思")
+    expect(result.options.soulRuntimeContext).toContain("【近期朋友圈动态】")
+  })
+
+  it("chatMomentsContextEnabled=false 时 block 不出现", async () => {
+    const deps = momentsDeps({ chatMomentsContextEnabled: false })
+    const result = await buildAgentRunOptions({
+      sessionId: "moments-off",
+      executionMode: "chat",
+      messages: [{ role: "user", content: "你好" }],
+    }, deps)
+
+    expect(deps.buildMomentsContext).not.toHaveBeenCalled()
+    expect(result.options.soulRuntimeContext).not.toContain("【近期朋友圈动态】")
+  })
+
+  it("momentsEnabled=false 总开关关闭时不注入", async () => {
+    const deps = momentsDeps({ momentsEnabled: false })
+    await buildAgentRunOptions({
+      sessionId: "moments-master-off",
+      executionMode: "chat",
+      messages: [{ role: "user", content: "你好" }],
+    }, deps)
+
+    expect(deps.buildMomentsContext).not.toHaveBeenCalled()
+  })
+
+  it("Work 模式不注入", async () => {
+    const deps = momentsDeps({})
+    await buildAgentRunOptions({
+      sessionId: "moments-work",
+      executionMode: "work",
+      messages: [{ role: "user", content: "帮我修个 bug" }],
+    }, deps)
+
+    expect(deps.buildMomentsContext).not.toHaveBeenCalled()
+  })
+
+  it("构建抛错时静默降级为空，不影响本轮运行", async () => {
+    const deps = momentsDeps({ throwInBuild: true })
+    const result = await buildAgentRunOptions({
+      sessionId: "moments-error",
+      executionMode: "chat",
+      messages: [{ role: "user", content: "你好" }],
+    }, deps)
+
+    expect(result.options.soulRuntimeContext).not.toContain("【近期朋友圈动态】")
+  })
+
+  it("返回空串时按空省略，不产生空分隔段", async () => {
+    const deps = momentsDeps({ blockText: "" })
+    const result = await buildAgentRunOptions({
+      sessionId: "moments-empty",
+      executionMode: "chat",
+      messages: [{ role: "user", content: "你好" }],
+    }, deps)
+
+    expect(result.options.soulRuntimeContext).not.toContain("【近期朋友圈动态】")
+    expect(result.options.soulRuntimeContext).not.toMatch(/(^|\n)---(\n|$)\s*(^|\n)---/)
+  })
+})

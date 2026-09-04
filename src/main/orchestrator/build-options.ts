@@ -149,6 +149,8 @@ export interface BuildOptionsDeps {
     contextBlock: string;
     retrievedAtoms: SocialAtom[];
   }>;
+  /** 构建朋友圈 Chat 背景块（只读本地 moments 数据，同步）；返回空串表示无内容。 */
+  buildMomentsContext?: (query: string) => string;
   /**
    * 获取对话的工作区绑定（来自 Conversation Workspace Binding）。
    * 返回 undefined 表示当前对话未绑定工作区。
@@ -221,6 +223,9 @@ export interface StyleSettingsLite {
   currentStyleId?: unknown;
   customStyle?: unknown;
   chatSocialContextEnabled?: unknown;
+  /** 朋友圈总开关与 Chat 背景注入开关（moments-awareness 门控用）。 */
+  momentsEnabled?: unknown;
+  chatMomentsContextEnabled?: unknown;
   /** 工具-模式覆盖层（三模适配层）。未提供时按 modes 字段或全可见过滤。 */
   toolModeOverrides?: ToolModeOverrides;
   /** Chat 模式工具增强总开关。未提供时视为关闭（chat 无工具，现状行为）。 */
@@ -484,6 +489,11 @@ export async function buildAgentRunOptions(
   const socialContextEnabled = isChatMode
     && styleSettings.chatSocialContextEnabled === true
     && Boolean(deps.buildChatSocialContext);
+  // 朋友圈 Chat 背景：总开关与子开关都开启才注入（momentsEnabled && chatMomentsContextEnabled）
+  const momentsContextEnabled = isChatMode
+    && styleSettings.chatMomentsContextEnabled === true
+    && styleSettings.momentsEnabled === true
+    && Boolean(deps.buildMomentsContext);
   const messagesForSoul = socialContextEnabled ? messages.slice(-12) : messages;
   const profile = deps.loadUserProfile();
   const { cleanMessages: cleanLlm, timestampedMessages: llmMessages, timeContext: conversationTimeContext } = buildConversationTimeContext(
@@ -526,6 +536,15 @@ export async function buildAgentRunOptions(
   envTimer.end();
 
   const channelSystem = buildChannelSystem(input.channel);
+
+  let momentsContextBlock = "";
+  if (momentsContextEnabled) {
+    try {
+      momentsContextBlock = deps.buildMomentsContext!(latestUserText);
+    } catch (err) {
+      console.warn("[Cyrene] moments context build failed:", err);
+    }
+  }
 
   let chatSocialContextBlock = "";
   let retrievedSocialAtoms: SocialAtom[] = [];
@@ -786,6 +805,7 @@ export async function buildAgentRunOptions(
     environmentContext,
     conversationTimeContext,
     chatSocialContextBlock,
+    momentsContextBlock,
     stylePromptBlock,
     autoInjectedSoulContext,
     skillActivation,

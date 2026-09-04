@@ -17,6 +17,8 @@ import { buildAlwaysOnContext, scheduleMemoryWrite } from "./index";
 import { matchSticker } from "../sticker-embedder";
 import { buildRelationshipContext, recordRelationshipTurn } from "../relationship/relationship-log";
 import { compileSocialContextBlock } from "../social-context/context";
+import * as momentsStore from "../moments/moments-store";
+import { buildMomentsContextBlock } from "../moments/moments-context";
 import { rankSocialAtoms } from "../social-context/retrieval";
 import {
   buildSkillCatalog,
@@ -231,6 +233,11 @@ export function createAgentRuntime(rawDeps: AgentRuntimeDeps): AgentRuntime {
           contextBlock: compileSocialContextBlock(retrievedAtoms),
           retrievedAtoms,
         };
+      },
+      buildMomentsContext: (query: string) => {
+        // 只读本地 moments 数据（内存缓存），同步返回；initialize 幂等防御装配顺序
+        momentsStore.initialize();
+        return buildMomentsContextBlock(momentsStore.listFeed({ limit: 20 }), query, Date.now());
       },
       getWorkspaceBinding: (conversationId: string) => {
         return rawDeps.chatsStore.getWorkspaceBinding(conversationId);
