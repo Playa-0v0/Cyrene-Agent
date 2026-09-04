@@ -470,6 +470,28 @@ const settingsApi = {
     ipcRenderer.on(IPC.PERMISSION_APPROVAL_SETTLED, listener);
     return () => ipcRenderer.removeListener(IPC.PERMISSION_APPROVAL_SETTLED, listener);
   },
+  // pop_quiz 抽查卡片（learn 模式）：主进程推送卡片（10s 幂等重播，同 quizId 覆盖）
+  onPopQuizRequest: (
+    cb: (card: { quizId: string; runId: string; intro: string; questions: unknown[] }) => void
+  ): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, card: Parameters<typeof cb>[0]) => cb(card);
+    ipcRenderer.on(IPC.POP_QUIZ_REQUEST, listener);
+    return () => ipcRenderer.removeListener(IPC.POP_QUIZ_REQUEST, listener);
+  },
+  // 提交作答：返回值带主进程本地判分详情，渲染端据此切展示态
+  resolvePopQuiz: (submission: unknown): Promise<{ ok: boolean; error?: string; graded?: unknown[] }> =>
+    ipcRenderer.invoke(IPC.POP_QUIZ_RESOLVE, submission),
+  // 跳过整次抽查
+  skipPopQuiz: (quizId: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.POP_QUIZ_SKIP, { quizId }),
+  // 抽查结算广播：提交/跳过/run 取消后主进程广播，渲染端据此清卡
+  onPopQuizSettled: (
+    cb: (settlement: { quizId: string; runId?: string; reason: "submitted" | "skipped" | "cancelled" }) => void
+  ): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, settlement: Parameters<typeof cb>[0]) => cb(settlement);
+    ipcRenderer.on(IPC.POP_QUIZ_SETTLED, listener);
+    return () => ipcRenderer.removeListener(IPC.POP_QUIZ_SETTLED, listener);
+  },
   // 截图热键捕获（设置页临时挂起全局快捷键）
   beginScreenshotHotkeyCapture: () => ipcRenderer.invoke(IPC.SCREENSHOT_HOTKEY_CAPTURE_START),
   endScreenshotHotkeyCapture: () => ipcRenderer.invoke(IPC.SCREENSHOT_HOTKEY_CAPTURE_END),
