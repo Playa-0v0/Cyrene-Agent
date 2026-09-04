@@ -12,7 +12,7 @@ import {
   shouldDismissAsk,
   type ComposerInteraction,
 } from "../components/run-presentation";
-import { ChatMessageList, type ChatMessageItem } from "../components/ChatMessageList";
+import { ChatMessageList } from "../components/ChatMessageList";
 import { ChatPageNavigation, type ChatPagePanel } from "../components/ChatPageNavigation";
 import {
   ContextCompressionNotice,
@@ -53,6 +53,7 @@ import {
   type ReactSessionMode,
 } from "./openSessionByDeps";
 import { useComposerAttachments } from "../hooks/useComposerAttachments";
+import { useSessionMessages } from "../hooks/useSessionMessages";
 import { AgentRunController, type AgentRunInput } from "./run/AgentRunController";
 import {
   appendPendingQueueEntry,
@@ -60,8 +61,6 @@ import {
   bindWorkspaceName,
   findSessionIdForRun,
   hasActiveRunForSession,
-  hydrateSessionMessages,
-  patchSessionMessage,
   removePendingQueueEntry,
   sessionInteraction,
   setSessionInteraction,
@@ -106,7 +105,7 @@ export function ChatPage() {
   const [inspectorTab, setInspectorTab] = useState<"diff" | "plan">("plan");
   const [mode, setMode] = useState<ConversationMode>(getInitialMode);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [messagesBySession, setMessagesBySession] = useState<Record<string, ChatMessageItem[]>>({});
+
   const [workspaceNames, setWorkspaceNames] = useState<Partial<Record<ConversationMode, string>>>({});
   const [pendingWorkspaceByMode, setPendingWorkspaceByMode] = useState<
     Partial<Record<ConversationMode, { path: string; displayName?: string }>>
@@ -157,6 +156,16 @@ export function ChatPage() {
   // 滚动到底部按钮状态
   const [scrollToBottomVisible, setScrollToBottomVisible] = useState(false);
   const scrollToBottomRef = useRef<() => void>(() => {});
+
+  // 消息域：渲染态消息按会话存储；补丁通道供 run 事件流、TTS、取消与附件预处理共用
+  const {
+    messagesBySession,
+    patchMessage: updateMessage,
+    hydrateMessages,
+    replaceSessionMessages,
+    appendMessages,
+    patchMessageAttachments: updateMessageAttachments,
+  } = useSessionMessages((targetMode) => activeSessionIdsRef.current[targetMode]);
 
   useEffect(() => {
     const settings = settingsApprovalApi();
@@ -479,15 +488,6 @@ export function ChatPage() {
     setInteractionsBySession((current) => setSessionInteractionBusy(current, sessionId, busy));
   }
 
-  function updateMessage(targetScope: ConversationMode | string, id: string, patch: Partial<ChatMessageItem>) {
-    setMessagesBySession((current) => {
-      const ownerSessionId = isConversationMode(targetScope)
-        ? Object.entries(current).find(([, items]) => items.some((item) => item.id === id))?.[0]
-          ?? activeSessionIdsRef.current[targetScope]
-        : targetScope;
-      return ownerSessionId ? patchSessionMessage(current, ownerSessionId, id, patch) : current;
-    });
-  }
 
   function handleTtsCacheKey(
     sessionId: string,
@@ -574,12 +574,7 @@ export function ChatPage() {
         };
       });
     }
-    setMessagesBySession((current) => hydrateSessionMessages(
-      current,
-      sessionId,
-      uiMessages,
-      hasActiveRunForSession(activeRunsBySession.current, sessionId),
-    ));
+    hydrateMessages(sessionId, uiMessages, hasActiveRunForSession(activeRunsBySession.current, sessionId));
     setWorkspaceNames((current) => ({
       ...current,
       [targetMode]: session.workspaceBinding?.displayName,
@@ -654,7 +649,7 @@ export function ChatPage() {
       api: aguiApi(),
       store: chatStore(),
       host: {
-        patchMessage: (sessionId, messageId, patch) => updateMessage(sessionId, messageId, patch),
+        patchMessage: updateMessage,
         setInteraction: setInteractionForSession,
         clearInteraction: clearInteractionForSession,
         dismissAskIfMatched: (sessionId, value) => {
@@ -770,21 +765,18 @@ export function ChatPage() {
       activeEarlyTtsRef.current = null;
       stopTtsPlayback();
       const assistantId = crypto.randomUUID();
-      setMessagesBySession((current) => ({
-        ...current,
-        [sessionId]: [
-          ...toUiMessages(truncatedSession),
-          {
-            id: assistantId,
-            role: "assistant",
-            content: "",
-            loading: true,
-            waitingForFirstEvent: true,
-            streaming: false,
-            responseStarted: false,
-          },
-        ],
-      }));
+      replaceSessionMessages(sessionId, [
+        ...toUiMessages(truncatedSession),
+        {
+          id: assistantId,
+          role: "assistant",
+          content: "",
+          loading: true,
+          waitingForFirstEvent: true,
+          streaming: false,
+          responseStarted: false,
+        },
+      ]);
       void runModel({
         targetMode: "chat",
         sessionId,
@@ -973,20 +965,6 @@ export function ChatPage() {
     await refreshSessionsRef.current(mode, false);
   }
 
-  function updateMessageAttachments(
-    sessionId: string,
-    messageId: string,
-    updater: (attachments: ComposerAttachment[]) => ComposerAttachment[],
-  ) {
-    setMessagesBySession((current) => ({
-      ...current,
-      [sessionId]: (current[sessionId] ?? []).map((item) => (
-        item.id === messageId
-          ? { ...item, attachments: updater(item.attachments ?? []) }
-          : item
-      )),
-    }));
-  }
 
   async function sendMessage(content: string, resumeFromRunId?: string) {
     const parsedMessage = parseComposerMessage(mode, content);
@@ -1072,28 +1050,24 @@ export function ChatPage() {
     waitForRun?: boolean;
   }): Promise<{ persisted: boolean }> {
     const { targetMode, sessionId, rawContent, visibleContent, attachments, userSticker, assistantId, userMessageId, resumeFromRunId, keepComposer } = input;
-    setMessagesBySession((current) => ({
-      ...current,
-      [sessionId]: [
-        ...(current[sessionId] ?? []),
-        {
-          id: userMessageId,
-          role: "user",
-          content: visibleContent,
-          sticker: userSticker,
-          attachments: attachments.length > 0 ? attachments : undefined,
-        },
-        {
-          id: assistantId,
-          role: "assistant" as const,
-          content: "",
-          loading: true,
-          waitingForFirstEvent: true,
-          streaming: false,
-          responseStarted: false,
-        },
-      ],
-    }));
+    appendMessages(sessionId, [
+      {
+        id: userMessageId,
+        role: "user",
+        content: visibleContent,
+        sticker: userSticker,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      },
+      {
+        id: assistantId,
+        role: "assistant" as const,
+        content: "",
+        loading: true,
+        waitingForFirstEvent: true,
+        streaming: false,
+        responseStarted: false,
+      },
+    ]);
     if (!keepComposer) {
       setDrafts((current) => ({ ...current, [scopeKey]: "" }));
       clearScopeAttachments();
