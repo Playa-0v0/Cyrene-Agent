@@ -1,6 +1,6 @@
 // moments-service 调度测试：反应闸门前置、任务入队、评论触发范围与错误隔离；
 // 主动发帖调度：设置/去重闸门前置、执行时复核冷却、成功落库与记账。
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { VendorConfig } from "../orchestrator/vendors";
 import type { MomentsModelOutput } from "./moments-agent";
 import { defaultMomentsPolicyState, type MomentsPolicyState } from "./moments-policy";
@@ -21,11 +21,16 @@ const mocks = vi.hoisted(() => ({
   loadGeneralSettings: vi.fn(),
   loadModelSettings: vi.fn(),
   loadPromptFile: vi.fn(),
+  getEmbeddingProvider: vi.fn(),
 }));
 
 vi.mock("../llm-queue", () => ({ enqueueLLMTask: mocks.enqueueLLMTask }));
 vi.mock("../settings/settings-facade", () => ({ loadGeneralSettings: mocks.loadGeneralSettings }));
 vi.mock("../settings/model-settings", () => ({ loadModelSettings: mocks.loadModelSettings }));
+vi.mock("../rag/embedding", () => ({
+  getEmbeddingProvider: mocks.getEmbeddingProvider,
+  getEmbeddingProviderIdentity: async () => ({ provider: "local", model: "test", dimensions: 2 }),
+}));
 vi.mock("../prompts/prompt-loader", () => ({ loadPromptFile: mocks.loadPromptFile }));
 vi.mock("../orchestrator/vendors", () => ({ getAdapterForConfig: vi.fn() }));
 vi.mock("../token-usage-store", () => ({ recordUsage: vi.fn(), recordRequest: vi.fn() }));
@@ -40,7 +45,12 @@ vi.mock("./moments-store", () => ({
   createCyrenePost: vi.fn(),
 }));
 
-import { createMomentsService, type MomentsTurnInput } from "./moments-service";
+import {
+  createMomentsMediaMatcher,
+  createMomentsService,
+  registerMomentsMediaMatcher,
+  type MomentsTurnInput,
+} from "./moments-service";
 
 function makePost(overrides: Partial<MomentPost> = {}): MomentPost {
   return {
@@ -181,6 +191,8 @@ interface HarnessOptions {
   /** null 表示模型未配置；缺省为已配置 */
   vendorConfig?: VendorConfig | null;
   modelResponse?: string;
+  /** 配图匹配（未注入时走默认闭包恒 null，纯文字落库） */
+  matchMedia?: (query: string) => Promise<MomentMedia | null>;
 }
 
 /** enqueueTask 默认内联执行，便于断言反应链路完整生效。 */
@@ -213,6 +225,7 @@ function createHarness(options: HarnessOptions = {}) {
       options.vendorConfig === undefined
         ? ({ provider: "test", baseUrl: "https://example.test", model: "m", apiKey: "k" } as VendorConfig)
         : options.vendorConfig,
+    matchMedia: options.matchMedia,
     buildPersona: () => "测试人设",
     enqueueTask,
     runModel,
@@ -462,5 +475,96 @@ describe("moments service 错误隔离", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(h.log).toHaveBeenCalledWith("post_task_failed", "发帖队列炸了");
     expect(h.policy.current.lastPostAt).toBeNull();
+  });
+});
+
+describe("moments service 配图接线", () => {
+  const MEDIA: MomentMedia = {
+    id: "media_asset_night-sky-01",
+    type: "image",
+    origin: "character_asset",
+    ref: "night-sky-01.jpg",
+  };
+
+  it("注入的 matchMedia 命中时主动动态带图落库", async () => {
+    const matchMedia = vi.fn(async () => MEDIA);
+    const h = createHarness({
+      cyreneMomentsPostingEnabled: true,
+      modelResponse: '{"shouldPost":true,"text":"今晚的夜空很好看","wantImage":true}',
+      matchMedia,
+    });
+
+    h.service.scheduleTurn(makeTurnInput());
+    await flush();
+
+    expect(matchMedia).toHaveBeenCalledTimes(1);
+    expect(typeof matchMedia.mock.calls[0][0]).toBe("string");
+    const cyrenePost = h.fake.state.posts.find((post) => post.author === "cyrene");
+    expect(cyrenePost?.media).toEqual([MEDIA]);
+  });
+
+  it("未注入 matchMedia 时纯文字落库（默认闭包恒 null）", async () => {
+    const h = createHarness({
+      cyreneMomentsPostingEnabled: true,
+      modelResponse: '{"shouldPost":true,"text":"随手记一笔","wantImage":true}',
+    });
+
+    h.service.scheduleTurn(makeTurnInput());
+    await flush();
+
+    const cyrenePost = h.fake.state.posts.find((post) => post.author === "cyrene");
+    expect(cyrenePost?.media).toEqual([]);
+  });
+});
+
+describe("createMomentsMediaMatcher 具体闭包", () => {
+  /** 查询向量恒为 [1,0]，与素材向量算余弦便于构造精确分数 */
+  const provider = {
+    name: "test-provider",
+    dims: 2,
+    embed: async () => [1, 0],
+    embedBatch: async (texts: string[]) => texts.map(() => [1, 0] as number[]),
+  };
+
+  beforeEach(() => {
+    mocks.getEmbeddingProvider.mockReset();
+    mocks.loadModelSettings.mockReset();
+    // 复位晚绑定索引：避免上一条用例注册的索引泄漏到下一条
+    registerMomentsMediaMatcher({ getMomentAssetIndex: () => null });
+  });
+
+  it("provider 与索引就绪且达阈值时产出 character_asset 媒体", async () => {
+    mocks.getEmbeddingProvider.mockReturnValue(provider);
+    registerMomentsMediaMatcher({ getMomentAssetIndex: () => [{ id: "desk-night-01", embedding: [1, 0] }] });
+    mocks.loadModelSettings.mockReturnValue({ momentSimilarityThreshold: 0.55 });
+
+    const media = await createMomentsMediaMatcher()("深夜赶工");
+
+    expect(media).toEqual({
+      id: "media_asset_desk-night-01",
+      type: "image",
+      origin: "character_asset",
+      ref: "desk-night-01.jpg",
+    });
+  });
+
+  it("embedding provider 未就绪时降级 null", async () => {
+    registerMomentsMediaMatcher({ getMomentAssetIndex: () => [{ id: "desk-night-01", embedding: [1, 0] }] });
+
+    expect(await createMomentsMediaMatcher()("深夜")).toBeNull();
+  });
+
+  it("索引未注册 / 未就绪时降级 null", async () => {
+    mocks.getEmbeddingProvider.mockReturnValue(provider);
+
+    expect(await createMomentsMediaMatcher()("深夜")).toBeNull();
+  });
+
+  it("最高分低于设置阈值时降级 null", async () => {
+    mocks.getEmbeddingProvider.mockReturnValue(provider);
+    registerMomentsMediaMatcher({ getMomentAssetIndex: () => [{ id: "desk-night-01", embedding: [0, 1] }] });
+    mocks.loadModelSettings.mockReturnValue({ momentSimilarityThreshold: 0.55 });
+
+    expect(await createMomentsMediaMatcher()("深夜")).toBeNull();
   });
 });

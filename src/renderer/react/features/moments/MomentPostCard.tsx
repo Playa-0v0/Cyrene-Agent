@@ -97,7 +97,9 @@ export function MomentPostCard({
             {post.media.map((media) => (
               <img
                 key={media.id}
-                src={buildMomentMediaUrl(post.id, media.ref)}
+                src={media.origin === "character_asset"
+                  ? resolveAsset(`moments/${media.ref}`)
+                  : buildMomentMediaUrl(post.id, media.ref)}
                 alt=""
                 loading="lazy"
                 draggable={false}

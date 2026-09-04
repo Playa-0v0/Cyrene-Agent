@@ -16,10 +16,12 @@ import {
   MOMENT_MAX_COMMENT_TEXT_LENGTH,
   type MomentComment,
   type MomentFeedItem,
+  type MomentMedia,
   type MomentPost,
   type MomentPostSource,
 } from "../../shared/moments-types";
 import { buildPostGenerationPacket } from "./moments-context";
+import { buildMomentImageQuery } from "./moment-media-matcher";
 import { MOMENTS_CYRENE_POST_TEXT_MAX } from "./moments-policy";
 
 export const MOMENTS_MODEL_MAX_TOKENS = 600;
@@ -392,7 +394,9 @@ export interface MomentsAgentDeps {
   /** 提交昔涟评论 */
   commitComment: (input: { postId: string; content: string; replyTo?: string }) => Promise<unknown>;
   /** 提交昔涟动态（store 串行队列内含开关复核）；返回 applied 表示真的落库 */
-  commitPost: (input: { text: string; source: MomentPostSource }) => Promise<{ applied: boolean }>;
+  commitPost: (input: { text: string; media: MomentMedia[]; source: MomentPostSource }) => Promise<{ applied: boolean }>;
+  /** 后置配图匹配：wantImage 时按文案+摘录选官方素材；未命中返回 null（纯文字降级） */
+  matchMedia: (query: string) => Promise<MomentMedia | null>;
   /** 执行时重读动态与评论线程：AI 思考期间世界可能已变 */
   loadFeedItem: (postId: string) => MomentFeedItem | null;
   log?: (event: string, detail?: unknown) => void;
@@ -467,9 +471,18 @@ export function createMomentsAgent(deps: MomentsAgentDeps): MomentsAgent {
     }
     if (decision.kind === "skip") return false;
 
-    // wantImage 暂不消费：配图链路（Phase 5）接入前一律纯文字发帖
+    // 后置配图（§7.5）：LLM 只表态想要图，选图由本地 embedding 匹配完成；
+    // 未命中阈值 / 索引未就绪时降级纯文字，不硬凑图
+    let media: MomentMedia[] = [];
+    if (decision.wantImage) {
+      const query = buildMomentImageQuery(decision.text, input.summary, new Date());
+      const matched = await deps.matchMedia(query);
+      if (matched) media = [matched];
+    }
+
     const result = await deps.commitPost({
       text: decision.text,
+      media,
       source: { type: "conversation", triggerExcerpt: input.summary },
     });
     return result.applied;

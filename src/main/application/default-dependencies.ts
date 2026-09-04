@@ -44,6 +44,7 @@ import { runDocumentIndexJob } from "../rag/document-index-worker";
 import { createLlmClient } from "../services/llm/llm-client";
 import { createTtsSynthesisService } from "../services/tts/tts-synthesis-service";
 import { createEmbeddingIndexService } from "../services/embedding/embedding-index-service";
+import { registerMomentsMediaMatcher } from "../moments/moments-service";
 import {
   addL2MemoryVector,
   deleteUserMemoryVectors,
@@ -269,6 +270,10 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         const llmClient = createLlmClient();
         const ttsSynthesisService = createTtsSynthesisService();
         const embeddingIndexService = createEmbeddingIndexService();
+        // Moments 配图：素材 embedding 索引 getter 晚绑定给 moments-service 模块单例（索引未就绪时纯文字降级）
+        registerMomentsMediaMatcher({
+          getMomentAssetIndex: () => embeddingIndexService.getMomentAssetEmbeddingIndex(),
+        });
         const citaService = createCitaService({ llmClient });
         const socialContextService = createSocialContextService({ llmClient, enqueueLLMTask });
         const proactiveLifecycle = createProactiveLifecycle({ loadGeneralSettings });

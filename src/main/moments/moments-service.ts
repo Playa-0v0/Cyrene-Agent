@@ -13,6 +13,8 @@ import { loadGeneralSettings } from "../settings/settings-facade";
 import { loadModelSettings } from "../settings/model-settings";
 import { loadPromptFile } from "../prompts/prompt-loader";
 import type { ChatMessage, VendorConfig } from "../orchestrator/vendors";
+import { getEmbeddingProvider } from "../rag/embedding";
+import { matchMomentAsset, type MomentAssetEmbeddingEntry } from "./moment-media-matcher";
 import * as momentsStore from "./moments-store";
 import {
   createMomentsAgent,
@@ -36,6 +38,7 @@ import {
 import type {
   MomentComment,
   MomentCommitResult,
+  MomentMedia,
   MomentCreateCommentInput,
   MomentCreatePostInput,
   MomentFeedItem,
@@ -98,6 +101,8 @@ export interface MomentsServiceDeps {
   /** 策略状态存取（默认读写 moments-state.json；测试注入内存版） */
   loadPolicyState?: () => MomentsPolicyState;
   savePolicyState?: (state: MomentsPolicyState) => void;
+  /** 后置配图匹配（未注入或未命中时纯文字发帖） */
+  matchMedia?: (query: string) => Promise<MomentMedia | null>;
   log?: (event: string, detail?: unknown) => void;
 }
 
@@ -109,6 +114,7 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     commitComment: (input) => deps.store.createComment(input, "cyrene"),
     commitPost: (input) => deps.store.createCyrenePost(input),
     loadFeedItem: (postId) => deps.store.getFeedItem(postId),
+    matchMedia: deps.matchMedia ?? (async () => null),
     log: deps.log,
   });
 
@@ -216,6 +222,21 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     scheduleTurn,
   };
 }
+// ── 配图匹配（Phase 5）：embedding 索引由组合根晚绑定 ──────────
+
+let getMomentAssetIndex: () => MomentAssetEmbeddingEntry[] | null = () => null;
+
+/**
+ * 组合根注册 moment 素材索引 getter（EmbeddingIndexService 实例在
+ * default-dependencies 内创建，模块单例无法静态引用，启动时注入）。
+ * 未注册 / 索引未就绪时 matchMedia 返回 null——纯文字降级。
+ */
+export function registerMomentsMediaMatcher(deps: {
+  getMomentAssetIndex: () => MomentAssetEmbeddingEntry[] | null;
+}): void {
+  getMomentAssetIndex = deps.getMomentAssetIndex;
+}
+
 // ── 具体装配（组合根 / IPC 直接使用） ───────────────────────────
 
 /** 人设四件套，与主动聊天共用同源 prompt 文件，且不含工具说明。 */
@@ -248,10 +269,36 @@ function loadMomentsVendorConfig(): VendorConfig | null {
   };
 }
 
+/**
+ * 具体配图匹配闭包：embedding provider + 晚绑定素材索引 + 设置里的相似度阈值。
+ * provider / 索引任一未就绪或分数未达阈值都返回 null——纯文字降级，不硬凑图。
+ */
+export function createMomentsMediaMatcher(): (query: string) => Promise<MomentMedia | null> {
+  return async (query) => {
+    const provider = getEmbeddingProvider();
+    const index = getMomentAssetIndex();
+    if (!provider || !index) return null;
+    const matched = await matchMomentAsset(
+      query,
+      provider,
+      index,
+      loadModelSettings().momentSimilarityThreshold,
+    );
+    if (!matched) return null;
+    return {
+      id: `media_asset_${matched.id}`,
+      type: "image",
+      origin: "character_asset",
+      ref: matched.file,
+    };
+  };
+}
+
 export const momentsService: MomentsService = createMomentsService({
   store: momentsStore,
   loadGeneralSettings,
   loadVendorConfig: loadMomentsVendorConfig,
+  matchMedia: createMomentsMediaMatcher(),
   buildPersona: buildMomentsPersonaPrompt,
   enqueueTask: (label, task) => enqueueLLMTask(label, task),
   runModel: async (messages) => {

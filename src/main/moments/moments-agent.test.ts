@@ -4,6 +4,7 @@ import {
   MOMENT_MAX_COMMENT_TEXT_LENGTH,
   type MomentComment,
   type MomentFeedItem,
+  type MomentMedia,
   type MomentPost,
 } from "../../shared/moments-types";
 
@@ -456,11 +457,14 @@ describe("createMomentsAgent 主动发帖", () => {
     modelText?: string;
     modelOutput?: { kind: "error"; reason: string };
     commitApplied?: boolean;
+    /** 配图匹配结果；缺省 null（未命中 → 纯文字降级） */
+    matchResult?: MomentMedia | null;
   }) {
     const runModel = vi.fn(
       async () => overrides.modelOutput ?? { kind: "text", text: overrides.modelText ?? "" },
     );
     const commitPost = vi.fn(async () => ({ applied: overrides.commitApplied ?? true }));
+    const matchMedia = vi.fn(async () => overrides.matchResult ?? null);
     const log = vi.fn();
     const agent = createMomentsAgent({
       buildPersona: () => PERSONA,
@@ -469,9 +473,10 @@ describe("createMomentsAgent 主动发帖", () => {
       commitComment: vi.fn(async () => undefined),
       commitPost,
       loadFeedItem: vi.fn(() => null),
+      matchMedia,
       log,
     });
-    return { agent, runModel, commitPost, log };
+    return { agent, runModel, commitPost, matchMedia, log };
   }
 
   it("发帖决策成功时提交动态并把摘录固化为 triggerExcerpt", async () => {
@@ -484,15 +489,55 @@ describe("createMomentsAgent 主动发帖", () => {
     expect(posted).toBe(true);
     expect(h.commitPost).toHaveBeenCalledWith({
       text: "有人终于肯收工啦",
+      media: [],
       source: { type: "conversation", triggerExcerpt: "[23:30] 用户：修完了\n[23:30] 昔涟：太棒了" },
     });
   });
 
-  it("wantImage=true 也只提交纯文字（Phase 4 无图版本，配图链路未接入）", async () => {
+  it("wantImage=true 且素材命中时提交带图动态", async () => {
+    const media: MomentMedia = {
+      id: "media_asset_desk-night-01",
+      type: "image",
+      origin: "character_asset",
+      ref: "desk-night-01.jpg",
+    };
+    const h = makePostHarness({
+      modelText: '{"shouldPost":true,"text":"深夜赶工终于收工啦","wantImage":true}',
+      matchResult: media,
+    });
+
+    const posted = await h.agent.generatePost({ summary: "深夜修完了", recentCyrenePosts: [] });
+
+    expect(posted).toBe(true);
+    expect(h.matchMedia).toHaveBeenCalledTimes(1);
+    // 查询由动态文案 + 触发摘录拼成
+    expect(h.matchMedia.mock.calls[0][0]).toContain("深夜赶工终于收工啦");
+    expect(h.matchMedia.mock.calls[0][0]).toContain("深夜修完了");
+    expect(h.commitPost).toHaveBeenCalledWith({
+      text: "深夜赶工终于收工啦",
+      media: [media],
+      source: { type: "conversation", triggerExcerpt: "深夜修完了" },
+    });
+  });
+
+  it("wantImage=true 但未命中素材时降级纯文字", async () => {
     const h = makePostHarness({ modelText: '{"shouldPost":true,"text":"文案","wantImage":true}' });
     await h.agent.generatePost({ summary: "摘录", recentCyrenePosts: [] });
-    expect(h.commitPost).toHaveBeenCalledTimes(1);
-    expect(h.commitPost.mock.calls[0][0]).not.toHaveProperty("media");
+
+    expect(h.matchMedia).toHaveBeenCalledTimes(1);
+    expect(h.commitPost).toHaveBeenCalledWith({
+      text: "文案",
+      media: [],
+      source: { type: "conversation", triggerExcerpt: "摘录" },
+    });
+  });
+
+  it("wantImage=false 时不调用配图匹配", async () => {
+    const h = makePostHarness({ modelText: '{"shouldPost":true,"text":"纯文字动态"}' });
+    await h.agent.generatePost({ summary: "摘录", recentCyrenePosts: [] });
+
+    expect(h.matchMedia).not.toHaveBeenCalled();
+    expect(h.commitPost.mock.calls[0][0].media).toEqual([]);
   });
 
   it("skip 决策不提交且返回 false", async () => {

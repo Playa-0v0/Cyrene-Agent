@@ -131,6 +131,8 @@ export interface ModelSettings {
   stickerEnabled: boolean;
   stickerSize: StickerSize;
   stickerSimilarityThreshold: number;
+  /** Moments 配图相似度阈值。0.3-0.9，默认 0.55；低于阈值的素材匹配降级纯文字。 */
+  momentSimilarityThreshold: number;
   /** 整个聊天请求的总超时（秒）。30-1800，默认 300。 */
   chatRequestTimeoutSec: number;
   /** CITA 结构化输出重试总预算（秒）。4-30，默认 8。 */
@@ -172,6 +174,7 @@ const DEFAULT_MODEL_SETTINGS: ModelSettings = {
   stickerEnabled: true,
   stickerSize: "standard",
   stickerSimilarityThreshold: 0.55,
+  momentSimilarityThreshold: 0.55,
   chatRequestTimeoutSec: 300,
   citaRepairBudgetSec: 8,
   rerankerMode: "standard",
@@ -330,6 +333,9 @@ export function normalizeModelSettings(input: Partial<ModelSettings> | null | un
     stickerSize: input?.stickerSize === "small" || input?.stickerSize === "large" ? input.stickerSize : "standard",
     stickerSimilarityThreshold: typeof input?.stickerSimilarityThreshold === "number"
       ? Math.max(0.3, Math.min(0.9, input.stickerSimilarityThreshold))
+      : 0.55,
+    momentSimilarityThreshold: typeof input?.momentSimilarityThreshold === "number"
+      ? Math.max(0.3, Math.min(0.9, input.momentSimilarityThreshold))
       : 0.55,
     chatRequestTimeoutSec: typeof input?.chatRequestTimeoutSec === "number"
       && Number.isFinite(input.chatRequestTimeoutSec)

@@ -16,7 +16,7 @@ export interface MomentMedia {
    * character_asset — 官方角色素材（Phase 5 才接入），只存 assetId。
    */
   origin: "user_attachment" | "character_asset";
-  /** user_attachment 时为副本文件名（如 "1.jpg"）；character_asset 时为 asset id */
+  /** user_attachment 时为副本文件名（如 "1.jpg"）；character_asset 时为官方素材文件名（如 "desk-night-01.jpg"，位于 renderer public/moments/） */
   ref: string;
 }
 

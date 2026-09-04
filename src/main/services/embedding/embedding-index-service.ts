@@ -6,14 +6,20 @@ import type { StickerEmbeddingEntry } from "../../sticker-embedder";
 import { loadUserStickerManifest } from "../../sticker-storage";
 import { buildCachedSceneIndex } from "../../scene-embedding-cache";
 import type { SceneIndex } from "../../scene-embedder";
+import { buildCachedMomentAssetEmbeddingIndex } from "../../moments/moment-embedding-cache";
+import type { MomentAssetEmbeddingEntry } from "../../moments/moment-media-matcher";
 
 export interface EmbeddingIndexService {
   getStickerEmbeddingIndex(): StickerEmbeddingEntry[] | null;
   getSceneEmbeddingIndex(): SceneIndex | null;
+  /** Moments 官方素材索引（配图用；未就绪时 null，匹配层降级纯文字） */
+  getMomentAssetEmbeddingIndex(): MomentAssetEmbeddingEntry[] | null;
   refreshStickerEmbeddingIndex(reason: string): void;
   refreshSceneEmbeddingIndex(reason: string): void;
+  refreshMomentAssetEmbeddingIndex(reason: string): void;
   invalidateStickerEmbeddingIndex(): void;
   invalidateSceneEmbeddingIndex(): void;
+  invalidateMomentAssetEmbeddingIndex(): void;
   scheduleStartupRefreshes(delayMs?: number): void;
 }
 
@@ -22,6 +28,8 @@ export function createEmbeddingIndexService(): EmbeddingIndexService {
   let stickerEmbeddingRefreshSeq = 0;
   let sceneEmbeddingIndex: SceneIndex | null = null;
   let sceneEmbeddingRefreshSeq = 0;
+  let momentAssetEmbeddingIndex: MomentAssetEmbeddingEntry[] | null = null;
+  let momentAssetEmbeddingRefreshSeq = 0;
 
   function refreshStickerEmbeddingIndex(reason: string): void {
     const seq = ++stickerEmbeddingRefreshSeq;
@@ -71,21 +79,49 @@ export function createEmbeddingIndexService(): EmbeddingIndexService {
     })();
   }
 
+  function refreshMomentAssetEmbeddingIndex(reason: string): void {
+    const seq = ++momentAssetEmbeddingRefreshSeq;
+    void (async () => {
+      try {
+        const provider = getEmbeddingProvider();
+        if (!provider) {
+          if (seq === momentAssetEmbeddingRefreshSeq) momentAssetEmbeddingIndex = null;
+          console.warn("[Moments] Embedding model not found. Moment media matching disabled.");
+          return;
+        }
+
+        const index = await buildCachedMomentAssetEmbeddingIndex(provider);
+        if (seq !== momentAssetEmbeddingRefreshSeq) return;
+        momentAssetEmbeddingIndex = index;
+        logger.info(LogTag.StickerEmbed, `moment asset index ready (${reason}): ${index.length} entries`);
+      } catch (err) {
+        if (seq === momentAssetEmbeddingRefreshSeq) momentAssetEmbeddingIndex = null;
+        console.error("[Moments] asset embedding refresh failed:", err instanceof Error ? err.message : String(err));
+      }
+    })();
+  }
+
   return {
     getStickerEmbeddingIndex: () => stickerEmbeddingIndex,
     getSceneEmbeddingIndex: () => sceneEmbeddingIndex,
+    getMomentAssetEmbeddingIndex: () => momentAssetEmbeddingIndex,
     refreshStickerEmbeddingIndex,
     refreshSceneEmbeddingIndex,
+    refreshMomentAssetEmbeddingIndex,
     invalidateStickerEmbeddingIndex: () => {
       stickerEmbeddingIndex = null;
     },
     invalidateSceneEmbeddingIndex: () => {
       sceneEmbeddingIndex = null;
     },
+    invalidateMomentAssetEmbeddingIndex: () => {
+      momentAssetEmbeddingIndex = null;
+    },
     scheduleStartupRefreshes: (delayMs = 1500) => {
       setTimeout(() => {
         refreshStickerEmbeddingIndex("startup");
         refreshSceneEmbeddingIndex("startup");
+        refreshMomentAssetEmbeddingIndex("startup");
       }, delayMs);
     },
   };
