@@ -21,6 +21,10 @@ export interface ScheduledTask {
   allowedToolIds: string[];
   createdAt: string;
   updatedAt: string;
+  /** 创建该任务的插件 id；缺失表示用户任务。主进程已把插件任务的有效授权映射进 enabled。 */
+  ownerPluginId?: string;
+  /** 插件任务冻结的会话模式；缺失按 work 执行。 */
+  mode?: string;
 }
 
 export interface ScheduledTaskHistoryEntry {

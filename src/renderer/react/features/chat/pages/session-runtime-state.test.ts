@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ChatMessageItem } from "../components/ChatMessageList";
 import type { ComposerInteraction } from "../components/run-presentation";
 import {
+  appendPendingQueueEntry,
   clearSessionInteraction,
   buildTodoRecoveryContext,
   bindWorkspaceName,
@@ -11,9 +12,11 @@ import {
   mergeHarnessTodosForSession,
   patchSessionMessage,
   recoverInterruptedMessage,
+  removePendingQueueEntry,
   sessionInteraction,
   setSessionInteraction,
   startSessionTodos,
+  type PendingQueueEntry,
 } from "./session-runtime-state";
 
 const ask = (id: string): ComposerInteraction => ({
@@ -222,5 +225,40 @@ describe("session runtime presentation state", () => {
       runStage: { kind: "failed", detail: "上次运行已中断" },
       runActivity: expect.objectContaining({ completedAt: 100, keepExpanded: true }),
     }));
+  });
+});
+describe("pending message queue", () => {
+  const entry = (id: string, overrides: Partial<PendingQueueEntry> = {}): PendingQueueEntry => ({
+    id,
+    rawContent: `raw-${id}`,
+    visibleContent: `显示 ${id}`,
+    attachments: [],
+    ...overrides,
+  });
+
+  it("appends entries in send order and isolates different sessions", () => {
+    const base = appendPendingQueueEntry({}, "s1", entry("a", { userSticker: "wave" }));
+    const next = appendPendingQueueEntry(base, "s1", entry("b", { keepComposer: true }));
+    const mixed = appendPendingQueueEntry(next, "s2", entry("c"));
+
+    expect(mixed.s1?.map((item) => item.id)).toEqual(["a", "b"]);
+    expect(mixed.s2?.map((item) => item.id)).toEqual(["c"]);
+    // 条目同时保留原始文本与展示文本：结束后按原始内容派发、按展示内容预览
+    expect(mixed.s1?.[0]).toMatchObject({ rawContent: "raw-a", visibleContent: "显示 a", userSticker: "wave" });
+    expect(mixed.s1?.[1]).toMatchObject({ keepComposer: true });
+  });
+
+  it("removes only the target entry and keeps the original reference when nothing matches", () => {
+    const state = appendPendingQueueEntry(
+      appendPendingQueueEntry({}, "s1", entry("a")),
+      "s1",
+      entry("b"),
+    );
+    const next = removePendingQueueEntry(state, "s1", "a");
+
+    expect(next.s1?.map((item) => item.id)).toEqual(["b"]);
+    expect(next.s2).toBeUndefined();
+    // 移除不存在的条目返回原引用（调用方 setState 跳过无变化渲染）
+    expect(removePendingQueueEntry(next, "s1", "missing")).toBe(next);
   });
 });

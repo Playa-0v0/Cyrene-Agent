@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "type": "number"
+    },
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string"
+    },
+    "entry": {
+      "type": "string"
+    },
+    "icon": {
+      "type": "string"
+    },
+    "defaultEnabled": {
+      "type": "boolean"
+    },
+    "deps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/PluginCapability"
+      }
+    }
+  },
+  "required": [
+    "apiVersion",
+    "id",
+    "name",
+    "version",
+    "description",
+    "author",
+    "entry"
+  ],
+  "additionalProperties": false,
+  "description": "插件作者提交的 manifest 原始形状，是 Manifest JSON Schema 的生成目标。 与 PluginManifest 的区别：defaultEnabled 可省略（宿主归一化为 true）， 字段格式约束（id 连字符、SemVer、entry 裸文件名等）由加载器的文件 与格式校验补充完成，Schema 只负责结构、类型和枚举。",
+  "definitions": {
+    "PluginCapability": {
+      "type": "string",
+      "enum": [
+        "channels",
+        "llm",
+        "secrets",
+        "workspace",
+        "conversations",
+        "scheduler",
+        "speech-input"
+      ],
+      "description": "插件可向宿主申请的宿主服务。deps 只是服务可用性声明，不是安全权限： 未声明的服务不会注入，声明的服务也只是获得该服务的稳定接口。"
+    }
+  }
+}

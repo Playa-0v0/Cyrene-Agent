@@ -87,6 +87,7 @@ describe("chat reasoning IPC", () => {
       model: "gpt-5.6",
       preference: { mode: "on", effort: "high" },
       thinkingOverride: 0,
+      transport: "openai",
       modelProfileId: "openai-profile",
     });
   });

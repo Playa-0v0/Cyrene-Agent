@@ -14,6 +14,7 @@ import { OpenapiConfigStore } from "./openapi-config";
 import { SelectionSetCache } from "./selection-set-cache";
 import { MpvController } from "./mpv-controller";
 import { CacheDownloader } from "./cache-downloader";
+import { scanAudioFiles } from "./local-music-scanner";
 import {
   PlaybackSession,
   type MusicPlaybackSessionSnapshot,
@@ -117,6 +118,10 @@ export class MusicService {
     if (!config) {
       this.backendState = "incompatible";
       this.emitBackendChange("incompatible");
+      // 关键：mpv 与网易云凭据无关。本地导入的曲目直接由 mpv 播本地文件，
+      // 之前 mpv 的启动写在这个 return 之后，导致没配网易云的用户
+      // 连本地音乐都放不了——播放器根本没起来。
+      await this.startMpv();
       return;
     }
     // Inject real credentials into the placeholder client (constructed with
@@ -131,7 +136,30 @@ export class MusicService {
       this.emitAccountChange(this.orchestrator.getAccountState());
     });
 
-    // Start mpv and wire its dispatcher into the provider.
+    await this.startMpv();
+  }
+
+  /**
+   * 启动 mpv 并把 dispatcher 接进 provider。
+   * 无论有没有网易云凭据都会调用——本地/缓存曲目的播放同样依赖它。
+   */
+  private async startMpv(): Promise<void> {
+    // 幂等：没有网易云凭据时 backendState 永远停在 "incompatible"，
+    // start() 的早退守卫（只认 ready/degraded）拦不住，于是每一次音乐操作
+    // 都会重跑 initOpenapi()。若这里不做保护，就会每次都 new 一个
+    // MpvController——旧实例连同注册在它上面的 IPC 监听器一起被丢掉，
+    // 表现为「歌能放但进度条不动」，同时后台堆积多个 mpv 进程。
+    //
+    // 注意守卫条件是 isReady() 而不是「对象存在」：上一次启动失败（mpv 缺失、
+    // IPC 连不上）会留下一个没跑起来的实例，若按「存在即早退」，
+    // 「无凭据时启动失败 → 用户补配凭据 → 再次 start()」这条路径会被挡住，
+    // 结果 backendState 变 ready 但 mpv 从未运行，不重启就永远放不了歌。
+    if (this.mpv?.isReady()) return;
+    if (this.mpv) {
+      // 上一次启动失败的残留实例：先清干净再重试，避免泄漏子进程
+      try { await this.mpv.dispose(); } catch { /* ignore */ }
+      this.mpv = null;
+    }
     this.mpv = new MpvController();
     try {
       await this.mpv.start();
@@ -168,12 +196,21 @@ export class MusicService {
         this.emitStateChange();
         void this.handleMpvState(state);
       });
-      // mpv 启动成功后显式广播 player: available
+      // mpv 启动成功后显式广播 player: available。
+      // 字段必须一起写：emitPlayerChange 只通知监听器，不改 this.playerState。
+      // 只广播不落字段的话，getPlayerState() 会停在 "unknown"；而在
+      // 「首次启动失败 → 重试成功」这条路径上更糟——字段会残留上一次的
+      // "unavailable"，UI 显示播放器不可用，实际却已经跑起来了。
+      this.playerState = "available";
       this.emitPlayerChange("available");
     } catch (err) {
       // mpv not found → degraded but still functional for non-playback operations.
       console.error("[music] mpv 启动失败，播放器降级为不可用：", err instanceof Error ? err.message : err);
       this.playerState = "unavailable";
+      // 关键：把失败的实例清掉。留着的话下一次 startMpv() 会被守卫早退，
+      // 用户即便补上了凭据、装好了 mpv，也要重启应用才能恢复。
+      try { await this.mpv?.dispose(); } catch { /* ignore */ }
+      this.mpv = null;
       this.provider = new NeteaseOpenapiProvider(this.client);
       this.emitPlayerChange("unavailable");
     }
@@ -460,7 +497,7 @@ export class MusicService {
     const session = this.validatePlaybackSession(input);
     const track = session.queue[session.queueIndex];
     if (!track) throw new MusicInputError("E_PLAYBACK_QUEUE_INDEX_INVALID");
-    await this.ensureReady();
+    await this.ensureTrackPlaybackReady(track.id);
     this.playbackSession.replace(session);
     this.emitPlaybackSessionChange();
     return this.dispatchFromCacheOrProvider(track.id);
@@ -634,6 +671,17 @@ export class MusicService {
     return this.cacheDownloader.importFiles(filePaths);
   }
 
+  /**
+   * 导入整个文件夹：递归扫描出音频文件后复用 importLocalFiles。
+   * truncated 表示命中数量上限，调用方需要如实告诉用户结果被截断了。
+   */
+  async importLocalFolder(dir: string): Promise<{ imported: number; skipped: number; truncated: boolean }> {
+    const { files, truncated } = await scanAudioFiles(dir);
+    if (files.length === 0) return { imported: 0, skipped: 0, truncated };
+    const result = await this.importLocalFiles(files);
+    return { ...result, truncated };
+  }
+
   /** 缓存索引变化（下载完成/删除/导入）订阅。 */
   onCacheUpdated(listener: () => void): () => void {
     return this.cacheDownloader.onUpdated(listener);
@@ -685,7 +733,7 @@ export class MusicService {
   /** Trusted renderer path: IDs originate from MusicService search results. */
   async playTrackFromUi(trackId: string): Promise<PlaybackDispatchResult> {
     if (!trackId) throw new MusicInputError("E_INVALID_ID_FORMAT");
-    await this.ensureReady();
+    await this.ensureTrackPlaybackReady(trackId);
     return this.dispatchFromCacheOrProvider(trackId);
   }
 
@@ -696,6 +744,17 @@ export class MusicService {
   }
 
   // ── Helpers ────────────────────────────────────────────────
+
+  /**
+   * 本地缓存（含用户导入）只依赖 mpv，不依赖网易云后端。
+   * 两条 UI 播放入口必须共用这道门禁，避免其中一条重新把本地音乐锁住。
+   */
+  private async ensureTrackPlaybackReady(trackId: string): Promise<void> {
+    if (this.shuttingDown) throw new MusicInputError("E_BACKEND_NOT_READY");
+    await this.start();
+    if (this.cacheDownloader.getFilePath(trackId)) return;
+    this.requireReady();
+  }
 
   private async ensureReady(): Promise<void> {
     if (this.shuttingDown) throw new MusicInputError("E_BACKEND_NOT_READY");

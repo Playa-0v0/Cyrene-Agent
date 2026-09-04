@@ -17,4 +17,17 @@ describe("RunRecoveryNotices", () => {
     expect(html).toContain("已进行 3 轮");
     expect(html).toContain("继续任务");
   });
+
+  it("does not render the takeover notice on the welcome screen (no active session)", () => {
+    const html = renderToStaticMarkup(createElement(RunRecoveryNotices, {
+      interruptedRun: null,
+      sessionTakeover: null,
+      activeSessionId: undefined,
+      isRunning: false,
+      onResume: () => undefined,
+      onTakeover: () => undefined,
+    }));
+
+    expect(html).not.toContain("正在运行的任务");
+  });
 });

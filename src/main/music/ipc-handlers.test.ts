@@ -128,7 +128,9 @@ describe("registerMusicIpcHandlers", () => {
     disposer();
     expect(removed).toContain("music:get-status");
     expect(removed).toContain("music:play-track");
-    expect(removed.length).toBe(29);
+    // 本地音乐的文件夹导入入口
+    expect(removed).toContain("music:import-local-folder");
+    expect(removed.length).toBe(30);
   });
 
   it("returns the background playback session for a newly opened player window", async () => {

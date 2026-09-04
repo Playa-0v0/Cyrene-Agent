@@ -5,6 +5,7 @@
 // 设计依据：ReviewInspector 的挤出式 aside 布局，扩展为多 tab。
 
 import type { ReactNode } from "react";
+import { useTranslation } from "../../../i18n";
 import "./RightInspector.css";
 
 export interface InspectorTab {
@@ -26,11 +27,12 @@ export function RightInspector({
   onTabChange: (id: string) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   if (tabs.length === 0) return null;
   const active = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
   const showTabs = tabs.length > 1;
   return (
-    <aside className="cy-right-inspector" aria-label="右侧检查面板">
+    <aside className="cy-right-inspector" aria-label={t("rightInspector.panelAria")}>
       <div className="cy-right-inspector__header">
         {showTabs ? (
           <div className="cy-right-inspector__tabs" role="tablist">
@@ -58,7 +60,7 @@ export function RightInspector({
             {tabs[0].label}
           </div>
         )}
-        <button type="button" className="cy-right-inspector__close" onClick={onClose} aria-label="关闭">
+        <button type="button" className="cy-right-inspector__close" onClick={onClose} aria-label={t("common.close")}>
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
             <path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.75" />
           </svg>

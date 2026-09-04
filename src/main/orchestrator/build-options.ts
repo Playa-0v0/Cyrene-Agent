@@ -19,7 +19,8 @@
 //   broadcastRuntimeStateChanged / observeRuntimeState
 //   sticker 文本预处理 / stickerEmbeddingIndex / getEmbeddingProvider / loadStickerSettings
 //
-// 这些全部塞到 BuildOptionsDeps 里。dispatcher 在 Phase 1 注入同样的 deps 即可。
+// 这些全部塞到 BuildOptionsDeps 里。dispatcher / agent-runtime 通过
+// buildBuildOptionsDeps()（agent-runtime.ts）注入同一份 deps，保证口径一致。
 import { existsSync } from "fs";
 import { basename } from "path";
 import {
@@ -153,6 +154,14 @@ export interface BuildOptionsDeps {
    * 返回 undefined 表示当前对话未绑定工作区。
    */
   getWorkspaceBinding?: (conversationId: string) => { workspaceRoot: string; displayName: string; boundAt: number } | undefined;
+  /** 构建已启用插件贡献的每轮动态提示词；失败时调用方应降级为空内容。 */
+  buildPluginPromptContext?: (input: {
+    source: "conversation";
+    mode: ConversationMode;
+    userText: string;
+    conversationId?: string;
+    channel?: string;
+  }) => Promise<string>;
 }
 
 /** onRunFinished 副作用所需的 deps（与 BuildOptionsDeps 部分重叠） */
@@ -604,6 +613,19 @@ export async function buildAgentRunOptions(
   const resolvedMode: ConversationMode = input.mode ?? (isChatMode ? "chat" : "work");
   const basePromptMode = resolvedMode;
 
+  let pluginPromptContext = "";
+  try {
+    pluginPromptContext = await deps.buildPluginPromptContext?.({
+      source: "conversation",
+      mode: resolvedMode,
+      userText: latestUserText,
+      conversationId,
+      channel: input.channel,
+    }) ?? "";
+  } catch (error) {
+    console.warn("[plugins] 构建插件提示词上下文失败，已跳过", error);
+  }
+
   const styleId = resolveRunStyleId(input, styleSettings);
   const isTaskMode = resolvedMode === "work" || resolvedMode === "code";
   // work/code 完全不受 style 影响：不注入风格 prompt，采样走厂商默认。
@@ -776,6 +798,7 @@ export async function buildAgentRunOptions(
     alwaysOnContext,
     relationshipContext,
     attachmentContext,
+    pluginPromptContext,
   ].filter((context): context is string => Boolean(context?.trim())).join("\n\n---\n\n");
 
   // 原始 messages 不携带 system。system 由 chat-loop / harness-adapter 按 promptLayers 组装。

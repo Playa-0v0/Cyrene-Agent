@@ -22,10 +22,14 @@ export class ChannelManager {
   /** 启动后已开启的 adapter（start 成功的才会调 stop） */
   private startedAdapters = new Set<ChannelId>();
 
-  /** 注册 adapter（必须在 startAll 之前调用） */
+  has(id: ChannelId): boolean {
+    return this.adapters.has(id);
+  }
+
+  /** 注册 adapter（必须在 startAll 之前调用；重复 id 一律拒绝） */
   register(adapter: ChannelAdapter): void {
     if (this.adapters.has(adapter.id)) {
-      console.warn(LOG, `渠道 ${adapter.id} 已注册，覆盖旧实例`);
+      throw new Error(`渠道 ${adapter.id} 已注册，禁止覆盖现有实例`);
     }
     this.adapters.set(adapter.id, adapter);
   }
@@ -42,6 +46,8 @@ export class ChannelManager {
   /** 启动所有已注册 adapter（失败的跳过、记 log） */
   async startAll(): Promise<void> {
     for (const adapter of this.adapters.values()) {
+      // 跳过已启动的 adapter（插件注册渠道场景：registerChannelAdapter 已 startOne）
+      if (this.startedAdapters.has(adapter.id)) continue;
       try {
         // 每次 start 前重新注入 handler（防止 setDispatcher 之前 adapter 已经被外部注入 null）
         if (this.dispatchFn) {
@@ -54,6 +60,36 @@ export class ChannelManager {
         console.error(LOG, `渠道启动失败 [${adapter.id}]:`, err instanceof Error ? err.message : err);
       }
     }
+  }
+
+  /** 注销 adapter：若已启动先 stop，再移除（运行时禁用插件渠道用） */
+  async unregister(id: ChannelId): Promise<boolean> {
+    const adapter = this.adapters.get(id);
+    if (!adapter) return false;
+    if (this.startedAdapters.has(id)) {
+      try {
+        await adapter.stop();
+      } catch (err) {
+        console.warn(LOG, `渠道停止失败 [${id}]:`, err instanceof Error ? err.message : err);
+      }
+      this.startedAdapters.delete(id);
+    }
+    this.adapters.delete(id);
+    logger.info(LogTag.Channels, `unregistered: ${id}`);
+    return true;
+  }
+
+  /** 启动单个 adapter（运行时启用插件渠道用） */
+  async startOne(id: ChannelId): Promise<void> {
+    const adapter = this.adapters.get(id);
+    if (!adapter) return;
+    if (this.startedAdapters.has(id)) return;
+    if (this.dispatchFn) {
+      setAdapterHandler(adapter, this.makeAdapterHandler(id));
+    }
+    await adapter.start();
+    this.startedAdapters.add(id);
+    logger.info(LogTag.Channels, `started: ${id} (${adapter.displayName})`);
   }
 
   /** 关闭所有已启动的 adapter */

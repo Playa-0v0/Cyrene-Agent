@@ -39,6 +39,7 @@ export function exposeMusicApi() {
     removeCachedTrack: (trackId: string) =>
       ipcRenderer.invoke(IPC.MUSIC_REMOVE_CACHED_TRACK, trackId),
     importLocalTracks: () => ipcRenderer.invoke(IPC.MUSIC_IMPORT_LOCAL_TRACKS),
+    importLocalFolder: () => ipcRenderer.invoke(IPC.MUSIC_IMPORT_LOCAL_FOLDER),
     // 窗口控制（播放器窗口无框）
     openPlayer: () => ipcRenderer.invoke(IPC.MUSIC_OPEN_PLAYER),
     openSettings: (section?: string) => ipcRenderer.invoke(IPC.MUSIC_OPEN_SETTINGS, section),

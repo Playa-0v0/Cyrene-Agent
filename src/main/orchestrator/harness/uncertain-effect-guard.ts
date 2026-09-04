@@ -1,6 +1,5 @@
 /**
- * Uncertain Effect Guard（v3 §5.5.1.1）
- * 注：注释中的 "v3 §x" / "设计稿 §x" 均指 docs/design/2026-08-08-cyreneHarnessloopdesign.md（CyreneHarness 设计稿 v3）。
+ * Uncertain Effect Guard：结果不确定副作用的拦截与解除。
  *
  * 仅保留副作用 fingerprint 拦截：
  * - isBlockedByUncertainEffect：阻止相同 non-idempotent 副作用的自动重放

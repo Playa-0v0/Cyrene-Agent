@@ -9,6 +9,7 @@ function makeCore(): CoreResult {
     runtime: {} as never,
     services: {} as never,
     channels: {} as never,
+    plugins: {} as never,
     scheduler: {} as never,
   };
 }

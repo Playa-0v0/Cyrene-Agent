@@ -53,6 +53,8 @@ import {
 } from "../rag";
 import { getEmbeddingProvider, getSceneEmbeddingProvider } from "../rag/embedding";
 import { toolRegistry } from "../orchestrator/tools/registry/tool-registry";
+import { pluginPromptRegistry } from "../../plugins/prompts";
+import type { PluginManager } from "../../plugins/manager";
 import { setLive2dWindowSender } from "../orchestrator/tools/built-in-tools";
 import { registerAllTools } from "../orchestrator/tools/registry/tool-registration";
 import { LspManager } from "../lsp/manager";
@@ -90,6 +92,9 @@ import { registerCallIpc } from "../call/call-manager";
 import { initSkills, skillRegistry } from "../skills";
 import { createSchedulerSubsystem } from "../scheduler/bootstrap";
 import { createChannelsSubsystem } from "../channels/bootstrap";
+import { createLifecyclePublisher } from "../plugin-host/lifecycle-publisher";
+import { createPendingTurnLifecycle } from "../plugin-host/pending-turn-lifecycle";
+import { startPluginRuntime } from "../plugin-runtime";
 import { createAgentRuntime } from "../orchestrator/agent-runtime";
 import { createRuntimeStateService } from "../orchestrator/runtime-state-service";
 import { createProactiveLifecycle } from "../proactive/proactive-lifecycle";
@@ -152,6 +157,25 @@ async function reconcileUserMemoryIndex(): Promise<void> {
 }
 
 export function createDefaultApplicationDependencies(): ApplicationDependencies {
+  // Agent Runtime 早于插件管理器构造；通过窄闭包在运行期转发宿主事件，避免反转启动顺序。
+  let pluginManager: PluginManager | undefined;
+  // 生命周期事件发布器：插件系统就绪前发布的事件没有监听器，直接丢弃
+  const lifecyclePublisher = createLifecyclePublisher({
+    publish: (event, payload) => pluginManager
+      ? pluginManager.publishHostEvent(event, payload)
+      : Promise.resolve(),
+  });
+  // 桌面轮次协调器：turn:finished 等待"终态 + 渲染端落盘确认"双条件；
+  // 计时器均 unref，应用退出前统一清理，不发布任何事件
+  const pendingTurnLifecycle = createPendingTurnLifecycle({
+    publisher: lifecyclePublisher,
+    onAbandon: (runId, reason) => {
+      console.warn(`[plugins] 桌面轮次事件放弃发布: runId=${runId} reason=${reason}`);
+    },
+  });
+  app.on("will-quit", () => {
+    pendingTurnLifecycle.disposeAll();
+  });
   const readiness = createStartupReadiness();
   const activation = createWindowActivationBroker();
   const shutdown = createShutdownCoordinator({ readiness, timeoutMs: SHUTDOWN_TIMEOUT_MS });
@@ -370,6 +394,11 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         socialContextScheduler: services.social.scheduler,
         chatsStore,
         socialAtomStore: services.social.store,
+        buildPluginPromptContext: (input) => pluginPromptRegistry.build(input),
+        publishPluginHostEvent: (event, payload) => pluginManager
+          ? pluginManager.publishHostEvent(event, payload)
+          : Promise.resolve(),
+        publishToolFinished: (event) => lifecyclePublisher.publishToolFinished(event),
       }),
 
       createChannels: (runtime, services) => createChannelsSubsystem({
@@ -377,12 +406,28 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         ttsSynthesisService: services.tts,
         getReactChatWindow: () => reactChatWindow,
         ipc: shell.ipc,
+        publishLifecycle: lifecyclePublisher,
       }),
+
+      startPlugins: async (services, scheduler) => {
+        pluginManager = await startPluginRuntime({
+          llmClient: services.llm,
+          ipc: shell.ipc,
+          schedulerStore: scheduler.store,
+          // 插件启停后让调度引擎重新归一化逾期任务并重排计时器（不补跑）。
+          onPluginRunningStateChange: () => scheduler.engine.refreshPluginTasks(),
+        });
+        return pluginManager;
+      },
 
       createScheduler: (runtime) => createSchedulerSubsystem({
         agentRuntime: runtime,
         getReactChatWindow: () => reactChatWindow,
         ipc: shell.ipc,
+        publishLifecycle: lifecyclePublisher,
+        // 插件任务只有在所属插件运行中才允许触发；用户任务不受影响。
+        canRunTask: (task) => !task.ownerPluginId
+          || (pluginManager?.isRunning(task.ownerPluginId) ?? false),
       }),
 
       registerCoreIpc: ({ ipc, runtime, services }) => {
@@ -428,10 +473,11 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         // AG-UI 事件流桥：渲染进程 invoke(AGUI_RUN) → CyreneAgent 跑 Agent 循环 → 事件透传
         registerAgUiIpc(
           (input) => runtime.buildOptions(input),
-          (result, latestUserText, conversationId) => runtime.onRunFinished(result, latestUserText, undefined, conversationId),
+          (result, latestUserText, context) => runtime.onRunFinished(result, latestUserText, context),
           () => reactChatWindow,
           services.proactive.proactiveConversationLifecycle,
           ipc,
+          pendingTurnLifecycle,
         );
 
         // 应用更新 IPC：安装走受控退出；autoUpdater 兜底路径进入同一协调器

@@ -3,6 +3,7 @@ import type { ChatSessionMeta, ConversationMode } from "../../../../../shared/ch
 import { ModeSwitch } from "../../../components/ui/ModeSwitch";
 import { ModelModeButton } from "../../../components/ui/ModelModeButton";
 import { NewTaskButton } from "../../../components/ui/NewTaskButton";
+import { PluginModeButton } from "../../../components/ui/PluginModeButton";
 import { SettingsButton } from "../../../components/ui/SettingsButton";
 import { SidebarToggle } from "../../../components/ui/SidebarToggle";
 import { SkillModeButton } from "../../../components/ui/SkillModeButton";
@@ -12,13 +13,11 @@ import { WindowControls } from "../../../components/ui/WindowControls";
 import { AppUpdateEntry } from "./AppUpdateEntry";
 import { ConversationSidebar } from "./ConversationSidebar";
 
-export type ChatPagePanel = "tool" | "skill" | "model";
+export type ChatPagePanel = "tool" | "skill" | "model" | "plugin";
 
 export interface ChatPageNavigationProps {
   collapsed: boolean;
-  toolPanelOpen: boolean;
-  skillPanelOpen: boolean;
-  modelPanelOpen: boolean;
+  activePanel: ChatPagePanel | null;
   mode: ConversationMode;
   sessions: ChatSessionMeta[];
   activeSessionId?: string;
@@ -39,9 +38,7 @@ export interface ChatPageNavigationProps {
 
 export function ChatPageNavigation({
   collapsed,
-  toolPanelOpen,
-  skillPanelOpen,
-  modelPanelOpen,
+  activePanel,
   mode,
   sessions,
   activeSessionId,
@@ -59,7 +56,7 @@ export function ChatPageNavigation({
   onCloseWindow,
   onOpenSettings,
 }: ChatPageNavigationProps) {
-  const hasOpenPanel = toolPanelOpen || skillPanelOpen || modelPanelOpen;
+  const hasOpenPanel = activePanel !== null;
 
   return (
     <>
@@ -75,9 +72,10 @@ export function ChatPageNavigation({
       <div className="cy-page-sidebar">
         <div className="cy-page-newtask">
           <NewTaskButton onClick={onNewTask} />
-          <ToolModeButton active={toolPanelOpen} onClick={() => onTogglePanel("tool")} />
-          <SkillModeButton active={skillPanelOpen} onClick={() => onTogglePanel("skill")} />
-          <ModelModeButton active={modelPanelOpen} onClick={() => onTogglePanel("model")} />
+          <ToolModeButton active={activePanel === "tool"} onClick={() => onTogglePanel("tool")} />
+          <SkillModeButton active={activePanel === "skill"} onClick={() => onTogglePanel("skill")} />
+          <ModelModeButton active={activePanel === "model"} onClick={() => onTogglePanel("model")} />
+          <PluginModeButton active={activePanel === "plugin"} onClick={() => onTogglePanel("plugin")} />
         </div>
         <div className="cy-page-conversations">
           <ConversationSidebar

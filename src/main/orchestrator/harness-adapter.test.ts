@@ -117,7 +117,7 @@ describe("mapTerminateReasonToTerminal", () => {
     });
   });
 
-  // P1 修订：hasUncertainEffects 不影响 cancelled / timeout / runtime_error（恒为 true）。
+  //  hasUncertainEffects 不影响 cancelled / timeout / runtime_error（恒为 true）。
   it("ignores hasUncertainEffects for cancelled/timeout/runtime_error (P1)", () => {
     expect(mapTerminateReasonToTerminal("cancelled", false)).toStrictEqual({
       status: "cancelled",

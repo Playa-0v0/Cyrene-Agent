@@ -1,8 +1,5 @@
 /**
  * CyreneHarness 核心类型定义。
- * 注：注释中的 "v3 §x" / "设计稿 §x" 均指 docs/design/2026-08-08-cyreneHarnessloopdesign.md（CyreneHarness 设计稿 v3）。
- *
- * 设计依据：docs/design/2026-08-08-cyreneHarnessloopdesign.md (v3)
  *
  * 本文件只定义 Harness 特有的类型，复用现有类型：
  * - ChatMessage / ToolCall / ToolSpec 来自 vendors/types
@@ -15,6 +12,7 @@ import type { ToolDefinition } from "../tools/registry/tool-registry";
 import type { CyreneRunTerminalResult } from "../../../shared/run-terminal";
 import type { TodoItem } from "../../../shared/task-session";
 import type { ToolErrorCategory } from "../tools/registry/tool-execution-error";
+import type { ToolRiskLevel } from "../../permission-policy";
 import type { ToolFileChange } from "../../../shared/chat-types";
 import type { ContextUsageSnapshot } from "../../../shared/context-usage";
 import type { ToolOutputRef, ToolOutputStore } from "./tool-output/tool-output-store";
@@ -24,7 +22,7 @@ export type { TodoItem, TodoStatus } from "../../../shared/task-session";
 // ── 工具调用结果 ──────────────────────────────────────────
 
 /**
- * 工具执行结果的四态 outcome（v3 §5.5.1）。
+ * 工具执行结果的四态 outcome。
  * - success: Runtime 明确知道工具成功
  * - failure: Runtime 明确知道工具失败
  * - unknown: Runtime 不知道工具到底怎么样了（主要是 non_idempotent timeout）
@@ -32,7 +30,7 @@ export type { TodoItem, TodoStatus } from "../../../shared/task-session";
  */
 export type ToolCallOutcome = "success" | "failure" | "unknown" | "not_executed";
 
-/** 副作用分类（v3 §5.2） */
+/** 副作用分类：只读 / 幂等修改 / 非幂等副作用（用于重试与重复执行防护） */
 export type SideEffectKind =
   | "read_only"
   | "idempotent_mutation"
@@ -41,7 +39,7 @@ export type SideEffectKind =
 /** 重试决策 */
 export type RetryDecision = "retry" | "no_retry";
 
-/** 工具执行后的结构化 observation（v3 §5.5） */
+/** 工具执行后的结构化 observation（面向模型的结果对象） */
 export interface ToolObservation {
   outcome: ToolCallOutcome;
   category?: ToolErrorCategory;
@@ -52,7 +50,7 @@ export interface ToolObservation {
   target?: string;
   message: string;
   suggestion?: string;
-  /** 截断信息（v3 §5.7） */
+  /** 截断信息（长输出按软/硬预算截断后的标记与 preview） */
   truncated?: boolean;
   preview?: string;
   fullOutputRef?: string;
@@ -62,7 +60,7 @@ export interface ToolObservation {
   output?: string;
 }
 
-// ── Uncertain Effect（v3 §5.5.1.1）───────────────────────
+// ── Uncertain Effect（结果不确定的副作用追踪）────────────
 
 export interface UncertainEffect {
   id: string;
@@ -73,7 +71,7 @@ export interface UncertainEffect {
   repeatAuthorization?: { source: "user"; grantedAt: number };
 }
 
-// ── Agent State（v3 §6.3）────────────────────────────────
+// ── Agent State（Agent 运行期可恢复状态）────────────────
 
 export interface AgentState {
   todoItems: TodoItem[];
@@ -173,6 +171,21 @@ export interface HarnessToolLifecycleEvent {
   status: "started" | "committed" | "unknown" | "not_executed";
 }
 
+/**
+ * 工具完成观察事件：工具结果已确定后的只读通知。
+ * 只携带稳定元数据（不含参数、输出与内部异常正文），供宿主旁路转发给插件；
+ * 观察者不得参与权限判断、重试、提交或恢复。
+ */
+export interface HarnessToolFinishedEvent {
+  toolId: string;
+  toolCallId: string;
+  runId: string;
+  status: ToolCallOutcome;
+  risk: ToolRiskLevel;
+  /** 工具开始执行到结果确定的耗时；未真正执行（not_executed）时不存在。 */
+  durationMs?: number;
+}
+
 /** 压缩事务边界；只有 committed 才表示 transcript 已被替换。 */
 export interface HarnessCompactionLifecycleEvent {
   status: "started" | "committed";
@@ -247,6 +260,8 @@ export interface HarnessInput {
   onCheckpoint?: (checkpoint: HarnessCheckpoint) => void;
   /** 工具执行前与模型可见结果提交后的持久化边界。 */
   onToolLifecycle?: (event: HarnessToolLifecycleEvent) => void;
+  /** 工具结果确定后的只读观察回调；只读稳定元数据，不参与执行决策。 */
+  onToolFinished?: (event: HarnessToolFinishedEvent) => void;
   /** 压缩前后持久化事务边界。 */
   onCompactionLifecycle?: (event: HarnessCompactionLifecycleEvent) => void;
   /** 每次模型请求前的非敏感缓存结构诊断。 */
@@ -261,7 +276,7 @@ export interface HarnessInput {
   toolContext?: import("../tools/registry/tool-context").ToolContext;
   /** 权限检查函数 */
   checkPermission?: (toolId: string, args: Record<string, unknown>) => Promise<boolean>;
-  /** ExecutionLedger：可选的同进程工具去重缓存（v3 §5.5.1.1） */
+  /** ExecutionLedger：可选的同进程工具去重缓存（用于副作用重复执行防护） */
   executionLedger?: import("../execution-ledger").ExecutionLedger;
   /** ToolOutputStore：生产 Harness 注入的完整工具结果存储。 */
   toolOutputStore?: ToolOutputStore;

@@ -1,6 +1,19 @@
-import { describe, expect, it } from "vitest";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeneralSettings } from "./general-settings";
 import { normalizeGeneralSettings } from "./settings-facade";
+
+const electronMock = vi.hoisted(() => ({
+  userDataDir: "",
+}));
+
+vi.mock("electron", () => ({
+  app: {
+    getPath: () => electronMock.userDataDir,
+  },
+}));
 
 describe("general LSP settings", () => {
   it("keeps valid user server overrides and safely drops malformed settings", () => {
@@ -70,5 +83,66 @@ describe("general Mossland TTS settings", () => {
       .toBe("moss-tts-1.5-flash");
     expect(normalizeGeneralSettings({ ttsMosslandModel: "  moss-tts-1.5-flash-20260828  " } as never).ttsMosslandModel)
       .toBe("moss-tts-1.5-flash-20260828");
+  });
+});
+
+describe("tool switch persistence round trip (chatToolsEnabled + toolModeOverrides)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    electronMock.userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "cyrene-settings-rt-"));
+  });
+
+  /** 模拟"重启"：resetModules 后重新 import，generalSettingsCache 归零、从磁盘重读 */
+  async function importFresh() {
+    return import("./settings-facade");
+  }
+
+  it("keeps chatToolsEnabled and toolModeOverrides across a simulated restart", async () => {
+    const { saveGeneralSettings } = await importFresh();
+    // 首次开启 Chat 工具增强（ToolModePanel.toggleChatTools → saveGeneral）
+    saveGeneralSettings({
+      chatToolsEnabled: true,
+      toolModeOverrides: { music_search: { chat: true }, weather: { chat: true } },
+    });
+
+    // 重启后读取
+    const reloaded = await importFresh();
+    const afterRestart = reloaded.loadGeneralSettings();
+    expect(afterRestart.chatToolsEnabled).toBe(true);
+    expect(afterRestart.toolModeOverrides).toEqual({
+      music_search: { chat: true },
+      weather: { chat: true },
+    });
+
+    // 逐工具开关（TOOL_SET_MODE_OVERRIDE handler → saveGeneral 合并写入）
+    reloaded.saveGeneralSettings({
+      toolModeOverrides: { ...afterRestart.toolModeOverrides, run_shell: { code: false } },
+    });
+
+    const third = await importFresh();
+    const finalSettings = third.loadGeneralSettings();
+    expect(finalSettings.toolModeOverrides).toEqual({
+      music_search: { chat: true },
+      weather: { chat: true },
+      run_shell: { code: false },
+    });
+    expect(finalSettings.chatToolsEnabled).toBe(true);
+  });
+
+  it("toggling chatToolsEnabled off preserves the per-tool override records", async () => {
+    const { saveGeneralSettings } = await importFresh();
+    saveGeneralSettings({
+      chatToolsEnabled: true,
+      toolModeOverrides: { music_search: { chat: true } },
+    });
+
+    // 关闭总开关只写 chatToolsEnabled，不应清空 overrides
+    const again = await importFresh();
+    again.saveGeneralSettings({ chatToolsEnabled: false });
+
+    const third = await importFresh();
+    const finalSettings = third.loadGeneralSettings();
+    expect(finalSettings.chatToolsEnabled).toBe(false);
+    expect(finalSettings.toolModeOverrides).toEqual({ music_search: { chat: true } });
   });
 });

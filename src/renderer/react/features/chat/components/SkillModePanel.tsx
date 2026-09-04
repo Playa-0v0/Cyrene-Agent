@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "../../../i18n";
 import "./SkillModePanel.css";
 
 type SkillMode = "work" | "code" | "learn";
@@ -24,10 +25,10 @@ const TABS: Array<{ key: TabKey; label: string }> = [
   { key: "learn", label: "Learn" },
 ];
 
-const SOURCE_OPTIONS: Array<{ key: "all" | SkillSource; label: string }> = [
-  { key: "all", label: "全部" },
-  { key: "builtin", label: "内置" },
-  { key: "user", label: "用户" },
+const SOURCE_OPTIONS: Array<{ key: "all" | SkillSource; labelKey: string }> = [
+  { key: "all", labelKey: "skillPanel.sourceAll" },
+  { key: "builtin", labelKey: "skillPanel.sourceBuiltin" },
+  { key: "user", labelKey: "skillPanel.sourceUser" },
 ];
 
 // TODO: 为每个 skill 配置专属 SVG 图标；key 为 skill id。
@@ -80,6 +81,7 @@ function isVisibleForMode(skill: SkillCatalogItem, mode: SkillMode, overrides: O
 }
 
 export const SkillModePanel: React.FC = () => {
+  const { t } = useTranslation();
   const [catalog, setCatalog] = useState<SkillCatalogItem[]>([]);
   const [overrides, setOverrides] = useState<Overrides>({});
   const [loading, setLoading] = useState(true);
@@ -138,7 +140,8 @@ export const SkillModePanel: React.FC = () => {
       if (source !== "all" && s.source !== source) return false;
       return true;
     });
-    const shown = candidates.filter((s) => s.enabled && isVisibleForMode(s, tab, overrides));
+    // 展示全部启用技能：关掉的置灰保留在列表里，便于重新开启（与工具面板同口径）。
+    const shown = candidates.filter((s) => s.enabled);
     const searched = kw
       ? shown.filter(
           (s) =>
@@ -160,16 +163,16 @@ export const SkillModePanel: React.FC = () => {
       <header className="skill-panel__header">
         <div className="skill-panel__header-row">
           <div>
-            <h1 className="skill-panel__title">技能</h1>
+            <h1 className="skill-panel__title">{t("skillPanel.title")}</h1>
             <p className="skill-panel__subtitle">
-              {`管理 skill 在 ${TABS.find((t) => t.key === tab)?.label} 模式下的可见性`}
+              {t("skillPanel.subtitle", { mode: TABS.find((item) => item.key === tab)?.label })}
             </p>
           </div>
           <div className="skill-panel__actions">
             <button
               type="button"
               className="skill-panel__icon-btn"
-              title="重新扫描 user skills"
+              title={t("skillPanel.rescan")}
               disabled={refreshing}
               onClick={handleRefresh}
             >
@@ -182,21 +185,21 @@ export const SkillModePanel: React.FC = () => {
       <div className="skill-panel__search-row">
         <input
           className="skill-panel__search"
-          placeholder="搜索 skill…"
+          placeholder={t("skillPanel.searchPlaceholder")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
       </div>
 
       <div className="skill-panel__tabs">
-        {TABS.map((t) => (
+        {TABS.map((tabItem) => (
           <button
-            key={t.key}
+            key={tabItem.key}
             type="button"
-            className={"skill-panel__tab" + (tab === t.key ? " is-active" : "")}
-            onClick={() => setTab(t.key)}
+            className={"skill-panel__tab" + (tab === tabItem.key ? " is-active" : "")}
+            onClick={() => setTab(tabItem.key)}
           >
-            {t.label}
+            {tabItem.label}
           </button>
         ))}
       </div>
@@ -211,13 +214,13 @@ export const SkillModePanel: React.FC = () => {
             }
             onClick={() => setSource(opt.key)}
           >
-            {opt.label}
+            {t(opt.labelKey)}
           </button>
         ))}
       </div>
 
       {loading ? (
-        <div className="skill-panel__loading">加载中…</div>
+        <div className="skill-panel__loading">{t("common.loading")}</div>
       ) : (
         <div className="skill-panel__list">
           {visibleSkills.map((skill) => {
@@ -229,11 +232,11 @@ export const SkillModePanel: React.FC = () => {
                   <div className="skill-card__body">
                     <div className="skill-card__name">
                       {skill.name}
-                      {!skill.enabled && <span className="skill-card__badge">已禁用</span>}
+                      {!skill.enabled && <span className="skill-card__badge">{t("skillPanel.disabledBadge")}</span>}
                     </div>
                     <div className="skill-card__meta">
                       <span className={`skill-card__source skill-card__source--${skill.source}`}>
-                        {skill.source === "builtin" ? "内置" : "用户"}
+                        {t(skill.source === "builtin" ? "skillPanel.sourceBuiltin" : "skillPanel.sourceUser")}
                       </span>
                       {skill.version ? (
                         <span className="skill-card__version">v{skill.version}</span>
@@ -251,12 +254,12 @@ export const SkillModePanel: React.FC = () => {
                   </button>
                 </div>
                 <div className="skill-card__desc">
-                  {skill.description.split("\n")[0] || "暂无描述"}
+                  {skill.description.split("\n")[0] || t("skillPanel.noDescription")}
                 </div>
               </div>
             );
           })}
-          {visibleSkills.length === 0 && <div className="skill-panel__empty">无匹配 skill</div>}
+          {visibleSkills.length === 0 && <div className="skill-panel__empty">{t("skillPanel.noMatch")}</div>}
         </div>
       )}
     </div>

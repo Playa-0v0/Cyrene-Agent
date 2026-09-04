@@ -159,4 +159,167 @@ describe("scheduler store", () => {
 
     expect(enabled.nextFireAt).toBe("2026-06-22T13:00:00.000Z");
   });
+
+  describe("插件任务不变量", () => {
+    it("创建时无视 enabled/toolMode 输入，永远以停用 + allow-list 落盘", () => {
+      const dir = tmpDir();
+      const store = createSchedulerStore({
+        tasksFile: path.join(dir, "scheduled-tasks.json"),
+        historyFile: path.join(dir, "scheduled-tasks-history.jsonl"),
+        now: () => new Date("2026-06-22T08:00:00.000Z"),
+        id: () => "id-1",
+      });
+      store.load();
+
+      const task = store.addTask({
+        title: "插件任务",
+        prompt: "Run",
+        schedule: { kind: "daily", timeOfDay: "09:00" },
+        enabled: true,
+        toolMode: "all-enabled",
+        allowedToolIds: ["a", "b"],
+        ownerPluginId: "demo-plugin",
+        pluginUserEnabled: false,
+        approvalFingerprint: "",
+        mode: "chat",
+      });
+
+      expect(task.enabled).toBe(false);
+      expect(task.toolMode).toBe("allow-list");
+      expect(task.ownerPluginId).toBe("demo-plugin");
+      expect(task.mode).toBe("chat");
+      expect(task.pluginUserEnabled).toBe(false);
+      expect(task.approvalFingerprint).toBe("");
+    });
+
+    it("加载时把旧版可能启用的插件任务归一化回停用", () => {
+      const dir = tmpDir();
+      const tasksFile = path.join(dir, "scheduled-tasks.json");
+      fs.writeFileSync(tasksFile, JSON.stringify({
+        tasks: [{
+          id: "task-p",
+          title: "插件任务",
+          prompt: "Run",
+          enabled: true,
+          schedule: { kind: "daily", timeOfDay: "08:00" },
+          nextFireAt: "2026-06-22T08:00:00.000Z",
+          toolMode: "all-enabled",
+          createdAt: "2026-06-22T00:00:00.000Z",
+          updatedAt: "2026-06-22T00:00:00.000Z",
+          ownerPluginId: "demo-plugin",
+          pluginUserEnabled: true,
+          approvalFingerprint: "abc",
+        }, {
+          id: "task-u",
+          title: "用户任务",
+          prompt: "Run",
+          enabled: true,
+          schedule: { kind: "daily", timeOfDay: "08:00" },
+          toolMode: "all-enabled",
+          createdAt: "2026-06-22T00:00:00.000Z",
+          updatedAt: "2026-06-22T00:00:00.000Z",
+        }],
+      }), "utf8");
+      const store = createSchedulerStore({
+        tasksFile,
+        historyFile: path.join(dir, "scheduled-tasks-history.jsonl"),
+        now: () => new Date("2026-06-22T08:00:00.000Z"),
+        id: () => "id-1",
+      });
+
+      store.load();
+
+      const pluginTask = store.getTasks().find(t => t.id === "task-p");
+      const userTask = store.getTasks().find(t => t.id === "task-u");
+      expect(pluginTask?.enabled).toBe(false);
+      expect(pluginTask?.toolMode).toBe("allow-list");
+      expect(pluginTask?.pluginUserEnabled).toBe(true);
+      expect(pluginTask?.approvalFingerprint).toBe("abc");
+      // 用户任务不受影响
+      expect(userTask?.enabled).toBe(true);
+      expect(userTask?.ownerPluginId).toBeUndefined();
+    });
+
+    it("任何 patch 都改不掉插件任务的 enabled 和 toolMode", () => {
+      const dir = tmpDir();
+      const store = createSchedulerStore({
+        tasksFile: path.join(dir, "scheduled-tasks.json"),
+        historyFile: path.join(dir, "scheduled-tasks-history.jsonl"),
+        now: () => new Date("2026-06-22T08:00:00.000Z"),
+        id: () => "id-1",
+      });
+      store.load();
+      const task = store.addTask({
+        title: "插件任务",
+        prompt: "Run",
+        schedule: { kind: "daily", timeOfDay: "09:00" },
+        ownerPluginId: "demo-plugin",
+      });
+
+      const updated = store.updateTask(task.id, { enabled: true, toolMode: "all-enabled" } as never);
+
+      expect(updated.enabled).toBe(false);
+      expect(updated.toolMode).toBe("allow-list");
+    });
+
+    it("pluginUserEnabled 启用时同样重排过期的 nextFireAt", () => {
+      const dir = tmpDir();
+      let now = new Date("2026-06-22T08:00:00.000Z");
+      const store = createSchedulerStore({
+        tasksFile: path.join(dir, "scheduled-tasks.json"),
+        historyFile: path.join(dir, "scheduled-tasks-history.jsonl"),
+        now: () => now,
+        id: () => "task-a",
+      });
+      store.load();
+      const task = store.addTask({
+        title: "Hourly",
+        prompt: "Run hourly",
+        schedule: { kind: "interval", every: 1, unit: "hours" },
+        ownerPluginId: "demo-plugin",
+      });
+      expect(task.nextFireAt).toBe("2026-06-22T09:00:00.000Z");
+
+      now = new Date("2026-06-22T12:15:00.000Z");
+      const enabled = store.updateTask(task.id, { pluginUserEnabled: true, approvalFingerprint: "fp" });
+
+      expect(enabled.pluginUserEnabled).toBe(true);
+      expect(enabled.approvalFingerprint).toBe("fp");
+      expect(enabled.nextFireAt).toBe("2026-06-22T13:00:00.000Z");
+    });
+
+    it("deleteTasksByOwner 只删除该插件的任务并持久化", () => {
+      const dir = tmpDir();
+      const tasksFile = path.join(dir, "scheduled-tasks.json");
+      const store = createSchedulerStore({
+        tasksFile,
+        historyFile: path.join(dir, "scheduled-tasks-history.jsonl"),
+        now: () => new Date("2026-06-22T08:00:00.000Z"),
+        id: (() => {
+          let n = 0;
+          return () => `id-${++n}`;
+        })(),
+      });
+      store.load();
+      store.addTask({ title: "用户任务", prompt: "A", schedule: { kind: "daily", timeOfDay: "08:00" } });
+      store.addTask({ title: "插件 A 任务", prompt: "B", schedule: { kind: "daily", timeOfDay: "08:00" }, ownerPluginId: "plugin-a" });
+      store.addTask({ title: "插件 A 任务 2", prompt: "C", schedule: { kind: "daily", timeOfDay: "09:00" }, ownerPluginId: "plugin-a" });
+      store.addTask({ title: "插件 B 任务", prompt: "D", schedule: { kind: "daily", timeOfDay: "10:00" }, ownerPluginId: "plugin-b" });
+
+      expect(store.deleteTasksByOwner("plugin-a")).toBe(2);
+      expect(store.deleteTasksByOwner("plugin-a")).toBe(0);
+      const remaining = store.getTasks();
+      expect(remaining.map(t => t.title).sort()).toEqual(["插件 B 任务", "用户任务"]);
+
+      // 持久化后重新加载仍是删除后的状态
+      const store2 = createSchedulerStore({
+        tasksFile,
+        historyFile: path.join(dir, "scheduled-tasks-history.jsonl"),
+        now: () => new Date("2026-06-22T08:00:00.000Z"),
+        id: () => "id-x",
+      });
+      store2.load();
+      expect(store2.getTasks().map(t => t.title).sort()).toEqual(["插件 B 任务", "用户任务"]);
+    });
+  });
 });

@@ -1,3 +1,4 @@
+import { t } from "../../../i18n";
 import type { RunActivityRecord } from "../../../../../shared/chat-types";
 
 export interface RunActivitySnapshot {
@@ -44,5 +45,7 @@ export function formatElapsed(milliseconds: number): string {
   const seconds = Math.max(0, Math.floor(milliseconds / 1_000));
   const minutes = Math.floor(seconds / 60);
   const remainderSeconds = seconds % 60;
-  return minutes > 0 ? `${minutes}分${remainderSeconds}秒` : `${remainderSeconds}秒`;
+  return minutes > 0
+    ? t("runActivity.elapsedMinutes", { minutes, seconds: remainderSeconds })
+    : t("runActivity.elapsedSeconds", { seconds: remainderSeconds });
 }

@@ -1,3 +1,4 @@
+import { t } from "../../../i18n";
 import type { CodeGitStatus } from "../../../../../shared/code-git-types";
 
 export interface GitActionIntent {
@@ -7,37 +8,40 @@ export interface GitActionIntent {
 
 export function buildGitPanelSummary(status: CodeGitStatus): string {
   const total = Object.values(status.summary).reduce((sum, count) => sum + count, 0);
-  return total === 0 ? "工作区干净" : `${total} 个变更`;
+  return total === 0 ? t("codeGit.workspaceClean") : t("codeGit.changeCount", { count: total });
 }
 
 export function buildGitStatusCopy(status: CodeGitStatus): string {
   if (status.state === "ready") return buildGitPanelSummary(status);
-  return status.message ?? "Git 状态暂时不可用";
+  return status.message ?? t("codeGit.statusUnavailable");
 }
 
 export function buildGitActionIntent(status: CodeGitStatus): GitActionIntent | null {
   if (status.state !== "ready") return null;
   if (status.files.length > 0) {
     return {
-      label: "提交变更",
-      prompt: "请检查当前 Git 变更，并在确认合适后提交。",
+      label: t("codeGit.commitChanges"),
+      prompt: t("codeGit.intentCommitPrompt"),
     };
   }
   if (status.ahead > 0) {
     return {
-      label: `推送 ${status.ahead} 个提交`,
-      prompt: `请把当前分支尚未推送的 ${status.ahead} 个提交推送到远端。`,
+      label: t("codeGit.pushCommits", { count: status.ahead }),
+      prompt: t("codeGit.intentPushPrompt", { count: status.ahead }),
     };
   }
   return null;
 }
 
+// 只存 i18n key（t() 不能出现在模块顶层常量里），展示文案在调用时求值。
+const CHANGE_KIND_LABEL_KEYS: Record<CodeGitStatus["files"][number]["kind"], string> = {
+  added: "codeGit.kindAdded",
+  modified: "codeGit.kindModified",
+  deleted: "codeGit.kindDeleted",
+  renamed: "codeGit.kindRenamed",
+  conflicted: "codeGit.kindConflicted",
+};
+
 export function changeKindLabel(kind: CodeGitStatus["files"][number]["kind"]): string {
-  return {
-    added: "新增",
-    modified: "修改",
-    deleted: "删除",
-    renamed: "重命名",
-    conflicted: "冲突",
-  }[kind];
+  return t(CHANGE_KIND_LABEL_KEYS[kind]);
 }

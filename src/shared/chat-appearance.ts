@@ -11,7 +11,7 @@ export interface ChatAppearanceSettings {
 
 export const DEFAULT_CHAT_APPEARANCE: ChatAppearanceSettings = {
   chatLineHeight: 1.75,
-  assistantBubbleEnabled: true,
+  assistantBubbleEnabled: false,
 };
 
 export const CHAT_LINE_HEIGHT_MIN = 1.0;

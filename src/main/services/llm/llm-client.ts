@@ -1,12 +1,9 @@
 import type { ModelSettings } from "../../settings/model-settings";
 import { getAdapterForConfig, createSseReader } from "../../orchestrator/vendors";
 import type {
-  ChatResponse,
   StructuredOutputRequest,
   VendorConfig,
 } from "../../orchestrator/vendors";
-import { classifyStructuredOutputEndpoint } from "../../orchestrator/structured-output/profiles";
-import { dispatchChatGeneration } from "../../orchestrator/structured-output/dispatcher";
 import {
   createVisibleStreamFilter,
   stripThinkBlocks,
@@ -242,30 +239,19 @@ export function createLlmClient(): LlmClient {
     );
 
     try {
-      const parsed = await dispatchChatGeneration<ChatResponse>({
-        request: chatRequest,
-        provider: adapter.id,
-        endpointKind: classifyStructuredOutputEndpoint({
-          providerId: adapter.id,
-          configuredBaseUrl: cfg.baseUrl,
-          officialBaseUrl: adapter.capability.baseUrl,
-        }),
-        legacy: async () => {
-          const http = adapter.buildRequest(chatRequest, cfg);
-          const response = await fetch(http.url, {
-            method: "POST",
-            headers: http.headers,
-            body: http.body,
-            signal: controller.signal,
-          });
-          if (!response.ok) {
-            const errorData = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-            const errMsg = (errorData as { error?: { message?: string } }).error?.message;
-            throw new Error(errMsg || `模型请求失败：HTTP ${response.status}`);
-          }
-          return adapter.parseResponse(await response.json());
-        },
+      const http = adapter.buildRequest(chatRequest, cfg);
+      const response = await fetch(http.url, {
+        method: "POST",
+        headers: http.headers,
+        body: http.body,
+        signal: controller.signal,
       });
+      if (!response.ok) {
+        const errorData = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+        const errMsg = (errorData as { error?: { message?: string } }).error?.message;
+        throw new Error(errMsg || `模型请求失败：HTTP ${response.status}`);
+      }
+      const parsed = adapter.parseResponse(await response.json());
       recordRequest(settings.model);
       if (parsed.usage) {
         recordUsage(parsed.usage.input, parsed.usage.output, 1, parsed.usage.cachedInput, settings.model, parsed.usage.cacheCreation);

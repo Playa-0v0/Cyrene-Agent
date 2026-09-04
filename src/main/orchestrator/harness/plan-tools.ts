@@ -1,6 +1,5 @@
 /**
- * 计划模式工具组（设计稿 §4）：enter_plan_mode / write_plan
- * 注：注释中的 "v3 §x" / "设计稿 §x" 均指 docs/design/2026-08-08-cyreneHarnessloopdesign.md（CyreneHarness 设计稿 v3）。
+ * 计划模式工具组：enter_plan_mode / write_plan
  *
  * 与 ask_user 同属 harness builtin：控制流工具需要访问会话状态与事件，
  * 不走 toolRegistry 权限链（builtin 在 checkPermission 之前 dispatch）。

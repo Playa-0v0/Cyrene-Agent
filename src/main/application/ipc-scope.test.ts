@@ -46,6 +46,16 @@ describe("createIpcScope", () => {
     expect(() => scope.handle("a", vi.fn())).toThrow("IPC channel already registered: a");
   });
 
+  it("supports dynamic handler removal without removing it again on dispose", () => {
+    const main = createFakeIpcMain();
+    const scope = createIpcScope(main);
+    scope.handle("plugin:demo:ping", vi.fn());
+    scope.removeHandler("plugin:demo:ping");
+    scope.dispose();
+    expect(main.removeHandler).toHaveBeenCalledTimes(1);
+    expect(main.handlers.has("plugin:demo:ping")).toBe(false);
+  });
+
   it("dispose is idempotent", () => {
     const main = createFakeIpcMain();
     const scope = createIpcScope(main);

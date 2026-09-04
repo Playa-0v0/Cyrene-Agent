@@ -8,6 +8,26 @@ export interface ScreenshotInsertPayload {
   hasAnnotations: boolean;
 }
 
+/** 语音输入提交请求（main → 聊天窗口渲染页）：把外部识别文本提交到冻结的会话。 */
+export interface SpeechInputCommitRequest {
+  /** 本次提交的关联标识；结果必须原样回显。 */
+  requestId: string;
+  /** 租约冻结的渲染目标标识；页面据此识别过期请求。 */
+  rendererTargetId: string;
+  sessionId: string;
+  mode: "chat" | "work" | "learn" | "code";
+  text: string;
+}
+
+/** 语音输入提交结果（渲染页 → main）：必须回显 requestId 与 rendererTargetId。 */
+export interface SpeechInputCommitResult {
+  requestId: string;
+  rendererTargetId: string;
+  ok: boolean;
+  /** ok 为 false 时的稳定错误码（PluginHostErrorCode 之一）与说明。 */
+  error?: { code: string; message: string };
+}
+
 export const IPC = {
   // pet window
   WINDOW_MINIMIZE: "window:minimize",
@@ -49,6 +69,8 @@ export const IPC = {
   AGUI_RUN: "agui:run",
   AGUI_EVENT: "agui:event",
   AGUI_CANCEL: "agui:cancel",
+  // 渲染端→主进程单向通知：本轮 run 的终态消息已写入会话存储（插件轮次事件的落盘确认）
+  AGUI_RUN_PERSISTED: "agui:run-persisted",
   HARNESS_GET_INTERRUPTED_RUN: "harness:get-interrupted-run",
   SCHEDULER_EVENT: "scheduler:event",
 
@@ -150,6 +172,12 @@ export const IPC = {
   CHATS_GET_ACTIVE_SESSION: "chats:get-active-session",
   // main → 所有窗口：活跃 sessionId 变化时广播
   CHATS_ACTIVE_SESSION_CHANGED: "chats:active-session-changed",
+
+  // 语音输入提交桥（主进程 ↔ 聊天窗口渲染页，仅供宿主内部使用，插件不直接接触）
+  // main → reactChatWindow：要求把外部语音识别文本提交到租约冻结的会话
+  SPEECH_INPUT_COMMIT_REQUEST: "speech-input:commit-request",
+  // reactChatWindow → main：提交结果（必须回显 requestId 与 rendererTargetId）
+  SPEECH_INPUT_COMMIT_RESULT: "speech-input:commit-result",
 
   // 对话工作区绑定
   // renderer → main：设置当前对话的工作区目录
@@ -301,6 +329,8 @@ export const IPC = {
   PERMISSION_APPROVAL_REQUEST: "permission:approval-request",
   // renderer → main：审批结果回传
   PERMISSION_APPROVAL_RESOLVE: "permission:approval-resolve",
+  // main → renderer：审批结算广播（用户已答 / run 取消），渲染端据此清卡
+  PERMISSION_APPROVAL_SETTLED: "permission:approval-settled",
   // main → renderer：计划模式状态变化广播（任何入口触发都走这条）
   PLAN_STATE_CHANGED: "plan:state-changed",
   // renderer → main：设置计划模式 on/off（显式目标，不是 toggle）
@@ -325,7 +355,7 @@ export const IPC = {
   CALL_ERROR: "call:error",               // main → renderer：错误
   CALL_STOP: "call:stop",                 // renderer → main：挂断
 
-  // 多渠道（Phase 0 骨架，Phase 1+ 实装微信/飞书）
+  // 多渠道（微信/飞书/QQ/QQ 机器人）
   CHANNELS_GET_CONFIG: "channels:get-config",
   CHANNELS_SAVE_CONFIG: "channels:save-config",
   CHANNELS_LIST: "channels:list",
@@ -352,7 +382,7 @@ export const IPC = {
   CHANNELS_QQ_TEST_CONNECTION: "channels:qq:test-connection",
   // QQ 官方机器人（QQ 开放平台）专属
   CHANNELS_QQBOT_TEST_CONNECTION: "channels:qqbot:test-connection",
-  // Phase 3.4：消息日志
+  // 消息日志
   CHANNELS_LOG_GET: "channels:log:get",
   CHANNELS_LOG_CLEAR: "channels:log:clear",
   // 渠道上下文绑定：设置页选择外部聊天继续使用某个桌面会话
@@ -402,6 +432,7 @@ export const IPC = {
   MUSIC_GET_CACHED_TRACKS: "music:get-cached-tracks",
   MUSIC_REMOVE_CACHED_TRACK: "music:remove-cached-track",
   MUSIC_IMPORT_LOCAL_TRACKS: "music:import-local-tracks",
+  MUSIC_IMPORT_LOCAL_FOLDER: "music:import-local-folder",
   // main → renderer：缓存索引变化（下载完成/删除/导入）广播
   MUSIC_CACHE_UPDATED: "music:cache-updated",
 
@@ -411,6 +442,14 @@ export const IPC = {
   SCREENSHOT_INSERT: "screenshot:insert",
   SCREENSHOT_HOTKEY_CAPTURE_START: "screenshot:hotkey-capture-start",
   SCREENSHOT_HOTKEY_CAPTURE_END: "screenshot:hotkey-capture-end",
+
+  // plugin system
+  PLUGINS_LIST: "plugins:list",
+  PLUGINS_SET_ENABLED: "plugins:set-enabled",
+  PLUGINS_OPEN: "plugins:open",
+  PLUGINS_RESCAN: "plugins:rescan",
+  PLUGINS_IMPORT_ZIP: "plugins:import-zip",
+  PLUGINS_UNINSTALL: "plugins:uninstall",
 
 } as const;
 

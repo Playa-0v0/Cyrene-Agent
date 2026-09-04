@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Input, Modal } from "antd";
+import { useTranslation } from "../../../i18n";
 import type { CodeGitChangedPayload, CodeGitStatus } from "../../../../../shared/code-git-types";
 import type { TodoState } from "../../../../../shared/todo-types";
 import workingPngUrl from "../../../assets/status-moods/工作中.png?url";
@@ -36,6 +37,7 @@ function ToggleIcon() {
 }
 
 export function CodeGitPanel({ sessionId, projectName, todoState, planPhase, onOpenPlan }: CodeGitPanelProps) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<CodeGitStatus | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [dialog, setDialog] = useState<"branch" | "commit" | null>(null);
@@ -71,8 +73,8 @@ export function CodeGitPanel({ sessionId, projectName, todoState, planPhase, onO
 
   const todos = todoState?.todos ?? [];
   const completed = todos.filter((todo) => todo.status === "completed").length;
-  const branchName = status?.branch?.current ?? (status?.branch?.detached ? "detached HEAD" : "暂无分支");
-  const statusCopy = status ? buildGitStatusCopy(status) : "正在读取 Git 状态…";
+  const branchName = status?.branch?.current ?? (status?.branch?.detached ? "detached HEAD" : t("codeGit.noBranch"));
+  const statusCopy = status ? buildGitStatusCopy(status) : t("codeGit.readingStatus");
   const runOperation = async (action: () => Promise<void>, onSuccess?: () => void) => {
     setOperating(true);
     setOperationError(null);
@@ -81,7 +83,7 @@ export function CodeGitPanel({ sessionId, projectName, todoState, planPhase, onO
       refreshControllerRef.current?.request();
       onSuccess?.();
     } catch (error) {
-      setOperationError(error instanceof Error ? error.message : "Git 操作失败");
+      setOperationError(error instanceof Error ? error.message : t("codeGit.operationFailed"));
     } finally {
       setOperating(false);
     }
@@ -91,9 +93,9 @@ export function CodeGitPanel({ sessionId, projectName, todoState, planPhase, onO
     <aside
       className={`cy-code-git ${floating.collapsed ? "cy-code-git--collapsed" : ""}`}
       style={{ left: floating.position.x, top: floating.position.y }}
-      aria-label="Code 项目与任务"
+      aria-label={t("codeGit.panelAria")}
     >
-      <button type="button" className="cy-code-git__dragbar" onMouseDown={floating.onHeaderMouseDown} onClick={floating.onHeaderClick} aria-expanded={!floating.collapsed} title="拖动">
+      <button type="button" className="cy-code-git__dragbar" onMouseDown={floating.onHeaderMouseDown} onClick={floating.onHeaderClick} aria-expanded={!floating.collapsed} title={t("codeGit.drag")}>
         <span className="cy-code-git__dragline" />
         <span className="cy-code-git__toggle" data-floating-toggle onClick={(event) => { event.stopPropagation(); floating.toggle(); }}><ToggleIcon /></span>
       </button>
@@ -101,33 +103,33 @@ export function CodeGitPanel({ sessionId, projectName, todoState, planPhase, onO
       <div className="cy-code-git__body">
         <div className="cy-code-git__mode"><i aria-hidden="true" />Coding</div>
         <div className="cy-code-git__hero">
-          <img className="cy-code-git__mascot" src={workingPngUrl} alt="工作中" />
+          <img className="cy-code-git__mascot" src={workingPngUrl} alt={t("codeGit.workingAlt")} />
           <div className="cy-code-git__project">
-            <strong>{projectName ?? "尚未绑定 Git 工作区"}</strong>
+            <strong>{projectName ?? t("codeGit.noWorkspace")}</strong>
             <span title={statusCopy}>{statusCopy}</span>
           </div>
-          <button className="cy-code-git__refresh" type="button" onClick={() => refreshControllerRef.current?.request()} disabled={!api || refreshing} aria-label="刷新 Git 状态">↻</button>
+          <button className="cy-code-git__refresh" type="button" onClick={() => refreshControllerRef.current?.request()} disabled={!api || refreshing} aria-label={t("codeGit.refresh")}>↻</button>
         </div>
 
         <div className="cy-code-git__git-actions">
           <button type="button" disabled={status?.state !== "ready"} onClick={() => setDialog("branch")}>
-            <span>分支切换</span><code>{branchName}</code><b>›</b>
+            <span>{t("codeGit.branchSwitch")}</span><code>{branchName}</code><b>›</b>
           </button>
           <div className="cy-code-git__change-row">
-            <span>变更</span>
+            <span>{t("codeGit.changes")}</span>
             <span className="cy-code-git__added">+{status?.lines.insertions ?? 0}</span>
             <span className="cy-code-git__deleted">-{status?.lines.deletions ?? 0}</span>
           </div>
           <button type="button" disabled={status?.state !== "ready" || (status.files.length === 0 && status.ahead === 0)} onClick={() => setDialog("commit")}>
-            <span>提交或推送</span><code>{status?.files.length ? "提交变更" : status?.ahead ? `推送 ${status.ahead} 个提交` : "暂无操作"}</code><b>›</b>
+            <span>{t("codeGit.commitOrPush")}</span><code>{status?.files.length ? t("codeGit.commitChanges") : status?.ahead ? t("codeGit.pushCommits", { count: status.ahead }) : t("codeGit.noAction")}</code><b>›</b>
           </button>
           {operationError && <p className="cy-code-git__operation-error">{operationError}</p>}
         </div>
 
         <div className="cy-code-git__divider" />
-        <div className="cy-code-git__todo-heading"><span>当前任务</span><small>{completed}/{todos.length} 已完成</small></div>
+        <div className="cy-code-git__todo-heading"><span>{t("codeGit.currentTasks")}</span><small>{t("codeGit.todoProgress", { completed, total: todos.length })}</small></div>
         <ul className="cy-code-git__todos" data-testid="code-todo-list">
-          {todos.length === 0 ? <li className="is-empty"><i />暂无任务</li> : todos.map((todo) => (
+          {todos.length === 0 ? <li className="is-empty"><i />{t("codeGit.noTasks")}</li> : todos.map((todo) => (
             <li key={todo.id} className={todo.status === "completed" ? "is-completed" : ""}>
               <i /> <span>{todo.content}</span>
             </li>
@@ -140,26 +142,26 @@ export function CodeGitPanel({ sessionId, projectName, todoState, planPhase, onO
         )}
       </div>
 
-      <Modal open={dialog === "branch"} title="切换分支" footer={null} onCancel={() => setDialog(null)} className="cy-code-git-modal">
-        <p className="cy-code-git-modal__hint">当前分支：<code>{branchName}</code></p>
+      <Modal open={dialog === "branch"} title={t("codeGit.switchBranch")} footer={null} onCancel={() => setDialog(null)} className="cy-code-git-modal">
+        <p className="cy-code-git-modal__hint">{t("codeGit.currentBranch")}<code>{branchName}</code></p>
         <div className="cy-code-git-modal__branch-list">
           {status?.branch?.branches.map((branch) => <button key={branch} type="button" disabled={branch === status.branch?.current || operating} onClick={() => api && void runOperation(() => api.switchBranch(sessionId, branch), () => setDialog(null))}>{branch === status.branch?.current ? "✓ " : ""}{branch}</button>)}
         </div>
         <div className="cy-code-git-modal__new-branch">
-          <Input value={newBranch} onChange={(event) => setNewBranch(event.target.value)} placeholder="新分支名称" disabled={operating} onPressEnter={() => api && newBranch.trim() && void runOperation(() => api.switchBranch(sessionId, newBranch.trim(), true), () => { setNewBranch(""); setDialog(null); })} />
-          <button type="button" disabled={!api || !newBranch.trim() || operating} onClick={() => api && void runOperation(() => api.switchBranch(sessionId, newBranch.trim(), true), () => { setNewBranch(""); setDialog(null); })}>新建并切换</button>
+          <Input value={newBranch} onChange={(event) => setNewBranch(event.target.value)} placeholder={t("codeGit.newBranchPlaceholder")} disabled={operating} onPressEnter={() => api && newBranch.trim() && void runOperation(() => api.switchBranch(sessionId, newBranch.trim(), true), () => { setNewBranch(""); setDialog(null); })} />
+          <button type="button" disabled={!api || !newBranch.trim() || operating} onClick={() => api && void runOperation(() => api.switchBranch(sessionId, newBranch.trim(), true), () => { setNewBranch(""); setDialog(null); })}>{t("codeGit.createAndSwitch")}</button>
         </div>
       </Modal>
 
-      <Modal open={dialog === "commit"} title="提交或推送" footer={null} onCancel={() => setDialog(null)} className="cy-code-git-modal">
+      <Modal open={dialog === "commit"} title={t("codeGit.commitOrPush")} footer={null} onCancel={() => setDialog(null)} className="cy-code-git-modal">
         {status?.files.length ? <section className="cy-code-git-modal__commit-section">
-          <p className="cy-code-git-modal__hint">将提交当前 {status.files.length} 个文件变更。</p>
-          <Input value={commitMessage} onChange={(event) => setCommitMessage(event.target.value)} placeholder="提交说明" disabled={operating} />
-          <button type="button" disabled={!api || !commitMessage.trim() || operating} onClick={() => api && void runOperation(() => api.commit(sessionId, commitMessage, status.files.map((file) => file.path)), () => { setCommitMessage(""); setDialog(null); })}>提交全部变更</button>
+          <p className="cy-code-git-modal__hint">{t("codeGit.commitHint", { count: status.files.length })}</p>
+          <Input value={commitMessage} onChange={(event) => setCommitMessage(event.target.value)} placeholder={t("codeGit.commitMessagePlaceholder")} disabled={operating} />
+          <button type="button" disabled={!api || !commitMessage.trim() || operating} onClick={() => api && void runOperation(() => api.commit(sessionId, commitMessage, status.files.map((file) => file.path)), () => { setCommitMessage(""); setDialog(null); })}>{t("codeGit.commitAll")}</button>
         </section> : null}
         {status?.ahead ? <section className="cy-code-git-modal__commit-section">
-          <p className="cy-code-git-modal__hint">有 {status.ahead} 个本地提交等待推送。</p>
-          <button type="button" disabled={!api || operating} onClick={() => api && void runOperation(() => api.push(sessionId), () => setDialog(null))}>推送 {status.ahead} 个提交</button>
+          <p className="cy-code-git-modal__hint">{t("codeGit.pushHint", { count: status.ahead })}</p>
+          <button type="button" disabled={!api || operating} onClick={() => api && void runOperation(() => api.push(sessionId), () => setDialog(null))}>{t("codeGit.pushCommits", { count: status.ahead })}</button>
         </section> : null}
         {operationError && <p className="cy-code-git__operation-error">{operationError}</p>}
       </Modal>

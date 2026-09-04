@@ -15,11 +15,10 @@ export interface VisionConfig {
   model: string;    // 如 gpt-4o / glm-5v-turbo / qwen-vl-max
 }
 
-/** 图片数据（不含 data: 前缀的纯 base64）。 */
-export interface VisionImage {
-  base64: string;
-  mime: string;  // 如 "image/png"
-}
+/** 图片来源二选一：本地数据（纯 base64）或公网 URL（厂商服务器自行拉取）。 */
+export type VisionImage =
+  | { base64: string; mime: string }  // 本地文件读出的数据，mime 如 "image/png"
+  | { url: string };                  // 公网图片地址，http(s) 开头
 
 const VISION_TIMEOUT_MS = resolveTimeoutPolicy({ stage: "vision-caption" }).totalMs;
 
@@ -55,7 +54,8 @@ export async function captionImage(
   config: VisionConfig,
 ): Promise<string> {
   const instruction = buildInstruction(userQuery);
-  const dataUrl = "data:" + image.mime + ";base64," + image.base64;
+  // base64 本地数据拼 data URL；公网 URL 原样直传，厂商服务器自行拉图
+  const imageUrl = "url" in image ? image.url : "data:" + image.mime + ";base64," + image.base64;
 
   // 永远 OpenAI 兼容格式：image_url content block
   const body = {
@@ -65,7 +65,7 @@ export async function captionImage(
         role: "user",
         content: [
           { type: "text", text: instruction },
-          { type: "image_url", image_url: { url: dataUrl } },
+          { type: "image_url", image_url: { url: imageUrl } },
         ],
       },
     ],

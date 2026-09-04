@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { normalizeChatAppearance } from "./chat-appearance";
 
 describe("normalizeChatAppearance", () => {
-  it("keeps Cyrene reply bubbles enabled for existing settings", () => {
+  it("defaults Cyrene reply bubbles to disabled for existing settings", () => {
     expect(normalizeChatAppearance({ chatLineHeight: 1.6 })).toEqual({
       chatLineHeight: 1.6,
-      assistantBubbleEnabled: true,
+      assistantBubbleEnabled: false,
     });
   });
 

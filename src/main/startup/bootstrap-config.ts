@@ -12,7 +12,7 @@ import { setEmailConfig } from "../orchestrator/tools/email-tools";
 import { setTravelConfig } from "../orchestrator/tools/travel-tools";
 import { toolRegistry } from "../orchestrator/tools/registry/tool-registry";
 import { resolveVendorRuntimeSettings, setVendorRuntimeSettingsGetter } from "../orchestrator/vendors/runtime-settings";
-import { setChoiceCardSender } from "../user-choice";
+import { setChoiceCardSender, setChoiceDismissSender } from "../user-choice";
 import { setAsrConfig } from "../asr/asr-config";
 import { setCallSettings } from "../call/call-manager";
 import { buildCallSystemPrompt } from "../call/call-prompt-builder";
@@ -75,6 +75,19 @@ export function bootstrapConfigGetters(ctx: BootstrapConfigContext): void {
         type: "CUSTOM",
         name: "cyrene.choice",
         value: cardData,
+      });
+    }
+  });
+
+  // 注入选择卡结算回调：老版 requestUserChoice 超时结算时通知渲染端清卡，
+  // 避免留下「点了没反应」的僵尸卡（与澄清卡的 cyrene.choice.dismiss 同机制）。
+  setChoiceDismissSender((settlement) => {
+    const win = getReactChatWindow();
+    if (win) {
+      win.webContents.send(IPC.AGUI_EVENT, {
+        type: "CUSTOM",
+        name: "cyrene.choice.dismiss",
+        value: settlement,
       });
     }
   });

@@ -2,10 +2,11 @@
 //
 // 设计：
 // - 启动时 initSandbox() 检测 SRT 安装状态；装了就启用 SandboxManager。
-// - wrapWithSandbox(command, cwd) 把命令字符串包成 {argv, env} 返回；
-//   null 表示 fallback 到直接 spawn（沙箱不可用 / wrap 失败）。
-// - 沙箱不可用时 workspace_mutation 命令仍被拒绝（保持原行为）。
-// - CYRENE_SRT=0 环境变量可强制禁用，出问题时 fallback。
+// - wrapWithSandbox(command, cwd) 把命令字符串包成 SandboxWrapOutcome 返回：
+//   { ok: true, argv, env } 或 { ok: false, reason }（disabled / not_ready / wrap_failed）。
+//   本层只归一化结果、不做 fallback 决策；拒绝还是降级由 run_shell 的 ExecutionPlan 路由
+//   （不可因 wrap 失败而 fail-open：需要沙箱的命令在 wrap 成功前不允许 spawn）。
+// - CYRENE_SRT=0 环境变量可强制禁用（reason: "disabled"）。
 //
 // SRT API 要点（已 PoC 验证）：
 // - namespace import（无 default export）：`await import('@anthropic-ai/sandbox-runtime')`
@@ -299,15 +300,30 @@ export async function ensureSandboxReady(cwd: string = process.cwd()): Promise<b
 }
 
 /**
+ * wrapWithSandbox 的归一化结果。
+ *
+ * 本函数只回答"能不能把这个命令安全包装起来"，不做任何 fallback 策略决策：
+ * 包装失败后是拒绝还是降级直跑，由调用方（run_shell 的 ExecutionPlan 路由）判定。
+ *
+ * - ok:false + reason:"disabled"    → 环境层面显式无沙箱（CYRENE_SRT=0 / 非 Windows / full 档），
+ *                                     属于用户主动选择，调用方可按 effect 分流
+ * - ok:false + reason:"not_ready"   → 沙箱本应可用但初始化失败（ensure 失败 / SRT 模块缺失）
+ * - ok:false + reason:"wrap_failed" → wrap 阶段抛错或返回非法 argv
+ */
+export type SandboxWrapOutcome =
+  | { ok: true; argv: string[]; env: NodeJS.ProcessEnv }
+  | { ok: false; reason: "disabled" | "not_ready" | "wrap_failed"; detail?: string };
+
+/**
  * 把命令字符串包成沙箱 argv + env。
  *
  * @param command 完整命令行字符串（如 "git status | findstr TODO"）
  * @param binShell 可选命令解释器；缺省时 SRT 在 Windows 使用 cmd.exe
- * @returns {argv, env} 调用方用 spawn(argv[0], argv.slice(1), {shell:false, env, cwd, stdio})；
- *          null 表示沙箱不可用或 wrap 失败，调用方 fallback 到直接 spawn。
+ * @returns SandboxWrapOutcome；ok:false 时 reason 区分"显式禁用"与"故障失败"，
+ *          调用方据此决定 fail-closed 还是降级（见 run-shell-tool.ts 的 ExecutionPlan）
  *
  * 流程：
- * 1. 沙箱未就绪 → 先 ensureSandboxReady(cwd)（可能弹 UAC，失败返回 null）
+ * 1. 沙箱未就绪 → 先 ensureSandboxReady(cwd)（可能弹 UAC，失败返回 not_ready）
  * 2. 调 wrapWithSandboxArgv(command, binShell, customConfig, undefined, cwd)
  *    工作区读写权限已在初始化阶段授予；customConfig 仅承载本次命令的 deny 规则
  */
@@ -315,26 +331,26 @@ export async function wrapWithSandbox(
   command: string,
   cwd?: string,
   binShell?: string,
-): Promise<{ argv: string[]; env: NodeJS.ProcessEnv } | null> {
+): Promise<SandboxWrapOutcome> {
   const level = getCurrentLevel();
   logger.info(LogTag.Runtime, `[Sandbox] wrapWithSandbox: command="${command}" cwd=${cwd || "(undefined)"} level=${level}`);
 
   if (sandboxDisabled || !isWindows()) {
     logger.info(LogTag.Runtime, `[Sandbox] wrapWithSandbox: skip (sandboxDisabled=${sandboxDisabled} isWindows=${isWindows()})`);
-    return null;
+    return { ok: false, reason: "disabled", detail: `sandboxDisabled=${sandboxDisabled} isWindows=${isWindows()}` };
   }
 
-  // full 档位不走沙箱，直接返回 null 让调用方 spawn
+  // full 档位不走沙箱（正常情况下调用方已提前分流，这里是防御性兜底）
   if (level === "full") {
     logger.info(LogTag.Runtime, "[Sandbox] wrapWithSandbox: full level, skipping sandbox (direct spawn)");
-    return null;
+    return { ok: false, reason: "disabled", detail: "full level" };
   }
 
   const resolvedCwd = cwd || process.cwd();
   const ready = await ensureSandboxReady(resolvedCwd);
   if (!ready || !srtModule) {
-    logger.info(LogTag.Runtime, `[Sandbox] wrapWithSandbox: sandbox not ready (ready=${ready} srtModule=${!!srtModule}), returning null`);
-    return null;
+    logger.info(LogTag.Runtime, `[Sandbox] wrapWithSandbox: sandbox not ready (ready=${ready} srtModule=${!!srtModule}), returning not_ready`);
+    return { ok: false, reason: "not_ready", detail: `ready=${ready} srtModule=${!!srtModule}` };
   }
 
   try {
@@ -350,8 +366,8 @@ export async function wrapWithSandbox(
     // per-call customConfig：按当前权限档位选 fs 配置
     const customConfig = buildFilesystemConfigForLevel(resolvedCwd);
     if (!customConfig) {
-      logger.info(LogTag.Runtime, "[Sandbox] wrapWithSandbox: customConfig is null (full level fallback), returning null");
-      return null;
+      logger.info(LogTag.Runtime, "[Sandbox] wrapWithSandbox: customConfig is null (full level fallback), returning not_ready");
+      return { ok: false, reason: "not_ready", detail: "customConfig is null" };
     }
 
     logger.info(LogTag.Runtime, `[Sandbox] wrapWithSandbox: calling wrapWithSandboxArgv...`);
@@ -365,14 +381,14 @@ export async function wrapWithSandbox(
     );
     if (!wrapped || !Array.isArray(wrapped.argv) || wrapped.argv.length === 0) {
       logger.warn(LogTag.Runtime, `[Sandbox] wrapWithSandbox: wrap returned empty argv for: ${command} (wrapped=${JSON.stringify(wrapped)})`);
-      return null;
+      return { ok: false, reason: "wrap_failed", detail: "empty argv" };
     }
     logger.info(LogTag.Runtime, `[Sandbox] wrapWithSandbox: success, argv.length=${wrapped.argv.length} argv[0]=${wrapped.argv[0]}`);
-    return { argv: wrapped.argv, env: wrapped.env };
+    return { ok: true, argv: wrapped.argv, env: wrapped.env };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    logger.error(LogTag.Runtime, `[Sandbox] wrapWithSandbox: wrap failed, falling back: ${msg}`);
-    return null;
+    logger.error(LogTag.Runtime, `[Sandbox] wrapWithSandbox: wrap failed: ${msg}`);
+    return { ok: false, reason: "wrap_failed", detail: msg };
   }
 }
 

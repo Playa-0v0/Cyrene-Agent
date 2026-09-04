@@ -5,14 +5,16 @@
 // → 点击展开色块 diff 行（绿=新增 红=删除 灰=上下文 蓝=hunk 头）。
 
 import { useState } from "react";
+import { useTranslation } from "../../../i18n";
 import type { ToolDiffLine, ToolFileChange } from "../../../../../shared/chat-types";
 import "./RunExperience.css";
 
-const KIND_LABEL: Record<ToolFileChange["kind"], string> = {
-  added: "新增",
-  modified: "修改",
-  deleted: "删除",
-  renamed: "重命名",
+// 只存 i18n key（t() 不能出现在模块顶层常量里），展示文案在组件内求值。
+const KIND_LABEL_KEYS: Record<ToolFileChange["kind"], string> = {
+  added: "fileChange.kindAdded",
+  modified: "fileChange.kindModified",
+  deleted: "fileChange.kindDeleted",
+  renamed: "fileChange.kindRenamed",
 };
 
 const KIND_CLASS: Record<ToolFileChange["kind"], string> = {
@@ -48,13 +50,14 @@ export function extractFileChanges(result: string): ToolFileChange[] | null {
 }
 
 export function FileChangeCard({ changes }: { changes: ToolFileChange[] }) {
+  const { t } = useTranslation();
   const totalAdd = changes.reduce((sum, c) => sum + c.insertions, 0);
   const totalDel = changes.reduce((sum, c) => sum + c.deletions, 0);
   return (
-    <section className="cy-file-change-card" aria-label="文件变更">
+    <section className="cy-file-change-card" aria-label={t("fileChange.panelAria")}>
       <header className="cy-file-change-card__summary">
         <span className="cy-file-change-card__title">
-          {changes.length} 个文件变更
+          {t("fileChange.summary", { count: changes.length })}
         </span>
         <span className="cy-file-change-card__stat is-add">+{totalAdd}</span>
         <span className="cy-file-change-card__stat is-remove">−{totalDel}</span>
@@ -67,6 +70,7 @@ export function FileChangeCard({ changes }: { changes: ToolFileChange[] }) {
 }
 
 function FileChangeRow({ change }: { change: ToolFileChange }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const hasDiff = Boolean(change.diff && change.diff.length > 0);
   const dirEnd = change.file.lastIndexOf("/");
@@ -76,7 +80,7 @@ function FileChangeRow({ change }: { change: ToolFileChange }) {
   const rowBody = (
     <>
       <span className={`cy-file-change-card__kind ${KIND_CLASS[change.kind]}`}>
-        {KIND_LABEL[change.kind]}
+        {t(KIND_LABEL_KEYS[change.kind])}
       </span>
       <span className="cy-file-change-card__path" title={change.file}>
         {dir && <span className="cy-file-change-card__dir">{dir}</span>}
@@ -112,7 +116,7 @@ function FileChangeRow({ change }: { change: ToolFileChange }) {
             <DiffLineView key={index} line={line} />
           ))}
           {change.truncated && (
-            <div className="cy-file-change-card__truncated">diff 过长已截断，完整内容请查看文件</div>
+            <div className="cy-file-change-card__truncated">{t("fileChange.truncated")}</div>
           )}
         </div>
       )}

@@ -23,6 +23,7 @@ files:
   - assets/**/*
   - vendor/**/*
   - "!vendor/cloud-music-mcp/**/*"
+  - "!vendor/cyrene-skills/**/*"
   - "!models/**/*"
   # prompts / skills 作为安装目录根下的独立文件夹，方便用户修改
 extraFiles:
@@ -39,6 +40,9 @@ extraResources:
     to: mingit
   - from: resources/components
     to: components
+  # 第三方 skills 快照归档：首启解压到 userData/skills（见 src/main/skills/snapshot-install.ts）
+  - from: vendor/cyrene-skills
+    to: cyrene-skills
 win:
   icon: assets/tray-icon.ico
   target:

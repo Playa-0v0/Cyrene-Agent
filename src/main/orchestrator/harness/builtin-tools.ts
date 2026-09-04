@@ -1,6 +1,5 @@
 /**
- * Harness 内置工具：update_todo / ask_user（v3 §8 / §9）
- * 注：注释中的 "v3 §x" / "设计稿 §x" 均指 docs/design/2026-08-08-cyreneHarnessloopdesign.md（CyreneHarness 设计稿 v3）。
+ * Harness 内置工具：update_todo（任务清单） / ask_user（澄清提问）
  *
  * 这两个工具不进 toolRegistry，由 Harness Loop 内部 dispatch。
  * 它们能直接访问 AgentState 和事件发送器。
@@ -111,7 +110,7 @@ export const updateTodoToolSpec: ToolSpec = {
   },
 };
 
-// ── Todo Invariants（v3 §8.9 / §8.10）────────────────────
+// ── Todo 状态流淌不变量：合法迁移表 + 最多一个 in_progress ──
 
 const VALID_TRANSITIONS: Record<TodoStatus, TodoStatus[]> = {
   // pending → completed 允许跳过 in_progress：一轮内批量收尾多条 todo 时
@@ -195,7 +194,7 @@ function validateAndCorrectTodos(
 }
 
 /**
- * 执行 update_todo（v3 §8.3）。
+ * 执行 update_todo（模型自维护任务清单）。
  * 返回 ToolObservation，包含修正后的实际列表 + 修正说明。
  */
 export async function executeUpdateTodo(
@@ -379,7 +378,7 @@ function parseAskQuestions(raw: unknown): { questions?: HarnessAskQuestion[]; er
 }
 
 /**
- * 执行 ask_user（v3 §9.4）。
+ * 执行 ask_user（交互式澄清提问，await 用户应答）。
  * 完全复用现有 requestUserClarification 链路。
  */
 export async function executeAskUser(
@@ -596,7 +595,7 @@ export function isInteractiveHarnessBuiltin(toolName: string): boolean {
 }
 
 /**
- * 计划工具组按状态注入（设计稿 §3 可见性即防御）：
+ * 计划工具组按状态注入（可见性即防御）：
  * - NORMAL：enter_plan_mode + write_plan。工具列表是 run 级固定的，模型常在
  *   同一 run 内先调 enter_plan_mode 再调 write_plan，因此两者必须同时注入；
  *   write_plan 自身有状态守卫（非 PLAN_DISCUSSING 调用直接 failure）。

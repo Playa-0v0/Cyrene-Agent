@@ -5,6 +5,7 @@
 
 import { Popover, Segmented } from "antd";
 import { useEffect, useState } from "react";
+import { useTranslation } from "../../../i18n";
 import reminderIconUrl from "../../../assets/status-moods/提醒.png?url";
 import "./PlanModeToggle.css";
 
@@ -34,6 +35,7 @@ function ChevronIcon() {
 }
 
 export function PlanModeToggle({ conversationId, workspaceRoot }: PlanModeToggleProps) {
+  const { t } = useTranslation();
   const [active, setActive] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -67,12 +69,12 @@ export function PlanModeToggle({ conversationId, workspaceRoot }: PlanModeToggle
     }
   }
 
-  const label = `计划模式 · ${active ? "on" : "off"}`;
+  const label = t("planToggle.label", { state: active ? "on" : "off" });
 
   const panel = (
     <div className="cy-plan-panel">
-      <strong>计划模式</strong>
-      <span>只读讨论方案，避免直接改文件</span>
+      <strong>{t("planToggle.title")}</strong>
+      <span>{t("planToggle.desc")}</span>
       <Segmented
         block
         size="small"

@@ -434,4 +434,65 @@ describe("ResponsesAdapter — structuredOutput 与推理控制", () => {
     expect(body).not.toHaveProperty("thinking");
     expect(body).not.toHaveProperty("output_config");
   });
+
+  test("proMode 翻译为 reasoning:{mode:'pro'}，effort 缺省填 defaultEffort（gpt-5.6）", () => {
+    const chatgptCap: ProviderCapability = { ...capability, id: "chatgpt" };
+    const { body } = makeBody([{ role: "user", content: "hi" }], {
+      cap: chatgptCap,
+      config: { model: "gpt-5.6", reasoning: { mode: "on", proMode: true } },
+    });
+    expect(body.reasoning).toEqual({ effort: "medium", mode: "pro" });
+    expect(body).not.toHaveProperty("reasoning_effort");
+  });
+
+  test("proMode + 显式 effort 共存：reasoning:{effort, mode:'pro'}", () => {
+    const chatgptCap: ProviderCapability = { ...capability, id: "chatgpt" };
+    const { body } = makeBody([{ role: "user", content: "hi" }], {
+      cap: chatgptCap,
+      config: { model: "gpt-5.6-sol", reasoning: { mode: "on", effort: "high", proMode: true } },
+    });
+    expect(body.reasoning).toEqual({ effort: "high", mode: "pro" });
+  });
+
+  test("proMode 不被支持的模型（gpt-5.1）→ 不发 reasoning.mode", () => {
+    const chatgptCap: ProviderCapability = { ...capability, id: "chatgpt" };
+    const { body } = makeBody([{ role: "user", content: "hi" }], {
+      cap: chatgptCap,
+      config: { model: "gpt-5.1", reasoning: { mode: "on", effort: "low", proMode: true } },
+    });
+    expect(body.reasoning).toEqual({ effort: "low" });
+  });
+
+  // ── MiniMax-M3（anthropic-adaptive）：Responses 协议下 thinking → reasoning.effort 映射 ──
+  // 官方 Responses API：省略 reasoning = 默认 effort:"none"（关闭）；非 none 值开启推理但不调深度。
+
+  test("MiniMax-M3 + on → thinking.type=adaptive 翻译为 reasoning:{effort:'minimal'}", () => {
+    const minimaxCap: ProviderCapability = { ...capability, id: "minimax" };
+    const { body } = makeBody([{ role: "user", content: "hi" }], {
+      cap: minimaxCap,
+      config: { model: "MiniMax-M3", reasoning: { mode: "on" } },
+    });
+    expect(body.reasoning).toEqual({ effort: "minimal" });
+    expect(body).not.toHaveProperty("thinking");
+  });
+
+  test("MiniMax-M3 + off → thinking.type=disabled 不发 reasoning（落默认 effort:none 即关闭）", () => {
+    const minimaxCap: ProviderCapability = { ...capability, id: "minimax" };
+    const { body } = makeBody([{ role: "user", content: "hi" }], {
+      cap: minimaxCap,
+      config: { model: "MiniMax-M3", reasoning: { mode: "off" } },
+    });
+    expect(body).not.toHaveProperty("reasoning");
+    expect(body).not.toHaveProperty("thinking");
+  });
+
+  test("MiniMax-M3 + auto → 不发 reasoning（跟随服务端默认）", () => {
+    const minimaxCap: ProviderCapability = { ...capability, id: "minimax" };
+    const { body } = makeBody([{ role: "user", content: "hi" }], {
+      cap: minimaxCap,
+      config: { model: "MiniMax-M3", reasoning: { mode: "auto" } },
+    });
+    expect(body).not.toHaveProperty("reasoning");
+    expect(body).not.toHaveProperty("thinking");
+  });
 });

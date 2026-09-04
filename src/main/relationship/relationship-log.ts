@@ -61,7 +61,9 @@ function compact(text: string, max = 120): string {
 
 function detectUserMood(text: string): string {
   if (/累|疲惫|困|没精神|撑不住|倦/.test(text)) return "疲惫"
-  if (/不要|别|不想|不喜欢|太影响|影响观感|先不|别.*问|不要.*确认/.test(text)) return "明确边界"
+  // 仅匹配明确指向交互方式的边界表达，避免"别/不想/先不"等常用词误伤
+  // （如"我今天不想xx"、"想吃点别的"不应触发低打扰偏好）
+  if (/影响观感|太影响|不要.{0,4}(确认|弹|问|卡片)|别.{0,4}(问|弹|确认|卡片)|少问|别问了/.test(text)) return "明确边界"
   if (/焦虑|压力|烦|崩|紧张|担心|慌/.test(text)) return "焦虑"
   if (/难过|伤心|委屈|失落|想哭/.test(text)) return "低落"
   if (/开心|高兴|舒服|喜欢|好耶|太好了/.test(text)) return "开心"

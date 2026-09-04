@@ -1,5 +1,6 @@
 import { Popover } from "antd";
 import { useEffect, useState } from "react";
+import { useTranslation } from "../../../i18n";
 
 type PermissionLevel = "project-read-only" | "read-only" | "scoped" | "per-action" | "full";
 
@@ -8,12 +9,13 @@ interface PermissionSettingsApi {
   setPermissionLevel?: (level: PermissionLevel) => Promise<{ ok: boolean; level?: PermissionLevel }>;
 }
 
-const PERMISSION_OPTIONS: ReadonlyArray<{ level: PermissionLevel; label: string }> = [
-  { level: "project-read-only", label: "完全只读" },
-  { level: "read-only", label: "允许访问" },
-  { level: "scoped", label: "指定目录" },
-  { level: "per-action", label: "请求审批" },
-  { level: "full", label: "完全访问" },
+// 只存 i18n key（t() 不能出现在模块顶层常量里），展示文案在组件内求值。
+const PERMISSION_OPTIONS: ReadonlyArray<{ level: PermissionLevel; labelKey: string }> = [
+  { level: "project-read-only", labelKey: "permission.levelProjectReadOnly" },
+  { level: "read-only", labelKey: "permission.levelReadOnly" },
+  { level: "scoped", labelKey: "permission.levelScoped" },
+  { level: "per-action", labelKey: "permission.levelPerAction" },
+  { level: "full", labelKey: "permission.levelFull" },
 ];
 
 function permissionApi(): PermissionSettingsApi | undefined {
@@ -37,11 +39,13 @@ function ChevronIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>;
 }
 
-function labelFor(level: PermissionLevel): string {
-  return PERMISSION_OPTIONS.find((option) => option.level === level)?.label ?? "允许访问";
+function labelFor(level: PermissionLevel, translate: (key: string) => string): string {
+  const option = PERMISSION_OPTIONS.find((item) => item.level === level);
+  return translate(option?.labelKey ?? "permission.levelReadOnly");
 }
 
 export function PermissionControl() {
+  const { t } = useTranslation();
   const [level, setLevel] = useState<PermissionLevel>("read-only");
   const [open, setOpen] = useState(false);
 
@@ -78,7 +82,7 @@ export function PermissionControl() {
       overlayClassName="cy-permission-popover"
       content={
         <div className="cy-permission-panel">
-          <strong>权限等级</strong>
+          <strong>{t("permission.panelTitle")}</strong>
           <div className="cy-permission-panel__options">
             {PERMISSION_OPTIONS.map((option) => (
               <button
@@ -88,7 +92,7 @@ export function PermissionControl() {
                 onClick={() => void select(option.level)}
               >
                 <PermissionIcon level={option.level} />
-                <span>{option.label}</span>
+                <span>{t(option.labelKey)}</span>
               </button>
             ))}
           </div>
@@ -97,7 +101,7 @@ export function PermissionControl() {
     >
       <button type="button" className={`cy-composer__footer-button cy-permission-control is-${level}`}>
         <PermissionIcon level={level} />
-        <span>{labelFor(level)}</span>
+        <span>{labelFor(level, t)}</span>
         <ChevronIcon />
       </button>
     </Popover>

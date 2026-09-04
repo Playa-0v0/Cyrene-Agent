@@ -1,0 +1,850 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cyrene · 系统状态</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+      --ink: #493942;
+      --muted: #9a8991;
+      --pink: #ef78a9;
+      --pink-strong: #df4f8a;
+      --pink-soft: #fff0f6;
+      --pink-pale: #fff8fb;
+      --line: #f3dce6;
+      --track: #f7e8ee;
+      --white: #ffffff;
+      --shadow: 0 22px 56px rgba(166, 80, 119, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+
+    /* ---------- 自绘标题栏（无边框窗口） ---------- */
+    .titlebar {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 38px;
+      padding: 0 8px 0 22px;
+      border-bottom: 1px solid rgba(243, 220, 230, 0.55);
+      background: linear-gradient(90deg, rgba(255, 242, 248, 0.9), rgba(255, 255, 255, 0.7));
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    .titlebar-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #9c8992;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+
+    .titlebar-title::before {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--pink);
+      box-shadow: 0 0 0 4px rgba(239, 120, 169, 0.14);
+      content: "";
+    }
+
+    .titlebar-actions {
+      display: flex;
+      gap: 4px;
+      -webkit-app-region: no-drag;
+    }
+
+    .titlebar-btn {
+      display: grid;
+      width: 40px;
+      height: 28px;
+      place-items: center;
+      padding: 0;
+      border: none;
+      border-radius: 9px;
+      background: transparent;
+      color: #9c8992;
+      font-size: 13px;
+      line-height: 1;
+      cursor: pointer;
+      transition: background 160ms ease, color 160ms ease;
+    }
+
+    .titlebar-btn:hover { background: var(--pink-soft); color: var(--pink-strong); }
+    .titlebar-btn:active { background: #fbdcea; }
+
+    .titlebar-btn.close:hover { background: #fde8ef; color: #df4f8a; }
+
+
+    html,
+    body {
+      min-width: 360px;
+      min-height: 100%;
+      margin: 0;
+      overflow: hidden; /* 无边框窗口内自适应重排，不出现滚动条 */
+      scrollbar-width: none;
+      background:
+        radial-gradient(circle at 6% 8%, rgba(255, 186, 218, 0.3), transparent 22rem),
+        radial-gradient(circle at 94% 92%, rgba(247, 205, 224, 0.34), transparent 24rem),
+        #fff9fc;
+      color: var(--ink);
+    }
+
+    html::-webkit-scrollbar,
+    body::-webkit-scrollbar { display: none; }
+
+    body {
+      user-select: none;
+    }
+
+    button,
+    input { font: inherit; }
+
+    .app-shell {
+      position: relative;
+      width: 100%;
+      min-height: 100vh;
+      margin: 0 auto;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.96);
+    }
+
+    .app-shell::before,
+    .app-shell::after {
+      position: absolute;
+      z-index: 0;
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      background: #fff2f7;
+      content: "";
+      pointer-events: none;
+    }
+
+    .app-shell::before { top: -112px; right: -68px; }
+    .app-shell::after { bottom: -124px; left: -72px; }
+
+    .topbar {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 96px;
+      gap: 18px;
+      align-items: center;
+      padding: 18px 24px 16px;
+      border-bottom: 1px solid var(--line);
+      background:
+        linear-gradient(125deg, rgba(255, 255, 255, 0.99), rgba(255, 242, 248, 0.88)),
+        var(--white);
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 8px;
+      color: var(--pink-strong);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--pink);
+      box-shadow: 0 0 0 5px rgba(239, 120, 169, 0.13);
+      content: "";
+    }
+
+    h1 {
+      margin: 0;
+      color: #4c3943;
+      font-size: clamp(20px, 2.4vw, 27px);
+      line-height: 1.16;
+      letter-spacing: -0.04em;
+    }
+
+    .subtitle {
+      margin: 6px 0 12px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .info-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+    }
+
+    .info-chip {
+      display: inline-flex;
+      min-width: 0;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 11px;
+      border: 1px solid #f4dfe8;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.82);
+      color: #76636d;
+      font-size: 12px;
+      line-height: 1;
+    }
+
+    .info-chip::before {
+      color: var(--pink);
+      content: "✦";
+      font-size: 10px;
+    }
+
+    .info-chip span {
+      max-width: 370px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .avatar-wrap {
+      position: relative;
+      justify-self: end;
+      width: 86px;
+      height: 86px;
+      transform: rotate(2deg);
+    }
+
+    .avatar-wrap::before,
+    .avatar-wrap::after {
+      position: absolute;
+      color: var(--pink);
+      content: "✦";
+    }
+
+    .avatar-wrap::before { top: -12px; right: 3px; font-size: 17px; }
+    .avatar-wrap::after { bottom: -7px; left: -8px; font-size: 11px; }
+
+    .avatar {
+      width: 100%;
+      height: 100%;
+      border-radius: 28% 44% 31% 42%;
+      object-fit: cover;
+      transform: rotate(-2deg);
+    }
+
+    .dashboard {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 12px;
+      padding: 16px 24px 14px;
+    }
+
+    .card {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: var(--white);
+      box-shadow: 0 8px 22px rgba(180, 103, 138, 0.07);
+    }
+
+    .card::before,
+    .card::after {
+      position: absolute;
+      z-index: 0;
+      color: rgba(230, 101, 156, 0.58);
+      content: "✦";
+      line-height: 1;
+      pointer-events: none;
+    }
+
+    .card::before {
+      top: 14px;
+      right: 17px;
+      font-size: 11px;
+    }
+
+    .card::after {
+      top: 30px;
+      right: 34px;
+      color: rgba(239, 120, 169, 0.34);
+      font-size: 6px;
+    }
+
+    .memory-card::before { right: 94px; }
+    .memory-card::after { right: 111px; }
+    .disk-card::before { right: 78px; }
+    .disk-card::after { right: 94px; }
+
+    .gauge-card {
+      grid-column: span 3;
+      display: flex;
+      min-height: 148px;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 12px 12px;
+      text-align: center;
+    }
+
+    .memory-card {
+      grid-column: span 6;
+      min-height: 148px;
+      padding: 16px 20px;
+      background: linear-gradient(145deg, #fff, #fff8fb);
+    }
+
+    .disk-card {
+      grid-column: span 8;
+      min-height: 172px;
+      padding: 14px 20px;
+    }
+
+    .optional-grid {
+      grid-column: span 4;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .mini-card {
+      position: relative;
+      min-height: 80px;
+      overflow: hidden;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      background: var(--pink-pale);
+    }
+
+    .mini-card::before,
+    .mini-card::after {
+      position: absolute;
+      color: rgba(230, 101, 156, 0.42);
+      content: "✦";
+      line-height: 1;
+      pointer-events: none;
+    }
+
+    .mini-card::before { right: 13px; bottom: 12px; font-size: 9px; }
+    .mini-card::after { right: 27px; bottom: 25px; font-size: 5px; opacity: 0.68; }
+
+    .card-heading,
+    .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .card-title,
+    .section-title {
+      margin: 0;
+      color: #5b4751;
+      font-size: 13px;
+      font-weight: 750;
+      letter-spacing: 0.02em;
+    }
+
+    .section-note {
+      color: #b29fa8;
+      font-size: 11px;
+    }
+
+    .gauge {
+      --value: 0;
+      display: grid;
+      width: 92px;
+      height: 92px;
+      margin: 8px auto 6px;
+      place-items: center;
+      border-radius: 50%;
+      background: conic-gradient(var(--pink) calc(var(--value) * 1%), var(--track) 0);
+      box-shadow: inset 0 0 0 1px rgba(231, 173, 199, 0.18);
+      transition: background 280ms ease;
+    }
+
+    .gauge::before {
+      grid-area: 1 / 1;
+      width: 70px;
+      height: 70px;
+      border: 1px solid #f5e5ec;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 6px 14px rgba(189, 116, 150, 0.08);
+      content: "";
+    }
+
+    .gauge.is-empty {
+      background: repeating-conic-gradient(#f2dce6 0 9deg, #faeff4 9deg 18deg);
+    }
+
+    .gauge-content {
+      z-index: 1;
+      grid-area: 1 / 1;
+    }
+
+    .gauge-value {
+      color: #4f3a44;
+      font-size: 21px;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+    }
+
+    .gauge-unit {
+      margin-left: 1px;
+      color: var(--pink-strong);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .gauge-caption {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .metric-row {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 15px 0 13px;
+    }
+
+    .metric-main {
+      color: #4c3943;
+      font-size: 29px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.05em;
+    }
+
+    .metric-main small {
+      margin-left: 3px;
+      color: var(--pink-strong);
+      font-size: 13px;
+      letter-spacing: 0;
+    }
+
+    .metric-detail {
+      max-width: 62%;
+      overflow: hidden;
+      color: #887680;
+      font-size: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .progress {
+      position: relative;
+      height: 10px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--track);
+    }
+
+    .progress-fill {
+      display: block;
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #f5a4c6, #e6659c);
+      box-shadow: 0 0 12px rgba(230, 101, 156, 0.26);
+      transition: width 350ms ease;
+    }
+
+    .progress-fill.is-empty {
+      width: 0 !important;
+      box-shadow: none;
+    }
+
+    .progress-scale {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 9px;
+      color: #b09da6;
+      font-size: 10px;
+    }
+
+    .disk-list {
+      display: grid;
+      gap: 11px;
+      margin-top: 13px;
+    }
+
+    .disk-row {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) 132px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .disk-name {
+      display: grid;
+      width: 36px;
+      height: 30px;
+      place-items: center;
+      border: 1px solid #f0d6e2;
+      border-radius: 10px;
+      background: #fff7fa;
+      color: var(--pink-strong);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .disk-meta {
+      overflow: hidden;
+      color: #806d76;
+      font-size: 11px;
+      text-align: right;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .disk-meta strong {
+      margin-left: 7px;
+      color: #513c46;
+      font-size: 12px;
+    }
+
+    .mini-label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #9c8992;
+      font-size: 11px;
+    }
+
+    .mini-icon {
+      display: grid;
+      width: 24px;
+      height: 24px;
+      place-items: center;
+      border: 1px solid #f1d6e2;
+      border-radius: 8px;
+      background: #fff;
+      color: var(--pink-strong);
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .mini-value {
+      margin-top: 9px;
+      color: #503c46;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+
+    .mini-value small {
+      margin-left: 3px;
+      color: #9c8992;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+
+    .footer {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 24px 14px;
+      color: #af9ba5;
+      font-size: 11px;
+    }
+
+    .footer-line {
+      height: 1px;
+      flex: 1;
+      background: linear-gradient(90deg, transparent, #ecc8d9 28%, #ecc8d9 72%, transparent);
+    }
+
+    .footer-pill {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 12px;
+      border: 1px solid #f0d8e3;
+      border-radius: 999px;
+      background: #fff9fc;
+      white-space: nowrap;
+    }
+
+    .footer-pill::before { color: var(--pink); content: "♡"; font-size: 13px; }
+
+    .empty { color: #c1adb6 !important; }
+
+    @media (max-width: 760px) {
+      .topbar { grid-template-columns: minmax(0, 1fr) 72px; padding: 16px 18px 14px; }
+      .avatar-wrap { width: 68px; height: 68px; }
+      .dashboard { padding: 14px 18px 12px; }
+      .gauge-card { grid-column: span 6; }
+      .memory-card,
+      .disk-card,
+      .optional-grid { grid-column: 1 / -1; }
+      .footer { padding: 0 18px 12px; }
+    }
+
+    @media (max-width: 470px) {
+      .subtitle { margin-bottom: 13px; }
+      .info-chip.cpu-model { display: none; }
+      .dashboard { gap: 10px; }
+      .gauge-card { min-height: 164px; padding-inline: 8px; }
+      .gauge { width: 96px; height: 96px; }
+      .gauge::before { width: 72px; height: 72px; }
+      .memory-card,
+      .disk-card { padding: 18px; }
+      .disk-row { grid-template-columns: 38px minmax(0, 1fr); gap: 9px; }
+      .disk-meta { grid-column: 2; text-align: left; }
+      .footer-line:first-child { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app-shell" aria-label="Cyrene 系统状态面板">
+    <header class="titlebar" id="titlebar">
+      <span class="titlebar-title">Cyrene · 系统状态</span>
+      <div class="titlebar-actions">
+        <button class="titlebar-btn" id="btnMinimize" title="最小化" aria-label="最小化">─</button>
+        <button class="titlebar-btn" id="btnMaximize" title="最大化 / 还原" aria-label="最大化或还原">□</button>
+        <button class="titlebar-btn close" id="btnClose" title="关闭" aria-label="关闭">✕</button>
+      </div>
+    </header>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Cyrene system monitor</p>
+        <h1>今天也有好好运行哦♪</h1>
+        <p class="subtitle">悄悄看一眼电脑的状态，一切都在温柔地运转。</p>
+        <div class="info-row">
+          <div class="info-chip"><span id="uptime">—</span></div>
+          <div class="info-chip cpu-model"><span id="cpuModel">—</span></div>
+        </div>
+      </div>
+      <div class="avatar-wrap" aria-hidden="true">
+        <img class="avatar" src="avatar.png" alt="" />
+      </div>
+    </header>
+
+    <section class="dashboard" aria-label="系统指标">
+      <article class="card gauge-card">
+        <h2 class="card-title">CPU 占用</h2>
+        <div class="gauge" id="cpuGauge">
+          <div class="gauge-content">
+            <span class="gauge-value" id="cpuValue">—</span><span class="gauge-unit" id="cpuUnit">%</span>
+          </div>
+        </div>
+        <div class="gauge-caption">处理器负载</div>
+      </article>
+
+      <article class="card gauge-card">
+        <h2 class="card-title">GPU 占用</h2>
+        <div class="gauge" id="gpuGauge">
+          <div class="gauge-content">
+            <span class="gauge-value" id="gpuValue">—</span><span class="gauge-unit" id="gpuUnit">%</span>
+          </div>
+        </div>
+        <div class="gauge-caption">图形处理器负载</div>
+      </article>
+
+      <article class="card memory-card">
+        <div class="card-heading">
+          <h2 class="card-title">内存</h2>
+          <span class="section-note">正在使用</span>
+        </div>
+        <div class="metric-row">
+          <div class="metric-main"><span id="memoryPercent">—</span><small id="memoryPercentUnit">%</small></div>
+          <div class="metric-detail" id="memoryDetail">—</div>
+        </div>
+        <div class="progress" role="progressbar" aria-label="内存占用">
+          <div class="progress-fill" id="memoryBar"></div>
+        </div>
+        <div class="progress-scale"><span>0%</span><span>轻盈运行中</span><span>100%</span></div>
+      </article>
+
+      <article class="card disk-card">
+        <div class="section-heading">
+          <h2 class="section-title">磁盘空间</h2>
+          <span class="section-note" id="diskCount">—</span>
+        </div>
+        <div class="disk-list" id="diskList"></div>
+      </article>
+
+      <section class="optional-grid" aria-label="扩展指标">
+        <article class="mini-card">
+          <div class="mini-label"><span class="mini-icon">°C</span>GPU 温度</div>
+          <div class="mini-value" id="gpuTemperature">—</div>
+        </article>
+        <article class="mini-card">
+          <div class="mini-label"><span class="mini-icon">VR</span>显存</div>
+          <div class="mini-value" id="vram">—</div>
+        </article>
+        <article class="mini-card">
+          <div class="mini-label"><span class="mini-icon">NET</span>网络</div>
+          <div class="mini-value" id="network">—</div>
+        </article>
+        <article class="mini-card">
+          <div class="mini-label"><span class="mini-icon">BAT</span>电池</div>
+          <div class="mini-value" id="battery">—</div>
+        </article>
+      </section>
+    </section>
+
+    <footer class="footer">
+      <span class="footer-line"></span>
+      <span class="footer-pill" id="refreshHint">状态每 3 秒刷新</span>
+      <span class="footer-line"></span>
+    </footer>
+  </main>
+
+  <script>
+    const byId = (id) => document.getElementById(id);
+    const isNumber = (value) => typeof value === "number" && Number.isFinite(value);
+    const clampPercent = (value) => Math.min(100, Math.max(0, value));
+
+    function setOptionalText(element, value) {
+      const empty = value == null || value === "";
+      element.textContent = empty ? "—" : String(value);
+      element.classList.toggle("empty", empty);
+    }
+
+    function formatGb(value) {
+      if (!isNumber(value)) return "—";
+      return Number.isInteger(value) ? String(value) : value.toFixed(1);
+    }
+
+    function formatSpeed(bytesPerSecond) {
+      if (!isNumber(bytesPerSecond)) return null;
+      if (bytesPerSecond >= 1024 ** 2) return `${(bytesPerSecond / 1024 ** 2).toFixed(1)} MB/s`;
+      if (bytesPerSecond >= 1024) return `${Math.round(bytesPerSecond / 1024)} KB/s`;
+      return `${Math.round(bytesPerSecond)} B/s`;
+    }
+
+    function setGauge(gaugeId, valueId, unitId, value) {
+      const gauge = byId(gaugeId);
+      const valid = isNumber(value);
+      const percent = valid ? Math.round(clampPercent(value)) : 0;
+      gauge.style.setProperty("--value", percent);
+      gauge.classList.toggle("is-empty", !valid);
+      byId(valueId).textContent = valid ? String(percent) : "—";
+      byId(valueId).classList.toggle("empty", !valid);
+      byId(unitId).style.display = valid ? "inline" : "none";
+      gauge.setAttribute("aria-label", valid ? `${percent}%` : "暂无数据");
+    }
+
+    function setMemory(snapshot) {
+      const valid = isNumber(snapshot.memoryPercent);
+      const percent = valid ? Math.round(clampPercent(snapshot.memoryPercent)) : 0;
+      byId("memoryPercent").textContent = valid ? String(percent) : "—";
+      byId("memoryPercent").classList.toggle("empty", !valid);
+      byId("memoryPercentUnit").style.display = valid ? "inline" : "none";
+      byId("memoryBar").style.width = `${percent}%`;
+      byId("memoryBar").classList.toggle("is-empty", !valid);
+
+      const hasSize = isNumber(snapshot.memoryUsedGb) && isNumber(snapshot.memoryTotalGb);
+      setOptionalText(
+        byId("memoryDetail"),
+        hasSize ? `${formatGb(snapshot.memoryUsedGb)} / ${formatGb(snapshot.memoryTotalGb)} GB` : null,
+      );
+    }
+
+    function renderDisks(disks) {
+      const list = byId("diskList");
+      list.replaceChildren();
+      const rows = Array.isArray(disks) && disks.length ? disks : [null, null, null];
+      byId("diskCount").textContent = Array.isArray(disks) && disks.length ? `${disks.length} 个分区` : "—";
+      byId("diskCount").classList.toggle("empty", !(Array.isArray(disks) && disks.length));
+
+      rows.slice(0, 4).forEach((disk, index) => {
+        const validPercent = disk && isNumber(disk.percent);
+        const percent = validPercent ? Math.round(clampPercent(disk.percent)) : 0;
+        const hasSize = disk && isNumber(disk.usedGb) && isNumber(disk.totalGb);
+        const row = document.createElement("div");
+        row.className = "disk-row";
+        row.innerHTML = `
+          <span class="disk-name">${disk?.name || `${String.fromCharCode(67 + index)}:`}</span>
+          <span class="progress" role="progressbar" aria-label="${disk?.name || "磁盘"}占用">
+            <span class="progress-fill${validPercent ? "" : " is-empty"}" style="width:${percent}%"></span>
+          </span>
+          <span class="disk-meta${hasSize || validPercent ? "" : " empty"}">
+            ${hasSize ? `${formatGb(disk.usedGb)} / ${formatGb(disk.totalGb)} GB` : "—"}
+            <strong>${validPercent ? `${percent}%` : "—"}</strong>
+          </span>`;
+        list.appendChild(row);
+      });
+    }
+
+    function renderOptional(snapshot) {
+      setOptionalText(
+        byId("gpuTemperature"),
+        isNumber(snapshot.gpuTemperature) ? `${Math.round(snapshot.gpuTemperature)} °C` : null,
+      );
+
+      const hasVram = isNumber(snapshot.vramUsedGb) && isNumber(snapshot.vramTotalGb);
+      setOptionalText(
+        byId("vram"),
+        hasVram ? `${formatGb(snapshot.vramUsedGb)} / ${formatGb(snapshot.vramTotalGb)} GB` : null,
+      );
+
+      setOptionalText(byId("network"), formatSpeed(snapshot.networkBytesPerSecond));
+
+      const batteryValue = isNumber(snapshot.batteryPercent)
+        ? `${Math.round(clampPercent(snapshot.batteryPercent))}%`
+        : snapshot.batteryLabel;
+      setOptionalText(byId("battery"), batteryValue);
+    }
+
+    window.renderSnapshot = function renderSnapshot(snapshot = {}) {
+      setGauge("cpuGauge", "cpuValue", "cpuUnit", snapshot.cpuPercent);
+      setGauge("gpuGauge", "gpuValue", "gpuUnit", snapshot.gpuPercent);
+      setMemory(snapshot);
+      renderDisks(snapshot.disks);
+      renderOptional(snapshot);
+      setOptionalText(byId("uptime"), snapshot.uptime);
+      setOptionalText(byId("cpuModel"), snapshot.cpuModel);
+    };
+
+    // 接线：通过插件私有 IPC 通道拉取实时快照，每 3 秒轮询
+    const { ipcRenderer } = require("electron");
+
+    // 自绘标题栏：窗口控制按钮 + 双击最大化/还原
+    byId("btnMinimize").addEventListener("click", () => ipcRenderer.send("plugin:system-status:win-minimize"));
+    byId("btnMaximize").addEventListener("click", () => ipcRenderer.send("plugin:system-status:win-maximize"));
+    byId("btnClose").addEventListener("click", () => ipcRenderer.send("plugin:system-status:win-close"));
+    byId("titlebar").addEventListener("dblclick", (e) => {
+      if (e.target.closest(".titlebar-btn")) return;
+      ipcRenderer.send("plugin:system-status:win-maximize");
+    });
+
+    async function poll() {
+      try {
+        const snapshot = await ipcRenderer.invoke("plugin:system-status:snapshot");
+        window.renderSnapshot(snapshot);
+      } catch (e) {
+        /* 单次失败忽略，下一轮重试 */
+      }
+    }
+
+    poll();
+    setInterval(poll, 3000);
+  </script>
+</body>
+</html>

@@ -1,7 +1,9 @@
 import type { BrowserWindow } from "electron";
 import type { IpcScope } from "../application/ipc-scope";
 import type { AgentRuntime } from "../orchestrator/agent-runtime";
+import type { LifecyclePublisher } from "../plugin-host/lifecycle-publisher";
 import { toolRegistry } from "../orchestrator/tools/registry/tool-registry";
+import type { ScheduledTask } from "./types";
 import { SchedulerEngine, type SchedulerEngineDeps } from "./scheduler-engine";
 import { getSchedulerStore } from "./scheduler-store";
 import { registerSchedulerIpc } from "./scheduler-ipc";
@@ -15,6 +17,13 @@ export interface SchedulerSubsystemDeps {
   registerIpc?: typeof registerSchedulerIpc;
   /** 共享 IPC scope；传入后 scheduler IPC 由组合根统一注销。 */
   ipc?: IpcScope;
+  /**
+   * 运行条件检查（在有效启用状态之上）：宿主注入"插件是否正在运行"，
+   * 插件停用时定时触发和手动触发都被跳过。
+   */
+  canRunTask?: (task: ScheduledTask) => boolean;
+  /** 生命周期事件发布器：调度轮次事件与 scheduler:finished 由此发布。 */
+  publishLifecycle?: LifecyclePublisher;
 }
 
 export interface SchedulerSubsystem {
@@ -41,11 +50,13 @@ export function createSchedulerSubsystem(deps: SchedulerSubsystemDeps): Schedule
     recordHistory: (entry) => store.recordHistory(entry),
     id: () => `hist-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     now: () => new Date(),
+    ...(deps.publishLifecycle ? { publishLifecycle: deps.publishLifecycle } : {}),
   });
 
   const engineDeps: SchedulerEngineDeps = {
     store,
     runTask: runner.runScheduledTask,
+    ...(deps.canRunTask ? { canRunTask: deps.canRunTask } : {}),
   };
   const engine = deps.createEngine
     ? deps.createEngine(engineDeps)

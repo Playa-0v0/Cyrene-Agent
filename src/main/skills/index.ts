@@ -9,7 +9,8 @@ import { skillRegistry } from "./skill-registry";
 import { registerSkillTools } from "./skill-tools";
 import type { SkillEntry } from "./types";
 import { logger, LogTag } from "../logger";
-import { getExternalContentPaths, resolveSkillScanSources } from "../external-content-paths";
+import { getExternalContentPaths, resolveSkillScanSources, resolveSkillsSnapshotArchivePath } from "../external-content-paths";
+import { installSkillsSnapshot } from "./snapshot-install";
 
 const LOG_PREFIX = "[Skills]";
 
@@ -30,11 +31,19 @@ function loadEnabledState(): Record<string, boolean> {
 }
 
 /**
- * 启动入口：扫描双源 skills → 灌入 registry（user 目录级覆盖 builtin + 合并 enabled 状态）→ 注册 meta-tool。
+ * 启动入口：首启把第三方 skills 快照解压到 user 区（哨兵保证只装一次），
+ * 再扫描双源 skills → 灌入 registry（user 目录级覆盖 builtin + 合并 enabled 状态）→ 注册 meta-tool。
  * 必须在 app.whenReady 之后调用（依赖 app.getPath）。
  */
-export function initSkills(): void {
-  const sources = resolveSkillScanSources(getExternalContentPaths());
+export async function initSkills(): Promise<void> {
+  const paths = getExternalContentPaths();
+
+  // 快照安装必须在扫描之前完成，否则首启扫不到归档里的第三方 skill。
+  const archivePath = resolveSkillsSnapshotArchivePath(paths);
+  const userSkillsDir = paths.userSkillDirectories[0];
+  await installSkillsSnapshot({ archivePath, userSkillsDir });
+
+  const sources = resolveSkillScanSources(paths);
 
   // 合并：扫描源按低到高优先级排列，user 覆盖 builtin。
   const map = new Map<string, SkillEntry>();

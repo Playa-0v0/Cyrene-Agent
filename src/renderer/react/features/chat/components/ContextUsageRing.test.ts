@@ -1,6 +1,6 @@
 // ContextUsageRing 单测：纯函数口径 + 静态渲染断言（renderToStaticMarkup，项目惯例）。
 //
-// 重点覆盖施工文档 Phase 3 验收点：
+// 重点覆盖边界与验收用例：
 // - visualRatio clamp（含 ratio>1：文本诚实显示 117%，圆环 clamp 整圈）
 // - contextWindowTokens<=0 / NaN：不渲染进度弧与百分比，菜单仍显示绝对值
 // - 分级变色（normal / warm≥70% / alert≥90%）
@@ -26,16 +26,21 @@ vi.mock("antd", async () => {
 vi.mock("../../../../../shared/renderer-base", () => ({ resolveAsset: (path: string) => path }));
 
 import {
-  CONTEXT_USAGE_CATEGORY_META,
   CONTEXT_USAGE_COMPACT_SRC,
-  CONTEXT_USAGE_MOOD_META,
   ContextUsageRing,
   RING_CIRCUMFERENCE,
   clampVisualRatio,
   computeUsageRatio,
+  contextUsageCategoryMeta,
+  contextUsageMoodMeta,
   formatTokenCount,
   resolveRingTone,
 } from "./ContextUsageRing";
+
+// 原 CONTEXT_USAGE_CATEGORY_META / CONTEXT_USAGE_MOOD_META 常量改为函数（t() 需按调用求值），
+// 这里取一次快照供断言使用（默认 zh-CN，与静态渲染的输出一致）。
+const CONTEXT_USAGE_CATEGORY_META = contextUsageCategoryMeta();
+const CONTEXT_USAGE_MOOD_META = contextUsageMoodMeta();
 
 const CATEGORY_KEYS: ContextUsageCategoryKey[] = [
   "systemPrompt",

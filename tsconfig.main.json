@@ -13,6 +13,6 @@
     "declaration": false,
     "sourceMap": true
   },
-  "include": ["src/main/**/*.ts", "src/shared/**/*.ts"],
-  "exclude": ["src/shared/renderer-base.ts", "src/main/**/*.test.ts"]
+  "include": ["src/plugins/**/*.ts", "src/main/**/*.ts", "src/shared/**/*.ts"],
+  "exclude": ["src/shared/renderer-base.ts", "src/main/**/*.test.ts", "src/plugins/**/*.test.ts"]
 }

@@ -1,0 +1,11 @@
+{
+  "apiVersion": 1,
+  "id": "system-status",
+  "name": "系统状态",
+  "version": "0.1.0",
+  "description": "查询本机系统状态：CPU、内存、磁盘、电池与开机时长",
+  "author": "Playa",
+  "entry": "index.cjs",
+  "icon": "avatar.png",
+  "defaultEnabled": false
+}

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "../../../i18n";
 import { DownOutlined } from "@ant-design/icons";
 import { ChatComposer, parseComposerMessage, type ComposerAttachment } from "../components/ChatComposer";
 import { ComposerSlot } from "../components/ComposerSlot";
@@ -6,56 +7,42 @@ import { TodoPanel } from "../components/TodoPanel";
 import { CodeGitPanel } from "../components/CodeGitPanel";
 import type { PlanReviewPhase } from "../components/PlanReviewPanel";
 import { ChatPageInspector, type ChatPageInspectorTabId } from "../components/ChatPageInspector";
-import type { TodoItem } from "../../../../../shared/todo-types";
 import {
-  normalizeChoiceInteraction,
   normalizeDeferredPlanChoice,
-  normalizeTaskPlanPresentation,
-  isFormalAnswerCommitted,
-  resolveRunFinishedStage,
-  resolveTerminalContent,
-  shouldClearComposerInteractionForTerminal,
   shouldDismissAsk,
   type ComposerInteraction,
 } from "../components/run-presentation";
-import { ChatMessageList, type ChatMessageItem } from "../components/ChatMessageList";
+import { ChatMessageList } from "../components/ChatMessageList";
 import { ChatPageNavigation, type ChatPagePanel } from "../components/ChatPageNavigation";
 import {
   ContextCompressionNotice,
   FileDropOverlay,
   RunRecoveryNotices,
 } from "../components/ChatWorkspaceNotices";
-import { applyAgentRoundBoundary, createRoundProcessMessage } from "../components/agent-rounds";
-import { applyTaskDelegationEvent, normalizeTaskDelegationEvent } from "../components/task-delegations";
 import { getTtsPlaybackSnapshot, playTtsToCompletion, stopTtsPlayback } from "../components/tts-playback";
 import { EarlyTtsPlaybackQueue } from "../tts/early-tts-queue";
 
-import type { AgentRoundRecord, ChatMessage, ChatSession, ChatSessionMeta, ConversationMode, ProcessMessageRecord, ReasoningBlock, RunActivityRecord, TaskDelegationDisplayRecord, ToolExecutionRecord } from "../../../../../shared/chat-types";
-import { isContextUsageSnapshot, type ContextUsageSnapshot } from "../../../../../shared/context-usage";
-import { ToolModePanel } from "../components/ToolModePanel";
-import { SkillModePanel } from "../components/SkillModePanel";
-import { ModelModePanel } from "../components/ModelModePanel";
+import type { ChatMessage, ChatSession, ChatSessionMeta, ConversationMode } from "../../../../../shared/chat-types";
+import { type ContextUsageSnapshot } from "../../../../../shared/context-usage";
+import { ChatPagePanelHost } from "../components/ChatPagePanelHost";
 import { useUserCallPreference } from "../../../hooks/useUserNickname";
 import { resolveRevisableLastTurn } from "../components/last-turn-actions";
 import { shouldListenForDeferredPlanEvents } from "./conversation-run-policy";
-import { arrayBufferToBase64, containsFiles, PASTE_IMAGE_MAX_BYTES } from "./attachment-utils";
+
 import {
   aguiApi,
   chatStore,
   choiceApi,
   settingsApprovalApi,
   sidebarApi,
-  type AguiEvent,
   type ModelConfigApi,
   type PublicModelConfig,
 } from "./chat-page-bridge";
 import {
   getInitialMode,
   isConversationMode,
-  normalizeWeatherData,
-  parseSessionRunActiveError,
+  LAST_MODE_STORAGE_KEY,
   permissionInteraction,
-  stageForStep,
   toUiMessages,
 } from "./chat-page-normalizers";
 import {
@@ -65,22 +52,21 @@ import {
   type OpenSessionArgs,
   type ReactSessionMode,
 } from "./openSessionByDeps";
-import { RunEventGate } from "./run-event-gate";
-import { splitTextForReveal } from "./message-reveal";
+import { useComposerAttachments } from "../hooks/useComposerAttachments";
+import { useSessionMessages } from "../hooks/useSessionMessages";
+import { AgentRunController, type AgentRunInput } from "./run/AgentRunController";
 import {
+  appendPendingQueueEntry,
   clearSessionInteraction,
-  buildTodoRecoveryContext,
   bindWorkspaceName,
   findSessionIdForRun,
   hasActiveRunForSession,
-  hydrateSessionMessages,
-  mergeHarnessTodosForSession,
-  patchSessionMessage,
+  removePendingQueueEntry,
   sessionInteraction,
   setSessionInteraction,
   setSessionInteractionBusy,
+  type PendingQueueBySession,
   type SessionInteractionState,
-  startSessionTodos,
   type TodoStateBySession,
 } from "./session-runtime-state";
 import "../../../components/ui/SidebarToggle.css";
@@ -94,7 +80,6 @@ import "../components/ChatComposer.css";
 import "../components/ReasoningControl.css";
 import "../components/StyleControl.css";
 import "../components/PermissionControl.css";
-import "../components/ModelModePanel.css";
 import "../components/ChatMessageList.css";
 import "../components/ConversationSidebar.css";
 /**
@@ -110,18 +95,17 @@ export {
 };
 
 export function ChatPage() {
+  const { t } = useTranslation();
   const preferredAddress = useUserCallPreference();
   const [collapsed, setCollapsed] = useState(false);
-  const [toolPanelOpen, setToolPanelOpen] = useState(false);
-  const [skillPanelOpen, setSkillPanelOpen] = useState(false);
-  const [modelPanelOpen, setModelPanelOpen] = useState(false);
+  const [activePanel, setActivePanel] = useState<ChatPagePanel | null>(null);
   /** 右侧 Review 检查面板：打开时把白色工作区挤窄 */
   const [reviewInspector, setReviewInspector] = useState<{ runId: string; fileIndex: number } | null>(null);
   /** 右侧面板当前激活的 tab（diff / plan），由打开动作自动切换 */
   const [inspectorTab, setInspectorTab] = useState<"diff" | "plan">("plan");
   const [mode, setMode] = useState<ConversationMode>(getInitialMode);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [messagesBySession, setMessagesBySession] = useState<Record<string, ChatMessageItem[]>>({});
+
   const [workspaceNames, setWorkspaceNames] = useState<Partial<Record<ConversationMode, string>>>({});
   const [pendingWorkspaceByMode, setPendingWorkspaceByMode] = useState<
     Partial<Record<ConversationMode, { path: string; displayName?: string }>>
@@ -130,16 +114,15 @@ export function ChatPage() {
   const [pendingModelProfileByMode, setPendingModelProfileByMode] = useState<
     Partial<Record<ConversationMode, string>>
   >({});
-  const [attachmentsByScope, setAttachmentsByScope] = useState<Record<string, ComposerAttachment[]>>({});
   const [sessionsByMode, setSessionsByMode] = useState<Partial<Record<ConversationMode, ChatSessionMeta[]>>>({});
   const [activeSessionIds, setActiveSessionIds] = useState<Partial<Record<ConversationMode, string>>>({});
-  const [attachmentBusy, setAttachmentBusy] = useState(false);
+
   const [modelBusyByMode, setModelBusyByMode] = useState<Partial<Record<ConversationMode, boolean>>>({});
   const [isCompressingContext, setIsCompressingContext] = useState(false);
   const [interactionsBySession, setInteractionsBySession] = useState<SessionInteractionState>({});
   const [lastTurnRevisionStarting, setLastTurnRevisionStarting] = useState(false);
   const [stickerSize, setStickerSize] = useState<"small" | "standard" | "large">("standard");
-  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+
   const [todoStateBySession, setTodoStateBySession] = useState<TodoStateBySession>({});
   // 计划模式（Plan Mode 二期）：会话级计划面板内容与阶段（review → executing → completed）。
   const [planReviewBySession, setPlanReviewBySession] = useState<
@@ -158,8 +141,7 @@ export function ChatPage() {
   const activeSessionIdsRef = useRef(activeSessionIds);
   const activeScopeRef = useRef(`mode:${mode}`);
   const sessionSelectionGeneration = useRef(0);
-  const dragDepthRef = useRef(0);
-  const localPreviewUrlsRef = useRef(new Set<string>());
+
   const activeRunsBySession = useRef<Record<string, { assistantId: string; runId?: string; mode: ConversationMode }>>({});
   const runCheckpointBySessionRef = useRef<Record<string, (status: "running" | "waiting_user") => void>>({});
   // bootstrap 标志：只由 cold-start finally 写入；模式切换 effect 仅检查
@@ -175,14 +157,25 @@ export function ChatPage() {
   const [scrollToBottomVisible, setScrollToBottomVisible] = useState(false);
   const scrollToBottomRef = useRef<() => void>(() => {});
 
+  // 消息域：渲染态消息按会话存储；补丁通道供 run 事件流、TTS、取消与附件预处理共用
+  const {
+    messagesBySession,
+    patchMessage: updateMessage,
+    hydrateMessages,
+    replaceSessionMessages,
+    appendMessages,
+    patchMessageAttachments: updateMessageAttachments,
+  } = useSessionMessages((targetMode) => activeSessionIdsRef.current[targetMode]);
+
   useEffect(() => {
     const settings = settingsApprovalApi();
     if (!settings) return;
-    return settings.onPermissionApprovalRequest((request) => {
+    const offRequest = settings.onPermissionApprovalRequest((request) => {
       const currentMode = activeModeRef.current;
       const currentSessionId = activeSessionIdsRef.current[currentMode];
       const ownerSessionId = findSessionIdForRun(activeRunsBySession.current, request.runId)
         ?? currentSessionId;
+      // 路由不到会话时先丢弃：主进程每 10s 幂等重播，会话就绪后卡片自然出现。
       if (!ownerSessionId) return;
       setInteractionForSession(ownerSessionId, permissionInteraction(request));
       const activeRun = activeRunsBySession.current[ownerSessionId];
@@ -191,6 +184,24 @@ export function ChatPage() {
         runCheckpointBySessionRef.current[ownerSessionId]?.("waiting_user");
       }
     });
+    // 结算广播：pending 已在主进程被结算（用户已答 / run 取消），
+    // 渲染端据此立即清卡——这是「僵尸审批卡（点了没反应）」的根治点。
+    const offSettled = settings.onPermissionApprovalSettled((settlement) => {
+      setInteractionsBySession((current) => {
+        for (const [sessionId, entry] of Object.entries(current)) {
+          if (entry.interaction.kind === "permission" && entry.interaction.id === settlement.id) {
+            const next = { ...current };
+            delete next[sessionId];
+            return next;
+          }
+        }
+        return current;
+      });
+    });
+    return () => {
+      offRequest();
+      offSettled();
+    };
   }, []);
 
   useEffect(() => {
@@ -214,7 +225,8 @@ export function ChatPage() {
   const lastTurnRevisionStartingRef = useRef(false);
   const activeAguiOffsRef = useRef(new Set<() => void>());
   const cancelRequestedSessionsRef = useRef(new Set<string>());
-  const [pendingQueueBySession, setPendingQueueBySession] = useState<Record<string, { id: string; rawContent: string; visibleContent: string; attachments: ComposerAttachment[]; userSticker?: string }[]>>({});
+  // 外部提交（语音输入）入队的消息带 keepComposer，消费时不触碰用户草稿
+  const [pendingQueueBySession, setPendingQueueBySession] = useState<PendingQueueBySession>({});
   const pendingQueueBySessionRef = useRef(pendingQueueBySession);
   useEffect(() => {
     pendingQueueBySessionRef.current = pendingQueueBySession;
@@ -234,7 +246,23 @@ export function ChatPage() {
   const composerInteraction = activeInteraction?.interaction;
   const interactionBusy = activeInteraction?.busy ?? false;
   const hasMessages = messages.length > 0;
-  const attachments = attachmentsByScope[scopeKey] ?? [];
+  const {
+    attachments,
+    attachmentBusy,
+    isDraggingFiles,
+    chooseFiles,
+    handlePastedImage,
+    handleScreenshot,
+    removeAttachment,
+    prepareImageAttachments,
+    clearScopeAttachments,
+    deleteScopeAttachments,
+    dragHandlers,
+  } = useComposerAttachments({
+    scopeKey,
+    getActiveScope: () => activeScopeRef.current,
+    patchMessageAttachments: updateMessageAttachments,
+  });
   const sessions = sessionsByMode[mode] ?? [];
   const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
   // 会话级最新上下文快照（环形图优先读取点）：run 事件实时写入；
@@ -259,25 +287,7 @@ export function ChatPage() {
     activeAguiOffsRef.current.clear();
     activeEarlyTtsRef.current?.queue.cancel();
     activeEarlyTtsRef.current = null;
-    for (const url of localPreviewUrlsRef.current) URL.revokeObjectURL(url);
-    localPreviewUrlsRef.current.clear();
   }, []);
-
-  useEffect(() => window.chat?.onScreenshotInsert?.((data) => {
-    const targetScope = activeScopeRef.current;
-    const attachment: ComposerAttachment = {
-      kind: "image",
-      name: `截图_${Date.now()}.png`,
-      filePath: data.filePath,
-      mime: data.mime,
-      previewUrl: data.previewUrl,
-      hasAnnotations: data.hasAnnotations,
-    };
-    setAttachmentsByScope((current) => ({
-      ...current,
-      [targetScope]: [...(current[targetScope] ?? []), attachment],
-    }));
-  }), []);
 
   useEffect(() => {
     const store = chatStore();
@@ -346,6 +356,37 @@ export function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 外部语音文本提交：主进程经 IPC 要求把文本提交到租约冻结的会话。
+  // 页面重新加载后 rendererTargetId 变化，旧目标的迟到请求直接回绝。
+  useEffect(() => {
+    const store = chatStore();
+    if (!store?.onSpeechInputCommitRequest) return;
+    const unsubscribe = store.onSpeechInputCommitRequest((request) => {
+      void (async () => {
+        let result: { ok: true } | { ok: false; error: { code: string; message: string } };
+        if (request.rendererTargetId !== store.getRendererTargetId()) {
+          result = {
+            ok: false,
+            error: { code: "E_NO_ACTIVE_INPUT_TARGET", message: "渲染目标已过期" },
+          };
+        } else {
+          result = await submitTextToSession({
+            sessionId: request.sessionId,
+            mode: request.mode,
+            text: request.text,
+          });
+        }
+        store.sendSpeechInputCommitResult({
+          requestId: request.requestId,
+          rendererTargetId: request.rendererTargetId,
+          ...(result.ok ? { ok: true } : { ok: false, error: result.error }),
+        });
+      })();
+    });
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     const active = activeEarlyTtsRef.current;
     if (active && (active.mode !== mode || active.sessionId !== activeSessionId)) {
@@ -381,6 +422,16 @@ export function ChatPage() {
         if (interaction) setInteractionForSession(activeSessionId, interaction);
         return;
       }
+      if (event.name === "cyrene.choice.dismiss") {
+        // run 事件闸之外的 dismiss（老版选择卡超时 / run 结束后发出的结算）：
+        // 匹配当前 ask 卡时清掉，避免留下点不出结果的僵尸卡。
+        setInteractionsBySession((current) => {
+          const entry = current[activeSessionId];
+          if (!entry || entry.interaction.kind !== "ask" || !shouldDismissAsk(entry.interaction, event.value)) return current;
+          return clearSessionInteraction(current, activeSessionId);
+        });
+        return;
+      }
       if (!event.name.startsWith("cyrene.plan.")) return;
       const value = (event.value ?? null) as { sessionId?: string; planPath?: string; planContent?: string; text?: string } | null;
       if (value?.sessionId && value.sessionId !== activeSessionId) return;
@@ -404,7 +455,7 @@ export function ChatPage() {
             setPlanReviewBySession((current) => current[value.sessionId!]
               ? { ...current, [value.sessionId!]: { ...current[value.sessionId!], phase: "executing" } }
               : current);
-            void sendMessage("已批准计划，请开始执行。");
+            void sendMessage(t("chatPage.planApprovedAutoMessage"));
           }
           break;
         case "cyrene.plan.supplement":
@@ -437,18 +488,8 @@ export function ChatPage() {
     setInteractionsBySession((current) => setSessionInteractionBusy(current, sessionId, busy));
   }
 
-  function updateMessage(targetScope: ConversationMode | string, id: string, patch: Partial<ChatMessageItem>) {
-    setMessagesBySession((current) => {
-      const ownerSessionId = isConversationMode(targetScope)
-        ? Object.entries(current).find(([, items]) => items.some((item) => item.id === id))?.[0]
-          ?? activeSessionIdsRef.current[targetScope]
-        : targetScope;
-      return ownerSessionId ? patchSessionMessage(current, ownerSessionId, id, patch) : current;
-    });
-  }
 
   function handleTtsCacheKey(
-    targetMode: ConversationMode,
     sessionId: string,
     messageId: string,
     cacheKey: string,
@@ -533,17 +574,12 @@ export function ChatPage() {
         };
       });
     }
-    setMessagesBySession((current) => hydrateSessionMessages(
-      current,
-      sessionId,
-      uiMessages,
-      hasActiveRunForSession(activeRunsBySession.current, sessionId),
-    ));
+    hydrateMessages(sessionId, uiMessages, hasActiveRunForSession(activeRunsBySession.current, sessionId));
     setWorkspaceNames((current) => ({
       ...current,
       [targetMode]: session.workspaceBinding?.displayName,
     }));
-    if (targetMode === activeModeRef.current) void store.setActiveSession(sessionId);
+    if (targetMode === activeModeRef.current) void store.setActiveSession(sessionId, targetMode);
   }
 
   /**
@@ -598,657 +634,88 @@ export function ChatPage() {
       return next;
     });
     setWorkspaceNames((current) => ({ ...current, [targetMode]: undefined }));
-    if (targetMode === activeModeRef.current) void store.setActiveSession(null);
+    if (targetMode === activeModeRef.current) void store.setActiveSession(null, targetMode);
   }
 
   // 渲染期间同步安装真实实现，保证 mount effect 不会先观察到默认 no-op。
   refreshSessionsRef.current = refreshSessions;
 
-  async function runModel(input: {
-    targetMode: ConversationMode;
-    sessionId: string;
-    userMessageId: string;
-    assistantId: string;
-    session: ChatSession;
-    attachments: ComposerAttachment[];
-    resumeFromRunId?: string;
-    takeoverFromRunId?: string;
-  }) {
-    const api = aguiApi();
-    const store = chatStore();
-    if (!api || !store) {
-      const visibleError = "模型请求失败：AG-UI 模型服务尚未就绪";
-      updateMessage(input.sessionId, input.assistantId, {
-        content: visibleError,
-        loading: false,
-        waitingForFirstEvent: false,
-        streaming: false,
-        responseStarted: true,
-      });
-      await store?.append(input.sessionId, {
-        id: input.assistantId,
-        role: "model",
-        content: visibleError,
-        at: Date.now(),
-      });
-      return;
-    }
-
-    modelBusyByModeRef.current = { ...modelBusyByModeRef.current, [input.targetMode]: true };
-    activeRunsBySession.current = {
-      ...activeRunsBySession.current,
-      [input.sessionId]: { assistantId: input.assistantId, mode: input.targetMode },
-    };
-    setModelBusyByMode((current) => ({ ...current, [input.targetMode]: true }));
-    const earlyTtsQueue = createEarlyTtsQueue(input.targetMode, input.sessionId, input.assistantId);
-    let streamContent = "";
-    // RUN_FINISHED.result.status，用于区分 success / cancelled / timeout / runtime_error
-    let terminalStatus: string | undefined;
-    let reasoningContent = "";
-    let reasoningBlocks: ReasoningBlock[] = [];
-    let processMessages: ProcessMessageRecord[] = [];
-    let agentRounds: AgentRoundRecord[] = [];
-    let taskDelegations: TaskDelegationDisplayRecord[] = [];
-    let activeRoundId: string | undefined;
-    let processMessageSequence = 0;
-    let finalMessageCompleted = false;
-    let revealCancelled = false;
-    let revealChain: Promise<void> = Promise.resolve();
-    let sticker: string | null = null;
-    let toolExecutions: ToolExecutionRecord[] = [];
-    let runStarted = false;
-    let runActivity: RunActivityRecord | undefined;
-    let currentTodos: TodoItem[] = [];
-    let persistedFinalContent = "";
-    // 上下文容量快照：preRequest 每轮实时覆盖（纯内存），terminal 随 checkpoint 落盘。
-    let contextUsage: ContextUsageSnapshot | undefined;
-    const assistantAt = Date.now();
-    let checkpointTimer: number | undefined;
-    let checkpointChain = Promise.resolve<ChatSession | null>(null);
-    const activeReasoningStarts = new Map<string, number>();
-    let currentReasoningId: string | undefined;
-    let resolveTerminal!: (error?: Error) => void;
-    const terminal = new Promise<Error | undefined>((resolve) => {
-      resolveTerminal = resolve;
-    });
-    const buildCheckpoint = (
-      status: "running" | "waiting_user" | "terminal",
-    ): ChatMessage => ({
-      id: input.assistantId,
-      role: "model",
-      content: status === "terminal" ? persistedFinalContent : "",
-      reasoning: reasoningContent || undefined,
-      reasoningBlocks,
-      processMessages,
-      agentRounds,
-      taskDelegations,
-      runActivity,
-      at: assistantAt,
-      sticker,
-      toolExecutions,
-      contextUsage,
-      runSnapshot: {
-        runId: activeRunsBySession.current[input.sessionId]?.runId,
-        status,
-        terminalStatus: status === "terminal"
-          ? (terminalStatus as "success" | "cancelled" | "timeout" | "runtime_error" | undefined)
-          : undefined,
-        todos: currentTodos,
-        updatedAt: Date.now(),
-      },
-    });
-    const writeCheckpoint = (
-      status: "running" | "waiting_user" | "terminal",
-    ): Promise<ChatSession | null> => {
-      const snapshot = buildCheckpoint(status);
-      checkpointChain = checkpointChain
-        .catch(() => null)
-        .then(() => store.upsert(input.sessionId, snapshot));
-      return checkpointChain;
-    };
-    const checkpointRun = (
-      status: "running" | "waiting_user" | "terminal",
-      immediate = false,
-    ): Promise<ChatSession | null> => {
-      if (checkpointTimer !== undefined) {
-        window.clearTimeout(checkpointTimer);
-        checkpointTimer = undefined;
-      }
-      if (immediate) return writeCheckpoint(status);
-      checkpointTimer = window.setTimeout(() => {
-        checkpointTimer = undefined;
-        void writeCheckpoint(status);
-      }, 350);
-      return checkpointChain;
-    };
-    runCheckpointBySessionRef.current = {
-      ...runCheckpointBySessionRef.current,
-      [input.sessionId]: (status) => {
-        void checkpointRun(status, true);
-      },
-    };
-    await checkpointRun("running", true);
-    const updateRunTool = (toolId: string, patch: Partial<ToolExecutionRecord>) => {
-      const index = toolExecutions.findIndex((tool) => tool.id === toolId);
-      toolExecutions = index === -1
-        ? [...toolExecutions, {
-            id: toolId,
-            name: patch.name ?? "工具调用",
-            status: patch.status ?? "running",
-            result: patch.result,
-            argsText: patch.argsText,
-            changes: patch.changes,
-            roundId: patch.roundId ?? activeRoundId,
-          }]
-        : toolExecutions.map((tool, toolIndex) => toolIndex === index ? { ...tool, ...patch } : tool);
-      updateMessage(input.sessionId, input.assistantId, { toolExecutions });
-    };
-    const enqueuePublicTextReveal = (content: string, publish: (chunk: string) => void) => {
-      if (input.targetMode === "chat") {
-        publish(content);
-        return;
-      }
-      revealChain = revealChain.then(async () => {
-        for (const chunk of splitTextForReveal(content)) {
-          if (revealCancelled) break;
-          publish(chunk);
-          await new Promise<void>((resolve) => window.setTimeout(resolve, 14));
-        }
-      });
-    };
-    const publishRunActivity = () => {
-      if (!runActivity) return;
-      updateMessage(input.sessionId, input.assistantId, { runActivity: { ...runActivity } });
-    };
-    const updateActiveReasoningStart = () => {
-      const starts = [...activeReasoningStarts.values()];
-      if (!runActivity) return;
-      runActivity = {
-        ...runActivity,
-        activeReasoningStartedAt: starts.length ? Math.min(...starts) : undefined,
-      };
-    };
-    const completeRunActivity = (keepExpanded = false) => {
-      if (!runActivity || runActivity.completedAt === undefined) {
-        const completedAt = Date.now();
-        for (const startedAt of activeReasoningStarts.values()) {
-          runActivity = {
-            ...(runActivity ?? { startedAt: completedAt, reasoningMs: 0 }),
-            reasoningMs: (runActivity?.reasoningMs ?? 0) + Math.max(0, completedAt - startedAt),
-          };
-        }
-        activeReasoningStarts.clear();
-        runActivity = {
-          ...(runActivity ?? { startedAt: completedAt, reasoningMs: 0 }),
-          completedAt,
-          activeReasoningStartedAt: undefined,
-          keepExpanded,
-        };
-        publishRunActivity();
-      }
-    };
-    const markFirstResponse = () => {
-      updateMessage(input.sessionId, input.assistantId, { waitingForFirstEvent: false });
-    };
-    const updateReasoningBlock = (id: string, patch: Partial<ReasoningBlock>) => {
-      const index = reasoningBlocks.findIndex((block) => block.id === id);
-      reasoningBlocks = index < 0
-        ? [...reasoningBlocks, { id, content: "", afterToolCount: toolExecutions.length, roundId: activeRoundId, ...patch }]
-        : reasoningBlocks.map((block, blockIndex) => blockIndex === index ? { ...block, ...patch } : block);
-      reasoningContent = reasoningBlocks.map((block) => block.content).filter(Boolean).join("\n\n");
-      updateMessage(input.sessionId, input.assistantId, { reasoning: reasoningContent || undefined, reasoningBlocks });
-      void checkpointRun("running");
-    };
-
-    const handleEvent = (event: AguiEvent) => {
-      if (event.type === "CUSTOM" && event.name === "cyrene.round") {
-        const value = event.value as { action?: unknown; roundId?: unknown } | null | undefined;
-        if ((value?.action === "start" || value?.action === "end") && typeof value.roundId === "string") {
-          const next = applyAgentRoundBoundary(
-            { rounds: agentRounds, activeRoundId },
-            value.action,
-            value.roundId,
-          );
-          agentRounds = next.rounds;
-          activeRoundId = next.activeRoundId;
-          updateMessage(input.sessionId, input.assistantId, { agentRounds });
-          void checkpointRun("running", true);
-        }
-      } else if (event.type === "RUN_STARTED") {
-        runStarted = true;
-        runActivity = { startedAt: Date.now(), reasoningMs: 0 };
-        setIsCompressingContext(false);
-        if (event.runId) {
-          // RUN_STARTED.runId 必须与 ack.runId 一致（由 bridge 注入 options.runId 保证）。
-          // 不一致时只 warn 不重写，避免渲染端拿到错误 runId 后无法 cancel。
-          const existing = activeRunsBySession.current[input.sessionId];
-          if (existing?.runId && existing.runId !== event.runId) {
-            console.warn(
-              `[ChatPage] RUN_STARTED.runId (${event.runId}) 与 ack.runId (${existing.runId}) 不一致，` +
-              `请检查 bridge 是否正确注入 options.runId。保留 ack.runId 作为权威值。`,
-            );
-          } else {
-            activeRunsBySession.current = {
-              ...activeRunsBySession.current,
-              [input.sessionId]: { ...(existing ?? { assistantId: input.assistantId, mode: input.targetMode }), runId: event.runId },
-            };
-          }
-        }
-        currentTodos = [];
-        setTodoStateBySession((current) => startSessionTodos(
-          current,
-          input.sessionId,
-          event.runId ?? activeRunsBySession.current[input.sessionId]?.runId,
-        ));
-        updateMessage(input.sessionId, input.assistantId, {
-          waitingForFirstEvent: false,
-          runActivity: { ...runActivity },
-          runStage: { kind: "understanding" },
-          runId: event.runId ?? activeRunsBySession.current[input.sessionId]?.runId,
-        });
-        void checkpointRun("running", true);
-        return;
-      }
-      if (!runStarted) return;
-      if (
-        event.type === "REASONING_MESSAGE_START"
-        || event.type === "REASONING_MESSAGE_CONTENT"
-        || event.type === "REASONING_MESSAGE_END"
-        || event.type === "TOOL_CALL_START"
-        || event.type === "TOOL_CALL_RESULT"
-        || event.type === "TOOL_CALL_END"
-        || event.type === "TEXT_MESSAGE_START"
-        || event.type === "TEXT_MESSAGE_CONTENT"
-        || event.type === "TEXT_MESSAGE_END"
-        || event.type === "CUSTOM"
-      ) markFirstResponse();
-      if (event.type === "REASONING_MESSAGE_START") {
-        const reasoningId = event.messageId ?? crypto.randomUUID();
-        currentReasoningId = reasoningId;
-        activeReasoningStarts.set(reasoningId, Date.now());
-        updateActiveReasoningStart();
-        publishRunActivity();
-        updateReasoningBlock(reasoningId, { streaming: true });
-        updateMessage(input.sessionId, input.assistantId, {
-          loading: false,
-          reasoningStreaming: true,
-          runStage: { kind: "responding" },
-        });
-      } else if (event.type === "REASONING_MESSAGE_CONTENT" && event.delta) {
-        const reasoningId = event.messageId ?? currentReasoningId ?? crypto.randomUUID();
-        currentReasoningId = reasoningId;
-        const current = reasoningBlocks.find((block) => block.id === reasoningId)?.content ?? "";
-        updateReasoningBlock(reasoningId, { content: current + event.delta, streaming: true });
-        updateMessage(input.sessionId, input.assistantId, {
-          reasoning: reasoningContent,
-          loading: false,
-          reasoningStreaming: true,
-        });
-      } else if (event.type === "REASONING_MESSAGE_END") {
-        const reasoningId = event.messageId ?? currentReasoningId;
-        if (reasoningId) {
-          const startedAt = activeReasoningStarts.get(reasoningId);
-          if (startedAt && runActivity) {
-            runActivity = {
-              ...runActivity,
-              reasoningMs: runActivity.reasoningMs + Math.max(0, Date.now() - startedAt),
-            };
-          }
-          activeReasoningStarts.delete(reasoningId);
-          updateActiveReasoningStart();
-          publishRunActivity();
-          updateReasoningBlock(reasoningId, { streaming: false });
-        }
-        currentReasoningId = undefined;
-        updateMessage(input.sessionId, input.assistantId, { reasoningStreaming: false, loading: false });
-        } else if (event.type === "STEP_STARTED") {
-          const stage = stageForStep(event.stepName);
-          if (stage) updateMessage(input.sessionId, input.assistantId, { runStage: stage });
-        } else if (event.type === "TOOL_CALL_START" && event.toolCallId) {
-          updateRunTool(event.toolCallId, {
-            name: event.toolCallName ?? "工具调用",
-            status: "running",
-            roundId: activeRoundId,
+  /**
+   * 模型运行入口：组装运行宿主与共享注册表，交给运行控制器执行。
+   * run 结束后的会话列表刷新与待发队列消费在 onRunFinished 中协调。
+   */
+  async function runModel(input: AgentRunInput) {
+    const controller = new AgentRunController(input, {
+      api: aguiApi(),
+      store: chatStore(),
+      host: {
+        patchMessage: updateMessage,
+        setInteraction: setInteractionForSession,
+        clearInteraction: clearInteractionForSession,
+        dismissAskIfMatched: (sessionId, value) => {
+          setInteractionsBySession((current) => {
+            const interaction = sessionInteraction(current, sessionId)?.interaction;
+            if (interaction?.kind !== "ask" || !shouldDismissAsk(interaction, value)) return current;
+            return clearSessionInteraction(current, sessionId);
           });
-          updateMessage(input.sessionId, input.assistantId, {
-            runStage: { kind: "executing", detail: event.toolCallName ?? "工具调用" },
-          });
-      } else if (event.type === "TOOL_CALL_ARGS" && event.toolCallId && event.delta) {
-        const currentArgs = toolExecutions.find((tool) => tool.id === event.toolCallId)?.argsText ?? "";
-        updateRunTool(event.toolCallId, { argsText: currentArgs + event.delta, roundId: activeRoundId });
-      } else if (event.type === "TOOL_CALL_RESULT" && event.toolCallId) {
-        updateRunTool(event.toolCallId, {
-          status: event.status === "failed" ? "error" : "success",
-          result: (event.content ?? "").slice(0, 4000),
-          changes: event.changes,
-        });
-        void checkpointRun("running", true);
-      } else if (event.type === "TOOL_CALL_END" && event.toolCallId) {
-        updateRunTool(event.toolCallId, {});
-      } else if (event.type === "TEXT_MESSAGE_START") {
-        updateMessage(input.sessionId, input.assistantId, {
-          loading: false,
-          reasoningStreaming: false,
-          responseStarted: true,
-          streaming: true,
-          runStage: { kind: "responding" },
-        });
-      } else if (event.type === "TEXT_MESSAGE_CONTENT" && event.delta) {
-        enqueuePublicTextReveal(event.delta, (chunk) => {
-          streamContent += chunk;
-          earlyTtsQueue.append(chunk);
-          updateMessage(input.sessionId, input.assistantId, {
-            content: streamContent,
-            loading: false,
-            streaming: true,
-            responseStarted: true,
-          });
-          void checkpointRun("running");
-        });
-      } else if (event.type === "TEXT_MESSAGE_END") {
-        revealChain = revealChain.then(() => {
-          finalMessageCompleted = true;
-          updateMessage(input.sessionId, input.assistantId, { streaming: false });
-        });
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.process_text") {
-        const content = (event.value as { content?: unknown } | null | undefined)?.content;
-        if (typeof content === "string" && content.trim()) {
-          const processId = `process-${processMessageSequence++}`;
-          processMessages = [...processMessages, createRoundProcessMessage(
-            processId,
-            "",
-            toolExecutions.length,
-            activeRoundId,
-          )];
-          updateMessage(input.sessionId, input.assistantId, { processMessages });
-          enqueuePublicTextReveal(content, (chunk) => {
-            processMessages = processMessages.map((message) => message.id === processId
-              ? { ...message, content: message.content + chunk }
-              : message);
-            updateMessage(input.sessionId, input.assistantId, { processMessages });
-            void checkpointRun("running");
-          });
-        }
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.task") {
-        const delegation = normalizeTaskDelegationEvent(event.value);
-        if (delegation) {
-          taskDelegations = applyTaskDelegationEvent(taskDelegations, delegation, activeRoundId);
-          updateMessage(input.sessionId, input.assistantId, {
-            taskDelegations,
-            runStage: { kind: "executing", detail: delegation.nickname },
-          });
-          void checkpointRun("running", true);
-        }
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.choice") {
-        const interaction = normalizeChoiceInteraction(event.value);
-        if (interaction) {
-          setInteractionForSession(input.sessionId, interaction);
-          updateMessage(input.sessionId, input.assistantId, { runStage: { kind: "waiting_user" } });
-          void checkpointRun("waiting_user", true);
-        }
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.choice.dismiss") {
-        setInteractionsBySession((current) => {
-          const interaction = sessionInteraction(current, input.sessionId)?.interaction;
-          if (interaction?.kind !== "ask" || !shouldDismissAsk(interaction, event.value)) return current;
-          return clearSessionInteraction(current, input.sessionId);
-        });
-        void checkpointRun("running", true);
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.taskPlan") {
-        const taskPlan = normalizeTaskPlanPresentation(event.value);
-        if (taskPlan) {
-          updateMessage(input.sessionId, input.assistantId, {
-            taskPlan,
-            runStage: { kind: "executing" },
-          });
-        }
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.todo") {
-        // Harness 的 Todo 复用右侧现有 TodoPanel，不再复制成消息内 TaskPlanCard。
-        const items = (event.value as { items?: Array<{ id: string; content: string; status: string }> } | null | undefined)?.items;
-        if (Array.isArray(items)) {
-          const ownerRunId = event.runId ?? activeRunsBySession.current[input.sessionId]?.runId;
-          const normalized = mergeHarnessTodosForSession({
-            [input.sessionId]: {
-              runId: ownerRunId,
-              todos: currentTodos,
-              updatedAt: Date.now(),
-            },
-          }, input.sessionId, ownerRunId, items);
-          currentTodos = normalized[input.sessionId]?.todos ?? currentTodos;
-          setTodoStateBySession((current) => mergeHarnessTodosForSession(
-            current,
-            input.sessionId,
-            ownerRunId,
-            items,
-          ));
-          void checkpointRun("running", true);
-        }
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.compressingContext") {
-        setIsCompressingContext(true);
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.context.usage") {
-        // 上下文容量快照：preRequest 纯内存实时刷新（零 I/O）；
-        // terminal 用 debounce 版 checkpointRun，合并进紧随其后的 RUN_FINISHED terminal checkpoint，一次落盘。
-        const snapshot = isContextUsageSnapshot(event.value) ? event.value : undefined;
-        if (snapshot) {
-          contextUsage = snapshot;
-          updateMessage(input.sessionId, input.assistantId, { contextUsage: snapshot });
-          // session 级状态同步刷新：环形图优先读取点，手动压缩等场景不再依赖消息级兜底。
-          setSessionContextUsageBySession((current) => ({ ...current, [input.sessionId]: snapshot }));
-          if (snapshot.phase === "terminal") void checkpointRun("running");
-        }
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.sticker") {
-        sticker = typeof event.value === "string" ? event.value : null;
-        updateMessage(input.sessionId, input.assistantId, { sticker });
-      } else if (event.type === "CUSTOM" && event.name === "cyrene.weather") {
-        const weather = normalizeWeatherData(event.value);
-        if (weather) {
-          updateMessage(input.sessionId, input.assistantId, { weather });
-        }
-      } else if (event.type === "RUN_FINISHED") {
-        // 读取 result.status 区分终态（success / cancelled / timeout / runtime_error）
-        const result = (event as { result?: { status?: string } }).result;
-        terminalStatus = result?.status;
-        if (terminalStatus !== "success") revealCancelled = true;
-        const stage = resolveRunFinishedStage(result);
-        updateMessage(input.sessionId, input.assistantId, { runStage: stage });
-        const activeRunId = activeRunsBySession.current[input.sessionId]?.runId;
-        if (shouldClearComposerInteractionForTerminal(activeRunId, event.runId)) {
-          clearInteractionForSession(input.sessionId);
-        }
-        resolveTerminal();
-      } else if (event.type === "RUN_ERROR") {
-        revealCancelled = true;
-        completeRunActivity(true);
-        updateMessage(input.sessionId, input.assistantId, { runStage: { kind: "failed" } });
-        const activeRunId = activeRunsBySession.current[input.sessionId]?.runId;
-        if (shouldClearComposerInteractionForTerminal(activeRunId, event.runId)) {
-          clearInteractionForSession(input.sessionId);
-        }
-        resolveTerminal(new Error(event.message ?? event.error ?? event.content ?? "模型请求失败"));
-      }
-    };
-    const eventGate = new RunEventGate<AguiEvent>();
-    const off = api.onEvent((event) => {
-      for (const accepted of eventGate.accept(event)) handleEvent(accepted);
-    });
-    activeAguiOffsRef.current.add(off);
-
-    try {
-      const general = await window.chat?.getGeneralSettings?.();
-      const ack = await api.run({
-        messages: input.session.messages.slice(-16).map((item) => ({
-          role: item.role,
-          content: item.content,
-          at: item.at,
+        },
+        updateTodos: (_sessionId, updater) => setTodoStateBySession((current) => updater(current)),
+        updateContextUsage: (sessionId, snapshot) => setSessionContextUsageBySession((current) => ({
+          ...current,
+          [sessionId]: snapshot,
         })),
-        userTurnId: input.userMessageId,
-        assistantTurnId: input.assistantId,
-        styleId: general?.currentStyleId,
-        sessionId: input.sessionId,
-        recoveryContext: buildTodoRecoveryContext(input.session.messages, input.assistantId),
-        ...(input.resumeFromRunId ? { resumeFromRunId: input.resumeFromRunId } : {}),
-        ...(input.takeoverFromRunId ? { takeoverFromRunId: input.takeoverFromRunId } : {}),
-        imageAttachments: input.attachments
-          .filter((attachment) => attachment.kind === "image" && attachment.filePath)
-          .map((attachment) => ({
-            name: attachment.name,
-            filePath: attachment.filePath!,
-            mime: attachment.mime,
-          })),
-      });
-      if (!ack.success) throw new Error(ack.error ?? "模型请求发起失败");
-      // 新 run 已被主进程接受：同会话旧的守卫冲突操作卡（若有）不再有效
-      setSessionTakeover((current) => (current && current.sessionId === input.sessionId ? null : current));
-      // 立即把 ack.runId 写入 activeRunsBySession，
-      // 让 cancel 在 RUN_STARTED 事件到达前也能找到正确的 runId。
-      // RUN_STARTED.runId 必须与 ack.runId 一致（由 bridge 注入 options.runId 保证）。
-      if (ack.runId) {
-        const existing = activeRunsBySession.current[input.sessionId];
-        activeRunsBySession.current = {
-          ...activeRunsBySession.current,
-          [input.sessionId]: {
-            ...(existing ?? { assistantId: input.assistantId, mode: input.targetMode }),
-            runId: ack.runId,
-          },
-        };
-        for (const accepted of eventGate.bind(ack.runId)) handleEvent(accepted);
-        await checkpointRun("running", true);
-        if (cancelRequestedSessionsRef.current.delete(input.sessionId)) {
-          await api.cancel(ack.runId);
-        }
-      }
-      const terminalError = await terminal;
-      if (terminalError) throw terminalError;
-      await revealChain;
-
-      // 只有 success + 完整 TEXT_MESSAGE_END + 非空正文才提交正式回答。
-      // cancelled / timeout / runtime_error 与半截流都只保留在展开的过程区。
-      const formalAnswerCommitted = isFormalAnswerCommitted(streamContent, terminalStatus, finalMessageCompleted);
-      completeRunActivity(!formalAnswerCommitted);
-      const finalContent = formalAnswerCommitted ? resolveTerminalContent(streamContent, terminalStatus) : "";
-      persistedFinalContent = finalContent;
-      updateMessage(input.sessionId, input.assistantId, {
-        content: finalContent,
-        loading: false,
-        waitingForFirstEvent: false,
-        streaming: false,
-        reasoning: reasoningContent || undefined,
-        reasoningBlocks,
-        processMessages,
-        agentRounds,
-        reasoningStreaming: false,
-        runActivity,
-        responseStarted: formalAnswerCommitted,
-        sticker,
-        toolExecutions,
-      });
-      const savedAssistant = await checkpointRun("terminal", true);
-      if (savedAssistant && formalAnswerCommitted) {
-        finishEarlyTtsQueue(earlyTtsQueue, finalContent);
-      } else earlyTtsQueue.cancel();
-    } catch (error) {
-      earlyTtsQueue.cancel();
-      terminalStatus = terminalStatus ?? "runtime_error";
-      completeRunActivity(true);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      // 会话守卫冲突：主进程拒绝了并发 run（典型场景：F5 后立即发消息）。
-      // 不走通用错误文案，改为挂起操作卡等用户决定是否终止旧 run 并重开本轮。
-      const conflictRunId = parseSessionRunActiveError(errorMessage);
-      if (conflictRunId) {
-        processMessages = [...processMessages, createRoundProcessMessage(
-          `process-${processMessageSequence++}`,
-          "当前会话已有正在运行的任务（可能来自刷新前的旧运行），本轮未执行。",
-          toolExecutions.length,
-          activeRoundId,
-        )];
-        updateMessage(input.sessionId, input.assistantId, {
-          content: "",
-          processMessages,
-          loading: false,
-          waitingForFirstEvent: false,
-          streaming: false,
-          reasoningStreaming: false,
-          runActivity,
-          responseStarted: false,
-        });
-        persistedFinalContent = "";
-        setSessionTakeover({
-          sessionId: input.sessionId,
-          activeRunId: conflictRunId,
-          retry: async () => {
-            // 重开本轮：assistant 占位消息回到 loading，带 takeoverFromRunId 重发
-            updateMessage(input.sessionId, input.assistantId, {
-              loading: true,
-              waitingForFirstEvent: true,
-              streaming: false,
-              responseStarted: false,
+        setCompressingContext: (_sessionId, value) => setIsCompressingContext(value),
+        setModeBusy: (targetMode, busy) => {
+          if (busy) {
+            modelBusyByModeRef.current = { ...modelBusyByModeRef.current, [targetMode]: true };
+            setModelBusyByMode((current) => ({ ...current, [targetMode]: true }));
+          } else {
+            const nextBusy = { ...modelBusyByModeRef.current };
+            delete nextBusy[targetMode];
+            modelBusyByModeRef.current = nextBusy;
+            setModelBusyByMode((current) => {
+              const next = { ...current };
+              delete next[targetMode];
+              return next;
             });
-            await runModel({ ...input, takeoverFromRunId: conflictRunId });
-          },
-        });
-        await checkpointRun("terminal", true);
-        return;
-      }
-      const visibleError = `模型请求失败：${errorMessage}`;
-      processMessages = [...processMessages, createRoundProcessMessage(
-        `process-${processMessageSequence++}`,
-        visibleError,
-        toolExecutions.length,
-        activeRoundId,
-      )];
-      updateMessage(input.sessionId, input.assistantId, {
-        content: "",
-        processMessages,
-        loading: false,
-        waitingForFirstEvent: false,
-        streaming: false,
-        reasoningStreaming: false,
-        runActivity,
-        responseStarted: false,
-      });
-      persistedFinalContent = "";
-      await checkpointRun("terminal", true);
-    } finally {
-      if (checkpointTimer !== undefined) window.clearTimeout(checkpointTimer);
-      const checkpointCallbacks = { ...runCheckpointBySessionRef.current };
-      delete checkpointCallbacks[input.sessionId];
-      runCheckpointBySessionRef.current = checkpointCallbacks;
-      off();
-      activeAguiOffsRef.current.delete(off);
-      const currentActive = activeRunsBySession.current[input.sessionId];
-      cancelRequestedSessionsRef.current.delete(input.sessionId);
-      if (currentActive?.assistantId === input.assistantId) {
-        const nextActive = { ...activeRunsBySession.current };
-        delete nextActive[input.sessionId];
-        activeRunsBySession.current = nextActive;
-      }
-      const nextBusy = { ...modelBusyByModeRef.current };
-      delete nextBusy[input.targetMode];
-      modelBusyByModeRef.current = nextBusy;
-      setModelBusyByMode((current) => {
-        const next = { ...current };
-        delete next[input.targetMode];
-        return next;
-      });
-      void refreshSessions(input.targetMode, false);
-      // 当前 session 队列中的下一条消息自动消费
-      const queue = pendingQueueBySessionRef.current[input.sessionId] ?? [];
-      if (queue.length > 0) {
-        const [next, ...rest] = queue;
-        pendingQueueBySessionRef.current = { ...pendingQueueBySessionRef.current, [input.sessionId]: rest };
-        setPendingQueueBySession(pendingQueueBySessionRef.current);
-        const assistantId = crypto.randomUUID();
-        void dispatchUserMessage({
-          targetMode: input.targetMode,
-          sessionId: input.sessionId,
-          rawContent: next.rawContent,
-          visibleContent: next.visibleContent,
-          attachments: next.attachments,
-          userSticker: next.userSticker,
-          assistantId,
-          userMessageId: next.id,
-        });
-      }
-    }
+          }
+        },
+        requestTakeover: (sessionId, activeRunId, retry) => setSessionTakeover({ sessionId, activeRunId, retry }),
+        clearTakeover: (sessionId) => setSessionTakeover((current) => (current && current.sessionId === sessionId ? null : current)),
+        earlyTts: {
+          start: createEarlyTtsQueue,
+          finish: finishEarlyTtsQueue,
+        },
+        onRunFinished: ({ mode, sessionId }) => {
+          void refreshSessions(mode, false);
+          // 当前 session 队列中的下一条消息自动消费
+          const queue = pendingQueueBySessionRef.current[sessionId] ?? [];
+          if (queue.length === 0) return;
+          const [next, ...rest] = queue;
+          pendingQueueBySessionRef.current = { ...pendingQueueBySessionRef.current, [sessionId]: rest };
+          setPendingQueueBySession(pendingQueueBySessionRef.current);
+          void dispatchUserMessage({
+            targetMode: mode,
+            sessionId,
+            rawContent: next.rawContent,
+            visibleContent: next.visibleContent,
+            attachments: next.attachments,
+            userSticker: next.userSticker,
+            assistantId: crypto.randomUUID(),
+            userMessageId: next.id,
+            keepComposer: next.keepComposer,
+          });
+        },
+      },
+      registries: {
+        activeRuns: activeRunsBySession,
+        checkpointTriggers: runCheckpointBySessionRef,
+        cancelRequestedSessions: cancelRequestedSessionsRef,
+        eventUnsubscribers: activeAguiOffsRef,
+      },
+      startRun: runModel,
+    });
+    await controller.start();
   }
 
   function isSessionBusy(sessionId: string): boolean {
@@ -1298,21 +765,18 @@ export function ChatPage() {
       activeEarlyTtsRef.current = null;
       stopTtsPlayback();
       const assistantId = crypto.randomUUID();
-      setMessagesBySession((current) => ({
-        ...current,
-        [sessionId]: [
-          ...toUiMessages(truncatedSession),
-          {
-            id: assistantId,
-            role: "assistant",
-            content: "",
-            loading: true,
-            waitingForFirstEvent: true,
-            streaming: false,
-            responseStarted: false,
-          },
-        ],
-      }));
+      replaceSessionMessages(sessionId, [
+        ...toUiMessages(truncatedSession),
+        {
+          id: assistantId,
+          role: "assistant",
+          content: "",
+          loading: true,
+          waitingForFirstEvent: true,
+          streaming: false,
+          responseStarted: false,
+        },
+      ]);
       void runModel({
         targetMode: "chat",
         sessionId,
@@ -1349,15 +813,15 @@ export function ChatPage() {
     const existing = activeSessionIdsRef.current[targetMode];
     if (existing) return existing;
     const store = chatStore();
-    if (!store) throw new Error("聊天会话服务尚未就绪");
+    if (!store) throw new Error(t("chatPage.errorChatStoreUnavailable"));
     const hasPendingWorkspace = !!pendingWorkspaceByMode[targetMode];
     const session = await store.create({
       identityId: null,
       mode: targetMode,
       title:
         targetMode === "work" || targetMode === "code" || hasPendingWorkspace
-          ? "新任务"
-          : "新对话",
+          ? t("chatPage.newTaskTitle")
+          : t("chatPage.newChatTitle"),
     });
     // 欢迎页暂存的模型选择在此落地（问题 2：无会话时选择器曾被静默丢弃）。
     const pendingModelProfileId = pendingModelProfileByMode[targetMode];
@@ -1380,16 +844,18 @@ export function ChatPage() {
     const store = chatStore();
     if (!store) return;
     const confirmed = options?.confirm === false || window.confirm(
-      "要在当前 Obsidian Vault 中添加 Cyrene 通用学习结构吗？只会创建缺失的文件，不会覆盖已有内容。"
+      t("chatPage.learnStructureConfirm")
     );
     if (!confirmed) return;
     const result = await store.initLearnWorkspace(sessionId);
     if (!result.ok) {
-      window.alert(`添加学习结构失败：${result.error ?? "未知错误"}`);
+      window.alert(t("chatPage.learnStructureFailed", { error: result.error ?? t("chatPage.unknownError") }));
     } else {
       const created = result.created?.length ?? 0;
       const skipped = result.skipped?.length ?? 0;
-      window.alert(`已创建 ${created} 个文件/目录${skipped > 0 ? `，跳过 ${skipped} 个已存在项` : ""}。`);
+      window.alert(skipped > 0
+        ? t("chatPage.learnStructureCreatedWithSkipped", { created, skipped })
+        : t("chatPage.learnStructureCreated", { created }));
     }
   }
 
@@ -1401,20 +867,20 @@ export function ChatPage() {
     const picked = await store.pickWorkspaceFolder();
     if (!picked.ok || !picked.path) return;
 
-    const workspace = { path: picked.path, displayName: picked.displayName ?? "工作文件夹" };
+    const workspace = { path: picked.path, displayName: picked.displayName ?? t("chatPage.defaultWorkspaceName") };
     setWorkspaceNames((current) => ({ ...current, [targetMode]: workspace.displayName }));
 
     const activeId = activeSessionIdsRef.current[targetMode];
     if (activeId) {
       const result = await store.setWorkspace(activeId, workspace.path);
       if (!result.ok) {
-        window.alert(`设置工作区失败：${result.error ?? "未知错误"}`);
+        window.alert(t("chatPage.setWorkspaceFailed", { error: result.error ?? t("chatPage.unknownError") }));
         return;
       }
       // Learn 模式：空目录询问是否初始化通用学习结构
       if (targetMode === "learn" && result.isEmpty) {
         const confirmed = window.confirm(
-          "这是一个空目录。Cyrene 可以在这里创建通用学习工作区结构（materials/、notes/、exercises/、templates/、learn/progress.md），方便你之后和 Cyrene 一起学习。\n\n是否创建？"
+          t("chatPage.emptyDirLearnStructureConfirm")
         );
         if (confirmed) {
           await initVaultStructure(activeId, { confirm: false });
@@ -1455,11 +921,7 @@ export function ChatPage() {
       delete next[`mode:${targetMode}`];
       return next;
     });
-    setAttachmentsByScope((current) => {
-      const next = { ...current };
-      delete next[`mode:${targetMode}`];
-      return next;
-    });
+    deleteScopeAttachments(`mode:${targetMode}`);
     setPendingWorkspaceByMode((current) => {
       const next = { ...current };
       if (inheritedWorkspace) {
@@ -1476,9 +938,7 @@ export function ChatPage() {
       }
       return next;
     });
-    setToolPanelOpen(false);
-    setSkillPanelOpen(false);
-    setModelPanelOpen(false);
+    setActivePanel(null);
   }
 
   async function handleRenameSession(sessionId: string, newTitle: string) {
@@ -1505,196 +965,6 @@ export function ChatPage() {
     await refreshSessionsRef.current(mode, false);
   }
 
-  async function chooseFiles(files: File[]) {
-    const targetScope = scopeKey;
-    if (!window.chat || files.length === 0) return;
-    setAttachmentBusy(true);
-    const previewsByName = new Map<string, string[]>();
-    for (const file of files) {
-      if (!file.type.startsWith("image/") && !/\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name)) continue;
-      const previewUrl = URL.createObjectURL(file);
-      localPreviewUrlsRef.current.add(previewUrl);
-      previewsByName.set(file.name, [...(previewsByName.get(file.name) ?? []), previewUrl]);
-    }
-    try {
-      const results = await window.chat.ingestDroppedFiles(files);
-      if (results.length > 0) {
-        const hydratedResults = results.map((attachment) => {
-          if (attachment.kind !== "image") return attachment;
-          const previews = previewsByName.get(attachment.name);
-          const localPreview = previews?.shift();
-          return localPreview ? { ...attachment, previewUrl: localPreview } : attachment;
-        });
-        setAttachmentsByScope((current) => ({
-          ...current,
-          [targetScope]: [...(current[targetScope] ?? []), ...hydratedResults],
-        }));
-      }
-    } catch (error) {
-      window.alert(`文件摄入失败：${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setAttachmentBusy(false);
-    }
-  }
-
-  /**
-   * Ctrl+V 粘贴图片：落主进程 screenshots/ 临时文件（复用截图链路），
-   * 构造与按钮截图相同的 ComposerAttachment 追加进当前 scope。
-   */
-  async function handlePastedImage(file: File) {
-    const targetScope = scopeKey;
-    if (!window.chat?.saveScreenshotTemp) return;
-    if (file.size > PASTE_IMAGE_MAX_BYTES) {
-      window.alert("粘贴的图片超过 20MB，已跳过。");
-      return;
-    }
-    setAttachmentBusy(true);
-    try {
-      const base64 = arrayBufferToBase64(await file.arrayBuffer());
-      const { filePath } = await window.chat.saveScreenshotTemp(base64, file.type);
-      const previewUrl = URL.createObjectURL(file);
-      localPreviewUrlsRef.current.add(previewUrl);
-      const attachment: ComposerAttachment = {
-        kind: "image",
-        name: file.name && file.name !== "image.png" ? file.name : `粘贴图片_${Date.now()}.png`,
-        filePath,
-        mime: file.type,
-        previewUrl,
-      };
-      setAttachmentsByScope((current) => ({
-        ...current,
-        [targetScope]: [...(current[targetScope] ?? []), attachment],
-      }));
-    } catch (error) {
-      const raw = error instanceof Error ? error.message : String(error);
-      const text = raw === "SCREENSHOT_TOO_LARGE"
-        ? "粘贴的图片超过 20MB。"
-        : raw === "INVALID_SCREENSHOT_IMAGE"
-          ? "粘贴的内容不是有效图片。"
-          : `粘贴图片失败：${raw}`;
-      window.alert(text);
-    } finally {
-      setAttachmentBusy(false);
-    }
-  }
-
-  /** 截图按钮：失败不再静默，按 reason 给可读提示（known-issues 问题 4）。 */
-  async function handleScreenshot() {
-    const result = await window.chat?.startScreenshot();
-    if (!result || result.ok) return;
-    const reason = typeof result.reason === "string" ? result.reason : "";
-    let text: string;
-    if (reason.startsWith("HELPER_")) {
-      text = "截图组件未就绪，请稍后重试。";
-    } else if (reason.startsWith("SCREENSHOT_CANCELLED")) {
-      text = "已取消截图。";
-    } else if (reason === "SCREENSHOT_FILE_PATH_REQUIRED") {
-      text = "截图失败：未生成截图文件。";
-    } else {
-      text = `截图失败：${reason || "未知错误"}`;
-    }
-    window.alert(text);
-  }
-
-  function updateMessageAttachments(
-    sessionId: string,
-    messageId: string,
-    updater: (attachments: ComposerAttachment[]) => ComposerAttachment[],
-  ) {
-    setMessagesBySession((current) => ({
-      ...current,
-      [sessionId]: (current[sessionId] ?? []).map((item) => (
-        item.id === messageId
-          ? { ...item, attachments: updater(item.attachments ?? []) }
-          : item
-      )),
-    }));
-  }
-
-  async function prepareImageAttachments(
-    sessionId: string,
-    messageId: string,
-    attachments: ComposerAttachment[],
-  ) {
-    const images = attachments.filter((attachment) => attachment.kind === "image" && attachment.filePath);
-    if (images.length === 0 || !window.chat) return;
-
-    let strategy: { mode: "direct" | "caption" } = { mode: "caption" };
-    try {
-      // 传 sessionId：会话绑定的档案若声明 multimodal 则按档案裁决，否则回退全局
-      strategy = await window.chat.getImageSendStrategy(sessionId);
-    } catch (error) {
-      console.warn("[Cyrene React] 获取图片发送策略失败，回退视觉描述:", error);
-    }
-
-    if (strategy.mode === "direct") {
-      const paths = new Set(images.map((image) => image.filePath));
-      updateMessageAttachments(sessionId, messageId, (current) => current.map((attachment) => (
-        paths.has(attachment.filePath)
-          ? { ...attachment, imageSendMode: "direct", status: "done" }
-          : attachment
-      )));
-      return;
-    }
-
-    for (const image of images) {
-      updateMessageAttachments(sessionId, messageId, (current) => current.map((attachment) => (
-        attachment.filePath === image.filePath
-          ? { ...attachment, imageSendMode: "caption", status: "processing" }
-          : attachment
-      )));
-      let result: { ok: boolean; caption?: string; error?: string };
-      try {
-        result = await window.chat.captionImage(image.filePath!, image.hasAnnotations === true);
-      } catch (error) {
-        result = { ok: false, error: error instanceof Error ? error.message : String(error) };
-      }
-      updateMessageAttachments(sessionId, messageId, (current) => current.map((attachment) => (
-        attachment.filePath === image.filePath
-          ? result.ok && result.caption
-            ? { ...attachment, imageSendMode: "caption", status: "done", caption: result.caption, reason: undefined }
-            : { ...attachment, imageSendMode: "caption", status: "error", reason: result.error ?? "图片分析失败" }
-          : attachment
-      )));
-    }
-  }
-
-  function removeAttachment(index: number) {
-    const targetScope = scopeKey;
-    setAttachmentsByScope((current) => ({
-      ...current,
-      [targetScope]: (current[targetScope] ?? []).filter((_, itemIndex) => itemIndex !== index),
-    }));
-  }
-
-  function handleDragEnter(event: DragEvent<HTMLElement>) {
-    if (!containsFiles(event.dataTransfer)) return;
-    event.preventDefault();
-    dragDepthRef.current += 1;
-    setIsDraggingFiles(true);
-  }
-
-  function handleDragOver(event: DragEvent<HTMLElement>) {
-    if (!containsFiles(event.dataTransfer)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-  }
-
-  function handleDragLeave(event: DragEvent<HTMLElement>) {
-    if (!containsFiles(event.dataTransfer)) return;
-    event.preventDefault();
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-    if (dragDepthRef.current === 0) setIsDraggingFiles(false);
-  }
-
-  function handleDrop(event: DragEvent<HTMLElement>) {
-    if (!containsFiles(event.dataTransfer)) return;
-    event.preventDefault();
-    dragDepthRef.current = 0;
-    setIsDraggingFiles(false);
-    const files = Array.from(event.dataTransfer.files);
-    if (files.length > 0) void chooseFiles(files);
-  }
 
   async function sendMessage(content: string, resumeFromRunId?: string) {
     const parsedMessage = parseComposerMessage(mode, content);
@@ -1718,12 +988,12 @@ export function ChatPage() {
         setWorkspaceNames((current) => bindWorkspaceName(
           current,
           targetMode,
-          pendingWorkspace.displayName ?? "工作文件夹",
+          pendingWorkspace.displayName ?? t("chatPage.defaultWorkspaceName"),
         ));
       }
       if (workspaceResult?.ok && targetMode === "learn" && workspaceResult.isEmpty) {
         const confirmed = window.confirm(
-          "这是一个空目录。Cyrene 可以在这里创建通用学习工作区结构（materials/、notes/、exercises/、templates/、learn/progress.md），方便你之后和 Cyrene 一起学习。\n\n是否创建？"
+          t("chatPage.emptyDirLearnStructureConfirm")
         );
         if (confirmed) {
           await initVaultStructure(sessionId, { confirm: false });
@@ -1738,17 +1008,17 @@ export function ChatPage() {
 
     // 如果当前 session 正在跑模型，新消息进入 composer 上方队列，等当前 run 结束后自动发送
     if (isSessionBusy(sessionId)) {
-      const nextQueue = {
-        ...pendingQueueBySessionRef.current,
-        [sessionId]: [
-          ...(pendingQueueBySessionRef.current[sessionId] ?? []),
-          { id: userMessageId, rawContent: message, visibleContent, attachments: attachmentsForMessage, userSticker },
-        ],
-      };
+      const nextQueue = appendPendingQueueEntry(pendingQueueBySessionRef.current, sessionId, {
+        id: userMessageId,
+        rawContent: message,
+        visibleContent: visibleMessage,
+        attachments: attachmentsForMessage,
+        userSticker,
+      });
       pendingQueueBySessionRef.current = nextQueue;
       setPendingQueueBySession(nextQueue);
       setDrafts((current) => ({ ...current, [scopeKey]: "" }));
-      setAttachmentsByScope((current) => ({ ...current, [scopeKey]: [] }));
+      clearScopeAttachments();
       return;
     }
     await dispatchUserMessage({
@@ -1774,32 +1044,34 @@ export function ChatPage() {
     assistantId: string;
     userMessageId: string;
     resumeFromRunId?: string;
-  }) {
-    const { targetMode, sessionId, rawContent, visibleContent, attachments, userSticker, assistantId, userMessageId, resumeFromRunId } = input;
-    setMessagesBySession((current) => ({
-      ...current,
-      [sessionId]: [
-        ...(current[sessionId] ?? []),
-        {
-          id: userMessageId,
-          role: "user",
-          content: visibleContent,
-          sticker: userSticker,
-          attachments: attachments.length > 0 ? attachments : undefined,
-        },
-        {
-          id: assistantId,
-          role: "assistant" as const,
-          content: "",
-          loading: true,
-          waitingForFirstEvent: true,
-          streaming: false,
-          responseStarted: false,
-        },
-      ],
-    }));
-    setDrafts((current) => ({ ...current, [scopeKey]: "" }));
-    setAttachmentsByScope((current) => ({ ...current, [scopeKey]: [] }));
+    /** 外部提交（语音输入）为 true：不清空用户正在编辑的草稿与附件。 */
+    keepComposer?: boolean;
+    /** 为 false 时用户消息落盘后立即返回，模型运行转入后台继续。 */
+    waitForRun?: boolean;
+  }): Promise<{ persisted: boolean }> {
+    const { targetMode, sessionId, rawContent, visibleContent, attachments, userSticker, assistantId, userMessageId, resumeFromRunId, keepComposer } = input;
+    appendMessages(sessionId, [
+      {
+        id: userMessageId,
+        role: "user",
+        content: visibleContent,
+        sticker: userSticker,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      },
+      {
+        id: assistantId,
+        role: "assistant" as const,
+        content: "",
+        loading: true,
+        waitingForFirstEvent: true,
+        streaming: false,
+        responseStarted: false,
+      },
+    ]);
+    if (!keepComposer) {
+      setDrafts((current) => ({ ...current, [scopeKey]: "" }));
+      clearScopeAttachments();
+    }
     const updatedSession = await chatStore()?.append(sessionId, {
       id: userMessageId,
       role: "user",
@@ -1828,11 +1100,24 @@ export function ChatPage() {
     }
     if (!updatedSession) {
       updateMessage(targetMode, assistantId, {
-        content: "模型请求失败：用户消息未能写入当前会话",
+        content: t("chatPage.errorUserMessageNotPersisted"),
         loading: false,
         waitingForFirstEvent: false,
         streaming: false,
         responseStarted: true,
+      });
+      return { persisted: false };
+    }
+    if (input.waitForRun === false) {
+      // 外部提交：用户消息已接受并落盘，模型运行在后台继续
+      void runModel({
+        targetMode,
+        sessionId,
+        userMessageId,
+        assistantId,
+        session: updatedSession,
+        attachments,
+        resumeFromRunId,
       });
     } else {
       await runModel({
@@ -1845,6 +1130,64 @@ export function ChatPage() {
         resumeFromRunId,
       });
     }
+    return { persisted: true };
+  }
+
+  /**
+   * 外部（语音输入租约）向指定会话提交文本：
+   * - 使用提交请求冻结的会话与模式，不读取当前页面状态；
+   * - 不清空用户正在编辑的草稿、附件和输入框；
+   * - 会话忙时进入与手动发送相同的消息队列；
+   * - 用户消息被接受并落盘后即返回，不等待模型完整回答。
+   */
+  async function submitTextToSession(input: {
+    sessionId: string;
+    mode: ConversationMode;
+    text: string;
+  }): Promise<{ ok: true } | { ok: false; error: { code: string; message: string } }> {
+    const text = input.text.trim();
+    if (!text) {
+      return { ok: false, error: { code: "E_INVALID_ARGUMENT", message: "提交文本不能为空" } };
+    }
+    const store = chatStore();
+    if (!store) {
+      return { ok: false, error: { code: "E_INTERNAL", message: "会话存储不可用" } };
+    }
+    const session = await store.get(input.sessionId);
+    if (!session) {
+      return { ok: false, error: { code: "E_NOT_FOUND", message: "会话已删除" } };
+    }
+    if (session.mode !== input.mode) {
+      return { ok: false, error: { code: "E_INVALID_ARGUMENT", message: "会话模式不匹配" } };
+    }
+    // 会话忙时进入同一消息队列，当前 run 结束后自动发送（视为已接受）
+    if (isSessionBusy(input.sessionId)) {
+      const nextQueue = appendPendingQueueEntry(pendingQueueBySessionRef.current, input.sessionId, {
+        id: crypto.randomUUID(),
+        rawContent: text,
+        visibleContent: text,
+        attachments: [],
+        keepComposer: true,
+      });
+      pendingQueueBySessionRef.current = nextQueue;
+      setPendingQueueBySession(nextQueue);
+      return { ok: true };
+    }
+    const dispatched = await dispatchUserMessage({
+      targetMode: input.mode,
+      sessionId: input.sessionId,
+      rawContent: text,
+      visibleContent: text,
+      attachments: [],
+      assistantId: crypto.randomUUID(),
+      userMessageId: crypto.randomUUID(),
+      keepComposer: true,
+      waitForRun: false,
+    });
+    if (!dispatched.persisted) {
+      return { ok: false, error: { code: "E_INTERNAL", message: "用户消息落盘失败" } };
+    }
+    return { ok: true };
   }
 
   async function cancelCurrentRun() {
@@ -1870,10 +1213,7 @@ export function ChatPage() {
   }
 
   function removeQueuedMessage(sessionId: string, id: string) {
-    const next = {
-      ...pendingQueueBySessionRef.current,
-      [sessionId]: (pendingQueueBySessionRef.current[sessionId] ?? []).filter((item) => item.id !== id),
-    };
+    const next = removePendingQueueEntry(pendingQueueBySessionRef.current, sessionId, id);
     pendingQueueBySessionRef.current = next;
     setPendingQueueBySession(next);
   }
@@ -1887,17 +1227,17 @@ export function ChatPage() {
     const visibleContent = parsedMessage.visibleContent;
     const attachmentsForMessage = attachments.map((attachment) => ({ ...attachment }));
     const userMessageId = crypto.randomUUID();
-    const nextQueue = {
-      ...pendingQueueBySessionRef.current,
-      [sessionId]: [
-        ...(pendingQueueBySessionRef.current[sessionId] ?? []),
-        { id: userMessageId, rawContent: parsedMessage.rawContent, visibleContent, attachments: attachmentsForMessage, userSticker },
-      ],
-    };
+    const nextQueue = appendPendingQueueEntry(pendingQueueBySessionRef.current, sessionId, {
+      id: userMessageId,
+      rawContent: parsedMessage.rawContent,
+      visibleContent,
+      attachments: attachmentsForMessage,
+      userSticker,
+    });
     pendingQueueBySessionRef.current = nextQueue;
     setPendingQueueBySession(nextQueue);
     setDrafts((current) => ({ ...current, [scopeKey]: "" }));
-    setAttachmentsByScope((current) => ({ ...current, [scopeKey]: [] }));
+    clearScopeAttachments();
   }
 
   const isCurrentScopeRunning = Boolean(activeSessionId && activeRunsBySession.current[activeSessionId]);
@@ -1914,9 +1254,7 @@ export function ChatPage() {
     <div className={`cy-page ${collapsed ? "is-collapsed" : ""}`}>
       <ChatPageNavigation
         collapsed={collapsed}
-        toolPanelOpen={toolPanelOpen}
-        skillPanelOpen={skillPanelOpen}
-        modelPanelOpen={modelPanelOpen}
+        activePanel={activePanel}
         mode={mode}
         sessions={sessions}
         activeSessionId={activeSessionId}
@@ -1926,19 +1264,15 @@ export function ChatPage() {
         }}
         onNewTask={() => void createNewTask()}
         onTogglePanel={(panel: ChatPagePanel) => {
-          setToolPanelOpen((value) => panel === "tool" ? !value : false);
-          setSkillPanelOpen((value) => panel === "skill" ? !value : false);
-          setModelPanelOpen((value) => panel === "model" ? !value : false);
+          setActivePanel((current) => current === panel ? null : panel);
         }}
         onSelectSession={(sessionId) => {
-          setToolPanelOpen(false);
-          setSkillPanelOpen(false);
-          setModelPanelOpen(false);
+          setActivePanel(null);
           void selectSession(sessionId);
         }}
         onOpenProject={(workspaceRoot) => {
           void chatStore()?.openWorkspace(workspaceRoot).then((result) => {
-            if (!result.ok) window.alert(`无法打开项目文件夹：${result.error ?? "未知错误"}`);
+            if (!result.ok) window.alert(t("chatPage.openProjectFolderFailed", { error: result.error ?? t("chatPage.unknownError") }));
           });
         }}
         onRenameSession={(sessionId, newTitle) => void handleRenameSession(sessionId, newTitle)}
@@ -1951,18 +1285,14 @@ export function ChatPage() {
       />
       <main
         className={`cy-page-main cy-workspace ${hasMessages ? "has-messages" : "is-empty"} ${isDraggingFiles ? "is-dragging-files" : ""}`}
-        onDragEnter={handleDragEnter}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
+        onDragEnter={dragHandlers.onDragEnter}
+        onDragOver={dragHandlers.onDragOver}
+        onDragLeave={dragHandlers.onDragLeave}
+        onDrop={dragHandlers.onDrop}
       >
         <FileDropOverlay visible={isDraggingFiles} />
-        {modelPanelOpen ? (
-          <ModelModePanel />
-        ) : skillPanelOpen ? (
-          <SkillModePanel />
-        ) : toolPanelOpen ? (
-          <ToolModePanel />
+        {activePanel ? (
+          <ChatPagePanelHost panel={activePanel} />
         ) : (
         <>
         {(mode === "work" || mode === "learn") && (
@@ -1988,7 +1318,7 @@ export function ChatPage() {
           sessionTakeover={sessionTakeover}
           activeSessionId={activeSessionId}
           isRunning={isCurrentScopeRunning}
-          onResume={(runId) => void sendMessage("继续上次任务", runId)}
+          onResume={(runId) => void sendMessage(t("chatPage.resumeLastTaskMessage"), runId)}
           onTakeover={() => {
             const takeover = sessionTakeover;
             if (!takeover) return;
@@ -2008,7 +1338,6 @@ export function ChatPage() {
             onRegenerateLastResponse={mode === "chat" ? regenerateLastChatResponse : undefined}
             onTtsCacheKey={activeSessionId
               ? (messageId, cacheKey, converterVersion) => handleTtsCacheKey(
-                mode,
                 activeSessionId,
                 messageId,
                 cacheKey,
@@ -2032,8 +1361,8 @@ export function ChatPage() {
               type="button"
               className="cy-workspace-composer__scroll-to-bottom"
               onClick={() => scrollToBottomRef.current()}
-              aria-label="滚动到底部"
-              title="滚动到底部"
+              aria-label={t("chatPage.scrollToBottom")}
+              title={t("chatPage.scrollToBottom")}
             >
               <DownOutlined />
             </button>
@@ -2115,10 +1444,12 @@ export function ChatPage() {
               if (!settings) return;
               setInteractionBusyForSession(activeSessionId, true);
               void settings.resolvePermissionApproval(id, allowed).then((result) => {
+                // ok:false = pending 已在主进程被结算（run 取消等）：卡片不可能再提交成功，直接清掉，
+                // 避免留下一张点多少次都没反应的僵尸卡。
                 if (result.ok) {
-                  clearInteractionForSession(activeSessionId);
                   runCheckpointBySessionRef.current[activeSessionId]?.("running");
                 }
+                clearInteractionForSession(activeSessionId);
                 setInteractionBusyForSession(activeSessionId, false);
               }).catch(() => setInteractionBusyForSession(activeSessionId, false));
             }}

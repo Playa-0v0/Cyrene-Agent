@@ -19,6 +19,8 @@ import type { LspServerOverride } from "../lsp/types";
  * 与 ChatAppearanceSettings 组合，统一保存到 general-settings.json。
  */
 export interface GeneralSettings extends ChatAppearanceSettings {
+  /** 功能插件开关表：pluginId -> enabled */
+  plugins: Record<string, boolean>;
   /** Harness 同时执行已明确安全工具的上限；1 表示完全串行。 */
   maxParallelToolCalls: number;
   citaEnabled: boolean;

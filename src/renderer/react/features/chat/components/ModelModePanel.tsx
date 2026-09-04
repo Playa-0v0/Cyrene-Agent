@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "../../../i18n";
 import fallbackIconUrl from "../../../assets/status-moods/陪伴中.png?url";
 import "./ModelModePanel.css";
 
@@ -29,8 +30,8 @@ const PROVIDER_ORDER = [
   "火山引擎",
 ];
 
-function getProviderLabel(provider: string | undefined): string {
-  if (!provider) return "未知厂商";
+function getProviderLabel(provider: string | undefined, fallback: string): string {
+  if (!provider) return fallback;
   // 如果 provider 已经是 "中文名" 或 "英文名（中文名）"，直接返回
   if (provider.includes("（") || provider.includes("）")) return provider;
   const map: Record<string, string> = {
@@ -86,6 +87,7 @@ function ModelIcon({ provider }: { provider: string }) {
 }
 
 export function ModelModePanel() {
+  const { t } = useTranslation();
   const [profiles, setProfiles] = useState<ModelProfile[]>([]);
   const [defaultId, setDefaultId] = useState<string>();
   const [filter, setFilter] = useState("");
@@ -146,25 +148,25 @@ export function ModelModePanel() {
   return (
     <div className="model-panel">
       <header className="model-panel__header">
-        <h1 className="model-panel__title">模型</h1>
-        <p className="model-panel__subtitle">默认模型用于新对话；当前对话可在输入框中单独切换。</p>
+        <h1 className="model-panel__title">{t("modelPanel.title")}</h1>
+        <p className="model-panel__subtitle">{t("modelPanel.subtitle")}</p>
       </header>
 
       <div className="model-panel__search-row">
         <input
           className="model-panel__search"
-          placeholder="搜索模型…"
+          placeholder={t("modelPanel.searchPlaceholder")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
       </div>
 
       {loading ? (
-        <div className="model-panel__loading">加载中…</div>
+        <div className="model-panel__loading">{t("common.loading")}</div>
       ) : (
         <div className="model-panel__grid">
           {profiles.length === 0 ? (
-            <div className="model-panel__empty">请先到 API 设置保存模型。</div>
+            <div className="model-panel__empty">{t("modelPanel.emptyHint")}</div>
           ) : (
             visibleProfiles.map((profile) => {
               const isDefault = profile.id === defaultId;
@@ -176,14 +178,14 @@ export function ModelModePanel() {
                   <div className="model-card__body">
                     <div className="model-card__name">
                       {profile.displayName || profile.provider}
-                      {isDefault && <span className="model-card__badge">默认</span>}
-                      {profile.multimodal === true && <span className="model-card__badge">多模态</span>}
+                      {isDefault && <span className="model-card__badge">{t("modelPanel.badgeDefault")}</span>}
+                      {profile.multimodal === true && <span className="model-card__badge">{t("modelPanel.badgeMultimodal")}</span>}
                       {profile.contextWindowTokens ? (
                         <span className="model-card__badge">{Math.round(profile.contextWindowTokens / 1000)}k</span>
                       ) : null}
                     </div>
                     <div className="model-card__meta">
-                      <span className="model-card__provider">{getProviderLabel(profile.provider)}</span>
+                      <span className="model-card__provider">{getProviderLabel(profile.provider, t("modelPanel.unknownProvider"))}</span>
                     </div>
                     <div className="model-card__desc">{profile.model}</div>
                   </div>
@@ -193,17 +195,17 @@ export function ModelModePanel() {
                       className={"model-card__pill" + (isDefault ? " is-on" : "")}
                       disabled={isDefault}
                       onClick={() => handleSetDefault(profile.id)}
-                      title={isDefault ? "当前默认模型" : "设为默认"}
+                      title={isDefault ? t("modelPanel.currentDefault") : t("modelPanel.setDefault")}
                     >
-                      {isDefault ? "默认" : "设为默认"}
+                      {isDefault ? t("modelPanel.badgeDefault") : t("modelPanel.setDefault")}
                     </button>
                     <button
                       type="button"
                       className="model-card__delete"
                       onClick={() => handleDelete(profile.id)}
-                      title="删除"
+                      title={t("modelPanel.delete")}
                     >
-                      删除
+                      {t("modelPanel.delete")}
                     </button>
                   </div>
                 </div>
@@ -211,7 +213,7 @@ export function ModelModePanel() {
             })
           )}
           {profiles.length > 0 && visibleProfiles.length === 0 && (
-            <div className="model-panel__empty">无匹配模型</div>
+            <div className="model-panel__empty">{t("modelPanel.noMatch")}</div>
           )}
         </div>
       )}

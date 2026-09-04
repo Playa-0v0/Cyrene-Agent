@@ -226,6 +226,23 @@ export function registerMusicIpcHandlers(service: MusicService): () => void {
   );
   channels.push(IPC.MUSIC_IMPORT_LOCAL_TRACKS);
 
+  // 选一个文件夹递归导入。和上面按文件选是两个入口——Windows 的文件框
+  // 没法同时选文件和目录，硬合成一个只会让两边都难用。
+  ipcMain.handle(IPC.MUSIC_IMPORT_LOCAL_FOLDER, () =>
+    wrap(async () => {
+      const picked = await dialog.showOpenDialog({
+        title: "导入本地音乐文件夹",
+        properties: ["openDirectory"],
+      });
+      if (picked.canceled || picked.filePaths.length === 0) {
+        return { imported: 0, skipped: 0, truncated: false, cancelled: true };
+      }
+      const result = await service.importLocalFolder(picked.filePaths[0]);
+      return { ...result, cancelled: false };
+    }, service),
+  );
+  channels.push(IPC.MUSIC_IMPORT_LOCAL_FOLDER);
+
   // ── 状态变更推送：任何 state 轴变化都广播到所有窗口 ──────────
   const unsubState = service.onStateChange((snapshot) => {
     for (const win of BrowserWindow.getAllWindows()) {

@@ -2,6 +2,7 @@
 
 import type { ReviewSnapshot } from "../shared/review-types";
 import type { AppUpdateApi } from "../shared/app-update";
+import type { PluginManagementApi } from "../shared/plugin-management";
 
 interface SystemApi {
   openExternal: (url: string) => Promise<{ ok: boolean; error?: string }>;
@@ -16,6 +17,7 @@ declare global {
     system?: SystemApi;
     review?: ReviewApi;
     appUpdate?: AppUpdateApi;
+    plugins?: PluginManagementApi;
   }
 }
 

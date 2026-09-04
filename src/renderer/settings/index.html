@@ -486,7 +486,7 @@
               </label>
               <label class="setting-row">
                 <div><strong>昔涟回复气泡</strong><span>关闭后以无背景文本显示昔涟的正式回答；用户消息气泡始终保留。</span></div>
-                <span class="switch"><input id="assistant-bubble-enabled" type="checkbox" checked /><span class="switch__track"><span class="switch__thumb"></span></span></span>
+                <span class="switch"><input id="assistant-bubble-enabled" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
               </label>
               <label class="setting-row">
                 <div><strong>段间距</strong><span>调整消息气泡内段落之间的间距（0.2 ~ 1.2em）。</span></div>
@@ -1467,7 +1467,7 @@
                 <div class="plugin-card__icon"><svg width="22" height="22" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M24 4C12.9543 4 4 12.9543 4 24C4 35.0457 12.9543 44 24 44C35.0457 44 44 35.0457 44 24C44 21.2883 43.4603 18.7026 42.4825 16.3446C42.2308 15.7376 41.9501 15.1457 41.6421 14.5707" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M35 10C37.2091 10 39 8.65685 39 7C39 5.34315 37.2091 4 35 4C32.7909 4 31 5.34315 31 7C31 8.65685 32.7909 10 35 10Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M24 31C27.866 31 31 27.866 31 24C31 20.134 27.866 17 24 17C20.134 17 17 20.134 17 24C17 27.866 20.134 31 24 31Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M31 6.5V24" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
                 <div class="plugin-card__body">
                   <h2>音乐工具</h2>
-                  <p>网易云音乐、QQ 音乐、Spotify 与本地音乐。</p>
+                  <p>网易云音乐与本地音乐。</p>
                 </div>
                 <button type="button" class="accordion-toggle" id="plugin-music-toggle" aria-label="展开音乐工具" aria-expanded="false">▾</button>
               </div>
@@ -1477,9 +1477,21 @@
                     <div class="plugin-card__icon"><img data-music-logo alt="网易云音乐" /></div>
                     <div class="plugin-card__body"><h2>网易云音乐</h2><p>扫码登录后搜索并播放歌曲。</p></div>
                   </button>
-                  <article class="plugin-card plugin-card--sub is-muted"><div class="plugin-card__body"><h2>QQ 音乐</h2><p>敬请期待</p></div><span class="plugin-placeholder-tag">敬请期待</span></article>
-                  <article class="plugin-card plugin-card--sub is-muted"><div class="plugin-card__body"><h2>Spotify</h2><p>敬请期待</p></div><span class="plugin-placeholder-tag">敬请期待</span></article>
-                  <article class="plugin-card plugin-card--sub is-muted"><div class="plugin-card__body"><h2>本地音乐</h2><p>敬请期待</p></div><span class="plugin-placeholder-tag">敬请期待</span></article>
+                  <article class="plugin-card plugin-card--sub" id="music-platform-local" data-platform="local">
+                    <div class="plugin-card__icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6a2 2 0 0 1 2-2h3.6l1.7 2H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 15v-4l3-.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="15" r="1.4" fill="currentColor"/></svg>
+                    </div>
+                    <div class="plugin-card__body">
+                      <h2>本地音乐</h2>
+                      <p id="local-status-line">正在读取…</p>
+                      <div class="music-card-actions" id="local-controls">
+                        <button type="button" class="music-card-btn music-card-btn--text" id="local-import-folder">导入文件夹</button>
+                        <button type="button" class="music-card-btn music-card-btn--text" id="local-import-files">导入文件</button>
+                        <button type="button" class="music-card-btn music-card-btn--text" id="local-open-player">打开播放器</button>
+                      </div>
+                    </div>
+                    <span class="plugin-placeholder-tag is-hidden" id="local-tag"></span>
+                  </article>
                 </div>
               </div>
             </article>
@@ -1577,12 +1589,30 @@
             </article>
 
             <article class="disclaimer-section">
+              <h2>7. AI 生成内容与使用心态提醒</h2>
+              <p>本软件中所有 AI 角色的对话、回应及行为均由大语言模型实时生成，角色人设和性格为虚构设定，并非真实个体。AI 的输出不具备真实情感、自我意识或主观意图。</p>
+              <p>请注意：</p>
+              <ul>
+                <li>所有对话内容均为 AI 生成，不代表任何真实个体的观点或情感。</li>
+                <li>本软件为娱乐性质的辅助工具，不可替代真实的社交关系、亲情、友情或专业心理咨询。</li>
+                <li>请勿对 AI 角色产生情感依赖，或将虚拟互动视为现实人际关系的替代品。</li>
+                <li>建议您在享受陪伴体验的同时，保持与现实世界的健康社交联系。</li>
+              </ul>
+            </article>
+
+            <article class="disclaimer-section">
               <h2>8. 特别鸣谢</h2>
               <p>特别鸣谢 B站 UP 主 <a href="https://space.bilibili.com/457683484" target="_blank" rel="noopener noreferrer">是依七哒</a> 制作并分享的 Live2D 模型相关资源，为本项目的桌宠展示提供了重要参考与支持。本项目仍为个人非商用同人项目，相关素材版权归属原权利方；如有侵权或使用不当，将积极配合处理。</p>
             </article>
 
             <article class="disclaimer-section">
-              <h2>9. 协议效力</h2>
+              <h2>9. 贡献者致谢</h2>
+              <p>感谢所有通过 GitHub 提交 Pull Request 为项目做出贡献的开发者。完整贡献者列表请查看：<a href="https://github.com/Playa-0v0/Cyrene-Agent/graphs/contributors?from=2026%2F5%2F30" target="_blank" rel="noopener noreferrer">Cyrene-Agent 贡献者页面 →</a></p>
+              <p>同时也感谢所有在 Issues 中提交反馈、建议以及 Star 支持本项目的朋友。</p>
+            </article>
+
+            <article class="disclaimer-section">
+              <h2>10. 协议效力</h2>
               <p>安装或使用本软件即视为您已阅读、理解并同意本免责声明的全部条款。</p>
             </article>
           </div>

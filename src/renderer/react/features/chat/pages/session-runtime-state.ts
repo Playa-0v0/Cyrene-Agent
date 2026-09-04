@@ -1,7 +1,9 @@
 import type { ChatMessageItem } from "../components/ChatMessageList";
 import type { ChatMessage, ConversationMode } from "../../../../../shared/chat-types";
 import type { ComposerInteraction } from "../components/run-presentation";
+import type { ComposerAttachment } from "../components/ChatComposer";
 import type { TodoItem } from "../../../../../shared/todo-types";
+import { t } from "../../../i18n";
 
 export interface SessionInteractionEntry {
   interaction: ComposerInteraction;
@@ -88,7 +90,7 @@ export function recoverInterruptedMessage(
     reasoningStreaming: false,
     loading: false,
     waitingForFirstEvent: false,
-    runStage: { kind: "failed", detail: "上次运行已中断" },
+    runStage: { kind: "failed", detail: t("chatPage.lastRunInterrupted") },
     runActivity: {
       ...(message.runActivity ?? { startedAt: snapshot.updatedAt, reasoningMs: 0 }),
       activeReasoningStartedAt: undefined,
@@ -183,4 +185,35 @@ export function mergeHarnessTodosForSession(
     ...state,
     [sessionId]: { runId: current?.runId ?? runId, todos, updatedAt },
   };
+}
+/** composer 上方待发队列的单条消息：run 进行中暂存，结束后按序自动发出。 */
+export interface PendingQueueEntry {
+  id: string;
+  rawContent: string;
+  visibleContent: string;
+  attachments: ComposerAttachment[];
+  userSticker?: string;
+  keepComposer?: boolean;
+}
+
+export type PendingQueueBySession = Record<string, PendingQueueEntry[]>;
+
+/** 会话忙时把消息追加到该会话的待发队列尾部（保持发送顺序）。 */
+export function appendPendingQueueEntry(
+  state: PendingQueueBySession,
+  sessionId: string,
+  entry: PendingQueueEntry,
+): PendingQueueBySession {
+  return { ...state, [sessionId]: [...(state[sessionId] ?? []), entry] };
+}
+
+/** 从待发队列移除一条消息（用户手动撤回）；队列未变时返回原引用。 */
+export function removePendingQueueEntry(
+  state: PendingQueueBySession,
+  sessionId: string,
+  id: string,
+): PendingQueueBySession {
+  const queue = state[sessionId];
+  if (!queue?.some((entry) => entry.id === id)) return state;
+  return { ...state, [sessionId]: queue.filter((entry) => entry.id !== id) };
 }

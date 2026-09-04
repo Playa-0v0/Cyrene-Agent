@@ -1,6 +1,5 @@
 /**
- * 双时钟超时管理（v3 §10.3 / §10.4）
- * 注：注释中的 "v3 §x" / "设计稿 §x" 均指 docs/design/2026-08-08-cyreneHarnessloopdesign.md（CyreneHarness 设计稿 v3）。
+ * 双时钟超时管理。
  *
  * 两个时钟：
  * - activeExecutionTime：工具执行 + LLM 调用时间（跑得快就允许跑更多轮）

@@ -1,3 +1,4 @@
+import { t } from "../../../i18n";
 import type { AskCardSubmission } from "../../../../../shared/ask-clarification";
 
 export type AgentRunStageKind =
@@ -178,51 +179,53 @@ export function describePermissionRequest(request: PermissionRequestDescription)
   switch (request.toolId) {
     case "weather": {
       const city = readPermissionString(request.args, ["city"]);
-      return city ? `查询${shortenPermissionText(city, 24)}天气` : "查询天气";
+      return city ? t("runPresentation.permissionWeather", { city: shortenPermissionText(city, 24) }) : t("runPresentation.permissionWeatherPlain");
     }
     case "web_search": {
       const query = readPermissionString(request.args, ["query", "keyword"]);
-      return query ? `搜索“${shortenPermissionText(query)}”` : "搜索网页";
+      return query ? t("runPresentation.permissionSearch", { query: shortenPermissionText(query) }) : t("runPresentation.permissionSearchPlain");
     }
     case "write_word": {
       const filename = readPermissionString(request.args, ["filename"]);
-      return filename ? `创建 Word 文档：${shortenPermissionText(filename)}` : "创建 Word 文档";
+      return filename ? t("runPresentation.permissionWord", { filename: shortenPermissionText(filename) }) : t("runPresentation.permissionWordPlain");
     }
     case "write_excel": {
       const filename = readPermissionString(request.args, ["filename"]);
-      return filename ? `创建 Excel 表格：${shortenPermissionText(filename)}` : "创建 Excel 表格";
+      return filename ? t("runPresentation.permissionExcel", { filename: shortenPermissionText(filename) }) : t("runPresentation.permissionExcelPlain");
     }
     case "write_powerpoint": {
       const filename = readPermissionString(request.args, ["filename"]);
-      return filename ? `创建演示文稿：${shortenPermissionText(filename)}` : "创建演示文稿";
+      return filename ? t("runPresentation.permissionPowerpoint", { filename: shortenPermissionText(filename) }) : t("runPresentation.permissionPowerpointPlain");
     }
     default:
-      return `执行「${request.toolName || request.toolId}」`;
+      return t("runPresentation.permissionFallback", { toolName: request.toolName || request.toolId });
   }
 }
 
 export function describeRunStage(stage: AgentRunStage): string {
   switch (stage.kind) {
     case "understanding":
-      return "昔涟正在理解需求…";
+      return t("runPresentation.stageUnderstanding");
     case "planning":
-      return "昔涟正在规划任务…";
+      return t("runPresentation.stagePlanning");
     case "executing":
-      return stage.detail ? `昔涟正在执行：${stage.detail}…` : "昔涟正在执行任务…";
+      return stage.detail
+        ? t("runPresentation.stageExecutingDetail", { detail: stage.detail })
+        : t("runPresentation.stageExecuting");
     case "waiting_permission":
-      return "昔涟正在获取审批…";
+      return t("runPresentation.stageWaitingPermission");
     case "waiting_user":
-      return "昔涟正在询问…";
+      return t("runPresentation.stageWaitingUser");
     case "responding":
-      return "昔涟正在组织回复…";
+      return t("runPresentation.stageResponding");
     case "completed":
-      return "昔涟已完成本轮处理";
+      return t("runPresentation.stageCompleted");
     case "cancelled":
-      return "本轮已取消";
+      return t("runPresentation.stageCancelled");
     case "timeout":
-      return "本轮已超时";
+      return t("runPresentation.stageTimeout");
     case "failed":
-      return "昔涟这一步没有顺利完成";
+      return t("runPresentation.stageFailed");
   }
 }
 

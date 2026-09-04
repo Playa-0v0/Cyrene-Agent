@@ -4,14 +4,16 @@
 // 与模型回复的 md 渲染保持完全一致；阶段色点与提示由 RightInspector 顶部 tab 提供。
 // 入口 chip（PlanReviewEntry）由 Code Todo 卡片承载，点击打开右侧面板。
 
+import { t, useTranslation } from "../../../i18n";
 import { MarkdownContent } from "./ChatMessageList";
 
 export type PlanReviewPhase = "review" | "executing" | "completed";
 
-const PHASE_NOTE: Record<PlanReviewPhase, string> = {
-  review: "请审阅计划内容后在对话中的卡片里决定",
-  executing: "已批准，昔涟正在按清单施工",
-  completed: "本计划施工已完成",
+// 只存 i18n key（t() 不能出现在模块顶层常量里），展示文案在组件/调用处求值。
+const PHASE_NOTE_KEYS: Record<PlanReviewPhase, string> = {
+  review: "planReview.noteReview",
+  executing: "planReview.noteExecuting",
+  completed: "planReview.noteCompleted",
 };
 
 const PHASE_DOT: Record<PlanReviewPhase, string> = {
@@ -20,10 +22,16 @@ const PHASE_DOT: Record<PlanReviewPhase, string> = {
   completed: "is-completed",
 };
 
-const PHASE_LABEL: Record<PlanReviewPhase, string> = {
-  review: "计划 · 待审批",
-  executing: "计划 · 执行中",
-  completed: "计划 · 已完成",
+const PHASE_LABEL_KEYS: Record<PlanReviewPhase, string> = {
+  review: "planReview.tabReview",
+  executing: "planReview.tabExecuting",
+  completed: "planReview.tabCompleted",
+};
+
+const ENTRY_LABEL_KEYS: Record<PlanReviewPhase, string> = {
+  review: "planReview.entryReview",
+  executing: "planReview.entryExecuting",
+  completed: "planReview.entryCompleted",
 };
 
 export function PlanContent({
@@ -33,9 +41,10 @@ export function PlanContent({
   content: string;
   phase?: PlanReviewPhase;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="cy-plan-content">
-      <p className="cy-plan-content__note">{PHASE_NOTE[phase]}</p>
+      <p className="cy-plan-content__note">{t(PHASE_NOTE_KEYS[phase])}</p>
       <div className="cy-plan-content__body">
         <MarkdownContent content={content} />
       </div>
@@ -44,7 +53,7 @@ export function PlanContent({
 }
 
 export function planTabLabel(phase: PlanReviewPhase): string {
-  return PHASE_LABEL[phase];
+  return t(PHASE_LABEL_KEYS[phase]);
 }
 
 export function planTabDotClass(phase: PlanReviewPhase): string {
@@ -59,15 +68,11 @@ export function PlanReviewEntry({
   phase: PlanReviewPhase;
   onOpen: () => void;
 }) {
-  const labels: Record<PlanReviewPhase, string> = {
-    review: "计划待审批",
-    executing: "计划执行中",
-    completed: "计划已完成",
-  };
+  const { t } = useTranslation();
   return (
     <button type="button" className={`cy-plan-entry is-${phase}`} onClick={onOpen}>
       <span className={`cy-plan-entry__dot ${PHASE_DOT[phase]}`} aria-hidden="true" />
-      {labels[phase]} · 点击查看
+      {t(ENTRY_LABEL_KEYS[phase])}
     </button>
   );
 }

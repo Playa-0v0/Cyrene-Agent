@@ -1,13 +1,11 @@
 /**
- * 工具分发器（v3 §3.1 / §5.7）
- * 注：注释中的 "v3 §x" / "设计稿 §x" 均指 docs/design/2026-08-08-cyreneHarnessloopdesign.md（CyreneHarness 设计稿 v3）。
+ * 工具分发器：统一 dispatch Harness 内置工具和普通工具。
  *
- * 统一 dispatch Harness 内置工具和普通工具。
  * - 内置工具（update_todo / ask_user）：由 executeHarnessBuiltin 处理，能直接访问 state 和 emitter
  * - 普通工具：走 executeToolCall，含权限检查、预校验、输出截断
  *
- * 普通工具执行前检查 uncertainEffects fingerprint 拦截（v3 §5.5.1.1）。
- * 普通工具执行后统一截断输出（v3 §5.7 双级预算）。
+ * 普通工具执行前检查 uncertainEffects fingerprint 拦截（防未确认副作用被自动重放）。
+ * 普通工具执行后统一截断输出（软/硬双级预算）。
  */
 
 import type { ToolCall } from "../vendors/types";
@@ -28,7 +26,7 @@ import { executeToolDefinition } from "../tools/registry/tool-executor";
 import type { ToolOutputStore } from "./tool-output/tool-output-store";
 import { ToolOutputPersistenceError } from "./tool-output/file-tool-output-store";
 
-// ── 工具输出截断（v3 §5.7）───────────────────────────────
+// ── 工具输出截断 ─────────────────────────────────────────
 
 export interface TruncationConfig {
   thresholdChars: number;
@@ -92,7 +90,7 @@ export interface ToolDispatchResult extends ToolObservation {
 }
 
 /**
- * 统一 dispatch 工具调用（v3 §3.1）。
+ * 统一 dispatch 工具调用。
  *
  * 1. 内置工具 → executeHarnessBuiltin
  * 2. 普通工具 → 先检查 fingerprint 拦截 → executeToolCall → 截断输出
@@ -119,7 +117,7 @@ export async function dispatchToolCall(
   const args = parseToolCallArgs(call);
   const tool = ctx.tools.find((t) => t.id === call.name);
 
-  // fingerprint 拦截（v3 §5.5.1.1）
+  // fingerprint 拦截（已不确定的副作用在授权前禁止自动重放）
   const fingerprint = toolCallFingerprint(call.name, args);
   const blockingEffect = ctx.state.uncertainEffects.find((effect) => effect.fingerprint === fingerprint);
   if (isBlockedByUncertainEffect(ctx.state, fingerprint)) {
@@ -186,7 +184,7 @@ export async function dispatchToolCall(
     result = { toolId: tool.id, args, ...await run() };
   }
 
-  // 截断输出（v3 §5.7）
+  // 截断输出（长输出按预算截断，只把可消费的 preview 交给模型）
   const truncationConfig = ctx.truncation ?? DEFAULT_TRUNCATION;
   const sideEffect = resolveSideEffect(tool, args);
   const { preview, truncated } = truncateOutput(

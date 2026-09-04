@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "../../../i18n";
 import type { TodoState } from "../../../../shared/todo-types";
 import workTodoPngUrl from "../../../assets/status-moods/提醒.png?url";
 import learnTodoPngUrl from "../../../assets/status-moods/学习.png?url";
@@ -12,9 +13,10 @@ export interface TodoPanelProps {
 
 const DEFAULT_WIDTH = 240;
 
-const MODE_LABELS: Record<TodoPanelProps["mode"], string> = {
-  work: "工作",
-  learn: "学习",
+// 只存 i18n key（t() 不能出现在模块顶层常量里），展示文案在组件内求值。
+const MODE_LABEL_KEYS: Record<TodoPanelProps["mode"], string> = {
+  work: "todo.modeWork",
+  learn: "todo.modeLearn",
 };
 
 function EmptyCircleIcon() {
@@ -53,20 +55,22 @@ function ToggleIcon() {
 }
 
 function ModeCapsule({ mode }: { mode: TodoPanelProps["mode"] }) {
+  const { t } = useTranslation();
   return (
     <div className="cy-todo__mode-capsule">
       <span className="cy-todo__mode-dot" aria-hidden="true" />
-      <span className="cy-todo__mode-label">{MODE_LABELS[mode]}</span>
+      <span className="cy-todo__mode-label">{t(MODE_LABEL_KEYS[mode])}</span>
     </div>
   );
 }
 
 export function TodoPanel({ state, mode }: TodoPanelProps) {
+  const { t } = useTranslation();
   const floating = useFloatingCard({ width: DEFAULT_WIDTH });
 
   const todos = state?.todos ?? [];
   const total = todos.length;
-  const completed = useMemo(() => todos.filter((t) => t.status === "completed").length, [todos]);
+  const completed = useMemo(() => todos.filter((item) => item.status === "completed").length, [todos]);
   const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   return (
@@ -74,7 +78,7 @@ export function TodoPanel({ state, mode }: TodoPanelProps) {
       className={`cy-todo ${floating.collapsed ? "cy-todo--collapsed" : ""}`}
       style={{ left: floating.position.x, top: floating.position.y }}
       role="region"
-      aria-label="当前任务"
+      aria-label={t("todo.panelAria")}
     >
       <button
         type="button"
@@ -82,7 +86,7 @@ export function TodoPanel({ state, mode }: TodoPanelProps) {
         onMouseDown={floating.onHeaderMouseDown}
         onClick={floating.onHeaderClick}
         aria-expanded={!floating.collapsed}
-        title="拖动"
+        title={t("todo.drag")}
       >
         <span className="cy-todo__dragline" />
         <span
@@ -103,11 +107,11 @@ export function TodoPanel({ state, mode }: TodoPanelProps) {
         </div>
 
         <div className="cy-todo__hero">
-          <img className="cy-todo__mascot" src={mode === "learn" ? learnTodoPngUrl : workTodoPngUrl} alt="提醒" />
+          <img className="cy-todo__mascot" src={mode === "learn" ? learnTodoPngUrl : workTodoPngUrl} alt={t("todo.mascotAlt")} />
           <div className="cy-todo__hero-text">
-            <div className="cy-todo__hero-title">当前任务</div>
+            <div className="cy-todo__hero-title">{t("todo.currentTasks")}</div>
             <div className="cy-todo__hero-sub">
-              {completed}/{total} 已完成
+              {t("todo.progress", { completed, total })}
             </div>
           </div>
         </div>
@@ -120,7 +124,7 @@ export function TodoPanel({ state, mode }: TodoPanelProps) {
               <span className="cy-todo__status" aria-hidden="true">
                 <EmptyCircleIcon />
               </span>
-              <span className="cy-todo__content">暂无任务</span>
+              <span className="cy-todo__content">{t("todo.empty")}</span>
             </li>
           ) : (
             todos.map((todo) => {
@@ -156,8 +160,8 @@ export function TodoPanel({ state, mode }: TodoPanelProps) {
 
           {mode === "work" && (
             <div className="cy-todo__extension-slot" data-testid="todo-extension-slot">
-              <span className="cy-todo__extension-label">项目状态</span>
-              <span className="cy-todo__extension-hint">Git 工作台即将接入</span>
+              <span className="cy-todo__extension-label">{t("todo.projectStatus")}</span>
+              <span className="cy-todo__extension-hint">{t("todo.gitComingSoon")}</span>
             </div>
           )}
         </div>

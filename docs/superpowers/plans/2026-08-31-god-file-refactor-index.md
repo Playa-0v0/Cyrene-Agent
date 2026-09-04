@@ -13,7 +13,7 @@
 | 4 | Harness Adapter（执行循环适配器） | `docs/superpowers/plans/2026-08-31-harness-adapter-refactor.md` | 恢复、检查点、权限、终态落库与审批 |
 | 5 | AG-UI Bridge（交互协议桥） | `docs/superpowers/plans/2026-08-31-agui-bridge-refactor.md` | exactly-once（只结算一次）、取消、接管、事件顺序 |
 
-## 推荐施工顺序
+## 原始依赖顺序
 
 ```text
 memory-store
@@ -24,6 +24,20 @@ memory-store
 ```
 
 这个顺序从相对独立的持久化和渠道模块开始，逐步进入运行选项、执行循环，最后处理状态和竞态最复杂的 AG-UI。每个阶段独立提交，前一阶段完全验证后再进入下一阶段。
+
+## 当前实际施工顺序
+
+本轮先施工 `harness-adapter`，再根据验证结果决定是否回到前置模块：
+
+```text
+harness-adapter
+→ build-options
+→ dispatcher
+→ memory-store
+→ agui-bridge
+```
+
+这不会改变模块边界；只改变实施起点。`harness-adapter` 计划中的第一任务仍然是先锁定 `runStore.create → runHarness → markTerminal → finalizeReview → completePlan` 调用轨迹，再开始提取代码。
 
 ## 每阶段固定节奏
 

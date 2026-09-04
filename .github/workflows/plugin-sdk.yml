@@ -1,0 +1,71 @@
+name: plugin-sdk
+
+# 插件开发包的构建、校验与发布：
+# - PR / master 推送只做构建、打包与示例编译测试
+# - plugin-sdk-v* 标签触发 npm 发布：优先 Trusted Publishing（OIDC + provenance），
+#   仓库未配置 Trusted Publishing 时回退到最小权限的 NPM_TOKEN
+on:
+  push:
+    branches: [master]
+    tags: ["plugin-sdk-v*"]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        run: npm ci --foreground-scripts
+
+      # 打包质量校验：Schema 无漂移、vendored 契约无漂移、包内容与内部路径检查、双入口加载
+      - name: Build and verify SDK package
+        run: npm run check:plugin-sdk
+
+      # 端到端：从打包产物（而非源码）编译四个示例插件并冒烟测试
+      - name: Compile and smoke-test plugin examples
+        run: npm run test:plugin-examples
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/plugin-sdk-v')
+    needs: build-test
+    runs-on: ubuntu-latest
+    permissions:
+      # npm Trusted Publishing 需要 OIDC id-token；contents 只读
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci --foreground-scripts
+
+      - name: Build SDK
+        run: npm run build:plugin-sdk
+
+      # 发布凭据属于仓库外配置：npm 侧已绑定 Trusted Publishing 时直接
+      # publish --provenance；否则使用仓库 secret 中的 NPM_TOKEN
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NODE_AUTH_TOKEN" ]; then
+            npm publish ./packages/plugin-sdk --access public
+          else
+            npm publish ./packages/plugin-sdk --access public --provenance
+          fi

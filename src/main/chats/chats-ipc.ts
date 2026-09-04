@@ -27,6 +27,7 @@ import { FileToolOutputStore } from "../orchestrator/harness/tool-output/file-to
 import { getHarnessRunStore } from "../orchestrator/harness/run-store";
 import { getRunReviewTracker } from "../orchestrator/review/run-review-tracker";
 import { getAdapterForConfig } from "../orchestrator/vendors";
+import { activeChatTargetRegistry } from "../plugin-host/active-chat-target";
 import { callSummarizeModel } from "../orchestrator/context-manager";
 import { buildContextUsageSnapshot } from "../orchestrator/context-usage";
 
@@ -264,6 +265,8 @@ export function registerChatsIpc(ipcOption?: IpcScope): void {
     if (!id) return false;
     const ok = chatsStore.deleteSession(id);
     if (ok) {
+      // 删除当前活动目标会话时使语音输入租约目标失效（登记表内部判断是否命中）
+      activeChatTargetRegistry.notifySessionDeleted(id);
       try {
         await new FileToolOutputStore(app.getPath("userData")).deleteConversation(id);
       } catch (error) {

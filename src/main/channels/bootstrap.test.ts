@@ -3,6 +3,20 @@
 // 不做任何初始化/启动 —— initialize / start / shutdown 必须显式调用。
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const channelMocks = vi.hoisted(() => ({
+  buildAndRunAgent: undefined as ((...args: unknown[]) => Promise<unknown>) | undefined,
+  agentError: undefined as Error | undefined,
+  agentResult: { reply: "渠道回复", toolResults: [] } as {
+    reply: string;
+    toolResults: unknown[];
+    terminal?: {
+      status: "success" | "timeout";
+      reason: string;
+      externalEffectsMayContinue: boolean;
+    };
+  },
+}));
+
 vi.mock("electron", () => ({
   app: { getPath: () => "/tmp", whenReady: async () => undefined },
   BrowserWindow: { getAllWindows: () => [], getFocusedWindow: () => null },
@@ -17,9 +31,9 @@ vi.mock("./init", () => ({
   shutdownChannels: vi.fn(async () => undefined),
 }));
 
-// dispatcher.ts 含未提交的用户修改，测试只依赖 setter（构造期被调用但不做实事）
+// 捕获生产装配写入 dispatcher 的执行函数，以验证真实渠道完成路径和终态边界。
 vi.mock("./dispatcher", () => ({
-  setDispatcherBuildAndRunAgent: vi.fn(),
+  setDispatcherBuildAndRunAgent: vi.fn((handler) => { channelMocks.buildAndRunAgent = handler; }),
   setDispatcherBroadcastChat: vi.fn(),
   setDispatcherLoadGeneralSettings: vi.fn(),
   setDispatcherLoadRecentHistory: vi.fn(),
@@ -28,7 +42,7 @@ vi.mock("./dispatcher", () => ({
   setDispatcherLoadBoundConversationHistory: vi.fn(),
   setDispatcherAppendBoundConversationMessage: vi.fn(),
   setDispatcherSynthesizeTts: vi.fn(),
-  formatChannelUserText: vi.fn(() => ""),
+  formatChannelUserText: vi.fn(() => "渠道问题"),
 }));
 
 // 避免拉起真实 tool registry（会级联 import RAG 等重依赖）
@@ -39,7 +53,39 @@ vi.mock("../orchestrator/tools/history-tools", () => ({
   indexConversationTurn: vi.fn(),
 }));
 vi.mock("../orchestrator/cyrene-agent", () => ({
-  CyreneAgent: class {},
+  CyreneAgent: class {
+    get lastResult() {
+      return channelMocks.agentResult;
+    }
+
+    runWithEvents() {
+      return { subscribe: ({ complete, error }: { complete: () => void; error: (err: Error) => void }) => {
+        if (channelMocks.agentError) error(channelMocks.agentError);
+        else complete();
+      } };
+    }
+  },
+}));
+vi.mock("./settings-store", () => ({
+  loadChannelsSettings: () => ({ toolSandbox: "safe" }),
+}));
+vi.mock("../settings/settings-facade", () => ({
+  loadGeneralSettings: () => ({}),
+}));
+vi.mock("../settings/model-settings", () => ({
+  loadModelSettings: () => ({}),
+  loadVisionConfig: () => undefined,
+  resolveModelSettingsProfile: () => ({ multimodal: false }),
+}));
+vi.mock("../chat/image-send-strategy", () => ({
+  decideImageSendStrategy: () => ({ mode: "none" }),
+}));
+vi.mock("./agent-input", () => ({
+  buildChannelAttachmentInputs: async () => ({ attachments: [], imageAttachments: [] }),
+}));
+vi.mock("./agent-policy", () => ({
+  resolveChannelAgentPolicy: () => ({ exposeTools: false, executionMode: "chat" }),
+  enforceChannelAgentPolicy: vi.fn(),
 }));
 
 // eslint-disable-next-line import/first
@@ -55,8 +101,29 @@ function makeChannelsDeps(): ChannelsSubsystemDeps {
   };
 }
 
+function makePublishLifecycle() {
+  return {
+    publishTurnStarted: vi.fn(),
+    publishTurnFinished: vi.fn(),
+    publishSchedulerFinished: vi.fn(),
+  };
+}
+
+function makeAgentRuntime(onRunFinished = vi.fn(async () => ({ sticker: null }))) {
+  return {
+    buildOptions: vi.fn(async () => ({
+      options: { executionMode: "chat", conversationMode: "chat" },
+      latestUserText: "unused",
+    })),
+    onRunFinished,
+    buildSchedulerOptions: vi.fn(),
+  } as unknown as ChannelsSubsystemDeps["agentRuntime"];
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  channelMocks.agentError = undefined;
+  channelMocks.agentResult = { reply: "渠道回复", toolResults: [] };
 });
 
 describe("createChannelsSubsystem lifecycle", () => {
@@ -74,6 +141,30 @@ describe("createChannelsSubsystem lifecycle", () => {
     const subsystem = createChannelsSubsystem(makeChannelsDeps(), lifecycle);
     await subsystem.start();
     expect(lifecycle.start).toHaveBeenCalledOnce();
+  });
+
+  it("resolves adaptersRegistered only after synchronous adapter initialization succeeds", async () => {
+    const lifecycle = { initialize: vi.fn(), start: vi.fn(async () => undefined), shutdown: vi.fn() };
+    const subsystem = createChannelsSubsystem(makeChannelsDeps(), lifecycle);
+    let settled = false;
+    void subsystem.adaptersRegistered.then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    subsystem.initialize();
+    await expect(subsystem.adaptersRegistered).resolves.toBeUndefined();
+    expect(settled).toBe(true);
+  });
+
+  it("rejects adaptersRegistered when adapter initialization fails", async () => {
+    const lifecycle = {
+      initialize: vi.fn(() => { throw new Error("adapter registration failed"); }),
+      start: vi.fn(async () => undefined),
+      shutdown: vi.fn(),
+    };
+    const subsystem = createChannelsSubsystem(makeChannelsDeps(), lifecycle);
+    expect(() => subsystem.initialize()).toThrow("adapter registration failed");
+    await expect(subsystem.adaptersRegistered).rejects.toThrow("adapter registration failed");
   });
 
   it("forwards the abort signal to the lifecycle start", async () => {
@@ -100,5 +191,134 @@ describe("createChannelsSubsystem lifecycle", () => {
     expect(initializeChannels).toHaveBeenCalledOnce();
     void startChannels;
     void shutdownChannels;
+  });
+
+  it("渠道成功回复把规范化文本和渠道上下文交给统一收尾路径", async () => {
+    const onRunFinished = vi.fn(async () => ({ sticker: null }));
+    const agentRuntime = makeAgentRuntime(onRunFinished);
+    const publishLifecycle = makePublishLifecycle();
+    createChannelsSubsystem({
+      ...makeChannelsDeps(),
+      agentRuntime,
+      publishLifecycle,
+    });
+
+    const buildAndRunAgent = channelMocks.buildAndRunAgent;
+    if (!buildAndRunAgent) throw new Error("渠道 Agent 执行函数未注册");
+    await buildAndRunAgent({
+      channel: "telegram",
+      chatType: "direct",
+      senderId: "user-1",
+      at: new Date("2026-09-02T00:00:00Z"),
+    }, "channel-session", []);
+
+    expect(onRunFinished).toHaveBeenCalledWith(
+      { reply: "渠道回复", toolResults: [] },
+      "渠道问题",
+      {
+        source: "channel",
+        mode: "chat",
+        conversationId: "channel-session",
+        channel: "telegram",
+      },
+    );
+
+    // 成功轮次：开始与结束事件各发布一次，携带渠道会话标识与运行 id
+    expect(publishLifecycle.publishTurnStarted).toHaveBeenCalledTimes(1);
+    const startedPayload = publishLifecycle.publishTurnStarted.mock.calls[0][0] as Record<string, unknown>;
+    expect(startedPayload).toMatchObject({
+      source: "channel",
+      channel: "telegram",
+      conversationId: "channel-session",
+      mode: "chat",
+    });
+    expect(typeof startedPayload.runId).toBe("string");
+    // 渠道不写桌面会话 Store，事件不提供消息边界
+    expect("inputMessageId" in startedPayload).toBe(false);
+
+    expect(publishLifecycle.publishTurnFinished).toHaveBeenCalledTimes(1);
+    const finishedPayload = publishLifecycle.publishTurnFinished.mock.calls[0][0] as Record<string, unknown>;
+    expect(finishedPayload).toMatchObject({
+      source: "channel",
+      channel: "telegram",
+      conversationId: "channel-session",
+      runId: startedPayload.runId,
+      mode: "chat",
+      status: "success",
+    });
+    expect(typeof finishedPayload.durationMs).toBe("number");
+  });
+
+  it("渠道超时终态不进入成功收尾", async () => {
+    channelMocks.agentResult = {
+      reply: "超时前的部分回复",
+      toolResults: [],
+      terminal: {
+        status: "timeout",
+        reason: "timeout",
+        externalEffectsMayContinue: true,
+      },
+    };
+    const onRunFinished = vi.fn(async () => ({ sticker: null }));
+    const agentRuntime = makeAgentRuntime(onRunFinished);
+    const publishLifecycle = makePublishLifecycle();
+    createChannelsSubsystem({
+      ...makeChannelsDeps(),
+      agentRuntime,
+      publishLifecycle,
+    });
+
+    const buildAndRunAgent = channelMocks.buildAndRunAgent;
+    if (!buildAndRunAgent) throw new Error("渠道 Agent 执行函数未注册");
+    const result = await buildAndRunAgent({
+      channel: "telegram",
+      chatType: "direct",
+      senderId: "user-1",
+      at: new Date("2026-09-02T00:00:00Z"),
+    }, "channel-session", []) as { text: string };
+
+    expect(result.text).toBe("超时前的部分回复");
+    expect(onRunFinished).not.toHaveBeenCalled();
+
+    // 超时终态仍发布一次结束事件，状态与 agent 终态一致
+    expect(publishLifecycle.publishTurnStarted).toHaveBeenCalledTimes(1);
+    expect(publishLifecycle.publishTurnFinished).toHaveBeenCalledTimes(1);
+    expect(publishLifecycle.publishTurnFinished.mock.calls[0][0]).toMatchObject({
+      source: "channel",
+      status: "timeout",
+      conversationId: "channel-session",
+    });
+  });
+
+  it("渠道执行失败时不进入成功收尾路径", async () => {
+    channelMocks.agentError = new Error("渠道执行失败");
+    const onRunFinished = vi.fn(async () => ({ sticker: null }));
+    const agentRuntime = makeAgentRuntime(onRunFinished);
+    const publishLifecycle = makePublishLifecycle();
+    createChannelsSubsystem({
+      ...makeChannelsDeps(),
+      agentRuntime,
+      publishLifecycle,
+    });
+
+    const buildAndRunAgent = channelMocks.buildAndRunAgent;
+    if (!buildAndRunAgent) throw new Error("渠道 Agent 执行函数未注册");
+    await expect(buildAndRunAgent({
+      channel: "telegram",
+      chatType: "direct",
+      senderId: "user-1",
+      at: new Date("2026-09-02T00:00:00Z"),
+    }, "channel-session", [])).rejects.toThrow("渠道执行失败");
+
+    expect(onRunFinished).not.toHaveBeenCalled();
+
+    // 异常退出也要发布一次 runtime_error 结束事件（finally 路径）
+    expect(publishLifecycle.publishTurnStarted).toHaveBeenCalledTimes(1);
+    expect(publishLifecycle.publishTurnFinished).toHaveBeenCalledTimes(1);
+    expect(publishLifecycle.publishTurnFinished.mock.calls[0][0]).toMatchObject({
+      source: "channel",
+      status: "runtime_error",
+      conversationId: "channel-session",
+    });
   });
 });

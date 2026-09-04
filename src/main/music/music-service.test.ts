@@ -324,6 +324,37 @@ describe("MusicService (M3 OpenAPI)", () => {
     expect(mocks.getSongDetail).not.toHaveBeenCalled();
   });
 
+  it("playSessionTrack cache hit → plays local file without OpenAPI config", async () => {
+    const localId = "local-123456789abc";
+    cacheState.files.set(localId, "C:/cache/local-song.mp3");
+    cacheState.records.set(localId, {
+      encryptedId: localId,
+      name: "本地歌曲",
+      artists: ["本地歌手"],
+    });
+    const { OpenapiConfigStore } = await import("./openapi-config");
+    vi.mocked(OpenapiConfigStore).mockImplementationOnce(function () {
+      return { loadValidated: vi.fn().mockResolvedValue(null) } as unknown as OpenapiConfigStore;
+    });
+    const s = new MusicService(PATHS);
+
+    const result = await s.playSessionTrack({
+      queue: [{ id: localId, name: "本地歌曲", artists: ["本地歌手"] }],
+      queueIndex: 0,
+      playbackMode: "all",
+      playlistId: "__local_cache__",
+    });
+
+    expect(result).toMatchObject({
+      state: "dispatched",
+      resourceType: "song",
+      resourceId: localId,
+    });
+    expect(s.getBackendState()).toBe("incompatible");
+    expect(mpvMocks.load).toHaveBeenCalledWith("C:/cache/local-song.mp3", "replace");
+    expect(mocks.getSongDetail).not.toHaveBeenCalled();
+  });
+
   it("playTrackFromUi downloading → awaits in-flight promise, then plays local", async () => {
     let resolveDownload!: (v: { ok: boolean; trackId: string; filePath?: string }) => void;
     cacheState.inFlight.set(

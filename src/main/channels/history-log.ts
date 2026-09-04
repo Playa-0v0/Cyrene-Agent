@@ -108,7 +108,7 @@ export function migrateHistory(fromSessionId: string, toSessionId: string): void
   }
 }
 
-/** 启动时所有 session 文件预读 (可选, dispatcher 用不到, 给将来 Phase 4 调试 UI 留接口). */
+/** 启动时所有 session 文件预读 (可选, dispatcher 用不到, 预留给将来的调试 UI). */
 export function reloadAllHistory(): Map<string, HistoryEntry[]> {
   const out = new Map<string, HistoryEntry[]>();
   try {
@@ -116,7 +116,7 @@ export function reloadAllHistory(): Map<string, HistoryEntry[]> {
     for (const name of fs.readdirSync(dir())) {
       if (!name.endsWith(".jsonl")) continue;
       const sid = name.replace(/\.jsonl$/, "").replace(/_/g, ":");
-      // 不尝试反推回原 sessionId, 这里只是占位接口, Phase 4 可优化
+      // 不尝试反推回原 sessionId, 这里只是占位接口, 后续可优化
       out.set(sid, loadRecentHistory(sid, MAX_FILE_LINES));
     }
   } catch {

@@ -1,8 +1,6 @@
 /**
- * 重试策略（v3 §5.3 / §5.4）
- * 注：注释中的 "v3 §x" / "设计稿 §x" 均指 docs/design/2026-08-08-cyreneHarnessloopdesign.md（CyreneHarness 设计稿 v3）。
+ * 重试策略：根据 error category + side-effect 决定是否重试，以及重试参数。
  *
- * 根据 error category + side-effect 决定是否重试，以及重试参数。
  * 核心原则：不让 LLM 决定"要不要重试"——这是代码的活。
  */
 
@@ -16,7 +14,7 @@ export interface RetryParams {
 }
 
 /**
- * 决定是否重试（v3 §5.3 决策表）。
+ * 决定是否重试。
  *
  * @param category 错误分类
  * @param sideEffect 副作用分类
@@ -60,7 +58,7 @@ export function decideRetry(
 }
 
 /**
- * 获取重试参数（v3 §5.4 退避策略）。
+ * 获取重试参数。
  */
 export function getRetryParams(category: ToolErrorCategory): RetryParams {
   switch (category) {

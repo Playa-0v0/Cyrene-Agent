@@ -701,6 +701,7 @@ Character IP, the Cyrene Live2D model (`models/cyrene/`), and artwork assets are
 - **Cyrene Character**: © HoYoverse / miHoYo
 - **Live2D Model**: Created by [@是依七哒](https://space.bilibili.com/457683484) — see [MODEL_LICENSE.md](./MODEL_LICENSE.md)
 - **Live2D Cubism SDK**: © Live2D Cubism
+- **Contributors**: See [docs/CONTRIBUTORS.md](./docs/CONTRIBUTORS.md)
 
 Special thanks to the original model creator for generously authorizing this project to use, modify, and redistribute the work.
 

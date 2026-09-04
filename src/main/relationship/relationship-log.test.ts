@@ -52,4 +52,23 @@ describe("relationship log", () => {
     expect(context).toContain("疲惫")
     expect(context).toContain("下次回应提示")
   })
+
+  it("does not misread common words as boundary signals", async () => {
+    const { RelationshipLogStore } = await import("./relationship-log")
+    const store = new RelationshipLogStore(filePath)
+
+    for (const text of ["我今天不想吃火锅", "我今天想吃点别的", "先不管这个报错，帮我看下代码"]) {
+      await store.recordTurn({
+        userText: text,
+        assistantText: "好的。",
+        cyreneFeeling: "平稳",
+        channel: "desktop",
+      })
+    }
+
+    const data = JSON.parse(fs.readFileSync(filePath, "utf8")) as {
+      entries: Array<{ userMood: string }>
+    }
+    expect(data.entries.every((e) => e.userMood === "未知")).toBe(true)
+  })
 })

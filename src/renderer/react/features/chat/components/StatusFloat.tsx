@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "../../../i18n";
 import 离线 from "../../../assets/status-float/离线.png";
 import 聆听中 from "../../../assets/status-float/聆听中.png";
 import 陪伴中 from "../../../assets/status-float/陪伴中.png";
@@ -6,7 +7,7 @@ import 提醒 from "../../../assets/status-float/提醒.png";
 
 interface FloatItem {
   src: string;
-  alt: string;
+  altKey: string;
   top: number;
   left: number;
   rotate: number;
@@ -15,11 +16,12 @@ interface FloatItem {
   duration: number;
 }
 
+// 只存 i18n key（非译文，可安全放模块顶层）；alt 文案在渲染时经 t() 求值。
 const IMAGES = [
-  { src: 离线, alt: "离线" },
-  { src: 聆听中, alt: "聆听中" },
-  { src: 陪伴中, alt: "陪伴中" },
-  { src: 提醒, alt: "提醒" },
+  { src: 离线, altKey: "statusFloat.offline" },
+  { src: 聆听中, altKey: "statusFloat.listening" },
+  { src: 陪伴中, altKey: "statusFloat.companion" },
+  { src: 提醒, altKey: "statusFloat.remind" },
 ];
 
 function randomRange(min: number, max: number): number {
@@ -27,6 +29,7 @@ function randomRange(min: number, max: number): number {
 }
 
 export function StatusFloat() {
+  const { t } = useTranslation();
   const items = useMemo<FloatItem[]>(() => {
     const baseTops = [18, 38, 58, 78];
     return IMAGES.map((img, index) => {
@@ -58,7 +61,7 @@ export function StatusFloat() {
         >
           <img
             src={item.src}
-            alt={item.alt}
+            alt={t(item.altKey)}
             style={{
               animationDelay: `${item.delay}s`,
               animationDuration: `${item.duration}s`,

@@ -1,5 +1,6 @@
 import { Download, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
+import { t } from "../../../i18n";
 import type { AppUpdateState } from "../../../../../shared/app-update";
 import "./AppUpdateEntry.css";
 
@@ -13,18 +14,18 @@ export function resolveAppUpdateEntryView(state: AppUpdateState): AppUpdateEntry
   switch (state.phase) {
     case "available":
       return {
-        label: state.availableVersion ? `发现新版本 v${state.availableVersion}` : "发现新版本",
+        label: state.availableVersion ? t("appUpdate.availableWithVersion", { version: state.availableVersion }) : t("appUpdate.available"),
         action: "download",
         disabled: false,
       };
     case "downloading":
       return {
-        label: `正在下载 ${Math.max(0, Math.min(100, Math.round(state.percent ?? 0)))}%`,
+        label: t("appUpdate.downloading", { percent: Math.max(0, Math.min(100, Math.round(state.percent ?? 0))) }),
         action: null,
         disabled: true,
       };
     case "downloaded":
-      return { label: "重启并更新", action: "install", disabled: false };
+      return { label: t("appUpdate.restart"), action: "install", disabled: false };
     default:
       return null;
   }

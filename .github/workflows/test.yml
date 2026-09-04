@@ -76,6 +76,10 @@ jobs:
           if (-not $files) { Write-Host "No root test files found"; exit 0 }
           npx vitest run --reporter=verbose --maxWorkers=1 $files
 
+      - name: Test src/plugins
+        if: success() || failure()
+        run: npx vitest run --reporter=verbose --maxWorkers=1 src/plugins
+
       - name: Test src/renderer
         if: success() || failure()
         run: npx vitest run --reporter=verbose --maxWorkers=1 src/renderer

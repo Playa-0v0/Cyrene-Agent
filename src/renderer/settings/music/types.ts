@@ -34,4 +34,8 @@ export interface MusicApi {
   saveOpenapiConfig: (config: { appId: string; privateKey: string }) => Promise<MusicIpcResult<{ backend: string }>>;
   openPlayer: () => Promise<unknown>;
   onStateChanged: (h: (s: MusicStatusSnapshot) => void) => (() => void) | void;
+  // 本地音乐（导入到缓存池，mpv 直接播本地文件）
+  getCachedTracks: () => Promise<MusicIpcResult<unknown[]>>;
+  importLocalTracks: () => Promise<MusicIpcResult<unknown>>;
+  importLocalFolder: () => Promise<MusicIpcResult<unknown>>;
 }

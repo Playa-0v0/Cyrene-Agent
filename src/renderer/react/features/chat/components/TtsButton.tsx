@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { useTranslation } from "../../../i18n";
 import {
   getTtsPlaybackSnapshot,
   subscribeTtsPlayback,
@@ -17,14 +18,15 @@ interface TtsButtonProps {
   color?: string;
 }
 
-function buttonLabel(status: TtsPlaybackStatus): string {
-  if (status === "synthesizing") return "正在生成语音";
-  if (status === "playing") return "暂停朗读";
-  if (status === "paused") return "继续朗读";
-  if (status === "completed") return "重新朗读";
-  if (status === "error") return "重新朗读";
-  return "朗读";
-}
+// 只存 i18n key（t() 不能出现在模块顶层常量里），展示文案在组件内求值。
+const STATUS_LABEL_KEYS: Record<TtsPlaybackStatus, string> = {
+  idle: "tts.labelIdle",
+  synthesizing: "tts.labelSynthesizing",
+  playing: "tts.labelPause",
+  paused: "tts.labelResume",
+  completed: "tts.labelReplay",
+  error: "tts.labelReplay",
+};
 
 export function TtsButton({
   conversationId,
@@ -36,13 +38,14 @@ export function TtsButton({
   size = 16,
   color = "#8e8e93",
 }: TtsButtonProps) {
+  const { t } = useTranslation();
   const playback = useSyncExternalStore(
     subscribeTtsPlayback,
     getTtsPlaybackSnapshot,
     getTtsPlaybackSnapshot,
   );
-  const status = playback.messageId === messageId ? playback.status : "idle";
-  const label = buttonLabel(status);
+  const status: TtsPlaybackStatus = playback.messageId === messageId ? playback.status : "idle";
+  const label = t(STATUS_LABEL_KEYS[status]);
 
   return (
     <button

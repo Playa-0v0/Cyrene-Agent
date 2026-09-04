@@ -170,7 +170,11 @@ export interface CyreneRunOptions {
   };
   /** 可用 Skill 列表（feature flag 开启时使用）。Skill 路由层不依赖该字段是否存在。 */
   availableSkills?: SkillRouteInfo[];
-  /** ExecutionLedger：同进程工具去重缓存(设计稿 v3 §5.5.1.1,指 docs/design/2026-08-08-cyreneHarnessloopdesign.md)。CyreneAgent 内部默认从 ExecutionLedgerStore 取,调用方一般不用传。 */
+  /**
+   * ExecutionLedger：同进程工具去重缓存（设计稿 v3 §5.5.1.1，
+   * 指 docs/design/2026-08-08-cyreneHarnessloopdesign.md）。
+   * CyreneAgent 内部默认从 ExecutionLedgerStore 取，调用方一般不用传。
+   */
   executionLedger?: ExecutionLedger;
   /**
    * 可信工作区根目录（来自 Conversation Workspace Binding）。
@@ -185,6 +189,11 @@ export interface CyreneRunOptions {
    * - 一旦 abort，markAbort("user_cancelled") 触发，harness 收到 signal.aborted 后返回 cancelled。
    */
   signal?: AbortSignal;
+  /**
+   * 工具结果确定后的只读观察回调（透传给 harness 的 onToolFinished）。
+   * 只携带稳定元数据供插件事件旁路使用，不参与执行决策。
+   */
+  onToolFinished?: (event: import("./harness/types").HarnessToolFinishedEvent) => void;
 }
 
 /** Agent run 最终结果（供桥层做副作用用）。 */

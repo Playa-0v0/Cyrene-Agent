@@ -1,0 +1,11 @@
+{
+  "apiVersion": 1,
+  "id": "scheduled-automation",
+  "name": "定时自动化",
+  "version": "0.1.0",
+  "description": "演示调度任务契约：通过工具创建、列出、更新、删除自己的定时任务，创建后需用户在宿主界面确认启用",
+  "author": "Cyrene 示例",
+  "entry": "index.cjs",
+  "defaultEnabled": false,
+  "deps": ["scheduler"]
+}

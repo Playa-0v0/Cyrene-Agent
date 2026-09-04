@@ -38,6 +38,8 @@ import {
   type ModelSettingsLite,
 } from "./build-options";
 import { type CyreneRunResult, type CyreneRunOptions } from "./cyrene-agent";
+import type { HarnessToolFinishedEvent } from "./harness/types";
+import type { ToolFinishedInput } from "../plugin-host/lifecycle-publisher";
 import {
   buildToolSystemPrompt,
   buildSoulSystemBasePrompt,
@@ -50,6 +52,11 @@ import { resolveRunCapabilities } from "./run-capabilities";
 import { loadStickerSettings } from "./sticker-settings";
 import type { RuntimeStateService } from "./runtime-state-service";
 import type { LlmClient } from "../services/llm/llm-client";
+import type {
+  PluginTurnCompletedEvent,
+  PluginPromptBuildInput,
+  PluginPromptMode,
+} from "../../plugins/types";
 
 type EnqueueLLMTask = <T>(
   label: string,
@@ -78,13 +85,25 @@ export interface AgentRuntimeDeps {
   socialContextScheduler: { schedule: (input: SocialExtractionInput) => void };
   chatsStore: { getWorkspaceBinding: (conversationId: string) => { workspaceRoot: string; displayName: string; boundAt: number } | undefined };
   socialAtomStore: { listActive: (conversationId: string, now: number) => SocialAtom[] };
+  buildPluginPromptContext: (input: PluginPromptBuildInput) => Promise<string>;
+  publishPluginHostEvent: <T>(event: string, payload: T) => Promise<void>;
+  /** 工具完成事件发布入口；缺省不发布（早期装配与测试场景）。 */
+  publishToolFinished?: (event: ToolFinishedInput) => void;
 }
 
 type SchedulerRunOptions = Omit<CyreneRunOptions, "toolSystemContent" | "soulSystemBaseContent">;
 
+export interface AgentRunFinishedContext {
+  source: PluginTurnCompletedEvent["source"];
+  mode: PluginPromptMode;
+  conversationId: string;
+  channel?: string;
+  runId?: string;
+}
+
 export interface AgentRuntime {
   buildOptions(input: AguiRunInput): Promise<{ options: CyreneRunOptions; latestUserText: string }>;
-  onRunFinished(result: CyreneRunResult, latestUserText: string, channel?: ChannelId, conversationId?: string): Promise<{ sticker: string | null }>;
+  onRunFinished(result: CyreneRunResult, latestUserText: string, context: AgentRunFinishedContext): Promise<{ sticker: string | null }>;
   buildSchedulerOptions(task: ScheduledTask): Promise<SchedulerRunOptions>;
 }
 
@@ -216,6 +235,7 @@ export function createAgentRuntime(rawDeps: AgentRuntimeDeps): AgentRuntime {
       getWorkspaceBinding: (conversationId: string) => {
         return rawDeps.chatsStore.getWorkspaceBinding(conversationId);
       },
+      buildPluginPromptContext: (input) => rawDeps.buildPluginPromptContext(input),
     };
   }
 
@@ -244,32 +264,72 @@ export function createAgentRuntime(rawDeps: AgentRuntimeDeps): AgentRuntime {
     };
   }
 
+  // 工具完成观察回调：harness 事件结构与插件事件字段一一对应，直接透传；
+  // 未配置发布入口时不注入，harness 侧零开销。
+  const onToolFinished = rawDeps.publishToolFinished
+    ? (event: HarnessToolFinishedEvent) => rawDeps.publishToolFinished!(event)
+    : undefined;
+
   return {
     buildOptions: async (input) => {
       const buildOptionsDeps = buildBuildOptionsDeps();
-      return buildAgentRunOptions(input, buildOptionsDeps);
+      const { options, latestUserText } = await buildAgentRunOptions(input, buildOptionsDeps);
+      return { options: { ...options, onToolFinished }, latestUserText };
     },
 
-    onRunFinished: async (result, latestUserText, channel, conversationId) => {
+    onRunFinished: async (result, latestUserText, context) => {
       const onRunFinishedDeps = buildOnRunFinishedDeps();
-      return onAgentRunFinished(result, latestUserText, onRunFinishedDeps, channel, conversationId);
+      const effects = await onAgentRunFinished(
+        result,
+        latestUserText,
+        onRunFinishedDeps,
+        context.channel as ChannelId | undefined,
+        context.conversationId,
+      );
+      // 调用方应只在成功终态进入收尾；此处再守住插件事件契约，避免未来新增入口误报完成。
+      const terminalStatus = result.terminal?.status;
+      if (terminalStatus !== undefined && terminalStatus !== "success") {
+        return effects;
+      }
+      const payload: PluginTurnCompletedEvent = {
+        source: context.source,
+        mode: context.mode,
+        conversationId: context.conversationId,
+        ...(context.channel ? { channel: context.channel } : {}),
+        ...(context.runId ? { runId: context.runId } : {}),
+      };
+      // 插件监听器属于旁路扩展：不等待它们，避免第三方插件延迟主回复的终态事件。
+      void rawDeps.publishPluginHostEvent("turn:completed", payload).catch((error) => {
+        console.warn("[plugins] 发布对话轮次完成事件失败", error);
+      });
+      return effects;
     },
 
     buildSchedulerOptions: async (task) => {
-      const settings = rawDeps.loadModelSettings();
+      // 与 channel bot / 聊天路径同策略：先展开默认模型档案再取顶层镜像，
+      // 否则用户只在档案里配模型时顶层 baseUrl/apiKey 可能为空，定时任务会调不到 LLM。
+      const settings = resolveModelSettingsProfile(rawDeps.loadModelSettings());
       const profile = rawDeps.loadUserProfile();
       const generalSettings = rawDeps.loadGeneralSettings();
+      // 会话模式取任务冻结字段（旧任务默认 work）：skill 过滤、模式提示词
+      // 和插件提示词上下文都跟随该模式。
+      const mode = task.mode ?? "work";
       const messages = [{ role: "user" as const, content: task.prompt }];
-      // 定时任务默认按 work 模式过滤 skill，并尊重 skill-模式覆盖层。
-      const scheduledSkills = rawDeps.skillRegistry.getEnabledForMode(
-        "work",
-        generalSettings.skillModeOverrides,
-      );
+      // 定时任务按任务模式过滤 skill，并尊重 skill-模式覆盖层；
+      // 与聊天路径同约定：chat 模式不暴露 skill。
+      const scheduledSkills = mode === "chat"
+        ? []
+        : rawDeps.skillRegistry.getEnabledForMode(mode, generalSettings.skillModeOverrides);
       const systemContent = [
-        buildModePrompt("work"),
+        buildModePrompt(mode),
         buildEnvironmentContext({ provider: settings.provider, model: settings.model }, profile),
         buildSkillCatalog(scheduledSkills),
         await buildAlwaysOnContext(task.prompt, messages),
+        await rawDeps.buildPluginPromptContext({
+          source: "scheduler",
+          mode,
+          userText: task.prompt,
+        }),
       ].join("\n\n---\n\n");
       return {
         settings: {
@@ -277,11 +337,15 @@ export function createAgentRuntime(rawDeps: AgentRuntimeDeps): AgentRuntime {
           baseUrl: settings.baseUrl,
           model: settings.model,
           apiKey: settings.apiKey,
+          // 协议与推理偏好需与聊天路径一致透传，否则定时任务会按默认协议发请求。
+          explicitTransport: settings.explicitTransport,
+          reasoning: settings.reasoning,
           contextWindowTokens: settings.contextWindowTokens,
         },
         messages: [{ role: "system" as const, content: systemContent }, ...messages],
         // 定时任务也不因整轮耗时被中断；仍保留单次模型/工具自身的超时。
         timeoutMs: 0,
+        onToolFinished,
       };
     },
   };

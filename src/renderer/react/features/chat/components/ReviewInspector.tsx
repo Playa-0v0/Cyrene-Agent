@@ -5,16 +5,18 @@
 // 外层 aside / tab 栏 / 关闭按钮由 RightInspector 统一提供。
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "../../../i18n";
 import type { ReviewFileChange, ReviewLine, ReviewSnapshot } from "../../../../../shared/review-types";
 import "./ReviewInspector.css";
 
-const KIND_LABEL: Record<ReviewFileChange["kind"], string> = {
-  modified: "修改",
-  created: "新增",
-  deleted: "删除",
-  renamed: "重命名",
-  binary: "二进制",
-  "large-text": "大文件",
+// 只存 i18n key（t() 不能出现在模块顶层常量里），展示文案在组件内求值。
+const KIND_LABEL_KEYS: Record<ReviewFileChange["kind"], string> = {
+  modified: "review.kindModified",
+  created: "review.kindCreated",
+  deleted: "review.kindDeleted",
+  renamed: "review.kindRenamed",
+  binary: "review.kindBinary",
+  "large-text": "review.kindLargeText",
 };
 
 const KIND_CLASS: Record<ReviewFileChange["kind"], string> = {
@@ -33,6 +35,7 @@ export function ReviewDiffContent({
   runId: string;
   fileIndex: number;
 }) {
+  const { t } = useTranslation();
   const [snapshot, setSnapshot] = useState<ReviewSnapshot | null>(null);
 
   useEffect(() => {
@@ -61,13 +64,13 @@ export function ReviewDiffContent({
       <div className="cy-review-inspector__file-title" title={file?.newPath ?? ""}>
         {file && (
           <span className={`cy-review-inspector__kind ${KIND_CLASS[file.kind]}`}>
-            {KIND_LABEL[file.kind]}
+            {t(KIND_LABEL_KEYS[file.kind])}
           </span>
         )}
-        <span className="cy-review-inspector__title-text">{file?.newPath ?? "加载中…"}</span>
+        <span className="cy-review-inspector__title-text">{file?.newPath ?? t("common.loading")}</span>
       </div>
       <div className="cy-review-inspector__body">
-        {!file && <div className="cy-review-inspector__loading">加载中…</div>}
+        {!file && <div className="cy-review-inspector__loading">{t("common.loading")}</div>}
         {file && <DiffView file={file} />}
       </div>
     </div>
@@ -75,11 +78,12 @@ export function ReviewDiffContent({
 }
 
 function DiffView({ file }: { file: ReviewFileChange }) {
+  const { t } = useTranslation();
   if (file.kind === "binary" || file.kind === "large-text") {
     return (
       <div className="cy-review-inspector__meta">
         <div className="cy-review-inspector__meta-info">
-          <span className={`cy-review-inspector__kind ${KIND_CLASS[file.kind]}`}>{KIND_LABEL[file.kind]}</span>
+          <span className={`cy-review-inspector__kind ${KIND_CLASS[file.kind]}`}>{t(KIND_LABEL_KEYS[file.kind])}</span>
           {file.before && (
             <span className="cy-review-inspector__meta-size">
               {formatSize(file.before.size)}
@@ -91,7 +95,7 @@ function DiffView({ file }: { file: ReviewFileChange }) {
           )}
         </div>
         <div className="cy-review-inspector__meta-hint">
-          {file.kind === "binary" ? "二进制文件，无法显示差异" : "文件过大，未生成行级差异"}
+          {file.kind === "binary" ? t("review.binaryHint") : t("review.largeTextHint")}
         </div>
       </div>
     );
@@ -101,7 +105,7 @@ function DiffView({ file }: { file: ReviewFileChange }) {
     return (
       <div className="cy-review-inspector__meta">
         <div className="cy-review-inspector__meta-hint">
-          {file.kind === "renamed" ? "文件已重命名，内容无变更" : "无行级差异"}
+          {file.kind === "renamed" ? t("review.renamedHint") : t("review.noDiffHint")}
         </div>
       </div>
     );

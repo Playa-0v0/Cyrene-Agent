@@ -98,12 +98,15 @@ describe("MODEL_REASONING_RULES — 规则匹配优先级", () => {
 // ── B. 9 家全部存在性 ──────────────────────────────────────
 
 describe("MODEL_REASONING_RULES — 9 家全部存在性", () => {
-  test("chatgpt gpt-5.6 → effort + openai-effort + supportedEfforts 含 max", () => {
+  test("chatgpt gpt-5.6 → effort + openai-effort + supportedEfforts 含 max + supportsProMode", () => {
     const cap = resolveReasoningCapability("chatgpt", "gpt-5.6");
     expect(cap.control).toBe("effort");
     expect(cap.requestStyle).toBe("openai-effort");
     expect(cap.supportedEfforts).toContain("max");
     expect(cap.supportsDisable).toBe(true);
+    // Responses API reasoning.mode:"pro"（gpt-5.6-sol 别名同规则）
+    expect(cap.supportsProMode).toBe(true);
+    expect(resolveReasoningCapability("chatgpt", "gpt-5.6-sol").supportsProMode).toBe(true);
   });
 
   test("chatgpt gpt-5 → effort + supportedEfforts 含 minimal", () => {
@@ -306,6 +309,18 @@ describe("normalizeReasoningPreference — 白名单", () => {
         .toEqual({ mode: "on", effort: e });
     }
   });
+
+  test("proMode=true → 保留", () => {
+    expect(normalizeReasoningPreference({ mode: "on", proMode: true }))
+      .toEqual({ mode: "on", proMode: true });
+  });
+
+  test("proMode 非法（字符串/null）→ 丢弃 proMode，其余保留", () => {
+    expect(normalizeReasoningPreference({ mode: "on", effort: "high", proMode: "yes" }))
+      .toEqual({ mode: "on", effort: "high" });
+    expect(normalizeReasoningPreference({ mode: "on", proMode: null }))
+      .toEqual({ mode: "on" });
+  });
 });
 
 // ── D. resolveEffectiveReasoning ──────────────────────────────────────
@@ -438,6 +453,39 @@ describe("resolveEffectiveReasoning", () => {
     expect(resolveEffectiveReasoning(saved, cap)).toEqual({ mode: "on", effort: "high" });
     // saved 不动
     expect(saved).toEqual({ mode: "on", effort: "max" });
+  });
+
+  // ── proMode（Responses API reasoning.mode="pro"，gpt-5.6 系列）──
+
+  const proCap: ReasoningCapability = {
+    control: "effort",
+    supportedEfforts: ["low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
+    requestStyle: "openai-effort",
+    supportsDisable: true,
+    supportsProMode: true,
+  };
+
+  test("supportsProMode + {on, proMode:true} → 保留 proMode", () => {
+    expect(resolveEffectiveReasoning({ mode: "on", proMode: true }, proCap))
+      .toEqual({ mode: "on", effort: "medium", proMode: true });
+  });
+
+  test("supportsProMode + {on, effort:'high', proMode:true} → effort 与 proMode 共存", () => {
+    expect(resolveEffectiveReasoning({ mode: "on", effort: "high", proMode: true }, proCap))
+      .toEqual({ mode: "on", effort: "high", proMode: true });
+  });
+
+  test("capability 不支持（supportsProMode 未声明）→ proMode 丢弃", () => {
+    expect(resolveEffectiveReasoning({ mode: "on", proMode: true }, toggleEffortCap))
+      .toEqual({ mode: "on", effort: "high" });
+  });
+
+  test("mode !== on → proMode 丢弃", () => {
+    expect(resolveEffectiveReasoning({ mode: "auto", proMode: true }, proCap))
+      .toEqual({ mode: "auto" });
+    expect(resolveEffectiveReasoning({ mode: "off", proMode: true }, proCap))
+      .toEqual({ mode: "off" });
   });
 });
 

@@ -17,6 +17,9 @@ vi.mock("../../../components/ui/SkillModeButton", () => ({
 vi.mock("../../../components/ui/ModelModeButton", () => ({
   ModelModeButton: () => createElement("span", null, "model-button"),
 }));
+vi.mock("../../../components/ui/PluginModeButton", () => ({
+  PluginModeButton: ({ active }: { active: boolean }) => createElement("span", null, `plugin-button:${active}`),
+}));
 vi.mock("../../../components/ui/WindowControls", () => ({
   WindowControls: () => createElement("span", null, "window-controls"),
 }));
@@ -38,9 +41,7 @@ describe("ChatPageNavigation", () => {
   it("hides the mode switch while a tool panel is open", () => {
     const html = renderToStaticMarkup(createElement(ChatPageNavigation, {
       collapsed: false,
-      toolPanelOpen: true,
-      skillPanelOpen: false,
-      modelPanelOpen: false,
+      activePanel: "tool",
       mode: "chat",
       sessions: [],
       activeSessionId: undefined,
@@ -62,5 +63,31 @@ describe("ChatPageNavigation", () => {
     expect(html).not.toContain("mode-switch");
     expect(html).toContain("tool-button:true");
     expect(html).toContain("conversation-sidebar");
+  });
+
+  it("places the plugin entry after the model entry and marks it active", () => {
+    const html = renderToStaticMarkup(createElement(ChatPageNavigation, {
+      collapsed: false,
+      activePanel: "plugin",
+      mode: "chat",
+      sessions: [],
+      activeSessionId: undefined,
+      onToggleCollapsed: () => undefined,
+      onModeChange: () => undefined,
+      onNewTask: () => undefined,
+      onTogglePanel: () => undefined,
+      onSelectSession: () => undefined,
+      onOpenProject: () => undefined,
+      onRenameSession: () => undefined,
+      onDeleteSession: () => undefined,
+      onTogglePinSession: () => undefined,
+      onMinimize: () => undefined,
+      onMaximize: () => undefined,
+      onCloseWindow: () => undefined,
+      onOpenSettings: () => undefined,
+    }));
+
+    expect(html.indexOf("model-button")).toBeLessThan(html.indexOf("plugin-button:true"));
+    expect(html).not.toContain("mode-switch");
   });
 });

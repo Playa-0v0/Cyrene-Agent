@@ -1,6 +1,5 @@
 /**
- * 循环内上下文压缩（v3 §10.6）
- * 注：注释中的 "v3 §x" / "设计稿 §x" 均指 docs/design/2026-08-08-cyreneHarnessloopdesign.md（CyreneHarness 设计稿 v3）。
+ * 循环内上下文压缩：在 Agent Loop 中途、而非仅入口处，防止循环内上下文膨胀。
  *
  * 三件事：
  * 1. 循环内检查点（每轮 callLLM 前检查，阈值 0.7）
@@ -13,7 +12,7 @@
 import type { ChatMessage } from "../vendors/types";
 import { estimateTokens, estimateMessageTokens } from "../context-manager";
 
-// ── Token 预算计算（v3 §10.6）─────────────────────────────
+// ── Token 预算计算 ────────────────────────────────────────
 
 export interface TokenBudget {
   /** 可用输入预算 = contextWindow - reservedOutput - safetyMargin */
@@ -25,7 +24,7 @@ export interface TokenBudget {
 }
 
 /**
- * 计算 token 预算并判断是否需要压缩（v3 §10.6）。
+ * 计算 token 预算并判断是否需要压缩。
  *
  * @param systemPrompt 系统提示词
  * @param toolSchemas 工具 schema 列表
@@ -61,7 +60,7 @@ export function computeTokenBudget(
   };
 }
 
-// ── 配对安全切点（v3 §10.6 第2点）────────────────────────
+// ── 配对安全切点 ─────────────────────────────────────────
 
 /**
  * 找到配对安全的压缩切点。
@@ -144,7 +143,7 @@ export function findSafeCutPointForRetainedTokens(
   return cutIndex;
 }
 
-// ── Agent 导向压缩 prompt（v3 §10.6 第3点）───────────────
+// ── Agent 导向压缩 prompt ────────────────────────────────
 
 export const AGENT_COMPACTION_PROMPT = `你正在为 CyreneHarness 生成可恢复的执行历史检查点。请将上方较早的对话历史压缩为以下固定 Markdown 结构；每个标题都必须保留，没有内容时写“无”。
 
@@ -195,7 +194,7 @@ export interface CompactionOptions {
 }
 
 /**
- * 执行循环内压缩（v3 §10.6）。
+ * 执行循环内压缩。
  *
  * 1. 找配对安全切点
  * 2. 被压缩段走摘要

@@ -81,6 +81,25 @@ function safeRelativePath(relativePath: string): string | null {
   return normalized;
 }
 
+/**
+ * Resolve the third-party skills snapshot archive path.
+ *  - Packaged: extraResources copies vendor/cyrene-skills into
+ *    resources/cyrene-skills/skills-snapshot.zip (outside asar, real disk path).
+ *  - Dev: repository vendor/cyrene-skills/skills-snapshot.zip.
+ * Returns null when the archive is absent (e.g. build-skills-snapshot not run).
+ */
+export function resolveSkillsSnapshotArchivePath(
+  paths: Pick<ExternalContentPaths, "installRoot"> = getExternalContentPaths(),
+  options: { isPackaged?: boolean; resourcesPath?: string; existsSync?: (p: string) => boolean } = {},
+): string | null {
+  const isPackaged = options.isPackaged ?? app.isPackaged;
+  const exists = options.existsSync ?? ((p: string) => fs.existsSync(p));
+  const candidate = isPackaged
+    ? path.join(options.resourcesPath ?? process.resourcesPath, "cyrene-skills", "skills-snapshot.zip")
+    : path.join(paths.installRoot, "vendor", "cyrene-skills", "skills-snapshot.zip");
+  return exists(candidate) ? candidate : null;
+}
+
 /** Find a prompt or prompt directory using user-first lookup order. */
 export function findPromptPath(
   relativePath: string,

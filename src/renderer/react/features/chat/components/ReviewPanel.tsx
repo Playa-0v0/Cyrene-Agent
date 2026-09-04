@@ -5,17 +5,19 @@
 // 点击某个文件 → 调用 onOpenInspector(runId, fileIndex) 打开右侧纯 diff 面板。
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "../../../i18n";
 import type { ReviewFileChange, ReviewSnapshot } from "../../../../../shared/review-types";
 import reminderIconUrl from "../../../assets/status-moods/提醒.png?url";
 import "./ReviewPanel.css";
 
-const KIND_LABEL: Record<ReviewFileChange["kind"], string> = {
-  modified: "修改",
-  created: "新增",
-  deleted: "删除",
-  renamed: "重命名",
-  binary: "二进制",
-  "large-text": "大文件",
+// 只存 i18n key（t() 不能出现在模块顶层常量里），展示文案在组件内求值。
+const KIND_LABEL_KEYS: Record<ReviewFileChange["kind"], string> = {
+  modified: "review.kindModified",
+  created: "review.kindCreated",
+  deleted: "review.kindDeleted",
+  renamed: "review.kindRenamed",
+  binary: "review.kindBinary",
+  "large-text": "review.kindLargeText",
 };
 
 const KIND_CLASS: Record<ReviewFileChange["kind"], string> = {
@@ -40,6 +42,7 @@ export function ReviewPanel({
   runId: string;
   onOpenInspector?: (runId: string, fileIndex: number) => void;
 }) {
+  const { t } = useTranslation();
   const [snapshot, setSnapshot] = useState<ReviewSnapshot | null>(null);
   const [expanded, setExpanded] = useState(false);
 
@@ -83,7 +86,7 @@ export function ReviewPanel({
   if (!snapshot) return null;
 
   return (
-    <section className={`cy-review-panel${expanded ? " is-expanded" : ""}`} aria-label="文件变更审查">
+    <section className={`cy-review-panel${expanded ? " is-expanded" : ""}`} aria-label={t("review.panelAria")}>
       <button
         type="button"
         className="cy-review-panel__header"
@@ -92,7 +95,7 @@ export function ReviewPanel({
       >
         <img className="cy-review-panel__icon" src={reminderIconUrl} alt="" aria-hidden="true" />
         <span className="cy-review-panel__title">
-          {snapshot.files.length} 个文件已更改
+          {t("review.fileCount", { count: snapshot.files.length })}
         </span>
         <span className="cy-review-panel__stats">
           {totalAdd > 0 && <span className="is-add">+{totalAdd}</span>}
@@ -115,7 +118,7 @@ export function ReviewPanel({
                 title={file.newPath}
               >
                 <span className={`cy-review-panel__kind ${KIND_CLASS[file.kind]}`}>
-                  {KIND_LABEL[file.kind]}
+                  {t(KIND_LABEL_KEYS[file.kind])}
                 </span>
                 <span className="cy-review-panel__file-path">
                   {dir && <span className="cy-review-panel__dir">{dir}</span>}

@@ -8,6 +8,7 @@ import { ipcMain } from "electron";
 
 export interface IpcScope {
   handle(channel: string, listener: (...args: any[]) => unknown): void;
+  removeHandler(channel: string): void;
   on(channel: string, listener: (...args: any[]) => void): void;
   dispose(): void;
 }
@@ -43,6 +44,16 @@ export function createIpcScope(main: IpcScopeMainLike = ipcMain as IpcScopeMainL
       handledChannels.add(channel);
       registrations.push({ kind: "handle", channel, listener });
       main.handle(channel, listener);
+    },
+
+    removeHandler(channel) {
+      assertActive();
+      if (!handledChannels.delete(channel)) return;
+      const index = registrations.findIndex(
+        (registration) => registration.kind === "handle" && registration.channel === channel,
+      );
+      if (index >= 0) registrations.splice(index, 1);
+      main.removeHandler(channel);
     },
 
     on(channel, listener) {

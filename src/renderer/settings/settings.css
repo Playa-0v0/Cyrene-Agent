@@ -1850,6 +1850,10 @@ body {
   border-color: rgba(255, 182, 220, 0.42);
   box-shadow: 0 12px 26px rgba(236, 72, 153, 0.22);
 }
+.plugin-add-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .plugin-list {
   display: grid;
   gap: 12px;
@@ -4292,6 +4296,56 @@ body {
   color: var(--rb-text-muted);
   white-space: nowrap;
 }
+
+/* 网格项默认 min-width:auto，长单词/按钮排会把列撑开挤扁邻居。 */
+.plugin-card__body {
+  min-width: 0;
+}
+/* 卡片按内容高度排列，避免一张高卡把同行的矮卡拉成一片空白。 */
+.music-platform-grid {
+  align-items: start;
+  /* 窄窗口下先收成单列。原来写死两列，窗口一窄每列只剩 ~200px，
+     中文会被折成一列一个字。
+     用 auto-fit 试过，但宽窗口下会自动排到三四列，卡片反而更窄——
+     两列才是这组卡片的设计意图，所以用断点显式控制。 */
+  grid-template-columns: 1fr;
+}
+@media (min-width: 720px) {
+  .music-platform-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 本地曲库为空时隐藏数量角标。 */
+.plugin-placeholder-tag.is-hidden {
+  display: none;
+}
+
+/* 本地音乐卡片操作区。 */
+.music-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.music-card-btn {
+  min-width: 30px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--rb-border-soft);
+  background: var(--rb-bg-2);
+  color: var(--rb-text-default);
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.music-card-btn:hover { border-color: var(--rb-border-strong); }
+.music-card-btn:active { background: var(--rb-bg-1); }
+.music-card-btn--text { font-size: 11px; }
 
 .music-card {
   margin-top: 18px;

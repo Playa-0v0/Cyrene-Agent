@@ -99,10 +99,10 @@ export interface PreparedHarnessRun {
   recovered?: ReturnType<typeof prepareHarnessRecovery>
   runStore: ReturnType<typeof getHarnessRunStore>
 }
-export function prepareHarnessRun(
+export async function prepareHarnessRun(
   options: CyreneRunOptions,
   signal: AbortSignal,
-): PreparedHarnessRun
+): Promise<PreparedHarnessRun>
 
 // tool-runtime.ts
 export interface PreparedToolRuntime {
@@ -119,7 +119,7 @@ export function prepareToolRuntime(input: {
 }): PreparedToolRuntime
 ```
 
-`prepareHarnessRun` 是同步函数，因为当前 run store、文件路径、恢复和计划文件读取均为同步路径；不得为了“整洁”改成异步。
+`prepareHarnessRun` 必须保留当前的异步边界：计划执行上下文通过 `fs.promises.readFile` 读取；run store 创建、恢复校验和其他同步操作仍保持同步，不得改成另一套 IO 策略。
 
 ---
 
@@ -235,10 +235,10 @@ npm run build:main
 - [ ] 使用三段窄接口，不让模块拥有 run store 或 review tracker：
 
 ```ts
-export function preparePlanRunContext(input: {
+export async function preparePlanRunContext(input: {
   mode?: ConversationMode
   threadId: string
-}): { planState: ReturnType<typeof getPlanState> | undefined; planContextBlock?: string }
+}): Promise<{ planState: ReturnType<typeof getPlanState> | undefined; planContextBlock?: string }>
 
 export function completePlanRun(input: {
   mode?: ConversationMode
@@ -250,7 +250,7 @@ export function completePlanRun(input: {
 }): void
 ```
 
-- [ ] 保持计划文件同步读取、错误日志、`[PLAN_CONTEXT]` 文本和换行不变。
+- [ ] 保持计划文件异步读取、错误日志、`[PLAN_CONTEXT]` 文本和换行不变。
 - [ ] `completeExecution` 在执行 run 任意终态都调用；只有返回 planPath 且未取消时发事件。
 - [ ] 运行新模块测试、characterization test 和构建。
 

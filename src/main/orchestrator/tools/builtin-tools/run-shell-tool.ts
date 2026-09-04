@@ -10,13 +10,14 @@
 
 import { spawn } from "child_process";
 import type { ToolDefinition } from "../registry/tool-registry";
-import { wrapWithSandbox, isSandboxReady } from "../../sandbox/sandbox-exec";
+import { wrapWithSandbox, type SandboxWrapOutcome } from "../../sandbox/sandbox-exec";
 import { getCurrentLevel } from "../../../permission";
 import { classifyShellEffect, isCatastrophicCommand, type ShellEffect } from "../../shell-execution-policy";
 import { logger, LogTag } from "../../../logger";
 import {
   buildDirectShellInvocation,
   resolveShellExecutable,
+  type ResolvedShellExecutable,
   type ShellKind,
 } from "../../shell-runtime";
 
@@ -76,6 +77,7 @@ interface ShellResult {
   stdout: string;
   stderr: string;
   truncated: boolean;
+  /** 遥测字段：是否经沙箱执行。仅用于日志/结果展示，不参与安全判定（判定在 spawn 前的 ExecutionPlan 完成） */
   ranViaSandbox: boolean;
   /** 因 idle/total 超时或外部取消而被强制终止 */
   timedOut: boolean;
@@ -96,68 +98,104 @@ function killTree(child: ReturnType<typeof spawn>): void {
   }
 }
 
+// ── 执行计划：安全决策与副作用执行分离 ─────────────────────
+// 不变量：非 full 档位下，任何命令在 ExecutionPlan 确定为可执行（sandboxed/direct）
+// 之前不会触碰 spawn；wrap 失败一律 fail-closed，绝不"先跑完再事后拒绝"
+// （旧实现曾在 wrap 抛错时静默直跑、执行完毕后才贴拒绝标签，构成 fail-open 漏洞）。
+// rejected 计划在类型层面就进不了 executePlan（见 ExecutablePlan）。
+type ExecutionPlan =
+  | { kind: "sandboxed"; command: string; cwd?: string; requestedShell: ShellKind; argv: string[]; env: NodeJS.ProcessEnv }
+  | { kind: "direct"; command: string; cwd?: string; requestedShell: ShellKind }
+  | { kind: "rejected"; command: string; cwd?: string; requestedShell: ShellKind; reason: string };
+
+/** 可执行计划：spawn 只接受这两种，rejected 在类型层面被挡在 executor 之外。 */
+type ExecutablePlan = Exclude<ExecutionPlan, { kind: "rejected" }>;
+
 /**
- * 执行一条完整 Shell 命令字符串。
+ * spawn 前完成全部安全决策（唯一调用沙箱 wrap 的地方）。
  *
- * 默认用 `cmd.exe /d /s /c`；显式 shell=bash 时用探测到的 Git Bash 执行。
- * 两种模式都支持各自的管道、重定向和命令连接语义。
- *
- * @param command 完整命令行字符串（如 "git status | findstr TODO"）
- * @param useSandbox true 时优先走沙箱；沙箱不可用则 fallback 到直接 Shell（调用方判定是否接受）
+ * 分流规则（按失败原因区分）：
+ * - wrap 成功 → sandboxed
+ * - wrap 失败 + reason "disabled"（用户显式无沙箱：CYRENE_SRT=0 / 非 Windows）+ read 类命令
+ *   → direct（graceful degradation，保留开发环境可用性）
+ * - wrap 失败（not_ready / wrap_failed），或 disabled + 写副作用命令，或 wrap 意外抛错
+ *   → rejected（fail-closed，无论 read/write 都不执行）
  */
-function runShellOnce(
+async function resolveExecutionPlan(
   command: string,
-  cwd?: string,
-  extraEnv?: Record<string, string>,
-  useSandbox?: boolean,
-  requestedShell: ShellKind = "cmd",
+  cwd: string | undefined,
+  requestedShell: ShellKind,
+  resolvedShell: ResolvedShellExecutable,
+  requiresSandbox: boolean,
+): Promise<ExecutionPlan> {
+  const base = { command, cwd, requestedShell };
+  let outcome: SandboxWrapOutcome;
+  try {
+    outcome = await wrapWithSandbox(
+      command,
+      cwd,
+      requestedShell === "bash" ? resolvedShell.executable : undefined,
+    );
+  } catch (err) {
+    // 契约上 wrapWithSandbox 永不抛错；此处兜底防止 API 破约重新打开 fail-open 缺口
+    const detail = err instanceof Error ? err.message : String(err);
+    logger.warn(LogTag.BuiltinTools, `[run_shell] wrapWithSandbox threw unexpectedly, fail-closed: ${detail}`);
+    return { ...base, kind: "rejected", reason: "沙箱包装异常，该命令已终止（未执行）" };
+  }
+
+  if (outcome.ok) {
+    return { ...base, kind: "sandboxed", argv: outcome.argv, env: outcome.env };
+  }
+
+  // 用户显式无沙箱 + 只读命令 → 允许降级直跑
+  if (outcome.reason === "disabled" && !requiresSandbox) {
+    logger.warn(LogTag.BuiltinTools, `[run_shell] sandbox disabled, read-effect fallback to direct ${requestedShell}`);
+    return { ...base, kind: "direct" };
+  }
+
+  const REJECT_REASON: Record<"disabled" | "not_ready" | "wrap_failed", string> = {
+    disabled: "沙箱未启用，该命令可能修改工作区，已终止",
+    not_ready: "沙箱不可用（初始化失败），该命令已终止。请在设置中安装沙箱或提升权限档位。",
+    wrap_failed: "沙箱包装失败，该命令已终止（未执行）",
+  };
+  logger.warn(LogTag.BuiltinTools, `[run_shell] fail-closed before spawn: reason=${outcome.reason} detail=${outcome.detail ?? "(none)"} effect=${requiresSandbox ? "write/unknown" : "read"} command="${command.slice(0, 200)}"`);
+  return { ...base, kind: "rejected", reason: REJECT_REASON[outcome.reason] };
+}
+
+/**
+ * 执行一个已通过安全决策的计划。
+ *
+ * spawn 只存在于本函数；`ranViaSandbox` 仅作遥测（日志/结果字段展示），
+ * 不再承担任何安全判定职责（判定已在 resolveExecutionPlan 的 spawn 之前完成）。
+ */
+function executePlan(
+  plan: ExecutablePlan,
+  resolvedShell: ResolvedShellExecutable,
   signal?: AbortSignal,
 ): Promise<ShellResult> {
   return new Promise((resolve) => {
     (async () => {
-      const resolvedShell = await resolveShellExecutable(requestedShell);
-      if (!resolvedShell) {
-        resolve({
-          shell: requestedShell,
-          errorCode: "BASH_UNAVAILABLE",
-          exitCode: -1,
-          stdout: "",
-          stderr: "[BASH_UNAVAILABLE] 未找到可用的 Bash。请安装 Git Bash，并确保 bash.exe 可执行。",
-          truncated: false,
-          ranViaSandbox: false,
-          timedOut: false,
-        });
-        return;
-      }
+      const requestedShell = plan.requestedShell;
+      const command = plan.command;
+      const cwd = plan.cwd;
 
-      const directInvocation = buildDirectShellInvocation(resolvedShell, command);
-      let spawnCmd: string = directInvocation.command;
-      let spawnArgs: string[] = directInvocation.args;
-      let spawnEnv: NodeJS.ProcessEnv = { ...process.env, ...extraEnv };
+      let spawnCmd: string;
+      let spawnArgs: string[];
+      let spawnEnv: NodeJS.ProcessEnv;
       let ranViaSandbox = false;
-
-      if (useSandbox) {
-        try {
-          const wrapped = await wrapWithSandbox(
-            command,
-            cwd,
-            requestedShell === "bash" ? resolvedShell.executable : undefined,
-          );
-          if (wrapped) {
-            spawnCmd = wrapped.argv[0];
-            spawnArgs = wrapped.argv.slice(1);
-            // 沙箱 env 是 SRT 给的（含必要的 PATH/token 等），extraEnv 叠加在后面
-            spawnEnv = { ...wrapped.env, ...extraEnv };
-            ranViaSandbox = true;
-          } else {
-            // wrap 返回 null（沙箱不可用/失败）→ fallback 到直接 Shell
-            // 调用方需自行判断是否接受 fallback（写副作用命令不接受 fallback）
-            console.log(LOG_PREFIX, `run_shell sandbox unavailable, fallback to direct ${requestedShell}`);
-          }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.warn(LOG_PREFIX, "run_shell wrap exception, fallback:", msg);
-        }
+      let directVerbatim = false;
+      if (plan.kind === "sandboxed") {
+        spawnCmd = plan.argv[0];
+        spawnArgs = plan.argv.slice(1);
+        // 沙箱 env 是 SRT 给的（含必要的 PATH/token 等）
+        spawnEnv = { ...plan.env };
+        ranViaSandbox = true;
+      } else {
+        const directInvocation = buildDirectShellInvocation(resolvedShell, command);
+        spawnCmd = directInvocation.command;
+        spawnArgs = directInvocation.args;
+        spawnEnv = { ...process.env };
+        directVerbatim = directInvocation.windowsVerbatimArguments;
       }
 
       const child = spawn(spawnCmd, spawnArgs, {
@@ -170,7 +208,7 @@ function runShellOnce(
         // 带引号路径如 node "E:\video test\_check.js" 会变成非法模块名。
         // windowsVerbatimArguments 让 argv 原样空格拼接，引号语义完全交给 cmd。
         // 沙箱路径不加：srt-win 是 Rust 程序（MSVCRT 解析 argv），与 Node 自动转义配对正确。
-        ...(ranViaSandbox || !directInvocation.windowsVerbatimArguments ? {} : { windowsVerbatimArguments: true }),
+        ...(ranViaSandbox || !directVerbatim ? {} : { windowsVerbatimArguments: true }),
         // stdin→/dev/null(NUL)：误启动交互式进程(python/node REPL)时让它读到 EOF 立即退出，
         // 不再卡在"等 stdin 输入"上耗满超时。stdout/stderr 仍 pipe 来收集输出。
         stdio: ["ignore", "pipe", "pipe"],
@@ -283,13 +321,14 @@ function runShellOnce(
         });
       });
     })().catch((err) => {
-      // async wrapper 异常兜底（理论上不会走到，wrapWithSandbox 内部已 try/catch）
+      // async wrapper 异常兜底（理论上不会走到，wrapWithSandbox 内部已 try/catch，
+      // 且安全决策在 resolveExecutionPlan 已完成，此处只影响单次执行的错误上报）
       const msg = err instanceof Error ? err.message : String(err);
       resolve({
-        shell: requestedShell,
+        shell: plan.requestedShell,
         exitCode: -1,
         stdout: "",
-        stderr: "[runShellOnce internal error] " + msg,
+        stderr: "[executePlan internal error] " + msg,
         truncated: false,
         ranViaSandbox: false,
         timedOut: false,
@@ -329,10 +368,21 @@ async function executeRunShell(args: Record<string, unknown>, context?: import("
   const effect: ShellEffect = classifyShellEffect(command);
   logger.info(LogTag.BuiltinTools, `[run_shell] entry: command="${command}" cwd=${cwd || "(undefined)"} effect=${effect} level=${level}`);
 
+  // 解释器前置解析：直跑和沙箱包装都需要（bash 不可用在此提前返回，不进入执行计划）
+  const resolvedShell = await resolveShellExecutable(requestedShell);
+  if (!resolvedShell) {
+    return JSON.stringify({
+      command, cwd, shell: requestedShell, errorCode: "BASH_UNAVAILABLE",
+      exitCode: -1, stdout: "",
+      stderr: "[BASH_UNAVAILABLE] 未找到可用的 Bash。请安装 Git Bash，并确保 bash.exe 可执行。",
+      timedOut: false, truncated: false, effect, sandboxed: false,
+    });
+  }
+
   // full 档位：直接 spawn，不走沙箱（用户已选择完全信任）
   if (level === "full") {
     logger.info(LogTag.BuiltinTools, `[run_shell] full level → direct ${requestedShell} (no sandbox)`);
-    const result = await runShellOnce(command, cwd, undefined, false, requestedShell, context?.signal);
+    const result = await executePlan({ kind: "direct", command, cwd, requestedShell }, resolvedShell, context?.signal);
     logger.info(LogTag.BuiltinTools, `[run_shell] [full] done: exitCode=${result.exitCode} timedOut=${result.timedOut} stdout.len=${result.stdout.length} stderr.len=${result.stderr.length}`);
     return JSON.stringify({
       command, cwd, shell: result.shell, shellExecutable: result.shellExecutable, errorCode: result.errorCode,
@@ -346,36 +396,23 @@ async function executeRunShell(args: Record<string, unknown>, context?: import("
     });
   }
 
-  // 非 full 档位：按副作用路由
-  // - read  → 沙箱优先，不可用则允许 fallback 到直接 cmd.exe（graceful degradation）
-  // - write/unknown → 必须沙箱，沙箱不可用或 wrap 失败则拒绝（不 fallback）
+  // 非 full 档位：spawn 前通过 ExecutionPlan 完成全部安全决策
+  // - read  → 仅当"用户显式无沙箱"（reason: disabled）时允许 direct 降级
+  // - write/unknown → 必须 wrap 成功，否则 rejected（fail-closed，不执行）
   const requiresSandbox = effect !== "read";
+  const plan = await resolveExecutionPlan(command, cwd, requestedShell, resolvedShell, requiresSandbox);
 
-  if (requiresSandbox && !isSandboxReady()) {
-    logger.info(LogTag.BuiltinTools, `[run_shell] write/unknown → sandbox not ready (level=${level}), rejected`);
+  if (plan.kind === "rejected") {
+    // 到达这里时 spawn 从未被调用——命令没有执行过，stdout 必然为空
     return JSON.stringify({
       command, cwd, shell: requestedShell,
       exitCode: -1, stdout: "",
-      stderr: "[拒绝] 沙箱不可用，该命令可能修改工作区，已终止。请在设置中安装沙箱或提升权限档位。",
+      stderr: `[拒绝] ${plan.reason}`,
       timedOut: false, truncated: false, effect, sandboxed: false,
     });
   }
 
-  const useSandbox = isSandboxReady();
-  logger.info(LogTag.BuiltinTools, `[run_shell] ${level} → useSandbox=${useSandbox} effect=${effect}`);
-  const result = await runShellOnce(command, cwd, undefined, useSandbox, requestedShell, context?.signal);
-
-  // 写副作用命令若 fallback 到直接 spawn（沙箱 wrap 失败）→ 拒绝
-  if (requiresSandbox && useSandbox && !result.ranViaSandbox) {
-    logger.warn(LogTag.BuiltinTools, `[run_shell] write/unknown → sandbox wrap failed (fell back to direct spawn), rejected. stderr=${result.stderr.slice(0, 200)}`);
-    return JSON.stringify({
-      command, cwd, shell: result.shell, shellExecutable: result.shellExecutable, errorCode: result.errorCode,
-      exitCode: -1, stdout: result.stdout,
-      stderr: result.stderr + "\n[拒绝] 沙箱不可用，该命令可能修改工作区，已终止",
-      timedOut: result.timedOut, truncated: result.truncated, effect, sandboxed: false,
-    });
-  }
-
+  const result = await executePlan(plan, resolvedShell, context?.signal);
   logger.info(LogTag.BuiltinTools, `[run_shell] [${level}] done: exitCode=${result.exitCode} timedOut=${result.timedOut} stdout.len=${result.stdout.length} stderr.len=${result.stderr.length} sandboxed=${result.ranViaSandbox}`);
   return JSON.stringify({
     command, cwd, shell: result.shell, shellExecutable: result.shellExecutable, errorCode: result.errorCode,

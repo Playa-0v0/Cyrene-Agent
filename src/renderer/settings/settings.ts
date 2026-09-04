@@ -111,6 +111,7 @@ import {
   deleteSchedulerTask, toggleSchedulerHistory,
 } from "./scheduler/panel";
 import { loadMusicPanel, disposeMusicPanel } from "./music/panel";
+import { initLocalMusicPanel } from "./music/local-panel";
 import { loadChannelsPanel } from "./channels/panel";
 import { renderProactiveDeliveryAvailability } from "./channels/panel";
 import "./asr/panel";  // 副作用导入：执行事件绑定 + 初始加载
@@ -188,7 +189,7 @@ if (!window.settings) {
       petVisible: true,
       petZoom: 1,
       chatLineHeight: 1.75,
-      assistantBubbleEnabled: true,
+      assistantBubbleEnabled: false,
       chatParaSpacing: 0.5,
       sidebarVisible: true,
       tasksVisible: true,
@@ -1025,7 +1026,7 @@ async function loadGeneralSettings(): Promise<void> {
     chatLineHeightInput.value = String(cfg.chatLineHeight ?? 1.75);
     chatLineHeightVal.textContent = (cfg.chatLineHeight ?? 1.75).toFixed(2);
     document.documentElement.style.setProperty("--rb-chat-line-height", String(cfg.chatLineHeight ?? 1.75));
-    assistantBubbleEnabledInput.checked = cfg.assistantBubbleEnabled ?? true;
+    assistantBubbleEnabledInput.checked = cfg.assistantBubbleEnabled ?? false;
     chatParaSpacingInput.value = String(cfg.chatParaSpacing ?? 0.5);
     chatParaSpacingVal.textContent = (cfg.chatParaSpacing ?? 0.5).toFixed(2) + "em";
     document.documentElement.style.setProperty("--rb-chat-para-spacing", (cfg.chatParaSpacing ?? 0.5) + "em");
@@ -1604,7 +1605,8 @@ function switchSection(section: string): void {
     !isChannels &&
     !isTts &&
     !isAsr &&
-    !isMusic
+    !isMusic &&
+    !isFeaturePlugins
   ) {
 	    placeholderIcon.innerHTML = label.emoji;
     placeholderTitle.textContent = label.title;
@@ -1641,14 +1643,14 @@ window.settings?.onChannelsStatusChanged((status) => {
 });
 
 // ===== channels panel (连接手机) =====
-// 飞书配置输入框（Phase 2 长连接版：只需 App ID + App Secret）
+// 飞书配置输入框（长连接版：只需 App ID + App Secret）
 // 微信按钮
 
 
 
 
 
-// ===== Phase 3.4：消息日志 =====
+// ===== 消息日志 =====
 
 
 
@@ -1658,7 +1660,7 @@ window.settings?.onChannelsStatusChanged((status) => {
 // （也可以在用户展开 details 时再拉，但保持简单直接拉）
 void loadChannelsPanel();
 
-// ===== Phase 2: 音乐工具面板 =====
+// ===== 音乐工具面板 =====
 // 备注：window.music.* 已在 preload 中通过 contextBridge 暴露。
 // 由于 renderer 走 Vite 打包、main/preload 走 esbuild，两端类型不互通，
 // 这里直接用 (window as any).music 做弱类型化调用，避免给 global.d.ts 加一堆 cross-bundle 类型。
@@ -1763,6 +1765,8 @@ musicToggle?.addEventListener("click", () => {
 });
 
 // ── 音乐工具路由 ──────────────────────────────────────────────
+initLocalMusicPanel();
+
 document.getElementById("music-platform-netease")?.addEventListener("click", () => {
   switchSection("music");
   musicHomeView?.classList.add("is-hidden");

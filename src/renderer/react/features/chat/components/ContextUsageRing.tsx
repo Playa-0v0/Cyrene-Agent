@@ -11,6 +11,7 @@
 //   点击把模型窗口内旧消息摘要成一条记忆，聊天窗口经 CHATS_CHANGED 重载。
 import { Popover } from "antd";
 import { useState } from "react";
+import { t, useTranslation } from "../../../i18n";
 import type { ContextUsageCategoryKey, ContextUsageSnapshot } from "../../../../../shared/context-usage";
 import { resolveAsset } from "../../../../../shared/renderer-base";
 import "./ContextUsageRing.css";
@@ -39,24 +40,31 @@ function compactApi(): CompactChatApi | undefined {
   return (window as typeof window & { chatStore?: CompactChatApi }).chatStore;
 }
 
-export const CONTEXT_USAGE_CATEGORY_META: Record<ContextUsageCategoryKey, { label: string; color: string }> = {
-  systemPrompt: { label: "系统提示词", color: "#8B5CF6" },
-  tools: { label: "工具", color: "#3B82F6" },
-  skills: { label: "技能", color: "#06B6D4" },
-  runtimeAndToolLogs: { label: "运行时与日志", color: "#F59E0B" },
-  conversation: { label: "对话历史", color: "#10B981" },
-  other: { label: "其他", color: "#9CA3AF" },
-  // 旧快照兼容（拆分前"工具与 Skill"合一）；新快照不再产出此 key。
-  toolDefinitions: { label: "工具与 Skill", color: "#3B82F6" },
-};
+/** 类别展示元数据（label 为用户可见文案）。
+ *  t() 不能在模块顶层常量里调用（语言切换后不更新），故改为函数、在调用时求值。 */
+export function contextUsageCategoryMeta(): Record<ContextUsageCategoryKey, { label: string; color: string }> {
+  return {
+    systemPrompt: { label: t("contextRing.categorySystemPrompt"), color: "#8B5CF6" },
+    tools: { label: t("contextRing.categoryTools"), color: "#3B82F6" },
+    skills: { label: t("contextRing.categorySkills"), color: "#06B6D4" },
+    runtimeAndToolLogs: { label: t("contextRing.categoryRuntimeAndToolLogs"), color: "#F59E0B" },
+    conversation: { label: t("contextRing.categoryConversation"), color: "#10B981" },
+    other: { label: t("contextRing.categoryOther"), color: "#9CA3AF" },
+    // 旧快照兼容（拆分前"工具与 Skill"合一）；新快照不再产出此 key。
+    toolDefinitions: { label: t("contextRing.categoryToolDefinitions"), color: "#3B82F6" },
+  };
+}
 
 /** 三档趣味性小人：normal / warm / alert；素材走 public 目录，不进 bundle。
- *  当前为占位图，后续直接替换 public/context-usage/ 下的同名文件即可。 */
-export const CONTEXT_USAGE_MOOD_META: Record<ContextUsageRingTone, { src: string; text: string }> = {
-  normal: { src: resolveAsset("context-usage/normal.png"), text: "还很宽敞，随便聊~" },
-  warm: { src: resolveAsset("context-usage/warm.png"), text: "有点满了，等下我帮你整理" },
-  alert: { src: resolveAsset("context-usage/alert.png"), text: "快撑不住啦，建议新开对话" },
-};
+ *  当前为占位图，后续直接替换 public/context-usage/ 下的同名文件即可。
+ *  拟人提示为用户可见文案，同上按调用时求值。 */
+export function contextUsageMoodMeta(): Record<ContextUsageRingTone, { src: string; text: string }> {
+  return {
+    normal: { src: resolveAsset("context-usage/normal.png"), text: t("contextRing.moodNormal") },
+    warm: { src: resolveAsset("context-usage/warm.png"), text: t("contextRing.moodWarm") },
+    alert: { src: resolveAsset("context-usage/alert.png"), text: t("contextRing.moodAlert") },
+  };
+}
 
 /** 压缩小人：悬停小人图时 crossfade 显示，点击触发主动压缩。 */
 export const CONTEXT_USAGE_COMPACT_SRC = resolveAsset("context-usage/compact.png");
@@ -107,6 +115,7 @@ interface ContextUsageRingProps {
 }
 
 export function ContextUsageRing({ usage, sessionId, busy }: ContextUsageRingProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [compactPhase, setCompactPhase] = useState<ContextCompactPhase>("idle");
   if (!usage) return null;
@@ -119,7 +128,7 @@ export function ContextUsageRing({ usage, sessionId, busy }: ContextUsageRingPro
   const summaryText = showRatio
     ? `${formatTokenCount(usage.totalTokens)} / ${formatTokenCount(usage.contextWindowTokens)} tokens (${percentText})`
     : `${formatTokenCount(usage.totalTokens)} tokens`;
-  const title = `上下文 ${summaryText.replace(" tokens ", " ")}`;
+  const title = t("contextRing.title", { summary: summaryText.replace(" tokens ", " ") });
 
   // 主动压缩：无 sessionId（如 demo 会话）或运行中不可点。
   const canCompact = Boolean(sessionId) && !busy;
@@ -138,23 +147,25 @@ export function ContextUsageRing({ usage, sessionId, busy }: ContextUsageRingPro
   };
 
   const compacting = compactPhase === "running";
+  const moodMeta = contextUsageMoodMeta();
   const moodText = compactPhase === "running"
-    ? "正在整理记忆…"
+    ? t("contextRing.compactRunning")
     : compactPhase === "done"
-      ? "记忆已整理，清爽啦~"
+      ? t("contextRing.compactDone")
       : compactPhase === "error"
-        ? "整理失败，稍后再试"
-        : CONTEXT_USAGE_MOOD_META[tone].text;
+        ? t("contextRing.compactError")
+        : moodMeta[tone].text;
 
   // 明细行按 token 从大到小排队，大头一眼置顶。
   const visibleCategories = usage.categories
     .filter((category) => category.tokens > 0)
     .sort((a, b) => b.tokens - a.tokens);
+  const categoryMeta = contextUsageCategoryMeta();
 
   const menu = (
-    <div className="cy-context-usage-menu" aria-label="上下文占比">
+    <div className="cy-context-usage-menu" aria-label={t("contextRing.menuAria")}>
       <div className="cy-context-usage-menu__header">
-        <strong>上下文容量</strong>
+        <strong>{t("contextRing.menuTitle")}</strong>
         <span>{summaryText}</span>
       </div>
       <div className={`cy-context-usage-menu__progress is-${tone}`} aria-hidden="true">
@@ -173,12 +184,12 @@ export function ContextUsageRing({ usage, sessionId, busy }: ContextUsageRingPro
           className="cy-context-usage-menu__mood-figure"
           onClick={handleCompactClick}
           disabled={!canCompact || compacting}
-          title={canCompact ? "整理记忆（压缩上下文）" : undefined}
-          aria-label="整理记忆（压缩上下文）"
+          title={canCompact ? t("contextRing.compactTitle") : undefined}
+          aria-label={t("contextRing.compactTitle")}
         >
           <img
             className="cy-context-usage-menu__mood-img"
-            src={CONTEXT_USAGE_MOOD_META[tone].src}
+            src={moodMeta[tone].src}
             alt=""
             aria-hidden="true"
             draggable={false}
@@ -195,7 +206,7 @@ export function ContextUsageRing({ usage, sessionId, busy }: ContextUsageRingPro
       </div>
       <ul className="cy-context-usage-menu__rows">
         {visibleCategories.map((category, index) => {
-          const meta = CONTEXT_USAGE_CATEGORY_META[category.key];
+          const meta = categoryMeta[category.key];
           // 占已用比例：各类加总恒 100%，直观看构成；与顶行"占窗口容量"互补。
           const share = usage.totalTokens > 0
             ? Math.round((category.tokens / usage.totalTokens) * 100)
@@ -216,7 +227,7 @@ export function ContextUsageRing({ usage, sessionId, busy }: ContextUsageRingPro
           );
         })}
       </ul>
-      <div className="cy-context-usage-menu__footnote">估算值（按字符折算），对话后自动刷新</div>
+      <div className="cy-context-usage-menu__footnote">{t("contextRing.footnote")}</div>
     </div>
   );
 

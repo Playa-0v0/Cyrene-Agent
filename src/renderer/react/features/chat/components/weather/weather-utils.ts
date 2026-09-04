@@ -1,38 +1,41 @@
+import { t } from "../../../../i18n";
 import type { WeatherCategory } from "./weather-types";
 
+/** WMO 天气码 → [分类, i18n key]，展示文案经 mapWmoCode 内的 t() 取值。 */
 export const WMO_MAP: Record<number, [WeatherCategory, string]> = {
-  0: ["clear", "晴"],
-  1: ["clear", "晴间多云"],
-  2: ["cloudy", "多云"],
-  3: ["cloudy", "阴"],
-  45: ["cloudy", "雾"],
-  48: ["cloudy", "雾凇"],
-  51: ["rain", "小雨"],
-  53: ["rain", "中雨"],
-  55: ["rain", "大雨"],
-  56: ["rain", "冻雨"],
-  57: ["rain", "强冻雨"],
-  61: ["rain", "小雨"],
-  63: ["rain", "中雨"],
-  65: ["rain", "大雨"],
-  66: ["rain", "冻雨"],
-  67: ["rain", "强冻雨"],
-  71: ["snow", "小雪"],
-  73: ["snow", "中雪"],
-  75: ["snow", "大雪"],
-  77: ["snow", "雪粒"],
-  80: ["rain", "阵雨"],
-  81: ["rain", "强阵雨"],
-  82: ["rain", "暴雨"],
-  85: ["snow", "阵雪"],
-  86: ["snow", "强阵雪"],
-  95: ["thunder", "雷暴"],
-  96: ["thunder", "雷暴伴冰雹"],
-  99: ["thunder", "强雷暴伴冰雹"],
+  0: ["clear", "weather.wmoClear"],
+  1: ["clear", "weather.wmoMostlyClear"],
+  2: ["cloudy", "weather.wmoPartlyCloudy"],
+  3: ["cloudy", "weather.wmoOvercast"],
+  45: ["cloudy", "weather.wmoFog"],
+  48: ["cloudy", "weather.wmoRimeFog"],
+  51: ["rain", "weather.wmoLightRain"],
+  53: ["rain", "weather.wmoModerateRain"],
+  55: ["rain", "weather.wmoHeavyRain"],
+  56: ["rain", "weather.wmoFreezingRain"],
+  57: ["rain", "weather.wmoHeavyFreezingRain"],
+  61: ["rain", "weather.wmoLightRain"],
+  63: ["rain", "weather.wmoModerateRain"],
+  65: ["rain", "weather.wmoHeavyRain"],
+  66: ["rain", "weather.wmoFreezingRain"],
+  67: ["rain", "weather.wmoHeavyFreezingRain"],
+  71: ["snow", "weather.wmoLightSnow"],
+  73: ["snow", "weather.wmoModerateSnow"],
+  75: ["snow", "weather.wmoHeavySnow"],
+  77: ["snow", "weather.wmoSnowGrains"],
+  80: ["rain", "weather.wmoShowers"],
+  81: ["rain", "weather.wmoHeavyShowers"],
+  82: ["rain", "weather.wmoViolentShowers"],
+  85: ["snow", "weather.wmoSnowShowers"],
+  86: ["snow", "weather.wmoHeavySnowShowers"],
+  95: ["thunder", "weather.wmoThunderstorm"],
+  96: ["thunder", "weather.wmoThunderstormHail"],
+  99: ["thunder", "weather.wmoHeavyThunderstormHail"],
 };
 
 export function mapWmoCode(code: number): [WeatherCategory, string] {
-  return WMO_MAP[code] ?? ["cloudy", "未知天气"];
+  const entry = WMO_MAP[code];
+  return entry ? [entry[0], t(entry[1])] : ["cloudy", t("weather.unknown")];
 }
 
 export const AMAP_MAP: Record<string, WeatherCategory> = {
@@ -64,34 +67,38 @@ export function mapAmapWeather(text: string): WeatherCategory {
   return AMAP_MAP[text] ?? "cloudy";
 }
 
+const WIND_DIR_KEYS = [
+  "N",
+  "NNE",
+  "NE",
+  "ENE",
+  "E",
+  "ESE",
+  "SE",
+  "SSE",
+  "S",
+  "SSW",
+  "SW",
+  "WSW",
+  "W",
+  "WNW",
+  "NW",
+  "NNW",
+] as const;
+
 export function omWindDir(deg: number): string {
-  const dirs = [
-    "北",
-    "东北偏北",
-    "东北",
-    "东北偏东",
-    "东",
-    "东南偏东",
-    "东南",
-    "东南偏南",
-    "南",
-    "西南偏南",
-    "西南",
-    "西南偏西",
-    "西",
-    "西北偏西",
-    "西北",
-    "西北偏北",
-  ];
-  return dirs[Math.round(deg / 22.5) % 16] + "风";
+  return t(`weather.windDir${WIND_DIR_KEYS[Math.round(deg / 22.5) % 16]}`);
 }
 
 export function formatReportTime(reporttime: string): string {
   const timePart = reporttime.split(" ")[1] ?? "";
-  return timePart.slice(0, 5) + " 更新";
+  return t("weather.updatedAt", { time: timePart.slice(0, 5) });
 }
 
 export function formatDateText(date = new Date()): string {
-  const weekNames = ["日", "一", "二", "三", "四", "五", "六"];
-  return `${date.getMonth() + 1}月${date.getDate()}日 星期${weekNames[date.getDay()]}`;
+  return t("weather.dateText", {
+    month: date.getMonth() + 1,
+    day: date.getDate(),
+    week: t(`weather.weekday${date.getDay()}`),
+  });
 }

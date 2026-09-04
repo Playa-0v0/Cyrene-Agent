@@ -7,7 +7,9 @@
     "cyrene": "./dist/cli/index.js"
   },
   "scripts": {
-    "build:main": "tsc -p tsconfig.main.json",
+    "build:main": "node -e \"require('fs').rmSync('dist/main/plugins',{recursive:true,force:true})\" && tsc -p tsconfig.main.json && node -e \"const fs=require('fs');fs.cpSync('src/plugins','dist/main/plugins',{recursive:true,filter:s=>fs.statSync(s).isDirectory()||s.endsWith('manifest.json')||s.endsWith('manifest.schema.json')||s.endsWith('native-import.cjs')})\"",
+    "generate:plugin-schema": "node scripts/plugin-sdk/generate-schema.mjs",
+    "check:plugin-schema": "node scripts/plugin-sdk/generate-schema.mjs --check",
     "build:preload": "tsc -p tsconfig.preload.json",
     "build:renderer": "vite build",
     "build:cli": "node scripts/build/cli.mjs",
@@ -16,6 +18,7 @@
     "build": "npm run build:main && npm run build:preload && npm run build:cli && npm run build:renderer",
     "prepare:mingit": "node scripts/packaging/prepare-mingit.mjs",
     "prepare:mpv": "node scripts/packaging/prepare-mpv.mjs",
+    "prepare:skills": "node scripts/packaging/build-skills-snapshot.mjs",
     "verify:mpv": "node scripts/verify/mpv-helper.mjs resources/bin/mpv/mpv.exe",
     "build:music-component": "node scripts/packaging/build-music-component.mjs",
     "package:win:dir": "npm run build && npm run build:screenshot-helper && npm run prepare:mingit && npm run prepare:mpv && electron-builder --win --dir",
@@ -30,7 +33,10 @@
     "sim:mix": "tsc -p tsconfig.sim.json && node dist/sim/main/sim/dmae-sim.js --scenario=mix",
     "sim:rescue": "tsc -p tsconfig.sim.json && node dist/sim/main/sim/dmae-sim.js --scenario=rescue",
     "sim:sweep": "tsc -p tsconfig.sim.json && node dist/sim/main/sim/dmae-sim.js --scenario=mix --rewardGain=3,5,7,10",
-    "sim:l2": "tsc -p tsconfig.sim.json && node dist/sim/main/sim/run-l2-sim.js"
+    "sim:l2": "tsc -p tsconfig.sim.json && node dist/sim/main/sim/run-l2-sim.js",
+    "build:plugin-sdk": "node scripts/plugin-sdk/build-sdk.mjs",
+    "check:plugin-sdk": "node scripts/plugin-sdk/build-sdk.mjs && node scripts/plugin-sdk/verify-package.mjs",
+    "test:plugin-examples": "node scripts/plugin-sdk/test-examples.mjs"
   },
   "engines": {
     "node": ">=24 <25",
@@ -54,6 +60,7 @@
     "electron-builder": "^26.15.3",
     "esbuild": "^0.25.0",
     "jsdom": "^30.0.1",
+    "ts-json-schema-generator": "^1.5.1",
     "typescript": "^5.6.0",
     "vite": "7.3.6",
     "vitest": "^4.1.9"
@@ -76,6 +83,7 @@
     "@playwright/mcp": "0.0.79",
     "@types/ws": "^8.18.1",
     "@xenova/transformers": "^2.17.2",
+    "ajv": "^8.20.0",
     "antd": "^6.5.2",
     "chart.js": "^4.5.1",
     "chokidar": "^4.0.3",
@@ -87,6 +95,7 @@
     "exceljs": "^4.4.0",
     "extract-zip": "^2.0.1",
     "gray-matter": "^4.0.3",
+    "i18next": "^26.4.0",
     "js-yaml": "^5.0.0",
     "llamaindex": "^0.12.1",
     "lucide-react": "^1.32.0",

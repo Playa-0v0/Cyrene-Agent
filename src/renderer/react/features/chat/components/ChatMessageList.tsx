@@ -2,6 +2,7 @@ import { Bubble, CodeHighlighter, Think, ThoughtChain, type BubbleItemType } fro
 import { XMarkdown, type ComponentProps } from "@ant-design/x-markdown";
 import Latex from "@ant-design/x-markdown/plugins/Latex";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type KeyboardEvent, type ReactNode } from "react";
+import { t, useTranslation } from "../../../i18n";
 import { resolveAsset } from "../../../../../shared/renderer-base";
 import type { AgentRoundRecord, ConversationMode, ProcessMessageRecord, ReasoningBlock, RunActivityRecord, TaskDelegationDisplayRecord, ToolExecutionRecord, ToolFileChange } from "../../../../../shared/chat-types";
 import type { ContextUsageSnapshot } from "../../../../../shared/context-usage";
@@ -169,30 +170,33 @@ function AssistantContent({
   streaming: boolean;
   stickerUrl?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="cy-message__assistant-body">
       {content && <MarkdownContent content={content} streaming={streaming} />}
-      {stickerUrl && <img className="cy-message__sticker" src={stickerUrl} alt="昔涟表情" draggable={false} />}
+      {stickerUrl && <img className="cy-message__sticker" src={stickerUrl} alt={t("messageList.assistantStickerAlt")} draggable={false} />}
     </div>
   );
 }
 
 function DotSpinner() {
+  const { t } = useTranslation();
   return (
-    <span className="cy-dot-spinner" aria-label="加载中" role="status">
+    <span className="cy-dot-spinner" aria-label={t("messageList.loadingAria")} role="status">
       {Array.from({ length: 8 }, (_, index) => <span className="cy-dot-spinner__dot" key={index} />)}
     </span>
   );
 }
 
 function ModelWaitContent() {
+  const { t } = useTranslation();
   return (
-    <section className="cy-model-wait" aria-label="等待模型响应">
+    <section className="cy-model-wait" aria-label={t("messageList.modelWaitAria")}>
       <span className="cy-model-wait__art" aria-hidden="true">
         <img src={connectingMoodUrl} alt="" draggable={false} />
         <DotSpinner />
       </span>
-      <span>昔涟正在等模型回应…</span>
+      <span>{t("messageList.modelWaitText")}</span>
     </section>
   );
 }
@@ -208,10 +212,11 @@ function ReasoningContent({
   expanded: boolean;
   onExpand: (expanded: boolean) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Think
       rootClassName="cy-message-reasoning"
-      title={loading ? "正在思考…" : "思考完成"}
+      title={loading ? t("messageList.thinkingTitle") : t("messageList.thinkingDoneTitle")}
       icon={
         <span className={`cy-reasoning-status-art${loading ? " is-thinking" : " is-complete"}`} aria-hidden="true">
           <img src={thinkingMoodUrl} alt="" draggable={false} />
@@ -268,6 +273,7 @@ function AgentRoundGroup({
   tools: ToolExecutionRecord[];
   interrupted: boolean;
 }) {
+  const { t } = useTranslation();
   const running = round.status === "running" && !interrupted;
   const [expanded, setExpanded] = useState(running);
   const wasRunningRef = useRef(running);
@@ -310,7 +316,7 @@ function AgentRoundGroup({
         <span className="cy-agent-round__title">
           {resolveAgentRoundTitle(round, tools, interrupted)}
           {!interrupted && round.status !== "running" && countRoundChangedFiles(tools) > 0 && (
-            <span className="cy-agent-round__files"> · {countRoundChangedFiles(tools)} 个文件已被改动</span>
+            <span className="cy-agent-round__files"> · {t("messageList.roundChangedFiles", { count: countRoundChangedFiles(tools) })}</span>
           )}
         </span>
         <svg className={`cy-agent-round__chevron${expanded ? " is-expanded" : ""}`} viewBox="0 0 16 16" aria-hidden="true">
@@ -344,6 +350,7 @@ export function RunActivityDetail({
   tools: ToolExecutionRecord[];
   interrupted?: boolean;
 }) {
+  const { t } = useTranslation();
   if (agentRounds.length > 0) {
     const visibleRounds = agentRounds.filter((round) =>
       processMessages.some((message) => message.roundId === round.id && message.content.trim())
@@ -351,7 +358,7 @@ export function RunActivityDetail({
       || taskDelegations.some((delegation) => delegation.roundId === round.id)
       || tools.some((tool) => tool.roundId === round.id));
     if (visibleRounds.length === 0) {
-      return <div className="cy-run-activity__empty">昔涟正在整理这一轮回复…</div>;
+      return <div className="cy-run-activity__empty">{t("messageList.organizingReply")}</div>;
     }
     return (
       <div className="cy-run-activity__detail">
@@ -401,7 +408,7 @@ export function RunActivityDetail({
   }
   return timeline.length
     ? <div className="cy-run-activity__detail">{timeline}</div>
-    : <div className="cy-run-activity__empty">昔涟正在整理这一轮回复…</div>;
+    : <div className="cy-run-activity__empty">{t("messageList.organizingReply")}</div>;
 }
 
 function RunActivityContent({
@@ -429,6 +436,7 @@ function RunActivityContent({
   expanded: boolean;
   onExpand: (expanded: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const now = useRunActivityNow(activity.completedAt === undefined);
   const snapshot = resolveRunActivitySnapshot(activity, now);
   const wasProcessingRef = useRef(snapshot.processing);
@@ -438,8 +446,8 @@ function RunActivityContent({
   }, [activity.keepExpanded, onExpand, snapshot.processing]);
 
   const title = snapshot.processing
-    ? `昔涟正在处理中 ${formatElapsed(snapshot.processingMs)}`
-    : `昔涟已处理 ${formatElapsed(snapshot.processingMs)}`;
+    ? t("messageList.activityProcessingTitle", { elapsed: formatElapsed(snapshot.processingMs) })
+    : t("messageList.activityProcessedTitle", { elapsed: formatElapsed(snapshot.processingMs) });
   const image = snapshot.processing ? workingMoodUrl : processedMoodUrl;
 
   return (
@@ -483,8 +491,9 @@ function RunActivityContent({
 }
 
 function ToolExecutionContent({ tools }: { tools: ToolExecutionRecord[] }) {
+  const { t } = useTranslation();
   return (
-    <section className="cy-tool-executions" aria-label="工具执行过程">
+    <section className="cy-tool-executions" aria-label={t("messageList.toolExecutionsAria")}>
       <ThoughtChain
         rootClassName="cy-tool-executions__chain"
         line="dashed"
@@ -524,14 +533,15 @@ function ToolResultContent({ result, changes }: { result?: string; changes?: Too
 }
 
 function attachmentStatus(attachment: ChatMessageAttachment): string | undefined {
-  if (attachment.status === "processing") return "视觉分析中…";
-  if (attachment.status === "error") return attachment.reason ?? "图片分析失败";
-  if (attachment.imageSendMode === "direct") return "已交给主模型查看";
-  if (attachment.imageSendMode === "caption" && attachment.status === "done") return "视觉分析完成";
+  if (attachment.status === "processing") return t("messageList.attachmentProcessing");
+  if (attachment.status === "error") return attachment.reason ?? t("messageList.attachmentErrorFallback");
+  if (attachment.imageSendMode === "direct") return t("messageList.attachmentDirect");
+  if (attachment.imageSendMode === "caption" && attachment.status === "done") return t("messageList.attachmentDone");
   return undefined;
 }
 
 function UserAttachments({ attachments }: { attachments: ChatMessageAttachment[] }) {
+  useTranslation();
   if (attachments.length === 0) return null;
   return (
     <div className="cy-message__attachments">
@@ -579,11 +589,12 @@ function UserContent({
   stickerUrl?: string;
   attachments?: ChatMessageAttachment[];
 }) {
+  const { t } = useTranslation();
   return (
     <div className="cy-message__user-body">
       <UserAttachments attachments={attachments} />
       {content && <MarkdownContent content={content} />}
-      {stickerUrl && <img className="cy-message__sticker" src={stickerUrl} alt="用户表情" draggable={false} />}
+      {stickerUrl && <img className="cy-message__sticker" src={stickerUrl} alt={t("messageList.userStickerAlt")} draggable={false} />}
     </div>
   );
 }
@@ -601,6 +612,7 @@ function LastUserMessageEditor({
   onCancel: () => void;
   onSubmit: () => void;
 }) {
+  const { t } = useTranslation();
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -616,14 +628,14 @@ function LastUserMessageEditor({
         autoFocus
         value={value}
         disabled={busy}
-        aria-label="编辑最后一条消息"
+        aria-label={t("messageList.editLastMessageAria")}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={handleKeyDown}
       />
       <div className="cy-last-message-editor__actions">
-        <button type="button" disabled={busy} onClick={onCancel}>取消</button>
+        <button type="button" disabled={busy} onClick={onCancel}>{t("common.cancel")}</button>
         <button type="button" className="is-primary" disabled={busy || !value.trim()} onClick={onSubmit}>
-          保存并重新生成
+          {t("messageList.saveAndRegenerate")}
         </button>
       </div>
     </div>
@@ -631,12 +643,14 @@ function LastUserMessageEditor({
 }
 
 function CyreneMessageAvatar() {
-  return <img className="cy-message-avatar__image" src={cyreneAvatarUrl} alt="昔涟" draggable={false} />;
+  const { t } = useTranslation();
+  return <img className="cy-message-avatar__image" src={cyreneAvatarUrl} alt={t("messageList.cyreneAvatarAlt")} draggable={false} />;
 }
 
 function UserMessageAvatar({ src }: { src: string | null }) {
-  if (src) return <img className="cy-message-avatar__image" src={src} alt="用户" draggable={false} />;
-  return <span className="cy-message-avatar__user" aria-label="用户" />;
+  const { t } = useTranslation();
+  if (src) return <img className="cy-message-avatar__image" src={src} alt={t("messageList.userAvatarAlt")} draggable={false} />;
+  return <span className="cy-message-avatar__user" aria-label={t("messageList.userAvatarAlt")} />;
 }
 
 function createRoles(

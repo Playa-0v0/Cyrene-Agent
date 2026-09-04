@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "../../i18n";
 
 interface SidebarToggleProps {
   collapsed?: boolean;
@@ -6,6 +7,7 @@ interface SidebarToggleProps {
 }
 
 export function SidebarToggle({ collapsed: controlledCollapsed, onToggle }: SidebarToggleProps) {
+  const { t } = useTranslation();
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
@@ -21,7 +23,7 @@ export function SidebarToggle({ collapsed: controlledCollapsed, onToggle }: Side
       onClick={handleClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      aria-label="切换侧栏"
+      aria-label={t("ui.toggleSidebar")}
     >
       <svg width="20" height="20" viewBox="0 0 48 48" fill="none">
         {/* 框 - 不变 */}

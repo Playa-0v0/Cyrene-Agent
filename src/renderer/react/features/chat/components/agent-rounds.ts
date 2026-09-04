@@ -1,26 +1,58 @@
+import { t } from "../../../i18n";
 import type { AgentRoundRecord, ProcessMessageRecord, ToolExecutionRecord } from "../../../../../shared/chat-types";
 
-const LIVE_TOOL_LABELS: Record<string, string> = {
-  list_dir: "列出目录",
-  read_file: "读取文件",
-  write_file: "写入文件",
-  edit_file: "编辑文件",
-  search_code: "搜索代码",
-  search_text: "文本搜索",
-  run_shell: "运行命令",
+// 以下映射只存 i18n key（非译文，可安全放模块顶层）；展示文案统一在函数调用时经 t() 求值，
+// 以响应运行时语言切换（t() 不能出现在模块顶层常量里）。
+
+const LIVE_TOOL_LABEL_KEYS: Record<string, string> = {
+  list_dir: "agentRounds.liveListDir",
+  read_file: "agentRounds.liveReadFile",
+  write_file: "agentRounds.liveWriteFile",
+  edit_file: "agentRounds.liveEditFile",
+  search_code: "agentRounds.liveSearchCode",
+  search_text: "agentRounds.liveSearchText",
+  run_shell: "agentRounds.liveRunShell",
 };
 
-const TOOL_LABELS: Record<string, string> = {
-  list_dir: "浏览目录",
-  read_file: "读取文件",
-  write_file: "写入文件",
-  edit_file: "编辑文件",
-  str_replace: "修改文件",
-  apply_patch: "应用补丁",
-  search_code: "搜索代码",
-  search_text: "搜索文本",
-  run_shell: "运行命令",
+const TOOL_LABEL_KEYS: Record<string, string> = {
+  list_dir: "agentRounds.toolListDir",
+  read_file: "agentRounds.toolReadFile",
+  write_file: "agentRounds.toolWriteFile",
+  edit_file: "agentRounds.toolEditFile",
+  str_replace: "agentRounds.toolStrReplace",
+  apply_patch: "agentRounds.toolApplyPatch",
+  search_code: "agentRounds.toolSearchCode",
+  search_text: "agentRounds.toolSearchText",
+  run_shell: "agentRounds.toolRunShell",
 };
+
+const SUMMARY_TOOL_KEYS: Record<string, string> = {
+  list_dir: "agentRounds.summaryListDir",
+  read_file: "agentRounds.summaryReadFile",
+  write_file: "agentRounds.summaryWriteFile",
+  edit_file: "agentRounds.summaryEditFile",
+  search_code: "agentRounds.summarySearchCode",
+  search_text: "agentRounds.summarySearchText",
+  run_shell: "agentRounds.summaryRunShell",
+};
+
+/** 实时执行中的工具动作名（"昔涟正在{{action}}"用）；未知名原样返回。 */
+function liveToolLabel(name: string): string {
+  const key = LIVE_TOOL_LABEL_KEYS[name];
+  return key ? t(key) : name;
+}
+
+/** 工具执行卡片的标签；未知名原样返回。 */
+function toolDisplayLabel(name: string): string {
+  const key = TOOL_LABEL_KEYS[name];
+  return key ? t(key) : name;
+}
+
+/** 工具执行状态文案里的动作名；未知名回退"执行操作"。 */
+function toolActionLabel(name: string): string {
+  const key = TOOL_LABEL_KEYS[name];
+  return key ? t(key) : t("agentRounds.fallbackAction");
+}
 
 export interface ToolExecutionPresentation {
   label: string;
@@ -55,27 +87,17 @@ export function describeToolExecution(tool: ToolExecutionRecord): ToolExecutionP
   const detail = tool.name === "run_shell"
     ? firstStringArg(args, ["command"])
     : firstStringArg(args, ["path", "filePath", "file_path", "directory", "dir"]);
-  const label = TOOL_LABELS[tool.name] ?? tool.name;
-  const action = TOOL_LABELS[tool.name] ?? "执行操作";
+  const label = toolDisplayLabel(tool.name);
+  const action = toolActionLabel(tool.name);
   const statusText = tool.name === "run_shell" && tool.status === "error" && result?.timedOut === true
-    ? "命令运行超时"
+    ? t("agentRounds.commandTimeout")
     : tool.status === "running"
-    ? `正在${action}`
+    ? t("agentRounds.statusRunning", { action })
     : tool.status === "error"
-      ? `${action}失败`
-      : `${action}完成`;
+      ? t("agentRounds.statusFailed", { action })
+      : t("agentRounds.statusDone", { action });
   return { label, statusText, detail };
 }
-
-const SUMMARY_TOOL_LABELS: Record<string, string> = {
-  list_dir: "浏览|个目录",
-  read_file: "读取|个文件",
-  write_file: "写入|个文件",
-  edit_file: "编辑|个文件",
-  search_code: "搜索|次",
-  search_text: "搜索|次",
-  run_shell: "执行|条命令",
-};
 
 export function createRoundProcessMessage(
   id: string,
@@ -130,13 +152,12 @@ function completedSummary(tools: readonly ToolExecutionRecord[]): string[] {
   const counts = new Map<string, number>();
   for (const tool of successful) counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1);
 
-  const facts = Object.entries(SUMMARY_TOOL_LABELS).flatMap(([name, pattern]) => {
+  const facts = Object.entries(SUMMARY_TOOL_KEYS).flatMap(([name, key]) => {
     const count = counts.get(name) ?? 0;
     if (count === 0) return [];
-    const [verb, suffix] = pattern.split("|");
-    return [`${verb} ${count} ${suffix}`];
+    return [t(key, { count })];
   });
-  if (facts.length === 0 && successful.length > 0) facts.push(`完成 ${successful.length} 项操作`);
+  if (facts.length === 0 && successful.length > 0) facts.push(t("agentRounds.summaryFallback", { count: successful.length }));
   return facts;
 }
 
@@ -156,15 +177,15 @@ export function resolveAgentRoundTitle(
 ): string {
   const failures = tools.filter((tool) => tool.status === "error").length;
   if (interrupted) {
-    return ["昔涟已中断", ...(failures ? [`${failures} 项失败`] : [])].join(" · ");
+    return [t("agentRounds.interruptedTitle"), ...(failures ? [t("agentRounds.failureCount", { count: failures })] : [])].join(" · ");
   }
   if (round.status === "running") {
     const current = [...tools].reverse().find((tool) => tool.status === "running");
     return current
-      ? `昔涟正在${LIVE_TOOL_LABELS[current.name] ?? current.name}`
-      : "昔涟正在思考";
+      ? t("agentRounds.runningLive", { action: liveToolLabel(current.name) })
+      : t("agentRounds.runningThinking");
   }
   const facts = completedSummary(tools);
-  if (failures) facts.push(`${failures} 项失败`);
-  return ["昔涟已完成", ...facts].join(" · ");
+  if (failures) facts.push(t("agentRounds.failureCount", { count: failures }));
+  return [t("agentRounds.completedTitle"), ...facts].join(" · ");
 }

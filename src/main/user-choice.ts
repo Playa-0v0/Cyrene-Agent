@@ -50,7 +50,8 @@ export type ChoiceSettlementReason = "answered" | "timeout" | "unavailable" | "c
 
 export interface ChoiceSettlement {
   id: string;
-  runId: string;
+  /** 关联 runId；老版 requestUserChoice 无 run 上下文时缺省。 */
+  runId?: string;
   revision: number;
   reason: ChoiceSettlementReason;
 }
@@ -72,14 +73,22 @@ let choiceCounter = 0;
 /** 注入的卡片回调：由 index.ts 启动时设置，把 ChoiceCardData 包成 CUSTOM 事件发给渲染端。 */
 let choiceCardSender: ((card: ChoiceCardData) => void) | null = null;
 
+/** 注入的结算回调：由 index.ts 启动时设置，老版选择卡超时结算时通知渲染端清卡。 */
+let choiceDismissSender: ((settlement: ChoiceSettlement) => void) | null = null;
+
 /** index.ts 启动时调用，注入卡片发送回调。 */
 export function setChoiceCardSender(sender: (card: ChoiceCardData) => void): void {
   choiceCardSender = sender;
 }
 
+/** index.ts 启动时调用，注入结算通知回调。 */
+export function setChoiceDismissSender(sender: (settlement: ChoiceSettlement) => void): void {
+  choiceDismissSender = sender;
+}
+
 /**
  * 发起一次用户选择请求，阻塞等待用户在聊天卡片里选一个选项。
- * 超时（120s）返回 defaultValue 或空串。
+ * 超时（userChoiceTimeout，默认 60s）返回 defaultValue 或空串，并广播 dismiss 让渲染端清卡。
  */
 export function requestUserChoice(
   question: string,
@@ -93,6 +102,8 @@ export function requestUserChoice(
     const timer = setTimeout(() => {
       pendingChoices.delete(id);
       console.warn(LOG_PREFIX, "选择超时（" + choiceTimeout + "ms），使用默认值:", defaultValue ?? "(空)");
+      // 通知渲染端清卡：超时已用默认值结算，卡片再点也只会得到 ok:false
+      choiceDismissSender?.({ id, revision: 1, reason: "timeout" });
       resolve(defaultValue ?? "");
     }, choiceTimeout);
 

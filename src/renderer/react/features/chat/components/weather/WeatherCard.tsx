@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { useTranslation } from "../../../../i18n";
 import type { OpenMeteoWeatherData, AmapWeatherData, WeatherData } from "./weather-types";
 import {
   mapWmoCode,
@@ -56,9 +57,10 @@ const ThermometerIcon = () => (
 );
 
 export const WeatherCard: React.FC<WeatherCardProps> = ({ data, theme = "light" }) => {
+  const { locale } = useTranslation();
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  const dateText = useMemo(() => formatDateText(), []);
+  const dateText = useMemo(() => formatDateText(), [locale]);
 
   if (data.source === "open-meteo") {
     return <OpenMeteoCard data={data} theme={theme} dateText={dateText} advancedOpen={advancedOpen} onToggle={() => setAdvancedOpen((v) => !v)} />;
@@ -82,7 +84,8 @@ const OpenMeteoCard: React.FC<OpenMeteoCardProps> = ({
   advancedOpen,
   onToggle,
 }) => {
-  const [category, weatherText] = useMemo(() => mapWmoCode(data.weatherCode), [data.weatherCode]);
+  const { t, locale } = useTranslation();
+  const [category, weatherText] = useMemo(() => mapWmoCode(data.weatherCode), [data.weatherCode, locale]);
 
   return (
     <article className={`weather-card ${advancedOpen ? "advanced-open" : ""}`} data-theme={theme}>
@@ -91,7 +94,7 @@ const OpenMeteoCard: React.FC<OpenMeteoCardProps> = ({
           <span className="weather-date-text">{dateText}</span>
           <span className="weather-update-text">
             <span className="weather-update-dot" />
-            <span>实时查询</span>
+            <span>{t("weather.liveQuery")}</span>
           </span>
         </div>
         <div className="weather-location">
@@ -111,7 +114,7 @@ const OpenMeteoCard: React.FC<OpenMeteoCardProps> = ({
             <span className="weather-temp-unit">°C</span>
           </div>
           <div className="weather-desc">{weatherText}</div>
-          <div className="weather-feels-like">体感 {data.feelsLike}°C</div>
+          <div className="weather-feels-like">{t("weather.feelsLike", { temp: data.feelsLike })}</div>
         </div>
       </section>
 
@@ -121,7 +124,7 @@ const OpenMeteoCard: React.FC<OpenMeteoCardProps> = ({
             <HumidityIcon />
           </div>
           <div className="weather-detail-text">
-            <span className="weather-detail-label">湿度</span>
+            <span className="weather-detail-label">{t("weather.humidity")}</span>
             <span className="weather-detail-value">{data.humidity}%</span>
           </div>
         </div>
@@ -130,7 +133,7 @@ const OpenMeteoCard: React.FC<OpenMeteoCardProps> = ({
             <WindDirIcon />
           </div>
           <div className="weather-detail-text">
-            <span className="weather-detail-label">风向</span>
+            <span className="weather-detail-label">{t("weather.windDirection")}</span>
             <span className="weather-detail-value">{omWindDir(data.windDeg)}</span>
           </div>
         </div>
@@ -139,7 +142,7 @@ const OpenMeteoCard: React.FC<OpenMeteoCardProps> = ({
             <WindSpeedIcon />
           </div>
           <div className="weather-detail-text">
-            <span className="weather-detail-label">风速</span>
+            <span className="weather-detail-label">{t("weather.windSpeed")}</span>
             <span className="weather-detail-value">{data.windSpeed} km/h</span>
           </div>
         </div>
@@ -148,7 +151,7 @@ const OpenMeteoCard: React.FC<OpenMeteoCardProps> = ({
             <PrecipIcon />
           </div>
           <div className="weather-detail-text">
-            <span className="weather-detail-label">降水量</span>
+            <span className="weather-detail-label">{t("weather.precipitation")}</span>
             <span className="weather-detail-value">{data.precipitation.toFixed(1)} mm</span>
           </div>
         </div>
@@ -171,8 +174,8 @@ const OpenMeteoCard: React.FC<OpenMeteoCardProps> = ({
         >
           <path d="M6 9l6 6 6-6" />
         </svg>
-        <span>{advancedOpen ? "收起高级数据" : "展开高级数据"}</span>
-        <span className="weather-toggle-hint">气压 · 体感温度</span>
+        <span>{advancedOpen ? t("weather.advancedCollapse") : t("weather.advancedExpand")}</span>
+        <span className="weather-toggle-hint">{t("weather.advancedHint")}</span>
       </button>
 
       <div className="weather-advanced-panel">
@@ -183,7 +186,7 @@ const OpenMeteoCard: React.FC<OpenMeteoCardProps> = ({
                 <PressureIcon />
               </div>
               <div className="weather-adv-text">
-                <span className="weather-adv-label">气压</span>
+                <span className="weather-adv-label">{t("weather.pressure")}</span>
                 <span className="weather-adv-value">{data.pressure.toFixed(1)} hPa</span>
               </div>
             </div>
@@ -192,7 +195,7 @@ const OpenMeteoCard: React.FC<OpenMeteoCardProps> = ({
                 <ThermometerIcon />
               </div>
               <div className="weather-adv-text">
-                <span className="weather-adv-label">体感温度</span>
+                <span className="weather-adv-label">{t("weather.feelsLikeTemperature")}</span>
                 <span className="weather-adv-value">{data.feelsLike}°C</span>
               </div>
             </div>
@@ -200,7 +203,7 @@ const OpenMeteoCard: React.FC<OpenMeteoCardProps> = ({
         </div>
       </div>
 
-      <footer className="weather-card-footer">天气数据来源：Open-Meteo</footer>
+      <footer className="weather-card-footer">{t("weather.sourceOpenMeteo")}</footer>
     </article>
   );
 };
@@ -212,6 +215,7 @@ interface AmapCardProps {
 }
 
 const AmapCard: React.FC<AmapCardProps> = ({ data, theme, dateText }) => {
+  const { t } = useTranslation();
   const category = useMemo(() => mapAmapWeather(data.weather), [data.weather]);
 
   return (
@@ -229,7 +233,7 @@ const AmapCard: React.FC<AmapCardProps> = ({ data, theme, dateText }) => {
             <span className="weather-province">{data.location.province}</span>
             <h1 className="weather-city">{data.location.city}</h1>
           </div>
-          <span className="weather-source-tag">高德天气</span>
+          <span className="weather-source-tag">{t("weather.sourceAmapTag")}</span>
         </div>
       </header>
 
@@ -241,7 +245,7 @@ const AmapCard: React.FC<AmapCardProps> = ({ data, theme, dateText }) => {
             <span className="weather-temp-unit">°C</span>
           </div>
           <div className="weather-desc">{data.weather}</div>
-          <div className="weather-feels-like">体感 {data.temp}°C</div>
+          <div className="weather-feels-like">{t("weather.feelsLike", { temp: data.temp })}</div>
         </div>
       </section>
 
@@ -251,7 +255,7 @@ const AmapCard: React.FC<AmapCardProps> = ({ data, theme, dateText }) => {
             <HumidityIcon />
           </div>
           <div className="weather-detail-text">
-            <span className="weather-detail-label">湿度</span>
+            <span className="weather-detail-label">{t("weather.humidity")}</span>
             <span className="weather-detail-value">{data.humidity}%</span>
           </div>
         </div>
@@ -260,8 +264,8 @@ const AmapCard: React.FC<AmapCardProps> = ({ data, theme, dateText }) => {
             <WindDirIcon />
           </div>
           <div className="weather-detail-text">
-            <span className="weather-detail-label">风向</span>
-            <span className="weather-detail-value">{data.windDirection}风</span>
+            <span className="weather-detail-label">{t("weather.windDirection")}</span>
+            <span className="weather-detail-value">{t("weather.windDirectionValue", { dir: data.windDirection })}</span>
           </div>
         </div>
         <div className="weather-detail-item">
@@ -269,13 +273,13 @@ const AmapCard: React.FC<AmapCardProps> = ({ data, theme, dateText }) => {
             <WindSpeedIcon />
           </div>
           <div className="weather-detail-text">
-            <span className="weather-detail-label">风力</span>
-            <span className="weather-detail-value">{data.windPower}级</span>
+            <span className="weather-detail-label">{t("weather.windPower")}</span>
+            <span className="weather-detail-value">{t("weather.windPowerValue", { power: data.windPower })}</span>
           </div>
         </div>
       </section>
 
-      <footer className="weather-card-footer">天气数据来源：高德天气</footer>
+      <footer className="weather-card-footer">{t("weather.sourceAmap")}</footer>
     </article>
   );
 };

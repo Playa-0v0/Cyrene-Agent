@@ -69,6 +69,32 @@ describe("build-options", () => {
     expect(result.options.soulSystemBaseContent).toContain(`[MODE:${mode}]`);
   });
 
+  it("把插件贡献放入每轮 runtime context，并传递可信运行元数据", async () => {
+    const deps = createBuildDeps();
+    deps.buildPluginPromptContext = vi.fn(async (input) => (
+      `[插件上下文：demo]\n${input.mode}:${input.userText}`
+    ));
+
+    const result = await buildAgentRunOptions({
+      sessionId: "plugin-prompt-session",
+      mode: "chat",
+      executionMode: "chat",
+      channel: "wechat",
+      messages: [{ role: "user", content: "今天天气如何" }],
+    }, deps);
+
+    expect(deps.buildPluginPromptContext).toHaveBeenCalledWith({
+      source: "conversation",
+      mode: "chat",
+      userText: "今天天气如何",
+      conversationId: "plugin-prompt-session",
+      channel: "wechat",
+    });
+    expect(result.options.soulRuntimeContext).toContain("[插件上下文：demo]\nchat:今天天气如何");
+    expect(result.options.soulSystemBaseContent).not.toContain("插件上下文：demo");
+    expect(result.options.toolSystemContent).not.toContain("插件上下文：demo");
+  });
+
   it("keeps chat tool-free when enhancement switch is off", async () => {
     const deps = createBuildDeps();
     deps.toolRegistry.getEnabled = () => [

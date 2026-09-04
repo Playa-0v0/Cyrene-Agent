@@ -12,7 +12,7 @@
 **Cyrene-Agent 是一个以《崩坏：星穹铁道》昔涟为核心角色的 Windows Live2D AI 桌面伴侣。**
 
 > 基于 Electron + TypeScript 开发的桌面端 Live2D 智能对话 Agent。  
-> 项目围绕昔涟（Cyrene）的角色设定，结合自研 DMAE 记忆引擎，  
+> 项目围绕昔涟（Cyrene）的角色设定，结合自研Cyrene_Harness+DMAE 记忆引擎，  
 > 将角色化聊天、个性化记忆、语音交互、工具调用与多平台接入整合在同一个桌面 Agent 中，  
 > 支持日常聊天（Chat）、辅助工作（Work）、代码协作（Code）、学习陪伴（Learn）四种对话模式。
 
@@ -29,6 +29,7 @@
 - 🌱 **条目生命周期** — 自研DMAE算法（v4.0未实现最新v5.1）负责管理prompt在上下文中的生命周期
 - 🔊 **语音交互** — 集成 TTS、ASR 与语音通话，让昔涟能够听见并回应用户
 - 🧰 **丰富工具生态** — 覆盖联网搜索、文件处理、文档生成、生活服务、音乐与 MCP 扩展
+- 🧩 **插件系统** — 本地插件包扩展 AI 工具、聊天渠道、自有窗口与语音输入，配套 npm SDK 与开发指南
 - 🔌 **多模型厂商适配** — 针对不同厂商提供分级 Structured Output 与 Function Calling 兼容方案
 - 🎨 **个性化外观** — 支持多套界面风格、主题外观与聊天字体选择
 - 📱 **多平台接入** — 支持桌面端、飞书、微信 iLink 与 QQ（NapCat / OneBot 11），共享角色能力与对话体验
@@ -388,6 +389,15 @@ Cyrene 内置和扩展的工具较多，主要覆盖以下类别：
 - 支持 `invoke_skill`、参考资料读取与 Slash Command。
 - 包含路径防护、重复读取限制与大文本截断机制。
 
+#### 🧩 插件系统
+
+- **本地插件包** — 一个文件夹（`manifest.json` + JS 入口文件）就是一个插件，在设置页统一管理启停；支持 ZIP 导入，安装走 staging 隔离校验 + 原子替换 + 失败自动回滚，内置路径穿越与压缩炸弹防护。
+- **开放能力** — 插件可以注册 AI 工具、弹出自有窗口、调用宿主 LLM、接入新聊天渠道、监听生命周期事件、注入每轮动态上下文，并可申请私有存储、安全密钥、只读会话分页、自有定时任务与语音输入租约等宿主服务。
+- **信任边界** — 用户插件首次发现一律停用，需在设置页手动启用；插件创建的定时任务必须用户核对配置后才生效；语音输入通过独占租约避免双输入源冲突。
+- **开发者工具链** — npm 包 [`@playa0v0/cyrene-plugin-sdk`](https://www.npmjs.com/package/@playa0v0/cyrene-plugin-sdk) 提供全部公开类型、Manifest 校验与 Mock Context 测试工具，运行时仅依赖 `ajv`；配套《[插件开发指南](docs/plugins/plugin-dev-guide.md)》与 `cyrene-plugin-dev` Skill，无需阅读宿主源码即可完成开发。
+- **官方示例** — 仓库 [`examples/`](./examples) 提供天气查询、长期记忆、定时自动化与本地 ASR 契约四个示例，均可直接作为开发起点。
+- **插件收录仓库** — [Cyrene-Plugins](https://github.com/Playa-0v0/Cyrene-Plugins) 收录经安全审核的社区插件，用户可直接下载 ZIP 导入；想让你的插件被更多人看到，欢迎提 PR 收录。
+
 #### 🌙 主动聊天
 
 - **状态感知** — 根据时间、用户活跃状态、会话状态和角色心情判断是否适合主动交流。
@@ -404,8 +414,9 @@ Cyrene 内置和扩展的工具较多，主要覆盖以下类别：
 
 #### 🧪 单元测试
 - Vitest 4 覆盖 asr / tts / channels / chats / game-bot / memory /
-  opener / orchestrator / rag / scheduler / skills 等核心模块。
+  opener / orchestrator / plugins / plugin-host / rag / scheduler / skills 等核心模块。
 - `npm test` 一次性 / `npm run test:watch` 监听模式。
+- 插件开发：`npm run check:plugin-sdk` 校验 SDK 打包，`npm run test:plugin-examples` 端到端验证官方示例。
 
 #### 🎬 场景模拟
 - `npm run sim` 默认场景 / `sim:coffee` / `sim:mix` / `sim:rescue` 单场景调试。
@@ -439,6 +450,7 @@ Cyrene 内置和扩展的工具较多，主要覆盖以下类别：
 | ✨ Skill 系统 | ✅ 可用 | 支持内置 Skill、用户自定义 Skill、Slash 命令与参考资料读取 |
 | 📚 RAG 文档知识库 | 🧪 实验性 | 支持多格式文档导入、向量与 BM25 混合检索、Reranker 和来源追溯 |
 | 🔌 MCP 扩展生态 | 🧪 实验性 | 支持 stdio、SSE 与 HTTP Transport，实际兼容性取决于第三方 MCP Server |
+| 🧩 插件系统 | ✅ 可用 | 本地插件 + ZIP 导入 + npm SDK（`@playa0v0/cyrene-plugin-sdk`），开放工具、渠道、窗口、存储、调度与语音输入等宿主能力 |
 | 📱 飞书 Lark | ✅ 可用 | 支持长连接消息接入与多种媒体类型 |
 | 📱 微信 iLink | 🧪 实验性 | 支持长轮询消息收发、媒体处理与手机端对话 |
 | 📱 QQ / NapCat | 🧪 实验性 | OneBot 11 反向 WebSocket、私聊/群聊白名单、引用/@ 与跨 WSL 多媒体传输 |
@@ -464,6 +476,7 @@ Cyrene 内置和扩展的工具较多，主要覆盖以下类别：
 | 沙箱执行（Windows） | `@anthropic-ai/sandbox-runtime`（SRT）— 非可信命令走 SandboxManager.wrapWithSandboxArgv；未安装时回退直接 spawn，workspace_mutation 命令仍被拒绝 |
 | LSP 客户端 | 自研 `LspManager` + `vscode-jsonrpc` 协议，进程按 serverId 复用，stdio pipe 与 `shell:false` 启动 |
 | 工具扩展 | `@modelcontextprotocol/sdk`（stdio / SSE / StreamableHTTP transport） |
+| 插件系统 | [`@playa0v0/cyrene-plugin-sdk`](https://www.npmjs.com/package/@playa0v0/cyrene-plugin-sdk)（npm 发布的插件开发包：公开类型 + Manifest Schema 校验 + Mock Context 测试工具） |
 | 记忆与检索 | Embedding（`@xenova/transformers`）+ BM25 + 自研 Cross-Encoder Reranker + 自研索引管线 |
 | 上下文条目调度 | 自研 DMAE V5.1（关键词命中召回 + 激活度衰减 + active/dormant/archived 三态可逆） |
 | 中文检索 | `@node-rs/jieba` |
@@ -516,6 +529,7 @@ src/
 │   │   ├── model-config/  # 模型配置（按 provider/model 分级）
 │   │   └── config/   # 超时 / 上下文窗口等全局配置
 │   ├── permission/   # 权限模块（checkPermission / risk 等级 / permission-policy）
+│   ├── plugin-host/  # 插件宿主服务（secrets / workspace / conversations / scheduler / 语音输入租约 / 生命周期发布器）
 │   ├── proactive/    # 主动对话：模型 / 策略 / 路由 / 服务
 │   ├── prompts/      # Prompt 文件加载（system prompt / persona / Runtime Policy）
 │   ├── protocols/    # 协议层（与外部组件的 IPC / 数据格式约定）
@@ -535,8 +549,10 @@ src/
 │   ├── tts/          # 语音合成（多引擎：MiniMax / Mossland / MiMo / GPT-SoVITS / 自定义）
 │   ├── windows/      # Windows 原生相关（窗口布局 / 位置 / 可见性）
 │   ├── agui-bridge.ts # AG-UI 事件桥（主进程 ↔ 渲染进程）
+│   ├── plugin-runtime.ts # 插件运行时装配（向插件注入宿主服务工厂）
 │   ├── sync-mcp-builtin.ts  # 内置 MCP 同步（Playwright / 飞书等）
 │   └── sticker-*.ts  # 贴纸语义匹配（协议 / 存储 / 描述 / embedder）
+├── plugins/          # 插件系统核心（manifest 校验 / 加载器 / 生命周期 / 资源跟踪 / 事件总线）
 ├── preload/          # Electron preload 桥接
 ├── renderer/         # Vite 渲染层
 │   ├── call/         # 语音通话窗口
@@ -565,126 +581,17 @@ dist/renderer/        # Vite 构建产物（构建产物 gitignore，产品资�
 ├── react/            # React 主入口（构建产物，gitignore）
 ├── status/           # 角色状态图片（工作中/思考中/提醒/离线/聆听中…，已跟踪）
 └── stickers/         # 贴纸图片资源（已跟踪）
+
+examples/              # 插件开发示例（weather-tool / long-term-memory / scheduled-automation / local-asr-contract）
+packages/
+└── plugin-sdk/       # @playa0v0/cyrene-plugin-sdk 源码（构建时从宿主同步公开契约，防漂移）
 ```
 
 > `dist/renderer/assets/`、各窗口的 `index.html`、`dist/renderer/live2dcubismcore.min.js` 为 Vite 构建产物
 > 不在 git 跟踪范围内。`audio/`、`avatars/`、`feeling/`、`icons/`、`models/`、`status/`、`stickers/` 为产品资源，已纳入 git。
 > 静态资源源文件见 `src/renderer/public/`。运行 `npm run build:renderer` 重新生成构建产物。
 
----
-## ❓ 常见问题
 
-### 本地 AI 模型
-
-
-### 是否支持本地大模型和其他第三方模型平台？
-
-Cyrene 对本地模型、自定义端点及未列入兼容性名单的第三方模型平台，仅提供基础的通用兼容与容错处理。
-
-由于这些端点尚未经过完整 Work 流程实测，因此：
-
-- 不保证能够稳定运行
-- 不保证 Structured Output 与 Function Calling 能力可用
-- 不保证能够完成完整 Agent 工具链
-- 暂不提供相关配置、兼容性问题与错误排查的技术解答
-
-未知模型、本地模型与自定义端点会默认使用通用 **D 档**运行，实际兼容性需要用户自行测试。
-
-> [!NOTE]
->
-> Cyrene 目前由个人独立开发，时间、设备和 API 测试成本有限。现阶段仅对项目明确适配并完成验证的主要模型厂商提供兼容性维护与技术解答，未来会根据项目进度逐步扩展测试范围。
-
-当前重点适配的模型厂商包括：
-
-- 豆包 Seed
-- Kimi
-- DeepSeek
-- Qwen
-- GLM
-- MiMo
-- MiniMax
-- OpenAI
-- Anthropic
-
-不同厂商和具体型号的验证状态并不相同，请以项目内的模型兼容性表及实测报告为准。
-
-> BGE-M3、`ms-marco-MiniLM-L-6-v2` 与 `bge-reranker-base` 是项目使用的本地 Embedding / Reranker 增强模型，不属于用于聊天的本地大语言模型。
-
-### API Key 安全吗？
-
-> [!WARNING]
->
-> 当前版本不建议在共享电脑或其他不可信环境中运行。
-
-LLM、独立视觉模型、ASR、TTS 及其他第三方服务的凭据会保存在应用的 `<userData>/` 目录中：
-
-- `<userData>/model-settings.json`：LLM 与视觉模型配置（明文）
-- `<userData>/app-settings.json`：ASR、TTS、地图、搜索、邮件等配置（明文）
-- `<userData>/weixin/credentials.json`：微信 iLink Bot 凭据（明文）
-- `<userData>/mcp-servers.json`：MCP server 配置，含 `env` 环境变量（明文）
-- `<userData>/channels-settings.json`：渠道配置；飞书 `appSecret` 与 QQ `accessToken` 使用 safeStorage 加密
-- `<userData>/music/netease/account.enc`：网易云音乐登录 Cookie（safeStorage 加密）
-
-目前大部分凭据仍以明文形式保存在本地文件中，主要依赖操作系统的用户目录权限进行保护。
-
-飞书、QQ 渠道凭据与网易云音乐登录 Cookie 使用 Electron `safeStorage` 加密：
-
-- Windows：DPAPI
-- macOS：Keychain
-- Linux：libsecret
-- 系统密钥环不可用时会回退至较弱的本地混淆方案
-
-请勿分享或上传 `<userData>/`、设置文件及日志文件，也不要将其同步到公共云盘或提交到 Git 仓库。
-
-如需清除凭据与应用配置，可以删除以下文件后重启：
-
-```text
-<userData>/model-settings.json
-<userData>/app-settings.json
-<userData>/weixin/credentials.json
-<userData>/mcp-servers.json
-<userData>/channels-settings.json
-<userData>/music/netease/account.enc
-```
-
-### macOS / Linux 可以运行吗？
-
-Cyrene 当前以 **Windows 10 / 11** 为主要开发和测试平台。
-
-| 平台 | 状态 | 说明 |
-|---|:---:|---|
-| Windows 10 / 11 | ✅ 已实测 | 主要支持平台 |
-| macOS | ⚠️ 未完整验证 | Electron 主体理论可运行，但透明窗口、鼠标穿透与窗口层级可能存在兼容问题 |
-| Linux | ⚠️ 未完整验证 | 桌面环境与系统密钥环差异可能影响部分功能 |
-
-`game-bot` 使用的 `nut.js` 包含原生依赖，目前仅在 Windows 上完成端到端验证。
-
-如在 macOS 或 Linux 上遇到兼容问题，欢迎通过 GitHub Issue 提交运行环境、错误日志和复现步骤。
-
-### 出现 OOM 或内存占用过高怎么办？
-
-可以依次尝试：
-
-1. **关闭 Reranker**  
-   设置 -> 昔涟设置 -> RAG / 文档导入 -> 将 Reranker 模式设为 none
-
-2. **关闭暂时不用的 MCP 服务**  
-   Playwright 等浏览器自动化服务可能启动额外的 Chromium 进程。
-
-3. **减少大型 RAG 文档**  
-   删除暂时不需要的知识库文件，降低索引和检索负担。
-
-4. **关闭不使用的窗口和后台任务**  
-   长时间运行的工具任务、语音服务和多会话可能持续占用资源。
-
-5. **重启应用**  
-   可以释放模型、索引、浏览器子进程和长期运行任务占用的内存。
-
-Embedding 索引已采用后台 Worker、批处理和缓存机制，以降低文档导入时的内存峰值。
-
-如果仍然频繁出现 OOM，可以在开发模式下使用 Chrome DevTools Memory Profiler 获取 Heap Snapshot，并在提交 Issue 时附上复现步骤与相关日志。
-
----
 ## ⚠️ 免责声明
 
 本项目为**非官方粉丝同人作品**，与 HoYoverse / 米哈游**无任何关联、
@@ -723,6 +630,11 @@ MIT 仅约束本仓库的源代码，不适用于角色、Live2D 模型与美术
 - **Live2D 模型**：由 [@是依七哒](https://space.bilibili.com/457683484) 制作 —
   详见 [MODEL_LICENSE.md](./MODEL_LICENSE.md)
 - **Live2D Cubism SDK**：© Live2D Cubism
+- **贡献者名单**：详见 [docs/CONTRIBUTORS.md](./docs/CONTRIBUTORS.md)
+
+<a href="https://github.com/Playa-0v0/Cyrene-Agent/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Playa-0v0/Cyrene-Agent&columns=10" alt="贡献者头像（实时更新，按 GitHub 提交数排序）" width="320">
+</a>
 
 特别感谢模型原作者慷慨授权本项目使用、修改并再分发其作品。
 

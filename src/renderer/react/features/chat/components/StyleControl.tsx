@@ -1,5 +1,6 @@
 import { Popover } from "antd";
 import { useEffect, useState } from "react";
+import { useTranslation } from "../../../i18n";
 import { normalizeStyleId, type StyleId } from "../../../../../shared/style-sampling";
 import gentleIconUrl from "../../../assets/status-moods/温柔.png?url";
 import livelyIconUrl from "../../../assets/status-moods/元气.png?url";
@@ -8,13 +9,15 @@ import focusedIconUrl from "../../../assets/status-moods/知性.png?url";
 import sweetIconUrl from "../../../assets/status-moods/撒娇.png?url";
 import customIconUrl from "../../../assets/status-moods/自定义.png?url";
 
-const STYLE_OPTIONS: ReadonlyArray<{ id: StyleId; label: string; iconUrl: string }> = [
-  { id: "default", label: "温柔 · 和善", iconUrl: gentleIconUrl },
-  { id: "lively", label: "元气 · 活泼", iconUrl: livelyIconUrl },
-  { id: "healing", label: "治愈 · 安心", iconUrl: healingIconUrl },
-  { id: "focused", label: "知性 · 认真", iconUrl: focusedIconUrl },
-  { id: "sweet", label: "撒娇 · 黏人", iconUrl: sweetIconUrl },
-  { id: "custom", label: "自定义", iconUrl: customIconUrl },
+// 只存 i18n key 与风格 id（id 是存储值不能改；t() 不能出现在模块顶层常量里），
+// 展示文案在组件内求值。
+const STYLE_OPTIONS: ReadonlyArray<{ id: StyleId; labelKey: string; iconUrl: string }> = [
+  { id: "default", labelKey: "style.optionDefault", iconUrl: gentleIconUrl },
+  { id: "lively", labelKey: "style.optionLively", iconUrl: livelyIconUrl },
+  { id: "healing", labelKey: "style.optionHealing", iconUrl: healingIconUrl },
+  { id: "focused", labelKey: "style.optionFocused", iconUrl: focusedIconUrl },
+  { id: "sweet", labelKey: "style.optionSweet", iconUrl: sweetIconUrl },
+  { id: "custom", labelKey: "style.optionCustom", iconUrl: customIconUrl },
 ];
 
 interface StyleSettingsApi {
@@ -31,6 +34,7 @@ function ChevronIcon() {
 }
 
 export function StyleControl() {
+  const { t } = useTranslation();
   const [styleId, setStyleId] = useState<StyleId>("default");
   const [open, setOpen] = useState(false);
 
@@ -61,7 +65,7 @@ export function StyleControl() {
       overlayClassName="cy-style-popover"
       content={
         <div className="cy-style-panel">
-          <strong>回复风格</strong>
+          <strong>{t("style.panelTitle")}</strong>
           <div className="cy-style-panel__options">
             {STYLE_OPTIONS.map((option) => (
               <button
@@ -71,7 +75,7 @@ export function StyleControl() {
                 onClick={() => void select(option.id)}
               >
                 <img className="cy-style-icon" src={option.iconUrl} alt="" />
-                <span>{option.label}</span>
+                <span>{t(option.labelKey)}</span>
               </button>
             ))}
           </div>
@@ -80,7 +84,7 @@ export function StyleControl() {
     >
       <button type="button" className="cy-composer__agent-button cy-style-control">
         <img className="cy-style-icon" src={current.iconUrl} alt="" />
-        <span>style · {current.label}</span>
+        <span>style · {t(current.labelKey)}</span>
         <ChevronIcon />
       </button>
     </Popover>
