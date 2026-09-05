@@ -502,3 +502,10 @@
   color: #d4384d;
   font-size: 12px;
 }
+
+.moments-panel__heading-icon {
+  align-self: center;
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+}
