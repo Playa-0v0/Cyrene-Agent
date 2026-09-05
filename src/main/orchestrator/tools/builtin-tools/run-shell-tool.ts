@@ -20,6 +20,7 @@ import {
   type ResolvedShellExecutable,
   type ShellKind,
 } from "../../shell-runtime";
+import { killTree, startShellJob, type ShellSpawnSpec } from "./shell-job-manager";
 
 const LOG_PREFIX = "[BuiltinTools]";
 
@@ -138,21 +139,6 @@ interface ShellResult {
   timedOut: boolean;
 }
 
-/** 可靠终止进程树。Windows 上 child.kill("SIGKILL") 只杀直接子进程，杀不掉孙进程。 */
-function killTree(child: ReturnType<typeof spawn>): void {
-  if (child.pid == null) return;
-  if (process.platform === "win32") {
-    // /T=含整棵子树  /F=强制  砍掉进程树，避免孙进程成为孤儿
-    spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
-      windowsHide: true,
-      shell: false,
-      stdio: "ignore",
-    });
-  } else {
-    try { child.kill("SIGKILL"); } catch { /* 已退出则忽略 */ }
-  }
-}
-
 // ── 执行计划：安全决策与副作用执行分离 ─────────────────────
 // 不变量：非 full 档位下，任何命令在 ExecutionPlan 确定为可执行（sandboxed/direct）
 // 之前不会触碰 spawn；wrap 失败一律 fail-closed，绝不"先跑完再事后拒绝"
@@ -218,6 +204,34 @@ async function resolveExecutionPlan(
 }
 
 /**
+ * 从执行计划构造 spawn 规格：沙箱计划用 SRT 给的 argv/env，直跑计划包装 shell 调用。
+ * 前台 executePlan 与后台 startShellJob 共用，保证两条路径的进程构造完全一致。
+ */
+function buildSpawnSpec(plan: ExecutablePlan, resolvedShell: ResolvedShellExecutable): ShellSpawnSpec {
+  if (plan.kind === "sandboxed") {
+    return {
+      command: plan.argv[0],
+      args: plan.argv.slice(1),
+      // 沙箱 env 是 SRT 给的（含必要的 PATH/token 等）
+      env: { ...plan.env },
+      cwd: plan.cwd,
+      windowsVerbatimArguments: false,
+      ranViaSandbox: true,
+    };
+  }
+  const directInvocation = buildDirectShellInvocation(resolvedShell, plan.command);
+  return {
+    command: directInvocation.command,
+    args: directInvocation.args,
+    env: { ...process.env },
+    cwd: plan.cwd,
+    // 直接 cmd.exe 路径必须 verbatim（引号语义交给 cmd），沙箱路径不加（见下方详细注释）
+    windowsVerbatimArguments: directInvocation.windowsVerbatimArguments,
+    ranViaSandbox: false,
+  };
+}
+
+/**
  * 执行一个已通过安全决策的计划。
  *
  * spawn 只存在于本函数；`ranViaSandbox` 仅作遥测（日志/结果字段展示），
@@ -234,37 +248,20 @@ function executePlan(
       const requestedShell = plan.requestedShell;
       const command = plan.command;
       const cwd = plan.cwd;
+      const spec = buildSpawnSpec(plan, resolvedShell);
+      const ranViaSandbox = spec.ranViaSandbox;
 
-      let spawnCmd: string;
-      let spawnArgs: string[];
-      let spawnEnv: NodeJS.ProcessEnv;
-      let ranViaSandbox = false;
-      let directVerbatim = false;
-      if (plan.kind === "sandboxed") {
-        spawnCmd = plan.argv[0];
-        spawnArgs = plan.argv.slice(1);
-        // 沙箱 env 是 SRT 给的（含必要的 PATH/token 等）
-        spawnEnv = { ...plan.env };
-        ranViaSandbox = true;
-      } else {
-        const directInvocation = buildDirectShellInvocation(resolvedShell, command);
-        spawnCmd = directInvocation.command;
-        spawnArgs = directInvocation.args;
-        spawnEnv = { ...process.env };
-        directVerbatim = directInvocation.windowsVerbatimArguments;
-      }
-
-      const child = spawn(spawnCmd, spawnArgs, {
-        cwd: cwd || undefined,
+      const child = spawn(spec.command, spec.args, {
+        cwd: spec.cwd || undefined,
         shell: false,
         windowsHide: true,
-        env: spawnEnv,
+        env: spec.env,
         // 直接 cmd.exe 路径必须 verbatim：Node 默认对 argv 做 MSVCRT 转义（" → \"），
         // 而 cmd.exe 的 /s 规则只剥首尾引号、不认 \" 转义，字面引号会传给目标程序——
         // 带引号路径如 node "E:\video test\_check.js" 会变成非法模块名。
         // windowsVerbatimArguments 让 argv 原样空格拼接，引号语义完全交给 cmd。
         // 沙箱路径不加：srt-win 是 Rust 程序（MSVCRT 解析 argv），与 Node 自动转义配对正确。
-        ...(ranViaSandbox || !directVerbatim ? {} : { windowsVerbatimArguments: true }),
+        ...(spec.windowsVerbatimArguments ? { windowsVerbatimArguments: true } : {}),
         // stdin→/dev/null(NUL)：误启动交互式进程(python/node REPL)时让它读到 EOF 立即退出，
         // 不再卡在"等 stdin 输入"上耗满超时。stdout/stderr 仍 pipe 来收集输出。
         stdio: ["ignore", "pipe", "pipe"],
@@ -302,13 +299,13 @@ function executePlan(
           : `命令超过 ${formatTimeoutMs(timeoutPolicy.totalMs)} 总上限`,
         cancelled: "所在任务已被用户取消",
       };
-      // 超时引导：帮模型自纠（idle 误杀 → 传 timeout_ms 豁免无输出检测；deadline 太短 → 调大重试）。
-      // "run_in_background 转后台"的引导待二期 shell_job 落地后再补，不提示尚不存在的能力。
+      // 超时引导：帮模型自纠（idle 误杀 → 传 timeout_ms 豁免无输出检测；时长不够 →
+      // 调大 timeout_ms 或转 run_in_background 后台执行并用 shell_job 管理）。
       const hintByReason: Record<StuckReason, string> = {
-        idle: "若这是正常的长时无输出任务（删除大目录/编译链接等），可传 timeout_ms 显式指定执行上限，设置后不再做无输出检测。",
+        idle: "若这是正常的长时无输出任务（删除大目录/编译链接等），可传 timeout_ms 显式指定执行上限，设置后不再做无输出检测；若是需要长时间运行的进程，可改用 run_in_background:true 后台执行。",
         total: timeoutPolicy.explicitDeadline
-          ? "如需更长时间，可增大 timeout_ms（1000–1800000 毫秒）后重试。"
-          : "如命令需要更长时间，可传 timeout_ms 参数（1000–1800000 毫秒）显式指定执行上限。",
+          ? "如需更长时间，可增大 timeout_ms（1000–1800000 毫秒）后重试，或改用 run_in_background:true 后台执行。"
+          : "如命令需要更长时间，可传 timeout_ms 参数（1000–1800000 毫秒）显式指定执行上限，或改用 run_in_background:true 后台执行。",
         cancelled: "",
       };
       // 已发起强制终止的原因。kill 后 close 常在宽限计时器之前到达（taskkill /F 收尸很快），
@@ -445,6 +442,40 @@ async function executeRunShell(args: Record<string, unknown>, context?: import("
     });
   }
 
+  const requiresSandbox = effect !== "read";
+
+  // 后台执行：spawn 后立即返回 jobId，输出流式写日志文件（状态机与护栏见 shell-job-manager）。
+  // 后台任务不做"无输出判卡死"检测，执行上限沿用 timeout_ms（未传则 30 分钟）；
+  // 与本轮 agent 调用解耦——取消本轮不杀后台任务，由用户 stop / 执行上限 / 应用退出控制。
+  if (args.run_in_background === true || args.run_in_background === "true") {
+    const plan: ExecutionPlan = level === "full"
+      ? { kind: "direct", command, cwd, requestedShell }
+      : await resolveExecutionPlan(command, cwd, requestedShell, resolvedShell, requiresSandbox);
+    if (plan.kind === "rejected") {
+      // 与前台一致的拒绝协议：spawn 从未被调用，stdout 必然为空
+      return JSON.stringify({
+        command, cwd, shell: requestedShell,
+        exitCode: -1, timedOut: false, captureTruncated: false, effect, sandboxed: false,
+        stderr: `[拒绝] ${plan.reason}`, stdout: "",
+      });
+    }
+    const spec = buildSpawnSpec(plan, resolvedShell);
+    const { jobId, logFile } = startShellJob({
+      spec, command, shell: requestedShell, totalMs: timeoutPolicy.totalMs,
+    });
+    logger.info(LogTag.BuiltinTools, `[run_shell] background ${jobId} started: command="${command}" totalMs=${timeoutPolicy.totalMs}`);
+    return JSON.stringify({
+      command, cwd, shell: requestedShell,
+      ranInBackground: true,
+      jobId,
+      logFile,
+      status: "running",
+      totalTimeoutMs: timeoutPolicy.totalMs,
+      sandboxed: spec.ranViaSandbox,
+      note: "命令已在后台启动，不阻塞本轮。用 shell_job (action=status, job_id) 查询状态，可传 wait_ms=0-60000 阻塞等待；action=stop 终止。日志持续写入 logFile（stdout+stderr 合计上限 64MB，超限自动终止）。",
+    });
+  }
+
   // full 档位：直接 spawn，不走沙箱（用户已选择完全信任）
   if (level === "full") {
     logger.info(LogTag.BuiltinTools, `[run_shell] full level → direct ${requestedShell} (no sandbox)`);
@@ -467,7 +498,7 @@ async function executeRunShell(args: Record<string, unknown>, context?: import("
   // 非 full 档位：spawn 前通过 ExecutionPlan 完成全部安全决策
   // - read  → 仅当"用户显式无沙箱"（reason: disabled）时允许 direct 降级
   // - write/unknown → 必须 wrap 成功，否则 rejected（fail-closed，不执行）
-  const requiresSandbox = effect !== "read";
+  // （requiresSandbox 已在后台分支前声明，此处复用）
   const plan = await resolveExecutionPlan(command, cwd, requestedShell, resolvedShell, requiresSandbox);
 
   if (plan.kind === "rejected") {
@@ -520,16 +551,20 @@ export const runShellTool: ToolDefinition = {
     "- 列目录 → list_dir\n" +
     "- 搜索代码内容 → search_text\n" +
     "- 下载网页 → fetch_url\n" +
-    "- 启动常驻进程（dev server / npx serve / watch / tail -f）→ 本工具只适合跑完就退出的命令，" +
-    "常驻进程会在 2 分钟无输出后被强制终止；需要预览服务时，构建完成后告知用户自行启动\n" +
+    "- 启动常驻进程（dev server / npx serve / watch / tail -f）→ 前台模式会在 2 分钟无输出后被强制终止，" +
+    "确需后台长驻时传 run_in_background:true，随后用 shell_job 工具查询状态/终止\n" +
     "- 能用专用工具完成的事\n\n" +
     "超时行为：默认 2 分钟无任何输出即判卡死终止，30 分钟总上限。" +
     "长时间无输出的任务（删除大目录/编译链接等）可传 timeout_ms（1000–1800000 毫秒）显式指定执行上限，" +
     "设置后不再做无输出检测，仅受该上限约束。\n\n" +
+    "后台模式：传 run_in_background:true 后命令在后台启动，立即返回 jobId 与 logFile（输出流式写日志文件，" +
+    "stdout+stderr 合计上限 64MB，超限自动终止），不阻塞本轮对话。执行上限沿用 timeout_ms（未传则 30 分钟）。" +
+    "之后用 shell_job 工具查询状态（可带 wait_ms 阻塞等待）或终止任务。\n\n" +
     "安全说明：非完全信任档位下，写副作用的命令会在沙箱中执行（限制文件系统访问范围）。" +
     "灾难命令（format/shutdown/dd 等）一律拒绝。\n" +
     "参数：command (完整命令行字符串，如 \"git status\")，cwd (可选工作目录)，shell (cmd 或 bash，默认 cmd)，" +
-    "timeout_ms (可选执行上限毫秒数，1000–1800000，设置后禁用无输出检测)。",
+    "timeout_ms (可选执行上限毫秒数，1000–1800000，设置后禁用无输出检测)，" +
+    "run_in_background (可选 true，后台执行并用 shell_job 管理)。",
   enabled: true,
   risk: "shell",
   modes: ["learn", "code", "work"],
@@ -548,6 +583,10 @@ export const runShellTool: ToolDefinition = {
       timeout_ms: {
         type: "number",
         description: "执行上限毫秒数，可选（1000–1800000，超出范围自动钳制）。语义=执行生命周期上限，超时进程树被强制终止；设置后不再做\"2 分钟无输出判卡死\"检测，适合删除大目录/编译链接等长时间无输出任务。不传则默认：2 分钟无输出判卡死 + 30 分钟总上限",
+      },
+      run_in_background: {
+        type: "boolean",
+        description: "可选 true：后台执行命令，立即返回 jobId 与 logFile 不阻塞本轮。输出流式写日志文件（合计上限 64MB）。之后用 shell_job 工具查询状态（action=status，可带 wait_ms 阻塞等待 0–60000 毫秒）或终止（action=stop）。后台任务不受无输出检测，执行上限沿用 timeout_ms（未传则 30 分钟），取消本轮对话不杀后台任务",
       },
     },
     required: ["command"],
