@@ -71,7 +71,7 @@ import { apiState, type SavedProfileLite } from "./api/state";
 import { apiForm, apiRuntimeForm, presetCards, profileList, profileListCount, profileEditorTitle, deleteProfileBtn, presetWebsiteLink, displayNameInput, baseUrlInput, baseUrlResetBtn, modelInput, modelInputSuggestions, contextWindowInput, apiKeyInput, apiKeyLabel, apiKeyHint, testConnectionBtn, transportSelect, transportHint, endpointPreview, customEndpointControls, customEndpointOverrides, customEndpointSummary, customEndpointGuideBtn, workFlowAdaptBtn, apiNoteText, multimodalToggle, embeddingDimensionsInput, toggleEnableThinking, toggleDisableThinking, toggleDisableMaxToken } from "./api/dom";
 import { visionBaseUrlInput, visionApiKeyInput, visionModelInput, visionFieldsWrap, testVisionBtn, visionTestStatus } from "./vision/dom";
 import { appearanceForm, appearanceSaveStatus, runtimeSyncSelect, runtimeSyncNote, windowCornerRadiusInput, windowCornerRadiusVal, petAlwaysOnTopInput, petVisibleInput, petZoomInput, petZoomVal, chatLineHeightInput, chatLineHeightVal, assistantBubbleEnabledInput, chatParaSpacingInput, chatParaSpacingVal, launchAtLoginInput, uiFontCurrent, uiFontImportButton, uiFontResetButton, uiIconSelect, screenshotHotkeyInput, openChromeGpu, disableGpuInput, sidebarVisibleInput, tasksVisibleInput } from "./appearance/dom";
-import { generalForm, generalSaveStatus, languageSelect, defaultChatModeSelect, segmentedOutputSelect, mobileMessageSegmentationSelect, proactiveChatSelect, proactiveDeliveryRow, proactiveDeliverySelect, chatSocialContextEnabledInput, citaEnabledInput, citaEngineSelect, clearChatHistoryBtn, customStyleSamplingBtn, customStylePromptBtn } from "./general/dom";
+import { generalForm, generalSaveStatus, languageSelect, defaultChatModeSelect, segmentedOutputSelect, mobileMessageSegmentationSelect, proactiveChatSelect, proactiveDeliveryRow, proactiveDeliverySelect, chatSocialContextEnabledInput, momentsEnabledInput, cyreneMomentsPostingEnabledInput, cyreneMomentsReactionsEnabledInput, momentsPostingRow, momentsReactionsRow, citaEnabledInput, citaEngineSelect, clearChatHistoryBtn, customStyleSamplingBtn, customStylePromptBtn } from "./general/dom";
 import { minBtn, closeBtn, preferencesForm, sectionTitle, sectionHint, placeholderPanel, cyrenePanel, disclaimerPanel, pluginsPanel, placeholderIcon, placeholderTitle, placeholderCopy, saveStatus, runtimeSaveStatus, preferencesSaveStatus, cyreneSaveStatus, openStickerManagerBtn, addStickerBtn } from "./shared/shell";
 import { pluginAddBtn, neteaseDetailView, permissionBlocksWrap, permissionNote } from "./plugins/dom";
 import { preferencesState } from "./preferences/state";
@@ -208,6 +208,10 @@ if (!window.settings) {
       proactiveChatMode: "off",
       proactiveDeliveryTarget: "local",
       chatSocialContextEnabled: false,
+      momentsEnabled: true,
+      chatMomentsContextEnabled: true,
+      cyreneMomentsPostingEnabled: false,
+      cyreneMomentsReactionsEnabled: true,
       screenshotHotkey: "Alt+Shift+S",
     }),
     saveGeneral: (c) => Promise.resolve(c as GeneralSettings),
@@ -546,6 +550,12 @@ function openCustomStyleModal(): void {
 
 function renderProactiveDeliveryVisibility(): void {
   proactiveDeliveryRow.hidden = getProactiveChatValue() !== "on";
+}
+
+// 朋友圈动态总开关关闭时隐藏昔涟行为子开关（与主动消息投递行的显隐模式一致）
+function renderMomentsSubRowsVisibility(): void {
+  momentsPostingRow.hidden = !momentsEnabledInput.checked;
+  momentsReactionsRow.hidden = !momentsEnabledInput.checked;
 }
 
 
@@ -1010,6 +1020,10 @@ async function loadGeneralSettings(): Promise<void> {
     const cita = getCitaUiState({ enabled: cfg.citaEnabled, semanticEngine: cfg.citaSemanticEngine });
     citaEnabledInput.checked = cita.enabled;
     chatSocialContextEnabledInput.checked = normalizeChatSocialContextEnabled(cfg.chatSocialContextEnabled);
+    momentsEnabledInput.checked = cfg.momentsEnabled ?? true;
+    cyreneMomentsPostingEnabledInput.checked = cfg.cyreneMomentsPostingEnabled ?? false;
+    cyreneMomentsReactionsEnabledInput.checked = cfg.cyreneMomentsReactionsEnabled ?? true;
+    renderMomentsSubRowsVisibility();
     citaEngineSelect.querySelectorAll<HTMLButtonElement>(".option-block").forEach((button) => {
       const selected = button.dataset.value === cita.selectedEngine;
       button.classList.toggle("is-active", selected);
@@ -1860,6 +1874,16 @@ deleteProfileBtn?.addEventListener("click", async () => {
 chatSocialContextEnabledInput.addEventListener("change", () => {
   setPreferencesSaveStatus("有未保存的更改");
 });
+momentsEnabledInput.addEventListener("change", () => {
+  renderMomentsSubRowsVisibility();
+  setPreferencesSaveStatus("有未保存的更改");
+});
+cyreneMomentsPostingEnabledInput.addEventListener("change", () => {
+  setPreferencesSaveStatus("有未保存的更改");
+});
+cyreneMomentsReactionsEnabledInput.addEventListener("change", () => {
+  setPreferencesSaveStatus("有未保存的更改");
+});
 
 customStyleSamplingBtn?.addEventListener("click", () => {
   openCustomStyleModal();
@@ -1886,6 +1910,9 @@ preferencesForm.addEventListener("submit", async (e) => {
       citaEnabled: citaEnabledInput.checked,
       citaSemanticEngine: "remote",
       chatSocialContextEnabled: chatSocialContextEnabledInput.checked,
+      momentsEnabled: momentsEnabledInput.checked,
+      cyreneMomentsPostingEnabled: cyreneMomentsPostingEnabledInput.checked,
+      cyreneMomentsReactionsEnabled: cyreneMomentsReactionsEnabledInput.checked,
       defaultChatMode: "chat",
       segmentedOutputMode: "off",
       mobileMessageSegmentation: getMobileMessageSegmentationValue(),
