@@ -3,6 +3,7 @@ import { XMarkdown, type ComponentProps } from "@ant-design/x-markdown";
 import Latex from "@ant-design/x-markdown/plugins/Latex";
 import { Component, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ErrorInfo, type KeyboardEvent, type ReactNode } from "react";
 import { t, useTranslation } from "../../../i18n";
+import { normalizeModelMarkdown } from "./markdown-normalize";
 import { resolveAsset } from "../../../../../shared/renderer-base";
 import type { AgentRoundRecord, ConversationMode, ProcessMessageRecord, ReasoningBlock, RunActivityRecord, TaskDelegationDisplayRecord, ToolExecutionRecord, ToolFileChange } from "../../../../../shared/chat-types";
 import type { ContextUsageSnapshot } from "../../../../../shared/context-usage";
@@ -149,11 +150,14 @@ class MarkdownRenderBoundary extends Component<{
 }
 
 export function MarkdownContent({ content, streaming }: { content: string; streaming?: boolean }) {
+  // 模型偶尔输出畸形 Markdown（# 后缺空格、标题粘正文、围栏粘句子），
+  // 渲染前先做机械归一化；归一化与 XMarkdown 解析都在同一 memo 周期内完成
+  const normalized = useMemo(() => normalizeModelMarkdown(content), [content]);
   return (
-    <MarkdownRenderBoundary content={content}>
+    <MarkdownRenderBoundary content={normalized}>
       <MessageStreamingContext.Provider value={Boolean(streaming)}>
         <XMarkdown
-          content={content}
+          content={normalized}
           config={markdownConfig}
           components={markdownComponents}
           openLinksInNewTab
