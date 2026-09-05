@@ -13,6 +13,7 @@ import { app } from "electron";
 import { toolRegistry } from "./registry/tool-registry";
 import type { ToolContext } from "./registry/tool-context";
 import { findSkillPath } from "../../external-content-paths";
+import { getRunReviewTracker } from "../review/run-review-tracker";
 
 const LOG_PREFIX = "[DocTools]";
 
@@ -23,6 +24,31 @@ function validateFilename(filename: string, ext: string): string | null {
   // 防危险字符
   if (/[<>:"|?*]/.test(filename)) return null;
   return filename;
+}
+
+/**
+ * filename 校验失败报错：区分「未提供」与「值不合法」，并回传实际收到的参数键。
+ * 丢参模型（如缺 filename 只传了 content）拿到点名报错才能自纠，
+ * 否则只会看到"必须是 .md 结尾"而意识不到自己根本没传。
+ */
+function filenameError(ext: string, args: Record<string, unknown>): string {
+  const raw = args.filename;
+  const keys = Object.keys(args).join(", ") || "（空）";
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
+    return `[错误] 未提供 filename 参数（要求 ${ext} 结尾）。本次收到的参数键：${keys}。请补上 filename 后重试。`;
+  }
+  const value = String(raw);
+  if (/[<>:"|?*]/.test(value)) {
+    return `[错误] filename 含非法字符（<>:"|?*）：${value}`;
+  }
+  return `[错误] filename 必须是 ${ext} 结尾，实际收到：${value}。`;
+}
+
+/** 写盘前捕获 Review 基线（runId 存在时；二进制文件 tracker 只存 metadata）。 */
+function captureBaseline(context: ToolContext | undefined, outputPath: string): void {
+  if (!context?.runId) return;
+  const tracker = getRunReviewTracker(app.getPath("userData"));
+  tracker.captureBefore(context.runId, outputPath);
 }
 
 /**
@@ -226,14 +252,14 @@ export function registerDocumentTools(): void {
     },
     execute: async (args, context?: ToolContext) => {
       const filename = validateFilename(String(args.filename || ""), ".xlsx");
-      if (!filename) return "[错误] filename 必须是 .xlsx 结尾";
+      if (!filename) return filenameError(".xlsx", args);
       const outputPath = resolveOutputPath(filename, context?.resolvedWorkspaceRoot);
       if (!outputPath) return "[错误] 路径不合法（禁止目录穿越或绝对路径）: " + filename;
       const sheets = args.sheets as Array<{
         name: string; headers: string[]; rows: unknown[][];
       }>;
       if (!Array.isArray(sheets) || sheets.length === 0) {
-        return "[错误] sheets 不能为空";
+        return "[错误] sheets 不能为空。本次收到的参数键：" + (Object.keys(args).join(", ") || "（空）");
       }
 
       const ExcelJS = await import("exceljs");
@@ -349,6 +375,7 @@ export function registerDocumentTools(): void {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
+      captureBaseline(context, outputPath);
       await workbook.xlsx.writeFile(outputPath);
       console.log(LOG_PREFIX, "Excel 已生成（默认美观样式）:", outputPath);
       return `[write_excel] 已生成：${outputPath}`;
@@ -390,7 +417,7 @@ export function registerDocumentTools(): void {
     },
     execute: async (args, context?: ToolContext) => {
       const filename = validateFilename(String(args.filename || ""), ".docx");
-      if (!filename) return "[错误] filename 必须是 .docx 结尾";
+      if (!filename) return filenameError(".docx", args);
       const outputPath = resolveOutputPath(filename, context?.resolvedWorkspaceRoot);
       if (!outputPath) return "[错误] 路径不合法（禁止目录穿越或绝对路径）: " + filename;
 
@@ -444,6 +471,7 @@ export function registerDocumentTools(): void {
       const buffer = await Packer.toBuffer(doc);
       const dir = path.dirname(outputPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      captureBaseline(context, outputPath);
       fs.writeFileSync(outputPath, buffer);
       console.log(LOG_PREFIX, "Word 已生成:", outputPath);
       return `[write_word] 已生成：${outputPath}`;
@@ -480,13 +508,14 @@ export function registerDocumentTools(): void {
     },
     execute: async (args, context?: ToolContext) => {
       const filename = validateFilename(String(args.filename || ""), ".pdf");
-      if (!filename) return "[错误] filename 必须是 .pdf 结尾";
+      if (!filename) return filenameError(".pdf", args);
       const outputPath = resolveOutputPath(filename, context?.resolvedWorkspaceRoot);
       if (!outputPath) return "[错误] 路径不合法（禁止目录穿越或绝对路径）: " + filename;
 
       const PDFKit = await import("pdfkit");
       const dir = path.dirname(outputPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      captureBaseline(context, outputPath);
       const doc = new PDFKit.default();
       const stream = fs.createWriteStream(outputPath);
       doc.pipe(stream);
@@ -549,12 +578,13 @@ export function registerDocumentTools(): void {
     },
     execute: async (args, context?: ToolContext) => {
       const filename = validateFilename(String(args.filename || ""), ".md");
-      if (!filename) return "[错误] filename 必须是 .md 结尾";
+      if (!filename) return filenameError(".md", args);
       const outputPath = resolveOutputPath(filename, context?.resolvedWorkspaceRoot);
       if (!outputPath) return "[错误] 路径不合法（禁止目录穿越或绝对路径）: " + filename;
 
       const dir = path.dirname(outputPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      captureBaseline(context, outputPath);
       fs.writeFileSync(outputPath, String(args.content || ""), "utf8");
       console.log(LOG_PREFIX, "Markdown 已生成:", outputPath);
       return `[write_markdown] 已生成：${outputPath}`;
