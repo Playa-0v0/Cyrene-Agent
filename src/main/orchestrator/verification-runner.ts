@@ -166,10 +166,29 @@ export function resolveBuiltinExecutable(
   return { executable, args: [] };
 }
 
-function truncateOutput(s: string, maxLen = 4000): string {
-  if (s.length <= maxLen) return s;
-  return s.slice(0, maxLen) + `\n... (truncated, total ${s.length} chars)`;
+// 视图截断：头 4000 + 尾 2000 的头尾窗口（测试汇总行、失败详情都在输出末尾，
+// 砍尾保头会把最关键的信息裁掉）。保留 `... (truncated` 前缀供上层标记检测。
+function truncateOutput(s: string, headLen = 4000, tailLen = 2000): string {
+  if (s.length <= headLen + tailLen) return s;
+  return (
+    s.slice(0, headLen) +
+    `\n... (truncated, total ${s.length} chars, head ${headLen} + tail ${tailLen} kept)\n` +
+    s.slice(-tailLen)
+  );
 }
+
+// 捕获上限按流独立计量（stdout/stderr 各 2MB，对齐 run_shell）：正常验证输出远小于此；
+// 超限丢弃新数据防内存失控。视图裁剪在进程结束时统一做（见 truncateOutput）。
+const VERIFICATION_CAPTURE_LIMIT_PER_STREAM = 2 * 1024 * 1024;
+
+// 超时按验证类型分档：deadline 是最大生命周期而非必等时长——命令正常结束立即返回，
+// 放宽档位没有代价，过短的一刀切会把正常任务杀在半路（全量测试实测 ~124s > 旧 60s）。
+export const DEFAULT_TIMEOUT_MS_BY_TYPE: Record<VerificationType, number> = {
+  typecheck: 2 * 60_000,
+  lint: 2 * 60_000,
+  build: 5 * 60_000,
+  test: 10 * 60_000,
+};
 
 function hashStderr(stderr: string): string {
   const crypto = require("crypto") as typeof import("crypto");
@@ -184,7 +203,7 @@ export interface RunnerOptions {
   onApprovalRequest?: (step: VerificationStep) => Promise<boolean>;
   /** 取消信号 */
   signal?: AbortSignal;
-  /** 超时（默认 60 秒） */
+  /** 超时覆盖值；不传时按验证类型分档（typecheck/lint 2min、build 5min、test 10min） */
   defaultTimeoutMs?: number;
 }
 
@@ -391,7 +410,8 @@ export class VerificationRunner {
     options: RunnerOptions,
   ): Promise<VerificationResult> {
     const startMs = Date.now();
-    const timeoutMs = options.defaultTimeoutMs ?? 60_000;
+    // 超时分档：调用方显式传入 defaultTimeoutMs 时优先，否则按验证类型取档位默认
+    const timeoutMs = options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS_BY_TYPE[step.type];
     return new Promise<VerificationResult>((resolve) => {
       let stdout = "";
       let stderr = "";
@@ -443,16 +463,20 @@ export class VerificationRunner {
         }, { once: true });
       }
 
+      // 捕获层只做 2MB/流的内存上限（超限丢弃新数据）；头尾窗口视图裁剪统一在
+      // 进程结束时做——流中截断会永久丢掉尾部（汇总行/失败详情恰在那里）
       child.stdout?.on("data", (d) => {
+        if (stdout.length >= VERIFICATION_CAPTURE_LIMIT_PER_STREAM) return;
         stdout += d.toString();
-        if (stdout.length > 8000) {
-          stdout = truncateOutput(stdout);
+        if (stdout.length > VERIFICATION_CAPTURE_LIMIT_PER_STREAM) {
+          stdout = stdout.slice(0, VERIFICATION_CAPTURE_LIMIT_PER_STREAM);
         }
       });
       child.stderr?.on("data", (d) => {
+        if (stderr.length >= VERIFICATION_CAPTURE_LIMIT_PER_STREAM) return;
         stderr += d.toString();
-        if (stderr.length > 8000) {
-          stderr = truncateOutput(stderr);
+        if (stderr.length > VERIFICATION_CAPTURE_LIMIT_PER_STREAM) {
+          stderr = stderr.slice(0, VERIFICATION_CAPTURE_LIMIT_PER_STREAM);
         }
       });
 
