@@ -141,6 +141,81 @@ describe("Review 基线捕获（写盘前）", () => {
     expect(fs.existsSync(path.join(tmpDir, "cyrene-runs"))).toBe(false);
   });
 
+  describe("append 模式", () => {
+    it("append=true 时追加到已有文件末尾", async () => {
+      const file = path.join(tmpDir, "note.md");
+      fs.writeFileSync(file, "# 标题\n\n第一段。");
+
+      const raw = await getTool("write_markdown").execute(
+        { filename: "note.md", content: "第二段。", append: true },
+        {},
+      );
+      expect(raw).toContain("已追加");
+      // 原文件末尾无换行 → 追加前补一个，两段不粘连
+      expect(fs.readFileSync(file, "utf8")).toBe("# 标题\n\n第一段。\n第二段。");
+    });
+
+    it("原文件以换行结尾时追加不重复换行", async () => {
+      const file = path.join(tmpDir, "note.md");
+      fs.writeFileSync(file, "第一段\n");
+
+      await getTool("write_markdown").execute(
+        { filename: "note.md", content: "第二段", append: true },
+        {},
+      );
+      expect(fs.readFileSync(file, "utf8")).toBe("第一段\n第二段");
+    });
+
+    it("append=true 但文件不存在时新建", async () => {
+      const file = path.join(tmpDir, "fresh.md");
+
+      const raw = await getTool("write_markdown").execute(
+        { filename: "fresh.md", content: "初始内容", append: true },
+        {},
+      );
+      expect(raw).toContain("已生成");
+      expect(fs.readFileSync(file, "utf8")).toBe("初始内容");
+    });
+
+    it("分两次写长笔记：覆盖写前半 + append 续写后半", async () => {
+      const file = path.join(tmpDir, "long-note.md");
+
+      await getTool("write_markdown").execute(
+        { filename: "long-note.md", content: "# 长笔记\n\n前半部分。\n" },
+        {},
+      );
+      await getTool("write_markdown").execute(
+        { filename: "long-note.md", content: "\n后半部分。\n", append: true },
+        {},
+      );
+      expect(fs.readFileSync(file, "utf8")).toBe("# 长笔记\n\n前半部分。\n\n后半部分。\n");
+    });
+
+    it("不传 append（默认覆盖）不追加", async () => {
+      const file = path.join(tmpDir, "note.md");
+      fs.writeFileSync(file, "旧内容");
+
+      await getTool("write_markdown").execute(
+        { filename: "note.md", content: "新内容" },
+        {},
+      );
+      expect(fs.readFileSync(file, "utf8")).toBe("新内容");
+    });
+
+    it("append 分段写共用同一基线（首段前捕获，追加不重复）", async () => {
+      await getTool("write_markdown").execute(
+        { filename: "multi.md", content: "段落一\n" },
+        { runId: "run-append-1" },
+      );
+      await getTool("write_markdown").execute(
+        { filename: "multi.md", content: "段落二\n", append: true },
+        { runId: "run-append-1" },
+      );
+      // 惰性快照：同一 run 只在第一次修改前捕获一次
+      expect(listBaselines("run-append-1")).toHaveLength(1);
+    });
+  });
+
   it("write_excel 覆盖已有文件时保存 binary 基线（metadata）", async () => {
     // 预置旧二进制（tracker 按前 8KB 是否含 null byte 判定，与扩展名无关）
     fs.writeFileSync(path.join(tmpDir, "report.xlsx"), Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 1]));

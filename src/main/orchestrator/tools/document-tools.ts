@@ -553,15 +553,19 @@ export function registerDocumentTools(): void {
     id: "write_markdown",
     name: "写 Markdown",
     description:
-      "生成一个 Markdown 文件（.md）。绑定项目时保存到该项目目录；未绑定时保存到桌面。\n\n" +
+      "生成或追加一个 Markdown 文件（.md）。绑定项目时保存到该项目目录；未绑定时保存到桌面。\n" +
+      "笔记很长时不要一次性写入：先写前半部分，再用 append=true 续写后半部分（软截断防护，" +
+      "也避免超长参数被截断后整文件覆盖）。\n\n" +
       "何时用：\n" +
       "- 用户要写笔记/文档\n" +
       "- 需要轻量级文档输出\n" +
       "- 比 Word/PDF 更轻量的场景\n\n" +
       "不要用于：\n" +
       "- 正式文档（用 write_word / write_pdf）\n" +
-      "- 表格数据（用 write_excel）\n\n" +
-      "参数：filename（.md 结尾），content（markdown 内容字符串）。",
+      "- 表格数据（用 write_excel）\n" +
+      "- 修改已有文件的局部内容（用 str_replace）\n\n" +
+      "参数：filename（.md 结尾），content（markdown 内容字符串），append（可选，默认 false 覆盖写；" +
+      "true 时在文件末尾追加，文件不存在则新建）。",
     enabled: true,
     risk: "fs-write",
     modes: ["learn", "code", "work"],
@@ -573,6 +577,7 @@ export function registerDocumentTools(): void {
       properties: {
         filename: { type: "string", description: "文件名（.md 结尾）" },
         content:  { type: "string", description: "markdown 内容" },
+        append:   { type: "boolean", description: "默认 false 覆盖写。true 时追加到文件末尾（文件不存在则新建）；长笔记分多次写入时用 true 续写" },
       },
       required: ["filename", "content"],
     },
@@ -582,10 +587,22 @@ export function registerDocumentTools(): void {
       const outputPath = resolveOutputPath(filename, context?.resolvedWorkspaceRoot);
       if (!outputPath) return "[错误] 路径不合法（禁止目录穿越或绝对路径）: " + filename;
 
+      const appendMode = args.append === true;
+      const content = String(args.content ?? "");
       const dir = path.dirname(outputPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       captureBaseline(context, outputPath);
-      fs.writeFileSync(outputPath, String(args.content || ""), "utf8");
+
+      if (appendMode && fs.existsSync(outputPath)) {
+        // 追加写：原文件末尾缺换行时补一个，避免两段内容粘在同一行
+        const existing = fs.readFileSync(outputPath, "utf8");
+        const needsNewline = existing.length > 0 && !existing.endsWith("\n");
+        fs.writeFileSync(outputPath, existing + (needsNewline ? "\n" : "") + content, "utf8");
+        console.log(LOG_PREFIX, "Markdown 已追加:", outputPath);
+        return `[write_markdown] 已追加：${outputPath}`;
+      }
+
+      fs.writeFileSync(outputPath, content, "utf8");
       console.log(LOG_PREFIX, "Markdown 已生成:", outputPath);
       return `[write_markdown] 已生成：${outputPath}`;
     },
