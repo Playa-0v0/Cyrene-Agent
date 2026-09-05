@@ -3,6 +3,16 @@ export type EarlyTtsPlay = (segment: string, index: number) => Promise<EarlyTtsP
 /** 自动语音早播的文本切分模式：sentence=一句一切（默认）；paragraph=一段一切（仅空行段落切分）；off=不切分（收完整条再整段朗读）。 */
 export type EarlyTtsSplitMode = "sentence" | "paragraph" | "off";
 
+/** 把设置层的「开关+模式」换算为队列实际切分模式：开关关闭则整段朗读；否则按 mode 选择，非法值一律回退一句一切。 */
+export function resolveEarlyTtsSplitMode(
+  enabled: unknown,
+  mode: unknown,
+): EarlyTtsSplitMode {
+  if (enabled === false) return "off";
+  if (mode === "paragraph") return "paragraph";
+  return "sentence";
+}
+
 const SENTENCE_END = /[。！？!?；;]/;
 
 function codePointLength(text: string): number {

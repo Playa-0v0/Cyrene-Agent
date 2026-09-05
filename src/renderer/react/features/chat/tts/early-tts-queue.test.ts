@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { EarlyTtsPlaybackQueue, StreamingMarkdownSegmenter } from "./early-tts-queue";
+import {
+  EarlyTtsPlaybackQueue,
+  StreamingMarkdownSegmenter,
+  resolveEarlyTtsSplitMode,
+} from "./early-tts-queue";
 
 describe("StreamingMarkdownSegmenter", () => {
   it("emits each complete sentence once across token-like chunks", () => {
@@ -148,5 +152,30 @@ describe("EarlyTtsPlaybackQueue", () => {
     await queue.finish("第一句。第二句。还没\n\n第三段。");
     expect(play).toHaveBeenCalledTimes(1);
     expect(play.mock.calls[0][0]).toBe("第一句。第二句。还没\n\n第三段。");
+  });
+});
+
+describe("resolveEarlyTtsSplitMode", () => {
+  it("maps a disabled switch to off regardless of the chosen mode", () => {
+    expect(resolveEarlyTtsSplitMode(false, "sentence")).toBe("off");
+    expect(resolveEarlyTtsSplitMode(false, "paragraph")).toBe("off");
+    expect(resolveEarlyTtsSplitMode(false, undefined)).toBe("off");
+  });
+
+  it("falls back to sentence when the switch is enabled or missing", () => {
+    expect(resolveEarlyTtsSplitMode(true, "sentence")).toBe("sentence");
+    expect(resolveEarlyTtsSplitMode(undefined, "sentence")).toBe("sentence");
+    expect(resolveEarlyTtsSplitMode(true, undefined)).toBe("sentence");
+    expect(resolveEarlyTtsSplitMode(undefined, undefined)).toBe("sentence");
+  });
+
+  it("ignores an invalid mode instead of guessing", () => {
+    expect(resolveEarlyTtsSplitMode(true, "bogus")).toBe("sentence");
+    expect(resolveEarlyTtsSplitMode(undefined, "bogus")).toBe("sentence");
+  });
+
+  it("keeps paragraph only when explicitly selected", () => {
+    expect(resolveEarlyTtsSplitMode(true, "paragraph")).toBe("paragraph");
+    expect(resolveEarlyTtsSplitMode(undefined, "paragraph")).toBe("paragraph");
   });
 });

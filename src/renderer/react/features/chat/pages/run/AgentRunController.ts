@@ -35,7 +35,7 @@ import {
   startSessionTodos,
   type TodoStateBySession,
 } from "../session-runtime-state";
-import type { EarlyTtsPlaybackQueue, EarlyTtsSplitMode } from "../../tts/early-tts-queue";
+import { resolveEarlyTtsSplitMode, type EarlyTtsPlaybackQueue } from "../../tts/early-tts-queue";
 
 /** 一次模型运行的全部输入：目标会话、消息占位与恢复/接管信息。 */
 export interface AgentRunInput {
@@ -207,10 +207,10 @@ export class AgentRunController {
 
     try {
       const general = await window.chat?.getGeneralSettings?.();
-      const splitMode: EarlyTtsSplitMode =
-        general?.ttsEarlyReadSplitEnabled === false
-          ? "off"
-          : (general?.ttsEarlyReadSplitMode ?? "sentence");
+      const splitMode = resolveEarlyTtsSplitMode(
+        general?.ttsEarlyReadSplitEnabled,
+        general?.ttsEarlyReadSplitMode,
+      );
       this.earlyTtsQueue = this.deps.host.earlyTts.start(
         this.input.targetMode,
         this.input.sessionId,
