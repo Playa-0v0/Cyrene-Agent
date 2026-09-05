@@ -76,7 +76,7 @@ describe("run_shell 纯拒绝路径（不 spawn、不联网）", () => {
       stdout: "",
       stderr: "[SHELL_UNSUPPORTED] shell 仅支持 cmd 或 bash",
       timedOut: false,
-      truncated: false,
+      captureTruncated: false,
       effect: "unknown",
       sandboxed: false,
     });
@@ -90,7 +90,7 @@ describe("run_shell 纯拒绝路径（不 spawn、不联网）", () => {
       stdout: "",
       stderr: "[拒绝] 该命令被系统禁止执行",
       timedOut: false,
-      truncated: false,
+      captureTruncated: false,
       effect: "unknown",
       sandboxed: false,
     });

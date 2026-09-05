@@ -37,7 +37,11 @@ const SHELL_TOTAL_TIMEOUT_MS = 30 * 60_000;
 // 孙进程持有的 stdio 管道不关 → close 永不触发 → Promise 永不 resolve（655 分钟挂死的根因）。
 // 宽限期一到无条件强制收尸，带上已收集的部分输出。
 const SHELL_KILL_GRACE_MS = 2_000;
-const SHELL_MAX_OUTPUT = 16 * 1024;  // 单次最多 16KB stdout/stderr
+// 捕获上限按流独立计量（stdout ≤2MB、stderr ≤2MB）：不用合并预算，否则 stdout 洪流
+// 会吃光预算、stderr 末尾的真正报错反而丢失。正常工程输出（npm test/build）远小于此，
+// 不会过早截断；超限的 chunk 丢弃并标记 captureTruncated=true（数据真实丢失，
+// 与 dispatcher 侧"数据完整、仅视图裁剪"的 truncatedForModel 是两个不同事实）。
+const SHELL_CAPTURE_LIMIT_PER_STREAM = 2 * 1024 * 1024;
 
 // ── Shell 输出解码 ─────────────────────────────────────
 // 中文 Windows 的 cmd.exe 按系统 OEM 码页（GBK/CP936）输出（dir/echo/del 等内建命令），
@@ -54,7 +58,7 @@ try {
 
 function decodeShellOutput(chunks: Buffer[]): string {
   if (chunks.length === 0) return "";
-  const buf = Buffer.concat(chunks).subarray(0, SHELL_MAX_OUTPUT);
+  const buf = Buffer.concat(chunks).subarray(0, SHELL_CAPTURE_LIMIT_PER_STREAM);
   try {
     return utf8StrictDecoder.decode(buf);
   } catch {
@@ -76,7 +80,8 @@ interface ShellResult {
   exitCode: number | null;
   stdout: string;
   stderr: string;
-  truncated: boolean;
+  /** 捕获层截断：true = 该流超 2MB 后数据被丢弃，落盘内容也缺失（区别于 dispatcher 侧仅裁剪视图的 truncatedForModel） */
+  captureTruncated: boolean;
   /** 遥测字段：是否经沙箱执行。仅用于日志/结果展示，不参与安全判定（判定在 spawn 前的 ExecutionPlan 完成） */
   ranViaSandbox: boolean;
   /** 因 idle/total 超时或外部取消而被强制终止 */
@@ -213,12 +218,12 @@ function executePlan(
         // 不再卡在"等 stdin 输入"上耗满超时。stdout/stderr 仍 pipe 来收集输出。
         stdio: ["ignore", "pipe", "pipe"],
       });
-      // Buffer 原样累积（16KB 上限），进程结束时按 UTF-8→GBK 顺序解码（见 decodeShellOutput）
+      // Buffer 原样累积（每流 2MB 上限），进程结束时按 UTF-8→GBK 顺序解码（见 decodeShellOutput）
       const stdoutChunks: Buffer[] = [];
       const stderrChunks: Buffer[] = [];
       let stdoutBytes = 0;
       let stderrBytes = 0;
-      let truncated = false;
+      let captureTruncated = false;
 
       // ── 双计时器 + 强制收尸 ──────────────────────────────
       // settled 保证只 resolve 一次；close/error/强制收尸任何一方先到都安全。
@@ -254,10 +259,10 @@ function executePlan(
             shell: requestedShell,
             shellExecutable: resolvedShell.executable,
             exitCode: null,
-            stdout: decodeShellOutput(stdoutChunks),
             stderr: decodeShellOutput(stderrChunks)
               + `\n[已终止] ${reasonText[reason]}，进程树已被强制终止。`,
-            truncated,
+            stdout: decodeShellOutput(stdoutChunks),
+            captureTruncated,
             ranViaSandbox,
             timedOut: true,
           });
@@ -278,32 +283,32 @@ function executePlan(
 
       child.stdout?.on("data", (chunk: Buffer) => {
         resetIdle();
-        if (stdoutBytes >= SHELL_MAX_OUTPUT) {
-          truncated = true;
+        if (stdoutBytes >= SHELL_CAPTURE_LIMIT_PER_STREAM) {
+          captureTruncated = true;
           return;
         }
         stdoutChunks.push(chunk);
         stdoutBytes += chunk.length;
-        if (stdoutBytes > SHELL_MAX_OUTPUT) truncated = true;
+        if (stdoutBytes > SHELL_CAPTURE_LIMIT_PER_STREAM) captureTruncated = true;
       });
       child.stderr?.on("data", (chunk: Buffer) => {
         resetIdle();
-        if (stderrBytes >= SHELL_MAX_OUTPUT) {
-          truncated = true;
+        if (stderrBytes >= SHELL_CAPTURE_LIMIT_PER_STREAM) {
+          captureTruncated = true;
           return;
         }
         stderrChunks.push(chunk);
         stderrBytes += chunk.length;
-        if (stderrBytes > SHELL_MAX_OUTPUT) truncated = true;
+        if (stderrBytes > SHELL_CAPTURE_LIMIT_PER_STREAM) captureTruncated = true;
       });
       child.on("error", (err) => {
         finish({
           shell: requestedShell,
           shellExecutable: resolvedShell.executable,
           exitCode: -1,
-          stdout: decodeShellOutput(stdoutChunks),
           stderr: decodeShellOutput(stderrChunks) + "\n[spawn error] " + err.message + (ranViaSandbox ? " [sandbox]" : ""),
-          truncated,
+          stdout: decodeShellOutput(stdoutChunks),
+          captureTruncated,
           ranViaSandbox,
           timedOut: false,
         });
@@ -313,9 +318,9 @@ function executePlan(
           shell: requestedShell,
           shellExecutable: resolvedShell.executable,
           exitCode: code,
-          stdout: decodeShellOutput(stdoutChunks),
           stderr: decodeShellOutput(stderrChunks),
-          truncated,
+          stdout: decodeShellOutput(stdoutChunks),
+          captureTruncated,
           ranViaSandbox,
           timedOut: false,
         });
@@ -327,9 +332,9 @@ function executePlan(
       resolve({
         shell: plan.requestedShell,
         exitCode: -1,
-        stdout: "",
         stderr: "[executePlan internal error] " + msg,
-        truncated: false,
+        stdout: "",
+        captureTruncated: false,
         ranViaSandbox: false,
         timedOut: false,
       });
@@ -349,8 +354,8 @@ async function executeRunShell(args: Record<string, unknown>, context?: import("
   if (!requestedShell) {
     return JSON.stringify({
       command, cwd, shell: String(args.shell), errorCode: "SHELL_UNSUPPORTED",
-      exitCode: -1, stdout: "", stderr: "[SHELL_UNSUPPORTED] shell 仅支持 cmd 或 bash",
-      timedOut: false, truncated: false, effect: "unknown", sandboxed: false,
+      exitCode: -1, timedOut: false, captureTruncated: false, effect: "unknown", sandboxed: false,
+      stderr: "[SHELL_UNSUPPORTED] shell 仅支持 cmd 或 bash", stdout: "",
     });
   }
 
@@ -359,8 +364,8 @@ async function executeRunShell(args: Record<string, unknown>, context?: import("
     logger.info(LogTag.BuiltinTools, `[run_shell] rejected: catastrophic command="${command}"`);
     return JSON.stringify({
       command, cwd, shell: requestedShell,
-      exitCode: -1, stdout: "", stderr: "[拒绝] 该命令被系统禁止执行",
-      timedOut: false, truncated: false, effect: "unknown", sandboxed: false,
+      exitCode: -1, timedOut: false, captureTruncated: false, effect: "unknown", sandboxed: false,
+      stderr: "[拒绝] 该命令被系统禁止执行", stdout: "",
     });
   }
 
@@ -373,9 +378,8 @@ async function executeRunShell(args: Record<string, unknown>, context?: import("
   if (!resolvedShell) {
     return JSON.stringify({
       command, cwd, shell: requestedShell, errorCode: "BASH_UNAVAILABLE",
-      exitCode: -1, stdout: "",
-      stderr: "[BASH_UNAVAILABLE] 未找到可用的 Bash。请安装 Git Bash，并确保 bash.exe 可执行。",
-      timedOut: false, truncated: false, effect, sandboxed: false,
+      exitCode: -1, timedOut: false, captureTruncated: false, effect, sandboxed: false,
+      stderr: "[BASH_UNAVAILABLE] 未找到可用的 Bash。请安装 Git Bash，并确保 bash.exe 可执行。", stdout: "",
     });
   }
 
@@ -384,15 +388,17 @@ async function executeRunShell(args: Record<string, unknown>, context?: import("
     logger.info(LogTag.BuiltinTools, `[run_shell] full level → direct ${requestedShell} (no sandbox)`);
     const result = await executePlan({ kind: "direct", command, cwd, requestedShell }, resolvedShell, context?.signal);
     logger.info(LogTag.BuiltinTools, `[run_shell] [full] done: exitCode=${result.exitCode} timedOut=${result.timedOut} stdout.len=${result.stdout.length} stderr.len=${result.stderr.length}`);
+    // 字段顺序契约：stdout 排最后（command/cwd 等短字段之后），保证下游截断的
+    // 尾窗始终覆盖 stdout 末尾——测试/构建命令的汇总行（Test Files/Tests passed）就在那里。
     return JSON.stringify({
       command, cwd, shell: result.shell, shellExecutable: result.shellExecutable, errorCode: result.errorCode,
       exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
       timedOut: result.timedOut,
-      truncated: result.truncated,
+      captureTruncated: result.captureTruncated,
       effect,
       sandboxed: false,
+      stderr: result.stderr,
+      stdout: result.stdout,
     });
   }
 
@@ -406,23 +412,23 @@ async function executeRunShell(args: Record<string, unknown>, context?: import("
     // 到达这里时 spawn 从未被调用——命令没有执行过，stdout 必然为空
     return JSON.stringify({
       command, cwd, shell: requestedShell,
-      exitCode: -1, stdout: "",
-      stderr: `[拒绝] ${plan.reason}`,
-      timedOut: false, truncated: false, effect, sandboxed: false,
+      exitCode: -1, timedOut: false, captureTruncated: false, effect, sandboxed: false,
+      stderr: `[拒绝] ${plan.reason}`, stdout: "",
     });
   }
 
   const result = await executePlan(plan, resolvedShell, context?.signal);
   logger.info(LogTag.BuiltinTools, `[run_shell] [${level}] done: exitCode=${result.exitCode} timedOut=${result.timedOut} stdout.len=${result.stdout.length} stderr.len=${result.stderr.length} sandboxed=${result.ranViaSandbox}`);
+  // 字段顺序契约同 full 档位：stdout 置尾，保证尾窗覆盖汇总行
   return JSON.stringify({
     command, cwd, shell: result.shell, shellExecutable: result.shellExecutable, errorCode: result.errorCode,
     exitCode: result.exitCode,
-    stdout: result.stdout,
-    stderr: result.stderr,
     timedOut: result.timedOut,
-    truncated: result.truncated,
+    captureTruncated: result.captureTruncated,
     effect,
     sandboxed: result.ranViaSandbox,
+    stderr: result.stderr,
+    stdout: result.stdout,
   });
 }
 
