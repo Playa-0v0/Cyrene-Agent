@@ -307,7 +307,6 @@
   border-radius: 6px;
   border: 1px solid var(--cy-border, #e8e8ec);
   display: block;
-  cursor: zoom-in;
 }
 
 .moment-card__images--single img {
