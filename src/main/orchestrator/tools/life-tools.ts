@@ -300,12 +300,13 @@ function registerStrReplaceTool(): void {
       "何时用：\n" +
       "- 修改现有文件中的一处或多处特定片段（多处用 edits 一次调用完成）\n" +
       "- 用户要「把 X 改成 Y」「把第 N 行的 A 替换成 B」\n" +
-      "- 修正笔记 / 文档的局部内容（learn 模式可用）\n\n" +
+      "- 修正笔记 / 文档的局部内容（learn 模式可用）\n" +
+      "- 填充空文件：文件存在但内容为空时，old_string 传空字符串，new_string 传完整内容，即可整体写入\n\n" +
       "不要用于：\n" +
       "- 多文件批量修改（用 apply_patch 补丁格式）\n" +
       "- 整文件重写（用 write_file）\n" +
       "- 新建文件（用 write_file）\n\n" +
-      "参数：file_path（文件路径），old_string（要替换的原文本，须精确匹配含缩进），new_string（替换后的文本）；" +
+      "参数：file_path（文件路径），old_string（要替换的原文本，须精确匹配含缩进；文件为空时传空字符串做整体写入），new_string（替换后的文本）；" +
       "同一文件多处修改可改用 edits 数组（每项含 old_string / new_string，按顺序应用，任一处失败则整体不生效）。\n" +
       "old_string 必须在文件中唯一；匹配多处会报错，需要更长的上下文使其唯一。" +
       "缩进/空白略有出入时会自动做归一化匹配，命中后按文件真实缩进写入。",

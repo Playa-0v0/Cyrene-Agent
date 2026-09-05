@@ -112,6 +112,43 @@ describe("str_replace 接线：单发替换", () => {
   });
 });
 
+describe("str_replace 接线：空文件播种", () => {
+  it("空文件 + 空 old_string → new_string 整体写入", async () => {
+    const file = path.join(tmpDir, "empty.md");
+    fs.writeFileSync(file, "");
+
+    const raw = await getTool("str_replace").execute(
+      { file_path: file, old_string: "", new_string: "# 摸底试卷\n\n第一题。" },
+      {},
+    );
+    const result = JSON.parse(raw);
+
+    expect(result.success).toBe(true);
+    expect(result.appliedEdits).toBe(1);
+    expect(fs.readFileSync(file, "utf8")).toBe("# 摸底试卷\n\n第一题。");
+    // changes 供 Review 卡片渲染：kind 仍为 modified
+    expect(result.changes[0].kind).toBe("modified");
+    expect(result.changes[0].insertions).toBeGreaterThan(0);
+  });
+
+  it("非空文件 + 空 old_string → 拒绝且不覆盖文件", async () => {
+    const file = path.join(tmpDir, "note.md");
+    fs.writeFileSync(file, "重要内容\n");
+
+    const raw = await getTool("str_replace").execute(
+      { file_path: file, old_string: "", new_string: "整文件覆盖" },
+      {},
+    );
+    const result = JSON.parse(raw);
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe("INVALID_INPUT");
+    expect(result.error).toContain("文件为空时可传空 old_string");
+    // 原内容原封不动
+    expect(fs.readFileSync(file, "utf8")).toBe("重要内容\n");
+  });
+});
+
 describe("str_replace 接线：edits 批量", () => {
   it("一次调用完成多处修改，返回 appliedEdits 与多条 changes", async () => {
     const file = path.join(tmpDir, "note.md");

@@ -184,10 +184,22 @@ function applySingleEdit(
   const oldStr = edit.old_string;
   const newStr = edit.new_string;
   if (!oldStr) {
+    // 空文件播种：文件内容为空时允许空 old_string，new_string 整体写入。
+    // 文件非空仍拒绝——防止模型漏传 old_string 把整文件误覆盖。
+    if (content.length === 0) {
+      return {
+        ok: true,
+        newContent: newStr,
+        eolNormalized: false,
+        whitespaceNormalized: false,
+        appliedEdits: 1,
+        segments: [{ beforeLines: [], afterLines: newStr.replace(/\r\n/g, "\n").split("\n") }],
+      };
+    }
     return {
       ok: false,
       errorCode: "INVALID_INPUT",
-      error: "old_string 不能为空",
+      error: "old_string 不能为空（文件非空）。文件为空时可传空 old_string 播种写入完整内容。",
     };
   }
 

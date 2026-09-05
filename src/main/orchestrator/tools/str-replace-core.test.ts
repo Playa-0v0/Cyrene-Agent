@@ -76,6 +76,31 @@ describe("精确匹配（第一层）", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errorCode).toBe("INVALID_INPUT");
+    // 报错需指明空文件可用空 old_string 播种，引导模型走对路
+    expect(result.error).toContain("文件为空时可传空 old_string");
+  });
+
+  it("空文件播种：空 old_string + new_string 整体写入", () => {
+    const result = applyStrReplaceEdits("", [{ old_string: "", new_string: "# 笔记\n\n第一段。" }]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.newContent).toBe("# 笔记\n\n第一段。");
+    expect(result.appliedEdits).toBe(1);
+    // diff 片段：before 为空、after 为新内容拆行
+    expect(result.segments).toEqual([
+      { beforeLines: [], afterLines: ["# 笔记", "", "第一段。"] },
+    ]);
+  });
+
+  it("空文件播种后批量 edits 继续生效（播种 + 局部改一起原子完成）", () => {
+    const result = applyStrReplaceEdits("", [
+      { old_string: "", new_string: "line1\nline2\nline3" },
+      { old_string: "line2", new_string: "LINE-TWO" },
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.newContent).toBe("line1\nLINE-TWO\nline3");
+    expect(result.appliedEdits).toBe(2);
   });
 
   it("edits 空数组报 INVALID_INPUT", () => {
