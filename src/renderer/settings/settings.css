@@ -3286,7 +3286,8 @@ body {
 }
 
 /* 合成模型下拉：匹配 tts-field input 的粉紫主题 */
-.tts-field select {
+.tts-field select,
+.tts-select {
   flex: 1;
   padding: 8px 12px;
   border-radius: 10px;
@@ -3305,21 +3306,30 @@ body {
   padding-right: 32px;
 }
 
-.tts-field select:hover {
+.tts-field select:hover,
+.tts-select:hover {
   border-color: rgba(255, 182, 220, 0.3);
   background-color: rgba(255, 110, 199, 0.12);
 }
 
-.tts-field select:focus {
+.tts-field select:focus,
+.tts-select:focus {
   outline: none;
   border-color: rgba(255, 182, 220, 0.5);
   background-color: rgba(255, 255, 255, 0.08);
 }
 
-.tts-field select option {
+.tts-field select option,
+.tts-select option {
   background: rgba(38, 28, 60, 0.98);
   color: rgba(254, 247, 255, 0.9);
   padding: 8px;
+}
+
+/* 播放交互区的早播切分下拉：关闭切分开关时置灰禁用 */
+.tts-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .tts-hint {

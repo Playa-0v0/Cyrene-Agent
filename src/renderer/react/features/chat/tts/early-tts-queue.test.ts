@@ -72,6 +72,19 @@ describe("StreamingMarkdownSegmenter", () => {
     expect(segmenter.finish("代码：\n```ts\nconst x = 1;\n```\n\n下一段话开始。\n\n这里是结尾。"))
       .toEqual(["这里是结尾。"]);
   });
+
+  it("off mode never splits mid-stream and emits the whole reply on finish", () => {
+    const segmenter = new StreamingMarkdownSegmenter(4, "off");
+    expect(segmenter.append("第一句。第二句。还没\n\n第三段。")).toEqual([]);
+    expect(segmenter.finish("第一句。第二句。还没\n\n第三段。"))
+      .toEqual(["第一句。第二句。还没\n\n第三段。"]);
+  });
+
+  it("off mode still commits the reply when trailing markdown is unclosed", () => {
+    const segmenter = new StreamingMarkdownSegmenter(4, "off");
+    segmenter.append("```ts\nconst value = 1");
+    expect(segmenter.finish("```ts\nconst value = 1")).toEqual(["```ts\nconst value = 1"]);
+  });
 });
 
 describe("EarlyTtsPlaybackQueue", () => {
@@ -126,5 +139,14 @@ describe("EarlyTtsPlaybackQueue", () => {
     expect(play).toHaveBeenCalledTimes(2);
     expect(play.mock.calls[0][0]).toBe("没有句号的段落一。还没切");
     expect(play.mock.calls[1][0]).toBe("段落二开始。");
+  });
+
+  it("queue in off mode plays the entire reply once on finish", async () => {
+    const play = vi.fn().mockResolvedValue("completed");
+    const queue = new EarlyTtsPlaybackQueue(play, undefined, "off");
+    queue.append("第一句。第二句。还没\n\n第三段。");
+    await queue.finish("第一句。第二句。还没\n\n第三段。");
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(play.mock.calls[0][0]).toBe("第一句。第二句。还没\n\n第三段。");
   });
 });

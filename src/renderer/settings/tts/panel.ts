@@ -127,8 +127,12 @@ async function loadTtsConfig(): Promise<void> {
   ttsEl("tts-auto-read").checked = Boolean(ttsState.config.ttsAutoRead);
   ttsEl("tts-speed").value = String(ttsState.config.ttsSpeed ?? 1);
   ttsEl("tts-volume").value = String(ttsState.config.ttsVolume ?? 1);
-  (ttsEl("tts-early-read-split-mode") as HTMLSelectElement).value =
-    ttsState.config.ttsEarlyReadSplitMode === "paragraph" ? "paragraph" : "sentence";
+  // 早播切分开关 + 模式下拉（关闭时置灰模式选择）
+  const splitEnabled = ttsState.config.ttsEarlyReadSplitEnabled !== false;
+  ttsEl("tts-early-read-split-enabled").checked = splitEnabled;
+  const splitModeEl = ttsEl("tts-early-read-split-mode") as HTMLSelectElement;
+  splitModeEl.value = ttsState.config.ttsEarlyReadSplitMode === "paragraph" ? "paragraph" : "sentence";
+  splitModeEl.disabled = !splitEnabled;
   updateTtsSliderLabels();
 
   // MiniMax
@@ -251,6 +255,13 @@ document.querySelectorAll<HTMLButtonElement>("[data-engine]").forEach((btn) => {
 // 自动朗读开关
 ttsEl("tts-auto-read").addEventListener("change", () => {
   void saveTtsField("ttsAutoRead", ttsEl("tts-auto-read").checked);
+});
+
+// 早播文本切分开关（关闭时禁用模式下拉并立即保存）
+ttsEl("tts-early-read-split-enabled").addEventListener("change", () => {
+  const enabled = ttsEl("tts-early-read-split-enabled").checked;
+  (ttsEl("tts-early-read-split-mode") as HTMLSelectElement).disabled = !enabled;
+  void saveTtsField("ttsEarlyReadSplitEnabled", enabled);
 });
 
 // 语速/音量滑块（change 时保存，input 时实时显示）

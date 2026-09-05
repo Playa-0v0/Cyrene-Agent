@@ -207,11 +207,15 @@ export class AgentRunController {
 
     try {
       const general = await window.chat?.getGeneralSettings?.();
+      const splitMode: EarlyTtsSplitMode =
+        general?.ttsEarlyReadSplitEnabled === false
+          ? "off"
+          : (general?.ttsEarlyReadSplitMode ?? "sentence");
       this.earlyTtsQueue = this.deps.host.earlyTts.start(
         this.input.targetMode,
         this.input.sessionId,
         this.input.assistantId,
-        general?.ttsEarlyReadSplitMode ?? "sentence",
+        splitMode,
       );
       const ack = await api.run({
         messages: this.input.session.messages.slice(-16).map((item) => ({

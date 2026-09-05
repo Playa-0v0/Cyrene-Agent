@@ -383,4 +383,50 @@ describe("AgentRunController", () => {
 
     expect(registries.checkpointTriggers.current["session-1"]).toBeUndefined();
   });
+
+  it("关闭切分时把 off 模式透传给 earlyTts.start", async () => {
+    vi.stubGlobal("window", {
+      chat: {
+        getGeneralSettings: vi.fn(async () => ({
+          ttsEarlyReadSplitEnabled: false,
+          ttsEarlyReadSplitMode: "paragraph",
+        })),
+      },
+      setTimeout,
+      clearTimeout,
+    });
+    const api = createFakeApi({ success: true, runId: "run-1" });
+    const store = createFakeStore();
+    const { host } = createRecordingHost();
+    const { promise } = launch(createInput(), { api, store, host, registries: createRegistries() });
+    await flush();
+    api.emit(RUN_STARTED_EVENT);
+    api.emit({ type: "RUN_FINISHED", runId: "run-1", result: { status: "success" } });
+    await promise;
+
+    expect(host.earlyTts.start).toHaveBeenCalledWith("chat", "session-1", "assistant-1", "off");
+  });
+
+  it("开启切分且选择一段一切时把 paragraph 透传给 earlyTts.start", async () => {
+    vi.stubGlobal("window", {
+      chat: {
+        getGeneralSettings: vi.fn(async () => ({
+          ttsEarlyReadSplitEnabled: true,
+          ttsEarlyReadSplitMode: "paragraph",
+        })),
+      },
+      setTimeout,
+      clearTimeout,
+    });
+    const api = createFakeApi({ success: true, runId: "run-1" });
+    const store = createFakeStore();
+    const { host } = createRecordingHost();
+    const { promise } = launch(createInput(), { api, store, host, registries: createRegistries() });
+    await flush();
+    api.emit(RUN_STARTED_EVENT);
+    api.emit({ type: "RUN_FINISHED", runId: "run-1", result: { status: "success" } });
+    await promise;
+
+    expect(host.earlyTts.start).toHaveBeenCalledWith("chat", "session-1", "assistant-1", "paragraph");
+  });
 });
