@@ -666,15 +666,13 @@
 
 [data-ui-theme="pearl-white"] .plugin-config .tts-field input,
 [data-ui-theme="pearl-white"] .tts-field input,
-[data-ui-theme="pearl-white"] .tts-field select,
-[data-ui-theme="pearl-white"] .tts-select {
+[data-ui-theme="pearl-white"] .tts-field select {
   color: var(--rb-input-text);
   background-color: var(--rb-input-bg);
   border-color: var(--rb-input-border);
 }
 
-[data-ui-theme="pearl-white"] .tts-field select option,
-[data-ui-theme="pearl-white"] .tts-select option {
+[data-ui-theme="pearl-white"] .tts-field select option {
   color: var(--rb-input-text);
   background: var(--rb-card-bg);
 }

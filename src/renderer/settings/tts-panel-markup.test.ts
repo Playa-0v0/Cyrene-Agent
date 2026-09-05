@@ -16,7 +16,7 @@ describe("TTS settings 面板结构（自动朗读文本切分）", () => {
     expect(html).not.toContain("早播文本切分");
   });
 
-  it("开关与下拉的稳定 id 仍然存在", () => {
+  it("开关与切分按钮组的稳定 id 仍然存在", () => {
     expect(html).toContain('id="tts-early-read-split-enabled"');
     expect(html).toContain('id="tts-early-read-split-mode"');
   });
@@ -35,8 +35,14 @@ describe("TTS settings 面板结构（自动朗读文本切分）", () => {
     }
   });
 
-  it("切分下拉包含一句一切/一段一切两个稳定选项", () => {
-    expect(html).toContain('<option value="sentence">一句一切</option>');
-    expect(html).toContain('<option value="paragraph">一段一切</option>');
+  it("切分模式采用与语言设置同族的圆角按钮组，含一句一切/一段一切两个选项", () => {
+    expect(html).toContain('id="tts-early-read-split-mode"');
+    expect(html).toContain('class="option-blocks option-blocks--wide"');
+    expect(html).toContain('role="radiogroup"');
+    expect(html).toContain('data-value="sentence"');
+    expect(html).toContain(">一句一切</button>");
+    expect(html).toContain('data-value="paragraph"');
+    expect(html).toContain(">一段一切</button>");
+    expect(html).not.toContain('<select id="tts-early-read-split-mode"');
   });
 });
