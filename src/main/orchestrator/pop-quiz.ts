@@ -64,11 +64,25 @@ function parseQuizQuestion(candidate: unknown, index: number): { question?: Quiz
   const common = { question, learningObjective, explanation, ...(sourceRef ? { sourceRef } : {}) };
 
   const parseOptions = (): { options?: string[]; error?: string } => {
-    if (!Array.isArray(item.options)) return { error: `第 ${index + 1} 题的 options 必须是数组` };
+    if (!Array.isArray(item.options) || item.options.length === 0) {
+      return { error: `第 ${index + 1} 题的 options 必须是选项文本数组，如 ["选项一", "选项二"]` };
+    }
     const options: string[] = [];
     for (const option of item.options) {
-      const text = typeof option === "string" ? option.trim() : "";
-      if (!text) return { error: `第 ${index + 1} 题的选项不能为空` };
+      // 模型可能沿用 ask_user 的对象选项习惯（{label}/{text}/{value}），统一规整成纯文本
+      const text = typeof option === "string"
+        ? option.trim()
+        : option && typeof option === "object" && !Array.isArray(option)
+          ? String(
+            (option as Record<string, unknown>).label
+              ?? (option as Record<string, unknown>).text
+              ?? (option as Record<string, unknown>).value
+              ?? "",
+          ).trim()
+          : "";
+      if (!text) {
+        return { error: `第 ${index + 1} 题的选项不能为空；options 必须是纯文本数组（如 ["选项一", "选项二"]），不要传对象` };
+      }
       options.push(text);
     }
     if (options.length < 2 || options.length > 6) {
@@ -77,17 +91,21 @@ function parseQuizQuestion(candidate: unknown, index: number): { question?: Quiz
     return { options };
   };
 
-  const isInt = (value: unknown): value is number =>
-    typeof value === "number" && Number.isInteger(value) && value >= 0;
+  // 模型常把下标写成字符串数字（"1"），显式转换后再校验
+  const toIndex = (value: unknown): number | undefined => {
+    const num = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+    return Number.isInteger(num) && num >= 0 ? num : undefined;
+  };
 
   switch (item.type) {
     case "choice": {
       const { options, error } = parseOptions();
       if (error || !options) return { error };
-      if (!isInt(item.correctIndex) || item.correctIndex >= options.length) {
-        return { error: `第 ${index + 1} 题 correctIndex 必须是有效选项下标` };
+      const correctIndex = toIndex(item.correctIndex);
+      if (correctIndex === undefined || correctIndex >= options.length) {
+        return { error: `第 ${index + 1} 题 correctIndex 必须是有效选项下标（0 到 ${options.length - 1} 的数字）` };
       }
-      return { question: { type: "choice", ...common, options, correctIndex: item.correctIndex } };
+      return { question: { type: "choice", ...common, options, correctIndex } };
     }
     case "multi": {
       const { options, error } = parseOptions();
@@ -96,25 +114,41 @@ function parseQuizQuestion(candidate: unknown, index: number): { question?: Quiz
         return { error: `第 ${index + 1} 题 correctIndexes 必须是非空数组` };
       }
       const seen = new Set<number>();
-      for (const idx of item.correctIndexes) {
-        if (!isInt(idx) || idx >= options.length || seen.has(idx)) {
-          return { error: `第 ${index + 1} 题 correctIndexes 含无效或重复下标` };
+      for (const raw of item.correctIndexes) {
+        const idx = toIndex(raw);
+        if (idx === undefined || idx >= options.length || seen.has(idx)) {
+          return { error: `第 ${index + 1} 题 correctIndexes 含无效或重复下标（必须是 0 到 ${options.length - 1} 的数字）` };
         }
         seen.add(idx);
       }
       return { question: { type: "multi", ...common, options, correctIndexes: [...seen].sort((a, b) => a - b) } };
     }
     case "true_false": {
-      if (typeof item.correct !== "boolean") {
-        return { error: `第 ${index + 1} 题 correct 必须是 boolean` };
+      // 模型可能把 boolean 写成字符串（"true"/"false"），规整后再判
+      const raw = item.correct;
+      const correct = typeof raw === "boolean"
+        ? raw
+        : raw === "true"
+          ? true
+          : raw === "false"
+            ? false
+            : undefined;
+      if (correct === undefined) {
+        return { error: `第 ${index + 1} 题 correct 必须是 boolean（true/false）` };
       }
-      return { question: { type: "true_false", ...common, correct: item.correct } };
+      return { question: { type: "true_false", ...common, correct } };
     }
     case "short_answer": {
       const referenceAnswer = typeof item.referenceAnswer === "string" ? item.referenceAnswer.trim() : "";
       if (!referenceAnswer) return { error: `第 ${index + 1} 题必须提供 referenceAnswer 评分参考` };
-      if (!Array.isArray(item.rubric)) return { error: `第 ${index + 1} 题的 rubric 必须是数组` };
-      const rubric = item.rubric.map((point) => String(point ?? "").trim()).filter(Boolean);
+      // rubric 允许单条字符串，包成数组
+      const rubricRaw = Array.isArray(item.rubric)
+        ? item.rubric
+        : typeof item.rubric === "string" && item.rubric.trim()
+          ? [item.rubric]
+          : undefined;
+      if (!rubricRaw) return { error: `第 ${index + 1} 题的 rubric 必须是数组（给分要点）` };
+      const rubric = rubricRaw.map((point) => String(point ?? "").trim()).filter(Boolean);
       return { question: { type: "short_answer", ...common, referenceAnswer, rubric } };
     }
     default:
@@ -468,7 +502,47 @@ export const popQuizTool: ToolDefinition = {
       questions: {
         type: "array",
         description: "1-3 道题的数组",
-        items: { type: "object", description: "题目结构见工具说明" },
+        items: {
+          type: "object",
+          properties: {
+            type: {
+              type: "string",
+              enum: ["choice", "multi", "true_false", "short_answer"],
+              description: "题型：choice=单选；multi=多选；true_false=判断；short_answer=简答",
+            },
+            question: { type: "string", description: "题干文本" },
+            learningObjective: { type: "string", description: "本题测的知识点（优先复用 outline/progress 里已有命名）" },
+            explanation: { type: "string", description: "标准答案为什么对（批改后展示给用户）" },
+            sourceRef: {
+              type: "object",
+              description: "出题依据的材料引用（可选；只引用本轮实际读取过的材料）",
+              properties: {
+                file: { type: "string", description: "vault 内相对路径" },
+                heading: { type: "string", description: "具体章节标题（可选）" },
+              },
+              required: ["file"],
+            },
+            options: {
+              type: "array",
+              description: "选项纯文本数组（choice/multi 必填；true_false/short_answer 不要传）。注意是字符串数组，不是对象",
+              items: { type: "string" },
+            },
+            correctIndex: { type: "integer", description: "choice 专属：正确项下标（从 0 开始）" },
+            correctIndexes: {
+              type: "array",
+              description: "multi 专属：全部正确项下标（全对才对）",
+              items: { type: "integer" },
+            },
+            correct: { type: "boolean", description: "true_false 专属：标准答案 true/false" },
+            referenceAnswer: { type: "string", description: "short_answer 专属：评分参考答案" },
+            rubric: {
+              type: "array",
+              description: "short_answer 专属：给分要点",
+              items: { type: "string" },
+            },
+          },
+          required: ["type", "question", "learningObjective", "explanation"],
+        },
       },
     },
     required: ["questions"],

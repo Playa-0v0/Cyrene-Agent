@@ -118,6 +118,77 @@ describe("parseQuizInput", () => {
     const parsed = parseQuizInput([withBadRef]);
     expect(parsed.questions?.[0].sourceRef).toBeUndefined();
   });
+
+  // 模型实际调用时的常见格式偏差：沿用 ask_user 的对象选项、字符串下标、字符串 boolean、
+  // 单条字符串 rubric。解析层统一规整，避免模型反复试错。
+  describe("格式容错（模型实际输出偏差）", () => {
+    it("对象选项（ask_user 习惯的 {label}/{text}/{value}）规整为纯文本", () => {
+      const withObjectOptions = {
+        ...sampleChoice(),
+        options: [{ label: "2" }, { text: "true" }, { value: "1" }],
+      };
+      const parsed = parseQuizInput([withObjectOptions]);
+      expect(parsed.error).toBeUndefined();
+      expect(parsed.questions?.[0]).toMatchObject({
+        type: "choice",
+        options: ["2", "true", "1"],
+        correctIndex: 0,
+      });
+    });
+
+    it("字符串下标（correctIndex: \"0\"）规整为数字", () => {
+      const withStringIndex = { ...sampleChoice(), correctIndex: "0" };
+      const parsed = parseQuizInput([withStringIndex]);
+      expect(parsed.questions?.[0]).toMatchObject({ correctIndex: 0 });
+    });
+
+    it("multi 的字符串下标数组同样规整", () => {
+      const multi = {
+        type: "multi" as const,
+        question: "下列哪些是原始类型？",
+        options: ["string", "object", "number"],
+        correctIndexes: ["0", "2"],
+        learningObjective: "原始类型",
+        explanation: "object 不是。",
+      };
+      const parsed = parseQuizInput([multi]);
+      expect(parsed.questions?.[0]).toMatchObject({ correctIndexes: [0, 2] });
+    });
+
+    it("true_false 的字符串 boolean（\"true\"/\"false\"）规整为 boolean", () => {
+      const withStringRef = {
+        type: "true_false" as const,
+        question: "=== 会做隐式类型转换。",
+        correct: "false",
+        learningObjective: "严格相等",
+        explanation: "=== 不转换。",
+      };
+      const parsed = parseQuizInput([withStringRef]);
+      expect(parsed.questions?.[0]).toMatchObject({ correct: false });
+    });
+
+    it("short_answer 的单条字符串 rubric 包成数组", () => {
+      const shortAnswer = {
+        type: "short_answer" as const,
+        question: "解释闭包",
+        referenceAnswer: "函数与其词法环境的组合",
+        rubric: "提到词法环境即可",
+        learningObjective: "闭包",
+        explanation: "闭包 = 函数 + 词法作用域。",
+      };
+      const parsed = parseQuizInput([shortAnswer]);
+      expect(parsed.questions?.[0]).toMatchObject({ rubric: ["提到词法环境即可"] });
+    });
+
+    it("选项对象数组也带不出空文本时，报错明确指出要纯文本数组", () => {
+      const badObjectOptions = {
+        ...sampleChoice(),
+        options: [{ label: "2" }, { unrelated: true }, "1"],
+      };
+      const parsed = parseQuizInput([badObjectOptions]);
+      expect(parsed.error).toContain("纯文本数组");
+    });
+  });
 });
 
 describe("buildPopQuizPublication", () => {
