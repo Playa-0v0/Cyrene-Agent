@@ -17,7 +17,7 @@ export function SkillModeButton({ active = false, onClick }: SkillModeButtonProp
       aria-pressed={active}
     >
       <span className="cy-side-action-icon">
-        <img src={skillIconUrl} alt="" width="18" height="18" style={{ objectFit: "contain" }} />
+        <img src={skillIconUrl} alt="" width="22" height="22" style={{ objectFit: "contain" }} />
       </span>
       <span className="cy-side-action-label">{t("ui.skills")}</span>
     </button>
