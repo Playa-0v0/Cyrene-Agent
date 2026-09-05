@@ -18,6 +18,13 @@ import {
 } from "./settings-store";
 import { channelManager } from "./manager";
 import { channelDispatcher } from "./dispatcher";
+import { getChannelConversationBindingStore } from "./conversation-binding-store";
+import { listSessions, getSession } from "../chats/chats-store";
+import {
+  bindContextConversation,
+  getContextBindingSnapshot,
+  unbindContextConversation,
+} from "./conversation-binding-api";
 import { startInboundServer, stopInboundServer } from "./inbound-server";
 import { FeishuAdapter } from "./adapters/feishu";
 import { ILinkBotAdapter, loadCredentials } from "./adapters/wechat/ilink-bot-adapter";
@@ -292,6 +299,22 @@ function registerChannelsIpc(ipcOption?: IpcScope): void {
   ipc.handle(IPC.CHANNELS_LOG_CLEAR, () => {
     clearLog();
     return { ok: true };
+  });
+
+  ipc.handle(IPC.CHANNELS_CONTEXT_BINDINGS_GET, () => {
+    return getContextBindingSnapshot(getChannelConversationBindingStore(), listSessions());
+  });
+
+  ipc.handle(IPC.CHANNELS_CONTEXT_BIND, (_e, payload: unknown) => {
+    return bindContextConversation(
+      getChannelConversationBindingStore(),
+      payload,
+      (conversationId) => getSession(conversationId) !== null,
+    );
+  });
+
+  ipc.handle(IPC.CHANNELS_CONTEXT_UNBIND, (_e, sessionId: unknown) => {
+    return unbindContextConversation(getChannelConversationBindingStore(), sessionId);
   });
 }
 

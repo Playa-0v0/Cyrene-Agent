@@ -182,6 +182,18 @@ export interface DispatcherDeps {
   buildAndRunAgent?: (msg: IncomingMessage, sessionId: string, priorMessages?: ChatMessage[]) => Promise<{ text: string; sticker: string | null }>;
   /** 读这个 sessionId 最近 N 条对话历史（按时间顺序）。不提供时不拼历史。 */
   loadRecentChannelHistory?: (sessionId: string, limit: number) => Promise<ChatMessage[]>;
+  /** 记录最近见到的外部聊天，供设置页列出可绑定的来源。 */
+  observeExternalChat?: (sessionId: string, msg: IncomingMessage) => void;
+  /** 返回外部聊天当前绑定的桌面会话；返回 null 表示保持渠道独立上下文。 */
+  resolveBoundConversationId?: (sessionId: string) => string | null;
+  /** 读取绑定桌面会话最近 N 条 user/assistant 消息。 */
+  loadBoundConversationHistory?: (conversationId: string, limit: number) => Promise<ChatMessage[]>;
+  /** 将绑定渠道消息镜像写入桌面会话。 */
+  appendBoundConversationMessage?: (
+    conversationId: string,
+    role: "user" | "assistant",
+    content: string,
+  ) => void | Promise<void>;
   /** 可选 — 把文本合成成音频。失败返回 null，dispatcher 会跳过 audio。 */
   synthesizeTts?: (text: string, context: DispatcherTtsContext) => Promise<Buffer | DispatcherTtsResult | null>;
   /** 可选 — 桌面端镜像广播：bot 入站/出站消息通知给 chatWindow。 */
@@ -259,6 +271,21 @@ export class ChannelDispatcher {
     }
 
     const sessionId = makeSessionId(msg.channel, msg.chatId);
+    try {
+      this.deps.observeExternalChat?.(sessionId, msg);
+    } catch (err) {
+      console.warn(LOG, "observeExternalChat 失败（继续处理消息）:", err);
+    }
+    let requestedBoundConversationId: string | null = null;
+    try {
+      requestedBoundConversationId = this.deps.resolveBoundConversationId?.(sessionId) ?? null;
+    } catch (err) {
+      // 绑定存储故障不能阻断外部渠道消息；降级到原有渠道独立上下文。
+      console.warn(LOG, "resolveBoundConversationId 失败（继续使用渠道上下文）:", err);
+    }
+    const hasBoundContext = Boolean(requestedBoundConversationId && this.deps.loadBoundConversationHistory);
+    const boundConversationId = hasBoundContext ? requestedBoundConversationId : null;
+    // 绑定只选择历史与消息镜像目标，Agent 运行身份始终属于原渠道。
     // 兼容旧版按 senderId 键控的历史：飞书 p2p 的 chatId(oc_) 与 senderId(ou_) 不同，
     // 升级后迁移旧滑窗文件到新键，避免既有渠道用户上下文一次性丢失（微信两者同值、QQ 为新增渠道，均无影响）
     migrateHistory(makeSessionId(msg.channel, msg.senderId), sessionId);
@@ -301,12 +328,25 @@ export class ChannelDispatcher {
     // 顺序不能反：先 append 再 load 会让本条消息既出现在滑窗末尾、又作为新 user
     // 消息追加给 agent，模型会把同一条消息读两遍。
     let priorMessages: ChatMessage[] | undefined;
-    if (this.deps.buildAndRunAgent && this.deps.loadRecentChannelHistory) {
+    if (this.deps.buildAndRunAgent) {
       try {
-        priorMessages = await this.deps.loadRecentChannelHistory(sessionId, 16);
+        if (boundConversationId && this.deps.loadBoundConversationHistory) {
+          priorMessages = await this.deps.loadBoundConversationHistory(boundConversationId, 16);
+        } else if (this.deps.loadRecentChannelHistory) {
+          priorMessages = await this.deps.loadRecentChannelHistory(sessionId, 16);
+        }
       } catch (err) {
-        console.warn(LOG, "loadRecentChannelHistory 失败 (继续不带历史):", err);
-        priorMessages = undefined;
+        console.warn(LOG, "加载绑定/渠道历史失败 (继续不带历史):", err);
+        if (boundConversationId && this.deps.loadRecentChannelHistory) {
+          try {
+            priorMessages = await this.deps.loadRecentChannelHistory(sessionId, 16);
+          } catch (fallbackErr) {
+            console.warn(LOG, "loadRecentChannelHistory fallback 失败:", fallbackErr);
+            priorMessages = undefined;
+          }
+        } else {
+          priorMessages = undefined;
+        }
       }
     }
 
@@ -315,6 +355,13 @@ export class ChannelDispatcher {
       appendChannelHistory(sessionId, "user", formatChannelUserText(msg));
     } catch (err) {
       console.warn(LOG, "appendHistory (incoming) 失败:", err);
+    }
+    if (boundConversationId && this.deps.appendBoundConversationMessage) {
+      try {
+        await this.deps.appendBoundConversationMessage(boundConversationId, "user", formatChannelUserText(msg));
+      } catch (err) {
+        console.warn(LOG, "appendBoundConversationMessage (incoming) 失败:", err);
+      }
     }
 
     // agent 调用；未注入 → echo
@@ -433,6 +480,13 @@ export class ChannelDispatcher {
     } catch (err) {
       console.warn(LOG, "appendHistory (outgoing) 失败:", err);
     }
+    if (boundConversationId && this.deps.appendBoundConversationMessage) {
+      try {
+        await this.deps.appendBoundConversationMessage(boundConversationId, "assistant", replyText);
+      } catch (err) {
+        console.warn(LOG, "appendBoundConversationMessage (outgoing) 失败:", err);
+      }
+    }
 
     // 构造 OutgoingMessage，capability 降级
     const outgoing: OutgoingMessage = {
@@ -528,6 +582,38 @@ export function setDispatcherLoadRecentHistory(
   fn: (sessionId: string, limit: number) => Promise<{ role: "user" | "assistant"; content?: string }[]>,
 ): void {
   channelDispatcher.deps.loadRecentChannelHistory = fn;
+}
+
+/** 注入最近外部聊天观察器（用于设置页上下文绑定列表）。 */
+export function setDispatcherObserveExternalChat(
+  fn: (sessionId: string, msg: IncomingMessage) => void,
+): void {
+  channelDispatcher.deps.observeExternalChat = fn;
+}
+
+/** 注入外部聊天到桌面会话的绑定查询。 */
+export function setDispatcherResolveBoundConversation(
+  fn: (sessionId: string) => string | null,
+): void {
+  channelDispatcher.deps.resolveBoundConversationId = fn;
+}
+
+/** 注入绑定桌面会话历史读取器。 */
+export function setDispatcherLoadBoundConversationHistory(
+  fn: (conversationId: string, limit: number) => Promise<{ role: "user" | "assistant"; content?: string }[]>,
+): void {
+  channelDispatcher.deps.loadBoundConversationHistory = fn;
+}
+
+/** 注入绑定桌面会话消息写入器。 */
+export function setDispatcherAppendBoundConversationMessage(
+  fn: (
+    conversationId: string,
+    role: "user" | "assistant",
+    content: string,
+  ) => void | Promise<void>,
+): void {
+  channelDispatcher.deps.appendBoundConversationMessage = fn;
 }
 
 /** 注入桌面端镜像广播（chatWindow 推送 bot 入站/出站消息） */

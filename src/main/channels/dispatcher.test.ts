@@ -1,7 +1,8 @@
 // dispatcher 核心单元测试：sessionId hash + 限速
 import * as os from "node:os";
 import { describe, it, expect, vi } from "vitest";
-import { formatChannelUserText, makeSessionId, lookupOriginalSender } from "./dispatcher";
+import { ChannelDispatcher, formatChannelUserText, makeSessionId, lookupOriginalSender } from "./dispatcher";
+import type { IncomingMessage } from "./types";
 
 vi.mock("electron", () => ({
   app: {
@@ -12,6 +13,16 @@ vi.mock("electron", () => ({
   safeStorage: {
     isEncryptionAvailable: () => false,
   },
+}));
+
+vi.mock("./message-log", () => ({
+  appendLog: vi.fn(),
+  reloadLogFromDisk: vi.fn(),
+}));
+
+vi.mock("./history-log", () => ({
+  appendHistory: vi.fn(),
+  migrateHistory: vi.fn(),
 }));
 
 describe("channels/dispatcher", () => {
@@ -58,5 +69,114 @@ describe("channels/dispatcher", () => {
 
   it("isolates QQ private sessions by user id", () => {
     expect(makeSessionId("qq", "10001")).not.toBe(makeSessionId("qq", "10002"));
+  });
+
+  function makeIncoming(overrides: Partial<IncomingMessage> = {}): IncomingMessage {
+    return {
+      channel: "qq",
+      chatType: "private",
+      senderId: "user-1",
+      senderName: "测试用户",
+      chatId: "chat-1",
+      text: "你好",
+      at: new Date(0),
+      ...overrides,
+    };
+  }
+
+  function makeManager() {
+    return { getAdapter: () => ({ capability: { text: true, image: true, audio: false, file: false, video: false, markdown: false, card: false, sticker: false, maxTextLength: 4000 } }) } as any;
+  }
+
+  it("uses channel history and channel session when the chat is unbound", async () => {
+    const loadRecentChannelHistory = vi.fn(async () => [{ role: "user" as const, content: "渠道旧消息" }]);
+    const buildAndRunAgent = vi.fn(async (_msg: IncomingMessage, sessionId: string, prior?: Array<{ role: string; content?: string }>) => {
+      expect(sessionId).toBe(makeSessionId("qq", "chat-1"));
+      expect(prior).toEqual([{ role: "user", content: "渠道旧消息" }]);
+      return { text: "渠道回复", sticker: null };
+    });
+    const dispatcher = new ChannelDispatcher({ manager: makeManager(), loadRecentChannelHistory, buildAndRunAgent });
+
+    const result = await dispatcher.handleIncoming(makeIncoming());
+
+    expect(result?.targetId).toBe("chat-1");
+    expect(loadRecentChannelHistory).toHaveBeenCalledWith(makeSessionId("qq", "chat-1"), 16);
+    expect(buildAndRunAgent).toHaveBeenCalledOnce();
+  });
+
+  it.each(["qq", "wechat"] as const)("uses bound desktop history while keeping %s runtime identity separate", async (channel) => {
+    const channelSessionId = makeSessionId(channel, "chat-1");
+    const loadRecentChannelHistory = vi.fn(async () => [{ role: "user" as const, content: "不应读取" }]);
+    const loadBoundConversationHistory = vi.fn(async (conversationId: string, limit: number) => {
+      expect(conversationId).toBe("conversation-7");
+      expect(limit).toBe(16);
+      return [{ role: "user" as const, content: "桌面旧消息" }];
+    });
+    const appendBoundConversationMessage = vi.fn();
+    const buildAndRunAgent = vi.fn(async (_msg: IncomingMessage, sessionId: string, prior?: Array<{ role: string; content?: string }>) => {
+      expect(sessionId).toBe(channelSessionId);
+      expect(prior).toEqual([{ role: "user", content: "桌面旧消息" }]);
+      return { text: "共享回复", sticker: null };
+    });
+    const dispatcher = new ChannelDispatcher({
+      manager: makeManager(),
+      loadRecentChannelHistory,
+      loadBoundConversationHistory,
+      resolveBoundConversationId: vi.fn((sessionId: string) => sessionId === channelSessionId ? "conversation-7" : null),
+      appendBoundConversationMessage,
+      buildAndRunAgent,
+    });
+
+    const result = await dispatcher.handleIncoming(makeIncoming({ channel }));
+
+    expect(result?.targetId).toBe("chat-1");
+    expect(loadRecentChannelHistory).not.toHaveBeenCalled();
+    expect(loadBoundConversationHistory).toHaveBeenCalledWith("conversation-7", 16);
+    expect(appendBoundConversationMessage).toHaveBeenNthCalledWith(1, "conversation-7", "user", "你好");
+    expect(appendBoundConversationMessage).toHaveBeenNthCalledWith(2, "conversation-7", "assistant", "共享回复");
+    expect(buildAndRunAgent).toHaveBeenCalledOnce();
+  });
+
+  it("falls back to channel history when bound desktop history cannot be loaded", async () => {
+    const channelSessionId = makeSessionId("qq", "chat-1");
+    const loadRecentChannelHistory = vi.fn(async () => [{ role: "user" as const, content: "渠道回退" }]);
+    const loadBoundConversationHistory = vi.fn(async () => { throw new Error("桌面对话已删除"); });
+    const buildAndRunAgent = vi.fn(async (_msg: IncomingMessage, sessionId: string, prior?: Array<{ role: string; content?: string }>) => {
+      expect(sessionId).toBe(channelSessionId);
+      expect(prior).toEqual([{ role: "user", content: "渠道回退" }]);
+      return { text: "回复", sticker: null };
+    });
+    const dispatcher = new ChannelDispatcher({
+      manager: makeManager(),
+      loadRecentChannelHistory,
+      loadBoundConversationHistory,
+      resolveBoundConversationId: () => "conversation-7",
+      buildAndRunAgent,
+    });
+
+    await dispatcher.handleIncoming(makeIncoming());
+
+    expect(loadRecentChannelHistory).toHaveBeenCalledWith(channelSessionId, 16);
+    expect(buildAndRunAgent).toHaveBeenCalledWith(expect.anything(), channelSessionId, [{ role: "user", content: "渠道回退" }]);
+  });
+
+  it("falls back to the unbound channel path when binding lookup fails", async () => {
+    const loadRecentChannelHistory = vi.fn(async () => [{ role: "user" as const, content: "渠道历史" }]);
+    const buildAndRunAgent = vi.fn(async (_msg: IncomingMessage, sessionId: string, prior?: Array<{ role: string; content?: string }>) => {
+      expect(sessionId).toBe(makeSessionId("qq", "chat-1"));
+      expect(prior).toEqual([{ role: "user", content: "渠道历史" }]);
+      return { text: "回复", sticker: null };
+    });
+    const dispatcher = new ChannelDispatcher({
+      manager: makeManager(),
+      loadRecentChannelHistory,
+      resolveBoundConversationId: () => { throw new Error("绑定存储暂不可用"); },
+      buildAndRunAgent,
+    });
+
+    const result = await dispatcher.handleIncoming(makeIncoming());
+
+    expect(result?.targetId).toBe("chat-1");
+    expect(loadRecentChannelHistory).toHaveBeenCalledWith(makeSessionId("qq", "chat-1"), 16);
   });
 });
