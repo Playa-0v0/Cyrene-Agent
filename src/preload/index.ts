@@ -11,7 +11,7 @@ import type { UiFont } from "../shared/ui-font";
 import type { ReasoningPreference } from "../shared/reasoning";
 import type { DocumentIndexProgress } from "../main/rag/document-index-queue";
 import type { AguiRunAck } from "../shared/run-terminal";
-import type { ReviewSnapshot } from "../shared/review-types";
+import type { ReviewSnapshot, ReviewRestoreOutcome } from "../shared/review-types";
 import { getLive2DIpcListenerCounts } from "./live2d-listener-diagnostics";
 import { exposeMusicApi } from "./music";
 import { normalizeChatAppearance, type ChatAppearanceSettings } from "../shared/chat-appearance";
@@ -734,6 +734,8 @@ contextBridge.exposeInMainWorld("chatStore", chatStoreApi);
 // Review 快照：获取指定 Run 的不可变文件变更审查数据
 const reviewApi = {
   get: (runId: string) => ipcRenderer.invoke(IPC.REVIEW_GET, runId) as Promise<ReviewSnapshot | null>,
+  // 把本次 Run 修改过的文件恢复到运行前状态（基于 before/ 基线）
+  restore: (runId: string) => ipcRenderer.invoke(IPC.REVIEW_RESTORE, runId) as Promise<ReviewRestoreOutcome>,
 };
 
 contextBridge.exposeInMainWorld("review", reviewApi);

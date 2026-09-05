@@ -460,6 +460,23 @@ export function registerChatsIpc(ipcOption?: IpcScope): void {
     // 崩溃恢复（interrupted）或异常终止的 Run：按 halted 补生成
     return tracker.finalizeIfPending(runId, session.createdAt, "halted");
   });
+
+  // ── Review 恢复：把本次 Run 修改过的文件回滚到运行前状态 ──
+  // 以 journal + before/ 基线为准；二进制文件只存元数据，无法恢复，计入 skipped。
+  // 单文件恢复失败不阻断其他文件（错误隔离），failed 非空时 ok=false。
+  ipc.handle(IPC.REVIEW_RESTORE, (_event, runId: string) => {
+    if (!runId || typeof runId !== "string") {
+      return { ok: false, restored: 0, skipped: [], failed: [], error: "invalid runId" };
+    }
+    const tracker = getRunReviewTracker(app.getPath("userData"));
+    try {
+      const outcome = tracker.restoreRun(runId);
+      return { ok: outcome.failed.length === 0, ...outcome };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, restored: 0, skipped: [], failed: [], error: msg };
+    }
+  });
 }
 
 // ── 路径验证 ──────────────────────────────────────────────

@@ -3,10 +3,11 @@
 // 默认折叠：圆角矩形头部（图标 + "N 个文件已更改" + 增删统计 + chevron）。
 // 点击头部展开文件列表（kind 徽标 + 路径 + 增删统计），再点收起。
 // 点击某个文件 → 调用 onOpenInspector(runId, fileIndex) 打开右侧纯 diff 面板。
+// 展开态提供"恢复到运行前"按钮：两步确认（防误触），恢复结果内联展示。
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "../../../i18n";
-import type { ReviewFileChange, ReviewSnapshot } from "../../../../../shared/review-types";
+import type { ReviewFileChange, ReviewRestoreOutcome, ReviewSnapshot } from "../../../../../shared/review-types";
 import reminderIconUrl from "../../../assets/status-moods/提醒.png?url";
 import "./ReviewPanel.css";
 
@@ -45,6 +46,54 @@ export function ReviewPanel({
   const { t } = useTranslation();
   const [snapshot, setSnapshot] = useState<ReviewSnapshot | null>(null);
   const [expanded, setExpanded] = useState(false);
+
+  // 恢复到运行前：两步确认（idle → confirm → 执行），结果内联展示
+  const [restoreConfirming, setRestoreConfirming] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreOutcome, setRestoreOutcome] = useState<ReviewRestoreOutcome | null>(null);
+
+  const handleRestoreClick = async (): Promise<void> => {
+    if (restoring) return;
+    if (!restoreConfirming) {
+      setRestoreConfirming(true);
+      return;
+    }
+    setRestoring(true);
+    try {
+      const result = await window.review?.restore(runId);
+      setRestoreOutcome(result ?? {
+        ok: false,
+        restored: 0,
+        skipped: [],
+        failed: [],
+        error: "review API 不可用",
+      });
+    } catch (err) {
+      setRestoreOutcome({
+        ok: false,
+        restored: 0,
+        skipped: [],
+        failed: [],
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setRestoring(false);
+      setRestoreConfirming(false);
+    }
+  };
+
+  const restoreSummary = useMemo(() => {
+    if (!restoreOutcome) return null;
+    if (restoreOutcome.error) return t("review.restoreFailed", { reason: restoreOutcome.error });
+    if (restoreOutcome.failed.length === 0 && restoreOutcome.skipped.length === 0) {
+      return t("review.restoreDone", { count: restoreOutcome.restored });
+    }
+    return t("review.restorePartial", {
+      restored: restoreOutcome.restored,
+      skipped: restoreOutcome.skipped.length,
+      failed: restoreOutcome.failed.length,
+    });
+  }, [restoreOutcome, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -134,6 +183,27 @@ export function ReviewPanel({
               </button>
             );
           })}
+          {/* 恢复入口：两步确认，恢复后展示结果摘要 */}
+          <div className="cy-review-panel__restore">
+            {restoreSummary ? (
+              <span className={`cy-review-panel__restore-summary${restoreOutcome?.ok === false ? " is-error" : ""}`}>
+                {restoreSummary}
+              </span>
+            ) : (
+              <button
+                type="button"
+                className={`cy-review-panel__restore-btn${restoreConfirming ? " is-confirming" : ""}`}
+                onClick={() => void handleRestoreClick()}
+                disabled={restoring}
+              >
+                {restoring
+                  ? t("review.restoreRunning")
+                  : restoreConfirming
+                    ? t("review.restoreConfirm")
+                    : t("review.restoreButton")}
+              </button>
+            )}
+          </div>
         </div>
       )}
     </section>

@@ -205,6 +205,8 @@ export const IPC = {
   // Review 快照（不可变文件变更审查）
   // renderer → main：获取指定 Run 的 ReviewSnapshot（不存在时按 halted 补生成）
   REVIEW_GET: "review:get",
+  // renderer → main：把指定 Run 修改过的文件恢复到运行前状态（基于 before/ 基线）
+  REVIEW_RESTORE: "review:restore",
 
 // sticker manager window
 	  STICKERS_MINIMIZE: "stickers:minimize",
