@@ -108,7 +108,10 @@ describe("Review 基线捕获（写盘前）", () => {
       { filename: "note.md", content: "新内容" },
       { runId: "run-md-1" },
     );
-    expect(raw).toContain("已生成");
+    // 返回体是 JSON（Diff Review 卡片证据链解析 changes 字段）
+    const result = JSON.parse(raw);
+    expect(result.success).toBe(true);
+    expect(result.append).toBe(false);
 
     const baselines = listBaselines("run-md-1");
     expect(baselines).toHaveLength(1);
@@ -150,7 +153,9 @@ describe("Review 基线捕获（写盘前）", () => {
         { filename: "note.md", content: "第二段。", append: true },
         {},
       );
-      expect(raw).toContain("已追加");
+      const result = JSON.parse(raw);
+      expect(result.success).toBe(true);
+      expect(result.append).toBe(true);
       // 原文件末尾无换行 → 追加前补一个，两段不粘连
       expect(fs.readFileSync(file, "utf8")).toBe("# 标题\n\n第一段。\n第二段。");
     });
@@ -173,7 +178,11 @@ describe("Review 基线捕获（写盘前）", () => {
         { filename: "fresh.md", content: "初始内容", append: true },
         {},
       );
-      expect(raw).toContain("已生成");
+      // append 目标不存在 → 等同新建（added）
+      const result = JSON.parse(raw);
+      expect(result.success).toBe(true);
+      expect(result.append).toBe(true);
+      expect(result.changes[0].kind).toBe("added");
       expect(fs.readFileSync(file, "utf8")).toBe("初始内容");
     });
 
@@ -268,5 +277,89 @@ describe("Review 基线捕获（写盘前）", () => {
       // 等待 pdfkit 内部流动作结束，避免延迟 open 撞上目录清理
       await new Promise((r) => setTimeout(r, 50));
     }
+  });
+});
+
+describe("write_markdown 覆盖写防护与 JSON 返回体", () => {
+  it("返回 JSON 带 changes：覆盖已有文件 → modified + 行级 diff", async () => {
+    const file = path.join(tmpDir, "note.md");
+    fs.writeFileSync(file, "旧一\n旧二");
+
+    const raw = await getTool("write_markdown").execute(
+      { filename: "note.md", content: "新一\n新二\n新三" },
+      {},
+    );
+    const result = JSON.parse(raw);
+    expect(result.success).toBe(true);
+    expect(result.tool).toBe("write_markdown");
+    expect(result.path).toBe(file);
+    expect(result.append).toBe(false);
+
+    const change = result.changes[0];
+    expect(change.kind).toBe("modified");
+    expect(change.deletions).toBe(2);
+    expect(change.insertions).toBe(3);
+    const removeTexts = change.diff.filter((l: { type: string }) => l.type === "remove").map((l: { text: string }) => l.text);
+    const addTexts = change.diff.filter((l: { type: string }) => l.type === "add").map((l: { text: string }) => l.text);
+    expect(removeTexts).toEqual(["旧一", "旧二"]);
+    expect(addTexts).toEqual(["新一", "新二", "新三"]);
+  });
+
+  it("新建文件 → added diff", async () => {
+    const raw = await getTool("write_markdown").execute(
+      { filename: "fresh.md", content: "# 标题" },
+      {},
+    );
+    const result = JSON.parse(raw);
+    const change = result.changes[0];
+    expect(change.kind).toBe("added");
+    expect(change.insertions).toBe(1);
+    expect(change.diff.map((l: { type: string; text: string }) => l.type)).toEqual(["add"]);
+  });
+
+  it("大文件骤降过半被拒绝且文件保持原样", async () => {
+    const file = path.join(tmpDir, "big.md");
+    const original = Array.from({ length: 80 }, (_, i) => `第 ${i + 1} 行`).join("\n");
+    fs.writeFileSync(file, original);
+
+    await expect(
+      getTool("write_markdown").execute({ filename: "big.md", content: "半截" }, {}),
+    ).rejects.toMatchObject({
+      code: "E_OVERWRITE_DROP_BLOCKED",
+      category: "runtime_safety",
+      retryable: false,
+      effectState: "not_applied",
+    });
+    // 拒绝发生在落盘之前，原文件未被改动
+    expect(fs.readFileSync(file, "utf8")).toBe(original);
+  });
+
+  it("小文件合法缩水不拦截", async () => {
+    const file = path.join(tmpDir, "small.md");
+    fs.writeFileSync(file, Array.from({ length: 8 }, (_, i) => `行 ${i + 1}`).join("\n"));
+
+    const raw = await getTool("write_markdown").execute(
+      { filename: "small.md", content: "整理后的两行\n第二行" },
+      {},
+    );
+    const result = JSON.parse(raw);
+    expect(result.success).toBe(true);
+    expect(fs.readFileSync(file, "utf8")).toBe("整理后的两行\n第二行");
+  });
+
+  it("append 到大文件不做骤降检查", async () => {
+    const file = path.join(tmpDir, "big-append.md");
+    const original = Array.from({ length: 60 }, (_, i) => `行 ${i + 1}`).join("\n");
+    fs.writeFileSync(file, original);
+
+    const raw = await getTool("write_markdown").execute(
+      { filename: "big-append.md", content: "追加的一小段", append: true },
+      {},
+    );
+    const result = JSON.parse(raw);
+    expect(result.success).toBe(true);
+    // 追加不删行：changes 记为 added（与 write_file 口径一致）
+    expect(result.changes[0].kind).toBe("added");
+    expect(fs.readFileSync(file, "utf8")).toBe(original + "\n追加的一小段");
   });
 });
