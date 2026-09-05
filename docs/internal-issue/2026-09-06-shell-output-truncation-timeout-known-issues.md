@@ -17,7 +17,7 @@
 | 2 run_verification 硬编码 60s 超时，全量测试（实测 124s）必死 | 已修复（C3，20b8707c） | verification-runner.ts：test 10min / build 5min / lint+typecheck 2min；reporter 显式 default |
 | 3 verification-runner 内层截断砍尾保头，长输出的汇总行落在截断区 | 已修复（C3，20b8707c） | verification-runner.ts：truncateOutput 改头尾窗口 + 截断阈值放大 |
 | 4 run_shell 超时不可配（idle 2min / total 30min 硬编码），且 idle 检测误伤无输出长任务 | 已修复（C4，e4f8f86b） | run-shell-tool.ts：新增 timeout_ms 参数（钳制 1s–30min）+ 显式 deadline 后禁用 idle |
-| 5 长命令无后台执行模式，模型只能整轮阻塞等待 | 待修复（二期） | run-shell-tool.ts + 新增 shell_job 工具（status/stop + wait_ms + 流式日志 64MB 上限 + 5 态状态机） |
+| 5 长命令无后台执行模式，模型只能整轮阻塞等待 | 已修复（C5，5236c091） | run-shell-tool.ts：run_in_background 参数 + 新增 shell-job-manager.ts（流式日志/64MB 上限/五态状态机）与 shell-job-tool.ts（status/stop + wait_ms） |
 | 6 read_file 256KB 捕获层砍头：大文件 totalLines 在残件上统计，翻页到假 EOF 静默丢后半 | 已修复（C2，dc069032） | fs-tools.ts：10MB 内存上限 + totalLines 全量统计 + 真实行号翻页 |
 | 7 dispatcher 头尾窗口过小（头 4096 + 尾 1024），尾窗装不下汇总行+失败详情 | 已修复（C1，72739039） |
 | 8 run_shell kill 后 close 先于宽限期到达时，终止结果伪装成正常退出（timedOut=false、exitCode=1、终止原因丢失，executor 误判 succeeded）——C4 实施时测试发现 | 已修复（C4，e4f8f86b） | run-shell-tool.ts：stuckReason 跟踪 + buildResult 统一构造，close/error 路径合并终止事实 | tool-dispatcher.ts：threshold 30K / head 12K / tail 8K |
@@ -250,10 +250,10 @@ Claude Code 模式（后台 + 轮询 + 阻塞等待）：
 - **C4**：run_shell timeout_ms 参数 + 显式 deadline 禁用 idle（方案 3）
 - **发布检查点**：工具描述快照更新 + 全量回归 + 实机跑几天验证
 
-### 二期（新能力，独立排期）
+### 二期（新能力，独立排期；C5/C6 已于 2026-09-06 落地）
 
-- **C5**：run_in_background + shell_job 工具（方案 4，含流式日志/64MB 上限/状态机/wait_ms/idle 豁免四护栏）
-- **C6**：二期快照更新 + 全量回归
+- **C5**：run_in_background + shell_job 工具（方案 4，含流式日志/64MB 上限/状态机/wait_ms/idle 豁免四护栏）——已落地（5236c091），验收测试 shell-job.test.ts 13 用例全过
+- **C6**：二期快照更新 + 全量回归——已完成（随 5236c091 提交：快照门禁加入 shell_job，全量 438 文件 / 3620 用例通过）
 
 ## 验收测试要点（acceptance tests）
 
@@ -266,5 +266,5 @@ Claude Code 模式（后台 + 轮询 + 阻塞等待）：
 - C3（超时分档）：build 模拟 90s 完成 → 不被 60s 杀
 - C4：timeout_ms=5000 的 sleep 10 命令 5s 被杀并返回引导信息
 - C4（idle 禁用回归）：timeout_ms=300000 + 命令 150 秒无任何输出后正常结束 → 不被 idle 杀，exitCode=0
-- C5（二期）：后台 sleep 300 正常 running、stop 后 stopped、wait_ms 阻塞期间进程退出立即返回、写超 64MB 日志的任务被杀且 reason=output_limit_exceeded
-- C5（kill 真实性）：output_limit_exceeded 后日志文件不再增长（验证 killTree 后写入真的停了，而非只改状态字段）
+- C5（二期，已覆盖 shell-job.test.ts）：后台任务正常 running、stop 后 stopped、wait_ms 阻塞期间进程退出立即返回、输出超上限任务被杀且 reason=output_limit_exceeded（64MB 生产常量，测试注入 4KB 小上限走同一代码路径）
+- C5（kill 真实性，已覆盖）：stop/超时/超限后主进程与孙进程均用 PID 探测确认真实死亡（Windows taskkill /T、Unix 进程组组杀），非仅状态字段变更
