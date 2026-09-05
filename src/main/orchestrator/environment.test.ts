@@ -85,3 +85,45 @@ describe("buildEnvironmentContext timezone", () => {
     expect(ctx).toMatch(/时区 Asia\/Shanghai/);
   });
 });
+
+describe("buildEnvironmentContext tool list removal (方案 B)", () => {
+  // 原实现按权限档位列三行工具清单（allow/ask/deny 三桶），用的是
+  // getEnabledTools() 全量口径、无视 ToolModeOverrides——模式关掉的工具
+  // 仍被"广告"给模型，调用即报 E_TOOL_UNAVAILABLE。方案 B：整段删除，
+  // 工具可见性以 tools Schema + 工具目录 prompt（均已按模式过滤）为唯一口径。
+  // 这里断言环境段不再出现任何工具 id 清单，防止回归。
+
+  /** 代表性工具 id 样本：覆盖各风险级，防三行清单以任何形式回归。 */
+  const REPRESENTATIVE_TOOL_IDS = [
+    "run_shell",
+    "write_file",
+    "write_markdown",
+    "str_replace",
+    "apply_patch",
+    "read_file",
+    "search_text",
+    "record_expense",
+  ];
+
+  it("does not emit any per-permission tool list lines", () => {
+    const ctx = buildEnvironmentContext(undefined, undefined);
+    expect(ctx).not.toContain("可直接调用的工具");
+    expect(ctx).not.toContain("需先弹审批的工具");
+    expect(ctx).not.toContain("被拒绝的工具");
+  });
+
+  it("does not mention any registered tool id in the environment section", () => {
+    const ctx = buildEnvironmentContext(undefined, undefined);
+    for (const toolId of REPRESENTATIVE_TOOL_IDS) {
+      expect(ctx).not.toContain(toolId);
+    }
+  });
+
+  it("keeps the permission level line and the generic rule note", () => {
+    const ctx = buildEnvironmentContext(undefined, undefined);
+    // 档位行保留（含 label + level），规则说明保留通用语义
+    expect(ctx).toMatch(/- 文件权限档位：.+/);
+    expect(ctx).toContain("工具能否调用以本轮提供的工具清单为准");
+    expect(ctx).toContain("高风险操作可能触发审批确认");
+  });
+});

@@ -1,19 +1,19 @@
 // Step 1 — 环境注入
 //
-// 把"今天是几号 / 系统是什么 / 桌面在哪 / 当前权限档位 / 哪些工具可用"
+// 把"今天是几号 / 系统是什么 / 桌面在哪 / 当前权限档位"
 // 这些模型本来要靠猜的事实，直接以 system 段落的形式喂给它。
 // 这一层不解决"模型想不想调工具"，但能消掉"模型不知道桌面真实路径"
 // 这一类低级幻觉，给后续的意图识别 + tool_choice 兜底打底。
+// 注意：这里刻意不列具体工具清单——工具可见性以 tools Schema + 工具目录 prompt
+// （两处均已按模式过滤）为唯一口径，避免出现"清单说了能调、实际调不了"的双口径。
 //
 // 输出格式刻意选择 Markdown 小节，方便 LLM 抓字段；同时在终端打印
 // `[Env]` 日志便于排障。
 
 import { app } from "electron";
 import * as os from "os";
-import { toolRegistry } from "./tools/registry/tool-registry";
 import { listMcpServers } from "./mcp-manager";
-import { ACCESS_LEVEL_LABEL, getCurrentLevel, policyFor } from "../permission";
-import type { ToolRiskLevel } from "../permission";
+import { ACCESS_LEVEL_LABEL, getCurrentLevel } from "../permission";
 import { getCapability } from "./vendors/capabilities";
 import { resolveChatContextTimezone } from "../chat-time-context";
 import { getDateLocale } from "../locale-context";
@@ -121,19 +121,6 @@ export function buildEnvironmentContext(modelInfo?: ModelInfo, userInfo?: UserIn
   const tz = resolveChatContextTimezone(userInfo?.timezone);
   const dateStr = formatDate(new Date(), tz);
 
-  // 工具清单：按"启用 + 当前档位放行"两个维度过滤，让模型只看到当下能用的
-  const allEnabled = toolRegistry.getEnabledTools();
-  const allowedTools: string[] = [];
-  const askTools: string[] = [];
-  const deniedTools: string[] = [];
-  for (const t of allEnabled) {
-    const risk: ToolRiskLevel = t.risk ?? "safe";
-    const verdict = policyFor(level, risk);
-    if (verdict === "allow") allowedTools.push(`${t.id}(${risk})`);
-    else if (verdict === "ask") askTools.push(`${t.id}(${risk})`);
-    else deniedTools.push(`${t.id}(${risk})`);
-  }
-
   // MCP server 状态
   let mcpLine = "未连接任何 MCP server";
   try {
@@ -159,13 +146,9 @@ export function buildEnvironmentContext(modelInfo?: ModelInfo, userInfo?: UserIn
   if (downloads) lines.push(`- 下载路径：${downloads}`);
   lines.push("");
   lines.push(`- 文件权限档位：${levelLabel}（${level}）`);
-  lines.push(`- 当前档位下可直接调用的工具：${allowedTools.length > 0 ? allowedTools.join(", ") : "（无）"}`);
-  if (askTools.length > 0) {
-    lines.push(`- 当前档位需先弹审批的工具：${askTools.join(", ")}`);
-  }
-  if (deniedTools.length > 0) {
-    lines.push(`- 当前档位被拒绝的工具（提到也调不出）：${deniedTools.join(", ")}`);
-  }
+  // 不列具体工具清单：可见性以 tools Schema + 工具目录 prompt（均已按模式过滤）为唯一口径，
+  // 这里只说明档位的通用规则，避免"清单说能调、实际调不了"的双口径误导。
+  lines.push("- 工具能否调用以本轮提供的工具清单为准；fs-write / shell 等高风险操作可能触发审批确认。");
   lines.push(`- MCP 服务：${mcpLine}`);
   lines.push("");
 
@@ -221,9 +204,6 @@ export function buildEnvironmentContext(modelInfo?: ModelInfo, userInfo?: UserIn
     LOG_PREFIX,
     `level=${level}`,
     `desktop=${desktop || "?"}`,
-    `allowed=${allowedTools.length}`,
-    `ask=${askTools.length}`,
-    `deny=${deniedTools.length}`,
     `mcp=${mcpLine.startsWith("未连接") ? "none" : "active"}`,
     `vision=${supportsVision}`,
   );
