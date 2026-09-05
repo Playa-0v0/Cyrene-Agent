@@ -21,10 +21,11 @@ import { getRunReviewTracker } from "../review/run-review-tracker";
 
 const LOG_PREFIX = "[DocTools]";
 
-/** 校验文件名：必须有合法扩展名，不能有危险字符。 */
-function validateFilename(filename: string, ext: string): string | null {
+/** 校验文件名：必须有合法扩展名，不能有危险字符。ext 支持多个候选（如 [".md", ".txt"]）。 */
+function validateFilename(filename: string, ext: string | string[]): string | null {
   if (!filename || typeof filename !== "string") return null;
-  if (!filename.toLowerCase().endsWith(ext)) return null;
+  const exts = Array.isArray(ext) ? ext : [ext];
+  if (!exts.some((e) => filename.toLowerCase().endsWith(e))) return null;
   // 防危险字符
   if (/[<>:"|?*]/.test(filename)) return null;
   return filename;
@@ -598,19 +599,20 @@ export function registerDocumentTools(): void {
     id: "write_markdown",
     name: "写 Markdown",
     description:
-      "生成或追加一个 Markdown 文件（.md）。绑定项目时保存到该项目目录；未绑定时保存到桌面。\n" +
+      "生成或追加一个笔记文件（.md 或 .txt）。绑定项目时保存到该项目目录；未绑定时保存到桌面。\n" +
       "覆盖已有大文件时若新内容行数骤降过半会被拒绝（防输出截断毁文件），此时改用 str_replace 做局部修改。\n" +
       "笔记很长时不要一次性写入：先写前半部分，再用 append=true 续写后半部分（软截断防护，" +
       "也避免超长参数被截断后整文件覆盖）。\n\n" +
       "何时用：\n" +
       "- 用户要写笔记/文档\n" +
+      "- 用户要写纯文本文件（.txt）\n" +
       "- 需要轻量级文档输出\n" +
       "- 比 Word/PDF 更轻量的场景\n\n" +
       "不要用于：\n" +
       "- 正式文档（用 write_word / write_pdf）\n" +
       "- 表格数据（用 write_excel）\n" +
       "- 修改已有文件的局部内容（用 str_replace）\n\n" +
-      "参数：filename（.md 结尾），content（markdown 内容字符串），append（可选，默认 false 覆盖写；" +
+      "参数：filename（.md 或 .txt 结尾），content（文本内容），append（可选，默认 false 覆盖写；" +
       "true 时在文件末尾追加，文件不存在则新建）。",
     enabled: true,
     risk: "fs-write",
@@ -621,15 +623,15 @@ export function registerDocumentTools(): void {
     inputSchema: {
       type: "object",
       properties: {
-        filename: { type: "string", description: "文件名（.md 结尾）" },
-        content:  { type: "string", description: "markdown 内容" },
+        filename: { type: "string", description: "文件名（.md 或 .txt 结尾）" },
+        content:  { type: "string", description: "文本内容" },
         append:   { type: "boolean", description: "默认 false 覆盖写。true 时追加到文件末尾（文件不存在则新建）；长笔记分多次写入时用 true 续写" },
       },
       required: ["filename", "content"],
     },
     execute: async (args, context?: ToolContext) => {
-      const filename = validateFilename(String(args.filename || ""), ".md");
-      if (!filename) return filenameError(".md", args);
+      const filename = validateFilename(String(args.filename || ""), [".md", ".txt"]);
+      if (!filename) return filenameError(".md 或 .txt", args);
       const outputPath = resolveOutputPath(filename, context?.resolvedWorkspaceRoot);
       if (!outputPath) return "[错误] 路径不合法（禁止目录穿越或绝对路径）: " + filename;
 

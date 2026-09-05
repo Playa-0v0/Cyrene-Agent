@@ -72,12 +72,22 @@ describe("filename 校验报错（参数缺失时回传实际键名）", () => {
 
   it("write_markdown filename 后缀不对时报错回传实际值", async () => {
     const raw = await getTool("write_markdown").execute(
-      { filename: "notes.txt", content: "x" },
+      { filename: "notes.rtf", content: "x" },
       {},
     );
-    expect(raw).toContain("必须是 .md 结尾");
-    expect(raw).toContain("notes.txt");
-    expect(fs.readdirSync(tmpDir).join(",")).not.toContain("notes.txt");
+    expect(raw).toContain("必须是 .md 或 .txt 结尾");
+    expect(raw).toContain("notes.rtf");
+    expect(fs.readdirSync(tmpDir).join(",")).not.toContain("notes.rtf");
+  });
+
+  it("write_markdown 接受 .txt 后缀（learn 模式写纯文本）", async () => {
+    const raw = await getTool("write_markdown").execute(
+      { filename: "todo.txt", content: "第一行\n第二行" },
+      {},
+    );
+    const result = JSON.parse(raw);
+    expect(result.success).toBe(true);
+    expect(fs.readFileSync(path.join(tmpDir, "todo.txt"), "utf8")).toBe("第一行\n第二行");
   });
 
   it("write_excel / write_word / write_pdf 缺 filename 时同样回传键名（不生成文件）", async () => {
