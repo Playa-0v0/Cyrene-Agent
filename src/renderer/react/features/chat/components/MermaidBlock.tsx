@@ -6,10 +6,11 @@
  * 流式期间（streaming=true）只显示占位，流完再正式渲染——半截源码必然语法报错，不值得边流边试。
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "../../../i18n";
 import { renderMermaidSVG } from "beautiful-mermaid";
 import { isOverSourceLimit, sanitizeSvg, stripFontImports } from "./svg-sanitize";
+import { SvgPreviewModal } from "./SvgPreviewModal";
 
 /** Cyrene 粉白主题：底色米白、主文字暖棕、点缀樱花粉 */
 const CYRENE_THEME = {
@@ -43,6 +44,7 @@ export function renderMermaidSafe(code: string): MermaidResult {
 
 export function MermaidBlock({ code, streaming }: { code: string; streaming?: boolean }) {
   const { t } = useTranslation();
+  const [zoomed, setZoomed] = useState(false);
   // 流式期间内容在变，不渲染图（显示占位）；memo 依赖 code，流结束后一次性出图
   const result = useMemo(() => (streaming ? null : renderMermaidSafe(code)), [code, streaming]);
 
@@ -52,11 +54,17 @@ export function MermaidBlock({ code, streaming }: { code: string; streaming?: bo
 
   if (result.kind === "svg") {
     return (
-      <div
-        className="cy-mermaid"
-        // 内容已经过 stripFontImports + DOMPurify 消毒
-        dangerouslySetInnerHTML={{ __html: result.svg }}
-      />
+      <>
+        <div
+          className="cy-mermaid cy-mermaid--zoomable"
+          title={t("messageList.diagramZoomHint")}
+          // 点击放大查看：气泡内 max-width 压缩会让大图看不清
+          onClick={() => setZoomed(true)}
+          // 内容已经过 stripFontImports + DOMPurify 消毒
+          dangerouslySetInnerHTML={{ __html: result.svg }}
+        />
+        <SvgPreviewModal svg={result.svg} open={zoomed} onClose={() => setZoomed(false)} />
+      </>
     );
   }
 

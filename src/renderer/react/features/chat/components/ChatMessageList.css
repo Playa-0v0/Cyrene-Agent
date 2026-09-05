@@ -670,6 +670,34 @@
   height: auto;
 }
 
+/* 可放大的图卡片：hover 高亮提示 */
+.cy-mermaid--zoomable,
+.cy-svg-card--zoomable {
+  cursor: zoom-in;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cy-mermaid--zoomable:hover,
+.cy-svg-card--zoomable:hover {
+  border-color: #e8a0b4;
+  box-shadow: 0 2px 10px rgba(232, 160, 180, 0.25);
+}
+
+/* 放大预览：解除气泡内 max-width 压缩，按 SVG 原始尺寸展示，容器滚动 */
+.cy-svg-preview-modal .cy-svg-preview {
+  max-height: 74vh;
+  overflow: auto;
+  text-align: center;
+  background: #fffafc;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.cy-svg-preview-modal .cy-svg-preview svg {
+  max-width: none;
+  height: auto;
+}
+
 .cy-mermaid--pending {
   padding: 18px 12px;
   color: #9a8a91;

@@ -6,9 +6,10 @@
  * 手写 SVG 不经过渲染引擎，熔断防的是超大 DOM 注入而不是同步渲染耗时。
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "../../../i18n";
 import { isOverHandwrittenSvgLimit, sanitizeSvg, stripFontImports } from "./svg-sanitize";
+import { SvgPreviewModal } from "./SvgPreviewModal";
 
 type SvgCardResult =
   | { kind: "svg"; svg: string }
@@ -25,6 +26,7 @@ export function renderSvgCardSafe(code: string): SvgCardResult {
 
 export function SvgCardBlock({ code, streaming }: { code: string; streaming?: boolean }) {
   const { t } = useTranslation();
+  const [zoomed, setZoomed] = useState(false);
   // 流式期间内容在变，显示占位；流结束后一次性消毒注入
   const result = useMemo(() => (streaming ? null : renderSvgCardSafe(code)), [code, streaming]);
 
@@ -34,11 +36,17 @@ export function SvgCardBlock({ code, streaming }: { code: string; streaming?: bo
 
   if (result.kind === "svg") {
     return (
-      <div
-        className="cy-svg-card"
-        // 内容已经过 stripFontImports + DOMPurify 消毒
-        dangerouslySetInnerHTML={{ __html: result.svg }}
-      />
+      <>
+        <div
+          className="cy-svg-card cy-svg-card--zoomable"
+          title={t("messageList.diagramZoomHint")}
+          // 点击放大查看：气泡内 max-width 压缩会让大图看不清
+          onClick={() => setZoomed(true)}
+          // 内容已经过 stripFontImports + DOMPurify 消毒
+          dangerouslySetInnerHTML={{ __html: result.svg }}
+        />
+        <SvgPreviewModal svg={result.svg} open={zoomed} onClose={() => setZoomed(false)} />
+      </>
     );
   }
 
