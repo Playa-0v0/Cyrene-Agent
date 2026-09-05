@@ -1746,6 +1746,16 @@
                 <input type="range" id="tts-volume" min="0" max="1" step="0.1" value="1" />
                 <span class="range-val" id="tts-volume-val">100%</span>
               </div>
+              <div class="setting-row">
+                <div>
+                  <strong>早播切分模式</strong>
+                  <span>自动朗读时文本如何切分：逐句朗读，或按空行段落整段朗读</span>
+                </div>
+                <select id="tts-early-read-split-mode">
+                  <option value="sentence">一句一切</option>
+                  <option value="paragraph">一段一切</option>
+                </select>
+              </div>
             </div>
 
             <!-- 引擎选择 -->

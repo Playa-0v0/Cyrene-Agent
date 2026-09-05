@@ -35,7 +35,7 @@ import {
   startSessionTodos,
   type TodoStateBySession,
 } from "../session-runtime-state";
-import type { EarlyTtsPlaybackQueue } from "../../tts/early-tts-queue";
+import type { EarlyTtsPlaybackQueue, EarlyTtsSplitMode } from "../../tts/early-tts-queue";
 
 /** 一次模型运行的全部输入：目标会话、消息占位与恢复/接管信息。 */
 export interface AgentRunInput {
@@ -77,7 +77,12 @@ export interface AgentRunHost {
   clearTakeover(sessionId: string): void;
   earlyTts: {
     /** 创建本轮的早播 TTS 队列（同一时间只保留一个活跃队列）。 */
-    start(mode: ConversationMode, sessionId: string, messageId: string): EarlyTtsPlaybackQueue;
+    start(
+      mode: ConversationMode,
+      sessionId: string,
+      messageId: string,
+      splitMode?: EarlyTtsSplitMode,
+    ): EarlyTtsPlaybackQueue;
     /** run 成功结束后用完整正文收尾播放。 */
     finish(queue: EarlyTtsPlaybackQueue, fullText: string): void;
   };
@@ -183,11 +188,6 @@ export class AgentRunController {
       ...this.deps.registries.activeRuns.current,
       [this.input.sessionId]: { assistantId: this.input.assistantId, mode: this.input.targetMode },
     };
-    this.earlyTtsQueue = this.deps.host.earlyTts.start(
-      this.input.targetMode,
-      this.input.sessionId,
-      this.input.assistantId,
-    );
     this.assistantAt = Date.now();
 
     // 注册本会话的检查点触发器：审批请求到达时立即把状态落为 waiting_user
@@ -207,6 +207,12 @@ export class AgentRunController {
 
     try {
       const general = await window.chat?.getGeneralSettings?.();
+      this.earlyTtsQueue = this.deps.host.earlyTts.start(
+        this.input.targetMode,
+        this.input.sessionId,
+        this.input.assistantId,
+        general?.ttsEarlyReadSplitMode ?? "sentence",
+      );
       const ack = await api.run({
         messages: this.input.session.messages.slice(-16).map((item) => ({
           role: item.role,

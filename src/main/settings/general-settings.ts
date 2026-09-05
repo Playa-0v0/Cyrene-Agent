@@ -73,6 +73,8 @@ export interface GeneralSettings extends ChatAppearanceSettings {
   ttsAutoRead: boolean;
   ttsSpeed: number;
   ttsVolume: number;
+  /** 自动语音早播的文本切分方式：sentence=一句一切（默认，现状）；paragraph=一段一切（仅空行段落切分）。 */
+  ttsEarlyReadSplitMode: "sentence" | "paragraph";
   // MiniMax
   ttsMinimaxKey: string;
   ttsMinimaxVoiceId: string;

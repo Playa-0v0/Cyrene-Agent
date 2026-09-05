@@ -51,6 +51,7 @@ describe("TTS settings panel", () => {
     document.body.replaceChildren();
     REQUIRED_INPUT_IDS.forEach(addInput);
     addSelect("tts-minimax-model", ["speech-2.8-turbo", "speech-2.8-hd"]);
+    addSelect("tts-early-read-split-mode", ["sentence", "paragraph"]);
     addSelect("tts-gptsovits-format", ["wav", "mp3"]);
     addSelect("tts-custom-cloud-format", ["mp3", "wav"]);
     addSelect("tts-mossland-model", ["moss-tts-1.5-flash", "moss-tts-1.0-pro"]);
@@ -90,5 +91,25 @@ describe("TTS settings panel", () => {
 
     expect((document.getElementById("tts-mossland-model") as HTMLSelectElement).value)
       .toBe("moss-tts-1.0-pro");
+  });
+
+  it("persists the early-read split mode when the select changes", async () => {
+    const saveSettings = vi.fn(async () => ({}));
+    Object.assign(window, {
+      tts: {
+        loadSettings: vi.fn(async () => ({ ttsEarlyReadSplitMode: "sentence" })),
+        saveSettings,
+      },
+    });
+    await import("./panel");
+    await Promise.resolve();
+    saveSettings.mockClear();
+
+    const select = document.getElementById("tts-early-read-split-mode") as HTMLSelectElement;
+    select.value = "paragraph";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(saveSettings).toHaveBeenCalledWith({ ttsEarlyReadSplitMode: "paragraph" });
   });
 });

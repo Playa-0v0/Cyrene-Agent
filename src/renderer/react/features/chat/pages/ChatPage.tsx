@@ -20,7 +20,7 @@ import {
   RunRecoveryNotices,
 } from "../components/ChatWorkspaceNotices";
 import { getTtsPlaybackSnapshot, playTtsToCompletion, stopTtsPlayback } from "../components/tts-playback";
-import { EarlyTtsPlaybackQueue } from "../tts/early-tts-queue";
+import { EarlyTtsPlaybackQueue, type EarlyTtsSplitMode } from "../tts/early-tts-queue";
 
 import type { ChatMessage, ChatSession, ChatSessionMeta, ConversationMode } from "../../../../../shared/chat-types";
 import { type ContextUsageSnapshot } from "../../../../../shared/context-usage";
@@ -503,6 +503,7 @@ export function ChatPage() {
     targetMode: ConversationMode,
     sessionId: string,
     messageId: string,
+    splitMode: EarlyTtsSplitMode = "sentence",
   ): EarlyTtsPlaybackQueue {
     activeEarlyTtsRef.current?.queue.cancel();
     const queue = new EarlyTtsPlaybackQueue(
@@ -522,6 +523,7 @@ export function ChatPage() {
         });
       },
       stopTtsPlayback,
+      splitMode,
     );
     activeEarlyTtsRef.current = { queue, mode: targetMode, sessionId, messageId };
     return queue;

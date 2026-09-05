@@ -54,6 +54,24 @@ describe("StreamingMarkdownSegmenter", () => {
     unclosed.append("```ts\nconst value = 1");
     expect(unclosed.finish("```ts\nconst value = 1")).toEqual([]);
   });
+
+  it("paragraph mode splits only on blank lines, never mid-sentence", () => {
+    const segmenter = new StreamingMarkdownSegmenter(4, "paragraph");
+    expect(segmenter.append("第一段没有句号也")).toEqual([]);
+    expect(segmenter.append("不会切。\n\n第二段开始。还在第")).toEqual(["第一段没有句号也不会切。"]);
+    expect(segmenter.append("二段。\n\n第三段完。")).toEqual(["第二段开始。还在第二段。"]);
+    expect(segmenter.finish("第一段没有句号也不会切。\n\n第二段开始。还在第二段。\n\n第三段完。"))
+      .toEqual(["第三段完。"]);
+  });
+
+  it("paragraph mode still waits for fenced code blocks to close", () => {
+    const segmenter = new StreamingMarkdownSegmenter(4, "paragraph");
+    expect(segmenter.append("代码：\n```ts\nconst x = 1;\n")).toEqual([]);
+    expect(segmenter.append("```\n\n下一段话开始。\n\n这里是结尾。"))
+      .toEqual(["代码：\n```ts\nconst x = 1;\n```", "下一段话开始。"]);
+    expect(segmenter.finish("代码：\n```ts\nconst x = 1;\n```\n\n下一段话开始。\n\n这里是结尾。"))
+      .toEqual(["这里是结尾。"]);
+  });
 });
 
 describe("EarlyTtsPlaybackQueue", () => {
@@ -98,5 +116,15 @@ describe("EarlyTtsPlaybackQueue", () => {
     resolvePlayback();
     await expect(finished).resolves.toBeUndefined();
     expect(play).toHaveBeenCalledTimes(1);
+  });
+
+  it("queue applies paragraph mode through its constructor", async () => {
+    const play = vi.fn().mockResolvedValue("completed");
+    const queue = new EarlyTtsPlaybackQueue(play, undefined, "paragraph");
+    queue.append("没有句号的段落一。还没切\n\n段落二开始。");
+    await queue.finish("没有句号的段落一。还没切\n\n段落二开始。");
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(play.mock.calls[0][0]).toBe("没有句号的段落一。还没切");
+    expect(play.mock.calls[1][0]).toBe("段落二开始。");
   });
 });

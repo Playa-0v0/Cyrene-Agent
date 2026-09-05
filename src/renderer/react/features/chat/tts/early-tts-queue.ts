@@ -1,5 +1,7 @@
 export type EarlyTtsPlaybackResult = "completed" | "skipped" | "interrupted" | "error";
 export type EarlyTtsPlay = (segment: string, index: number) => Promise<EarlyTtsPlaybackResult>;
+/** 自动语音早播的文本切分模式：sentence=一句一切（默认）；paragraph=一段一切（仅空行段落切分）。 */
+export type EarlyTtsSplitMode = "sentence" | "paragraph";
 
 const SENTENCE_END = /[。！？!?；;]/;
 
@@ -31,7 +33,10 @@ export class StreamingMarkdownSegmenter {
   private buffer = "";
   private committed = 0;
 
-  constructor(private readonly minChars = 4) {}
+  constructor(
+    private readonly minChars = 4,
+    private readonly splitMode: EarlyTtsSplitMode = "sentence",
+  ) {}
 
   append(delta: string): string[] {
     if (delta) this.buffer += delta;
@@ -159,7 +164,7 @@ export class StreamingMarkdownSegmenter {
       }
 
       if (SENTENCE_END.test(character)) {
-        commit(index + 1, false);
+        if (this.splitMode === "sentence") commit(index + 1, false);
         continue;
       }
       if (character === "\n" && next === "\n") {
@@ -180,7 +185,7 @@ export class StreamingMarkdownSegmenter {
 
 /** Serializes complete speech segments so a later sentence never interrupts the current audio. */
 export class EarlyTtsPlaybackQueue {
-  private readonly segmenter = new StreamingMarkdownSegmenter();
+  private readonly segmenter: StreamingMarkdownSegmenter;
   private readonly pending: string[] = [];
   private drainPromise: Promise<void> | null = null;
   private cancelled = false;
@@ -192,7 +197,10 @@ export class EarlyTtsPlaybackQueue {
   constructor(
     private readonly play: EarlyTtsPlay,
     private readonly cancelPlayback: () => void = () => undefined,
-  ) {}
+    splitMode: EarlyTtsSplitMode = "sentence",
+  ) {
+    this.segmenter = new StreamingMarkdownSegmenter(4, splitMode);
+  }
 
   append(delta: string): void {
     if (this.cancelled || this.finished) return;

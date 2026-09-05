@@ -127,6 +127,8 @@ async function loadTtsConfig(): Promise<void> {
   ttsEl("tts-auto-read").checked = Boolean(ttsState.config.ttsAutoRead);
   ttsEl("tts-speed").value = String(ttsState.config.ttsSpeed ?? 1);
   ttsEl("tts-volume").value = String(ttsState.config.ttsVolume ?? 1);
+  (ttsEl("tts-early-read-split-mode") as HTMLSelectElement).value =
+    ttsState.config.ttsEarlyReadSplitMode === "paragraph" ? "paragraph" : "sentence";
   updateTtsSliderLabels();
 
   // MiniMax
@@ -256,6 +258,12 @@ ttsEl("tts-speed").addEventListener("input", updateTtsSliderLabels);
 ttsEl("tts-speed").addEventListener("change", () => saveTtsField("ttsSpeed", Number(ttsEl("tts-speed").value)));
 ttsEl("tts-volume").addEventListener("input", updateTtsSliderLabels);
 ttsEl("tts-volume").addEventListener("change", () => saveTtsField("ttsVolume", Number(ttsEl("tts-volume").value)));
+
+// 早播切分模式
+ttsEl("tts-early-read-split-mode").addEventListener("change", () => {
+  const mode = ttsEl("tts-early-read-split-mode").value === "paragraph" ? "paragraph" : "sentence";
+  void saveTtsField("ttsEarlyReadSplitMode", mode);
+});
 
 // GPT-SoVITS 超时输入框（number，blur 时保存并做简单边界限制）
 ttsEl("tts-gptsovits-timeout").addEventListener("change", () => {
