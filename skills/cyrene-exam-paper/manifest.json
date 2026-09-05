@@ -1,6 +1,6 @@
 {
   "id": "cyrene-exam-paper",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "defaultEnabled": true,
   "entry": "index.ts",
   "autoInject": true,
