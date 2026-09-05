@@ -11,7 +11,7 @@ export function NewTaskButton({ label, onClick }: NewTaskButtonProps) {
   return (
     <button className="cy-side-action" onClick={onClick} type="button">
       <span className="cy-side-action-icon">
-        <img src={newIconUrl} alt="" width="18" height="18" style={{ objectFit: "contain" }} />
+        <img src={newIconUrl} alt="" width="22" height="22" style={{ objectFit: "contain" }} />
       </span>
       <span className="cy-side-action-label">{label ?? t("ui.newButton")}</span>
     </button>

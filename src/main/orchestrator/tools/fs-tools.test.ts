@@ -248,3 +248,65 @@ describe("write_file truthful contract", () => {
       .rejects.toMatchObject({ code: "E_WRITE_EVIDENCE_FAILED", effectState: "unknown" });
   });
 });
+
+describe("write_file 覆盖写骤降防护", () => {
+  function writeTool() {
+    return vi.mocked(toolRegistry.register).mock.calls.find(
+      (call) => call[0].id === "write_file",
+    )?.[0];
+  }
+
+  function lines(n: number): string {
+    return Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n");
+  }
+
+  it("大文件覆盖写骤降过半时拒绝且文件保持原样", async () => {
+    const target = path.join(tmpDir, "big.txt");
+    const original = lines(100);
+    fs.writeFileSync(target, original);
+
+    await expect(writeTool()!.execute({ path: target, content: "半截内容" }))
+      .rejects.toMatchObject({
+        code: "E_OVERWRITE_DROP_BLOCKED",
+        category: "runtime_safety",
+        retryable: false,
+        effectState: "not_applied",
+      });
+    // 拒绝发生在落盘之前，原文件未被改动
+    expect(fs.readFileSync(target, "utf8")).toBe(original);
+  });
+
+  it("小文件合法缩水不拦截", async () => {
+    const target = path.join(tmpDir, "small.txt");
+    fs.writeFileSync(target, lines(10));
+
+    const result = JSON.parse(await writeTool()!.execute({ path: target, content: "x\ny" }));
+    expect(result.success).toBe(true);
+    expect(fs.readFileSync(target, "utf8")).toBe("x\ny");
+  });
+
+  it("覆盖写返回行级 diff（旧文全文 remove + 新文全文 add）", async () => {
+    const target = path.join(tmpDir, "over.txt");
+    fs.writeFileSync(target, "旧一\n旧二");
+
+    const result = JSON.parse(await writeTool()!.execute({ path: target, content: "新一\n新二\n新三" }));
+    const change = result.changes[0];
+    expect(change.kind).toBe("modified");
+    expect(change.insertions).toBe(3);
+    expect(change.deletions).toBe(2);
+    const removeTexts = change.diff.filter((l: { type: string }) => l.type === "remove").map((l: { text: string }) => l.text);
+    const addTexts = change.diff.filter((l: { type: string }) => l.type === "add").map((l: { text: string }) => l.text);
+    expect(removeTexts).toEqual(["旧一", "旧二"]);
+    expect(addTexts).toEqual(["新一", "新二", "新三"]);
+  });
+
+  it("append 不做骤降检查（追加只增不减）", async () => {
+    const target = path.join(tmpDir, "append.txt");
+    const original = lines(60);
+    fs.writeFileSync(target, original);
+
+    const result = JSON.parse(await writeTool()!.execute({ path: target, content: "尾巴", append: true }));
+    expect(result.success).toBe(true);
+    expect(fs.readFileSync(target, "utf8")).toBe(original + "尾巴");
+  });
+});

@@ -9,6 +9,7 @@ import { useUserAvatar } from "../../hooks/useUserAvatar";
 import { useUserNickname } from "../../hooks/useUserNickname";
 import { MomentComposer } from "./MomentComposer";
 import { MomentPostCard } from "./MomentPostCard";
+import momentsIconUrl from "../../assets/moments.png?url";
 import "./MomentsPanel.css";
 
 /** 「动态」面板：顶部常驻发布框（QQ 空间式）+ 下方朋友圈式信息流。 */
@@ -87,6 +88,7 @@ export function MomentsPanel() {
       <div className="moments-panel__scroll">
         <div className="moments-panel__inner">
           <header className="moments-panel__header">
+            <img className="moments-panel__heading-icon" src={momentsIconUrl} alt="" />
             <h1 className="moments-panel__title">{t("moments.title")}</h1>
             <span className="moments-panel__subtitle">{t("moments.subtitle")}</span>
           </header>

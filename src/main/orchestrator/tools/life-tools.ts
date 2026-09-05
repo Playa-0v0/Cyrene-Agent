@@ -13,6 +13,7 @@ import * as path from "path";
 import { app } from "electron";
 import { toolRegistry } from "./registry/tool-registry";
 import { buildReplacedDiff, countLines, finalizeFileChanges } from "./registry/tool-evidence";
+import { applyStrReplaceEdits } from "./str-replace-core";
 import { currentUserTimezone } from "./built-in-tools";
 import { resolveTimeoutPolicy } from "../../runtime-policy";
 import { getDateLocale } from "../../locale-context";
@@ -287,132 +288,56 @@ function registerTranslateTool(): void {
 }
 
 // ══════════════════════════════════════════════════════════
-// 代码补丁
+// 代码补丁（匹配与批量应用逻辑在 str-replace-core.ts，此处只做注册与 fs 接线）
 // ══════════════════════════════════════════════════════════
-
-interface MatchPosition {
-  line: number;       // 1-based 行号
-  context: string;    // 匹配位置前后各 2 行上下文
-}
-
-/** 计算两个字符串的相似度（0-1） */
-function similarity(a: string, b: string): number {
-  if (a === b) return 1;
-  if (!a || !b) return 0;
-  const maxLen = Math.max(a.length, b.length);
-  if (maxLen === 0) return 1;
-
-  // 简单的字符集相似度
-  const setA = new Set(a);
-  const setB = new Set(b);
-  let intersection = 0;
-  for (const c of setA) {
-    if (setB.has(c)) intersection++;
-  }
-  return intersection / Math.max(setA.size, setB.size);
-}
-
-/** 在文件行中查找最接近 old_string 的位置 */
-function findNearestMatch(
-  lines: string[],
-  oldStr: string,
-): { line: number; similarity: number; context: string } | null {
-  const oldLines = oldStr.split("\n");
-  const firstLine = oldLines[0]?.trim() || "";
-  if (!firstLine) return null;
-
-  let bestMatch: { line: number; sim: number } | null = null;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const sim = similarity(firstLine, line.trim());
-    if (sim > 0.5 && (!bestMatch || sim > bestMatch.sim)) {
-      bestMatch = { line: i + 1, sim };
-    }
-  }
-
-  if (!bestMatch) return null;
-
-  // 收集上下文（前后各 2 行）
-  const contextStart = Math.max(0, bestMatch.line - 3);
-  const contextEnd = Math.min(lines.length, bestMatch.line + 2);
-  const contextLines = lines.slice(contextStart, contextEnd).map((l, idx) => {
-    const ln = contextStart + idx + 1;
-    const marker = ln === bestMatch!.line ? ">" : " ";
-    return `${marker} ${String(ln).padStart(4)} | ${l}`;
-  });
-
-  return {
-    line: bestMatch.line,
-    similarity: bestMatch.sim,
-    context: contextLines.join("\n"),
-  };
-}
-
-/** 查找所有匹配位置和上下文 */
-function findAllMatchPositions(lines: string[], oldStr: string): MatchPosition[] {
-  const positions: MatchPosition[] = [];
-  const oldLines = oldStr.split("\n");
-  const firstLine = oldLines[0] || "";
-
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes(firstLine)) {
-      // 检查完整匹配
-      const candidate = lines.slice(i, i + oldLines.length).join("\n");
-      if (candidate === oldStr) {
-        const contextStart = Math.max(0, i - 2);
-        const contextEnd = Math.min(lines.length, i + oldLines.length + 2);
-        const contextLines = lines.slice(contextStart, contextEnd).map((l, idx) => {
-          const ln = contextStart + idx + 1;
-          const marker = (ln >= i + 1 && ln <= i + oldLines.length) ? ">" : " ";
-          return `${marker} ${String(ln).padStart(4)} | ${l}`;
-        });
-
-        positions.push({
-          line: i + 1,
-          context: contextLines.join("\n"),
-        });
-      }
-    }
-  }
-
-  return positions;
-}
 
 function registerStrReplaceTool(): void {
   toolRegistry.register({
     id: "str_replace",
     name: "精确替换",
     description:
-      "对单个文件应用精确的字符串替换。\n\n" +
+      "对单个文件应用精确的字符串替换（内容锚点，不依赖行号）。\n\n" +
       "何时用：\n" +
-      "- 修改现有文件中的一处特定代码片段\n" +
-      "- 用户要「把 X 改成 Y」「把第 N 行的 A 替换成 B」\n\n" +
+      "- 修改现有文件中的一处或多处特定片段（多处用 edits 一次调用完成）\n" +
+      "- 用户要「把 X 改成 Y」「把第 N 行的 A 替换成 B」\n" +
+      "- 修正笔记 / 文档的局部内容（learn 模式可用）\n" +
+      "- 填充空文件：文件存在但内容为空时，old_string 传空字符串，new_string 传完整内容，即可整体写入\n\n" +
       "不要用于：\n" +
-      "- 同一文件多处修改、或多文件批量修改（用 apply_patch 补丁格式）\n" +
+      "- 多文件批量修改（用 apply_patch 补丁格式）\n" +
       "- 整文件重写（用 write_file）\n" +
       "- 新建文件（用 write_file）\n\n" +
-      "参数：file_path（文件路径），old_string（要替换的原文本，必须精确匹配含缩进），new_string（替换后的文本）。\n" +
-      "old_string 必须在文件中唯一；匹配多处会报错，需要更长的上下文使其唯一。",
+      "参数：file_path（文件路径），old_string（要替换的原文本，须精确匹配含缩进；文件为空时传空字符串做整体写入），new_string（替换后的文本）；" +
+      "同一文件多处修改可改用 edits 数组（每项含 old_string / new_string，按顺序应用，任一处失败则整体不生效）。\n" +
+      "old_string 必须在文件中唯一；匹配多处会报错，需要更长的上下文使其唯一。" +
+      "缩进/空白略有出入时会自动做归一化匹配，命中后按文件真实缩进写入。",
     enabled: true,
     risk: "fs-write",
-    modes: ["code", "work"],
+    modes: ["code", "work", "learn"],
     effectKind: "mutation" as const,
     verificationPolicy: "code" as const,
     inputSchema: {
       type: "object",
       properties: {
         file_path:   { type: "string", description: "文件绝对路径" },
-        old_string:  { type: "string", description: "要替换的原文本（必须精确匹配，含缩进）" },
-        new_string:  { type: "string", description: "替换后的文本" },
+        old_string:  { type: "string", description: "要替换的原文本（必须精确匹配，含缩进）。与 edits 二选一" },
+        new_string:  { type: "string", description: "替换后的文本。与 edits 二选一" },
+        edits: {
+          type: "array",
+          description: "批量替换（与 old_string/new_string 二选一）：一次调用完成同一文件多处修改，按数组顺序依次应用，任一处失败则整体不生效",
+          items: {
+            type: "object",
+            properties: {
+              old_string: { type: "string", description: "要替换的原文本（必须精确匹配，含缩进）" },
+              new_string: { type: "string", description: "替换后的文本" },
+            },
+            required: ["old_string", "new_string"],
+          },
+        },
       },
-      required: ["file_path", "old_string", "new_string"],
+      required: ["file_path"],
     },
     execute: async (args, ctx?) => {
       const filePath = String(args.file_path || "");
-      const oldStr = String(args.old_string ?? "");
-      const newStr = String(args.new_string ?? "");
-      console.log(LOG_PREFIX, "str_replace:", filePath, "old_len=" + oldStr.length, "new_len=" + newStr.length);
       if (!filePath) return JSON.stringify({ success: false, errorCode: "INVALID_PATH", error: "file_path 不能为空", retryable: false });
       if (!fs.existsSync(filePath)) {
         return JSON.stringify({
@@ -423,64 +348,39 @@ function registerStrReplaceTool(): void {
         });
       }
 
+      // 参数形态：edits 非空数组走批量；否则要求单发 old/new 齐备
+      const rawEdits = Array.isArray(args.edits) ? args.edits : [];
+      const edits = rawEdits
+        .filter((e): e is { old_string: string; new_string: string } =>
+          typeof e === "object" && e !== null && typeof (e as Record<string, unknown>).old_string === "string" && typeof (e as Record<string, unknown>).new_string === "string")
+        .map((e) => ({ old_string: e.old_string, new_string: e.new_string }));
+      const singleMode = edits.length === 0;
+      if (singleMode) {
+        const oldStr = String(args.old_string ?? "");
+        const newStr = String(args.new_string ?? "");
+        if (!oldStr && !newStr) {
+          return JSON.stringify({
+            success: false,
+            errorCode: "INVALID_INPUT",
+            error: "需要提供 old_string/new_string（单处替换）或 edits 数组（多处替换），本次收到的参数键：" + Object.keys(args).join(", "),
+            retryable: false,
+          });
+        }
+        edits.push({ old_string: oldStr, new_string: newStr });
+      }
+
       const content = fs.readFileSync(filePath, "utf8");
-      if (!oldStr) return JSON.stringify({ success: false, errorCode: "INVALID_INPUT", error: "old_string 不能为空", retryable: false });
+      console.log(LOG_PREFIX, "str_replace:", filePath, "edits=" + edits.length);
 
-      // EOL 归一化：模型通常按 LF 提供文本，而 Windows 文件常为 CRLF。
-      // 精确字节匹配失败率极高 → 匹配前先把 old/new 对齐到文件的实际 EOL，写入时保持文件原有换行风格。
-      let matchStr = oldStr;
-      let replaceStr = newStr;
-      if (content.includes("\r\n") && !oldStr.includes("\r")) {
-        matchStr = oldStr.replaceAll("\n", "\r\n");
-        replaceStr = newStr.replaceAll("\n", "\r\n");
-      } else if (!content.includes("\r\n") && oldStr.includes("\r\n")) {
-        matchStr = oldStr.replaceAll("\r\n", "\n");
-        replaceStr = newStr.replaceAll("\r\n", "\n");
-      }
-      const eolNormalized = matchStr !== oldStr;
-
-      const lines = content.split("\n");
-      const count = content.split(matchStr).length - 1;
-
-      if (count === 0) {
-        // old_string 未找到：提供最近似候选和上下文
-        const nearest = findNearestMatch(lines, oldStr);
+      const result = applyStrReplaceEdits(content, edits);
+      if (!result.ok) {
+        // 失败不落盘：诊断信息原样透传给模型
         return JSON.stringify({
           success: false,
-          errorCode: "OLD_STRING_NOT_FOUND",
-          error: "old_string 在文件中未找到。已自动尝试 CRLF/LF 换行归一化仍未匹配，请用 read_file 核对实际内容（缩进、空格、标点）后重试。",
+          errorCode: result.errorCode,
+          error: result.error,
           retryable: false,
-          diagnostic: {
-            kind: "not_found",
-            filePath,
-            oldStringLength: oldStr.length,
-            fileEol: content.includes("\r\n") ? "CRLF" : "LF",
-            nearestMatch: nearest ? {
-              line: nearest.line,
-              similarity: nearest.similarity,
-              context: nearest.context,
-            } : null,
-          },
-        });
-      }
-
-      if (count > 1) {
-        // 多处匹配：提供所有匹配位置和上下文
-        const positions = findAllMatchPositions(lines, matchStr);
-        return JSON.stringify({
-          success: false,
-          errorCode: "MULTIPLE_MATCHES",
-          error: `old_string 在文件中匹配 ${count} 处，需要更长的上下文使其唯一。`,
-          retryable: false,
-          diagnostic: {
-            kind: "multiple_matches",
-            filePath,
-            matchCount: count,
-            positions: positions.slice(0, 5).map(pos => ({
-              line: pos.line,
-              context: pos.context,
-            })),
-          },
+          diagnostic: result.diagnostic,
         });
       }
 
@@ -490,27 +390,33 @@ function registerStrReplaceTool(): void {
         tracker.captureBefore(ctx.runId, filePath);
       }
 
-      const newContent = content.replace(matchStr, replaceStr);
-      fs.writeFileSync(filePath, newContent, "utf8");
+      fs.writeFileSync(filePath, result.newContent, "utf8");
       const size = fs.statSync(filePath).size;
-      console.log(LOG_PREFIX, "str_replace:", filePath, "size=" + size, eolNormalized ? "eolNormalized=true" : "");
+      console.log(
+        LOG_PREFIX,
+        "str_replace:", filePath, "size=" + size,
+        result.eolNormalized ? "eolNormalized=true" : "",
+        result.whitespaceNormalized ? "whitespaceNormalized=true" : "",
+      );
+
       // diff 展示统一按 LF 拆行，避免 CRLF 残留到卡片渲染
-      const beforeLines = matchStr.replaceAll("\r\n", "\n").split("\n");
-      const afterLines = replaceStr.replaceAll("\r\n", "\n").split("\n");
+      const changes = result.segments.map((seg) => ({
+        file: filePath,
+        kind: "modified" as const,
+        insertions: countLines(seg.afterLines.join("\n")),
+        deletions: countLines(seg.beforeLines.join("\n")),
+        diff: buildReplacedDiff(seg.beforeLines, seg.afterLines),
+      }));
       return JSON.stringify({
         tool: "str_replace",
         filePath,
         action: "modified",
         sizeBytes: size,
         success: true,
-        eolNormalized,
-        changes: finalizeFileChanges([{
-          file: filePath,
-          kind: "modified",
-          insertions: countLines(newStr),
-          deletions: countLines(oldStr),
-          diff: buildReplacedDiff(beforeLines, afterLines),
-        }]),
+        eolNormalized: result.eolNormalized,
+        whitespaceNormalized: result.whitespaceNormalized,
+        appliedEdits: result.appliedEdits,
+        changes: finalizeFileChanges(changes),
       });
     },
   });

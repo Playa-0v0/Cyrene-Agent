@@ -7,7 +7,8 @@ import { toolRegistry } from "./registry/tool-registry";
 import { captionImage } from "../vision-captioner";
 import type { ToolContext } from "./registry/tool-context";
 import type { ToolFileChange } from "../../../shared/chat-types";
-import { buildFullFileDiff, countLines, finalizeFileChanges } from "./registry/tool-evidence";
+import { buildFullFileDiff, buildReplacedDiff, countLines, finalizeFileChanges } from "./registry/tool-evidence";
+import { checkOverwriteDrop, overwriteDropMessage } from "./overwrite-guard";
 import type { VerificationPolicy } from "./registry/tool-registry";
 import { logger, LogTag } from "../../logger";
 import { ToolExecutionError } from "./registry/tool-execution-error";
@@ -270,6 +271,34 @@ async function executeWriteFile(args: Record<string, unknown>, ctx?: ToolContext
   const createDirs = args.createDirs !== false; // 默认创建父目录
   const existedBefore = fs.existsSync(filePath);
 
+  // 覆盖写防护：写前现读当前文件，同一份内容同时用于骤降检查（软截断检测）
+  // 与行级 diff 生成。不走 review 基线——基线是本 run 第一次修改前的状态，
+  // 本轮早前可能已改过该文件，用基线会把骤降口径和 diff 都算错。
+  let existingContent: string | null = null;
+  if (!append && existedBefore) {
+    try {
+      existingContent = fs.readFileSync(filePath, "utf8");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new ToolExecutionError(
+        "E_READ_BEFORE_OVERWRITE_FAILED",
+        "写前读取原文件失败，已拒绝覆盖写: " + msg,
+        "permission_denied",
+      );
+    }
+    const drop = checkOverwriteDrop(existingContent, content);
+    if (drop.blocked) {
+      // 拒绝发生在落盘之前，文件保持原样
+      throw new ToolExecutionError(
+        "E_OVERWRITE_DROP_BLOCKED",
+        overwriteDropMessage(drop),
+        "runtime_safety",
+        false,
+        "not_applied",
+      );
+    }
+  }
+
   console.log(LOG_PREFIX, "write_file:", filePath, "bytes=" + Buffer.byteLength(content, "utf8"), append ? "(append)" : "(overwrite)");
 
   if (createDirs) {
@@ -322,6 +351,7 @@ async function executeWriteFile(args: Record<string, unknown>, ctx?: ToolContext
     );
   }
   // Diff Review 卡片证据：新文件/追加=added，覆盖已有=modified
+  // diff 展示统一按 LF 拆行，避免 CRLF 残留到卡片渲染
   const insertions = countLines(content);
   const change: ToolFileChange = append || !existedBefore
     ? {
@@ -335,8 +365,12 @@ async function executeWriteFile(args: Record<string, unknown>, ctx?: ToolContext
         file: filePath,
         kind: "modified",
         insertions,
-        deletions: 0,
-        // 覆盖写没有行级 diff（全文替换），只给统计
+        deletions: countLines(existingContent ?? ""),
+        // 覆盖写 = 整文件替换：旧全文 remove + 新全文 add，行级上限由 finalizeFileChanges 控制
+        diff: buildReplacedDiff(
+          (existingContent ?? "").replace(/\r\n/g, "\n").split("\n"),
+          content.replace(/\r\n/g, "\n").split("\n"),
+        ),
       };
 
   return JSON.stringify({
@@ -389,7 +423,8 @@ toolRegistry.register({
   id: "write_file",
   name: "写入文件",
   description:
-    "把文本内容写入本地文件，覆盖或追加。会自动创建父目录。\n\n" +
+    "把文本内容写入本地文件，覆盖或追加。会自动创建父目录。\n" +
+    "覆盖已有大文件时若新内容行数骤降过半会被拒绝（防输出截断毁文件），此时改用 str_replace 做局部修改。\n\n" +
     "何时用：\n" +
     "- 用户要保存生成的笔记、改写后的文本、配置\n" +
     "- 用户要新建文件\n" +

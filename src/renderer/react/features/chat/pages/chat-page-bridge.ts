@@ -9,6 +9,12 @@ import type {
   SpeechInputCommitRequest,
   SpeechInputCommitResult,
 } from "../../../../../shared/ipc-channels";
+import type {
+  PopQuizCard,
+  PopQuizResolveResponse,
+  PopQuizSettledPayload,
+  PopQuizSubmission,
+} from "../../../../../shared/pop-quiz";
 
 export interface ChatStoreApi {
   list: (options?: { mode?: ConversationMode }) => Promise<ChatSessionMeta[]>;
@@ -104,6 +110,11 @@ export interface SettingsApprovalApi {
   onPermissionApprovalRequest: (callback: (request: PermissionApprovalRequest) => void) => () => void;
   resolvePermissionApproval: (id: string, allowed: boolean) => Promise<{ ok: boolean }>;
   onPermissionApprovalSettled: (callback: (settlement: PermissionApprovalSettled) => void) => () => void;
+  // pop_quiz 抽查卡片（learn 模式）：请求推送 / 提交作答 / 跳过 / 结算广播
+  onPopQuizRequest: (callback: (card: PopQuizCard) => void) => () => void;
+  resolvePopQuiz: (submission: PopQuizSubmission) => Promise<PopQuizResolveResponse>;
+  skipPopQuiz: (quizId: string) => Promise<{ ok: boolean; error?: string }>;
+  onPopQuizSettled: (callback: (settlement: PopQuizSettledPayload) => void) => () => void;
 }
 
 export interface PublicModelConfig {

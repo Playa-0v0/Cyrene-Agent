@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "../../../i18n";
+import skillIconUrl from "../../../assets/status-moods/陪伴中.png?url";
 import "./SkillModePanel.css";
 
 type SkillMode = "work" | "code" | "learn";
@@ -163,6 +164,7 @@ export const SkillModePanel: React.FC = () => {
       <header className="skill-panel__header">
         <div className="skill-panel__header-row">
           <div>
+            <img className="skill-panel__heading-icon" src={skillIconUrl} alt="" />
             <h1 className="skill-panel__title">{t("skillPanel.title")}</h1>
             <p className="skill-panel__subtitle">
               {t("skillPanel.subtitle", { mode: TABS.find((item) => item.key === tab)?.label })}

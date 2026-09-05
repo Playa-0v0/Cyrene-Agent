@@ -324,3 +324,17 @@
   background: var(--cy-border, #f2f2f2);
   border-radius: 3px;
 }
+/* 头部左侧：图标 + 标题/副标题两行网格 */
+.skill-panel__header-row > div:first-child {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 14px;
+  align-items: center;
+}
+
+.skill-panel__heading-icon {
+  grid-row: span 2;
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+}

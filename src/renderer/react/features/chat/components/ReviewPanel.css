@@ -156,3 +156,44 @@
   flex-shrink: 0;
   color: var(--cy-text-muted, #b5adb2);
 }
+
+/* 恢复入口（展开态列表底部） */
+.cy-review-panel__restore {
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--cy-border, #ece7ea);
+}
+
+.cy-review-panel__restore-btn {
+  padding: 5px 12px;
+  border: 1px solid var(--cy-border, #d9d2d6);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--cy-text, #2f2d31);
+  font: 12px/1.4 var(--rb-font-sans, sans-serif);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.cy-review-panel__restore-btn:hover {
+  background: var(--cy-bg-hover, #fff1f6);
+}
+/* 第二次点击前的确认态：警示色，提示这是破坏性操作 */
+.cy-review-panel__restore-btn.is-confirming {
+  border-color: #cf222e;
+  color: #cf222e;
+  font-weight: 600;
+}
+.cy-review-panel__restore-btn.is-confirming:hover {
+  background: #ffebe9;
+}
+.cy-review-panel__restore-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.cy-review-panel__restore-summary {
+  font: 12px/1.5 var(--rb-font-sans, sans-serif);
+  color: #116329;
+}
+.cy-review-panel__restore-summary.is-error {
+  color: #cf222e;
+}

@@ -76,6 +76,11 @@ export interface UncertainEffect {
 export interface AgentState {
   todoItems: TodoItem[];
   uncertainEffects: UncertainEffect[];
+  /**
+   * 同工具连续失败计数（熔断用）：failure 递增、success 清零、not_executed/unknown 不动。
+   * 可选字段：旧持久化状态无此字段，运行时按需创建。
+   */
+  toolFailureStreaks?: Record<string, number>;
 }
 
 export type HarnessCacheEpochReason =

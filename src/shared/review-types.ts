@@ -22,6 +22,26 @@ export interface ReviewSnapshot {
 
 export type ReviewRunStatus = "completed" | "failed" | "cancelled" | "halted";
 
+/** 恢复操作的单文件级明细（跳过或失败的原因） */
+export interface ReviewRestoreDetail {
+  path: string;
+  reason: string;
+}
+
+/** 恢复到运行前的结果（IPC 返回体） */
+export interface ReviewRestoreOutcome {
+  /** true = 全部成功（skipped 也算成功：那些文件本就无法恢复） */
+  ok: boolean;
+  /** 恢复成功的文件数（含删除的运行期间新建文件） */
+  restored: number;
+  /** 无法恢复的文件（如 binary 基线只存元数据） */
+  skipped: ReviewRestoreDetail[];
+  /** 恢复失败的文件（IO 错误等） */
+  failed: ReviewRestoreDetail[];
+  /** 整体异常时的错误信息 */
+  error?: string;
+}
+
 /** 单文件在本次 Run 中的变更类型 */
 export type ReviewFileKind =
   | "modified" // 内容被修改

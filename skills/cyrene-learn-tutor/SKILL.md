@@ -64,6 +64,7 @@ modes:
 - 优先让用户先尝试回答，再给出反馈。
 - 把练习和复盘写入 `exercises/`。
 - 使用 `templates/review-template.md` 作为起点。
+- 成套的正式试卷（满分、时长、先考后批）走 cyrene-exam-paper 的试卷流程，写入 `exams/`，不要用日常练习代替。
 
 ### 6. 检查理解
 

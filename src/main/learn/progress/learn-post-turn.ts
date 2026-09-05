@@ -15,6 +15,7 @@ import { loadProgress, applyUpdate, saveProgress, ensureProgressFile } from "./l
 import { obsidianWorkspace } from "../obsidian/obsidian-workspace-service";
 import type { ChatVendorAdapter } from "../../orchestrator/vendors/types";
 import type { VendorConfig } from "../../orchestrator/vendors/types";
+import type { QuizAnswerResult } from "../../../shared/pop-quiz";
 
 export interface LearnPostTurnDeps {
   adapter: ChatVendorAdapter;
@@ -22,6 +23,8 @@ export interface LearnPostTurnDeps {
   systemPrompt: string;
   userMessage: string;
   assistantMessage: string;
+  /** 本轮 pop_quiz 抽查的实测作答（已本地判分）；跳过的抽查不进来。 */
+  quizEvidence?: QuizAnswerResult[];
 }
 
 /**
@@ -51,13 +54,14 @@ export async function runLearnPostTurnHook(deps: LearnPostTurnDeps): Promise<voi
 }
 
 async function updateProgressAsync(deps: LearnPostTurnDeps): Promise<void> {
-  // 1. 轻量模型提取
+  // 1. 轻量模型提取（quizEvidence 为本轮抽查实测作答，作为客观事实优先采信）
   const update = await extractProgress({
     adapter: deps.adapter,
     cfg: deps.cfg,
     systemPrompt: deps.systemPrompt,
     userMessage: deps.userMessage,
     assistantMessage: deps.assistantMessage,
+    quizEvidence: deps.quizEvidence,
   });
 
   if (!update || !update.hasMeaningfulChange) return;

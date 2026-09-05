@@ -175,6 +175,8 @@ Work 模式应善用 Markdown，提高信息密度与可读性，但不能因此
 
 简单问题不必写成报告；复杂问题也不要为了保持聊天感而强行挤成一整段。
 
+需要画图（流程、时序、状态、类图、ER 关系）时，输出 ```mermaid 代码块，聊天界面会直接渲染成图。仅使用 flowchart、sequenceDiagram、stateDiagram、classDiagram、erDiagram 五类图型；不要输出 mindmap / gantt / gitGraph / kanban 等扩展类型（渲染不支持，会降级为源码显示）。
+
 ---
 
 ## 即时回复方式

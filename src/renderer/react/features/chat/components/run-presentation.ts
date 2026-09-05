@@ -82,13 +82,28 @@ export interface PermissionInteraction {
   targetPath?: string;
 }
 
+export interface PopQuizInteraction {
+  kind: "quiz";
+  /** quizId，同时是提交与结算广播的幂等键。 */
+  id: string;
+  runId?: string;
+  intro: string;
+  questions: Array<{
+    id: string;
+    type: "choice" | "multi" | "true_false" | "short_answer";
+    question: string;
+    options: Array<{ id: string; label: string }>;
+    learningObjective: string;
+  }>;
+}
+
 export interface PermissionRequestDescription {
   toolId: string;
   toolName: string;
   args: Record<string, unknown>;
 }
 
-export type ComposerInteraction = AskUserInteraction | PermissionInteraction;
+export type ComposerInteraction = AskUserInteraction | PermissionInteraction | PopQuizInteraction;
 
 export type ComposerSlotKind = "composer" | ComposerInteraction["kind"];
 
@@ -356,6 +371,51 @@ export function normalizeDeferredPlanChoice(
   const card = asRecord(value);
   if (asNonEmptyString(card?.sessionId) !== activeSessionId) return undefined;
   return normalizeChoiceInteraction(value);
+}
+
+/**
+ * 边界校验主进程推来的抽查卡片。畸形 payload 直接判失效（不渲染），
+ * 与 ask 卡片同款防线；主进程 10s 幂等重播，短暂畸形不会卡住用户。
+ */
+export function normalizePopQuizCard(value: unknown): PopQuizInteraction | undefined {
+  const card = asRecord(value);
+  const quizId = asNonEmptyString(card?.quizId);
+  const runId = asNonEmptyString(card?.runId);
+  if (!quizId || !runId || !Array.isArray(card.questions)) return undefined;
+  const questions = (card.questions as unknown[]).flatMap((item) => {
+    const question = asRecord(item);
+    const id = asNonEmptyString(question?.id);
+    const type = asNonEmptyString(question?.type);
+    const prompt = asNonEmptyString(question?.question);
+    if (!id || !prompt) return [];
+    if (type !== "choice" && type !== "multi" && type !== "true_false" && type !== "short_answer") return [];
+    const options = Array.isArray(question.options)
+      ? question.options.flatMap((option) => {
+          const record = asRecord(option);
+          const optionId = asNonEmptyString(record?.id);
+          const label = asNonEmptyString(record?.label);
+          return optionId && label ? [{ id: optionId, label }] : [];
+        })
+      : [];
+    // 选择题没选项就没法答；判断题/简答题本来就不带选项
+    if ((type === "choice" || type === "multi") && options.length < 2) return [];
+    return [{
+      id,
+      type,
+      question: prompt,
+      options,
+      learningObjective: asNonEmptyString(question.learningObjective) ?? "",
+    }];
+  });
+  // 题目数量或内容对不上主进程的发布（1-3 题）时整卡废弃，避免渲染半张残卡
+  if (questions.length === 0 || questions.length !== card.questions.length) return undefined;
+  return {
+    kind: "quiz",
+    id: quizId,
+    runId,
+    intro: asNonEmptyString(card.intro) ?? "",
+    questions,
+  };
 }
 
 export function createAskDrafts(questions: AskUserQuestion[]): AskDrafts {

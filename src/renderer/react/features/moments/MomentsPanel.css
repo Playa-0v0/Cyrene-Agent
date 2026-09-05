@@ -307,7 +307,6 @@
   border-radius: 6px;
   border: 1px solid var(--cy-border, #e8e8ec);
   display: block;
-  cursor: zoom-in;
 }
 
 .moment-card__images--single img {
@@ -502,4 +501,11 @@
   margin-top: 4px;
   color: #d4384d;
   font-size: 12px;
+}
+
+.moments-panel__heading-icon {
+  align-self: center;
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
 }

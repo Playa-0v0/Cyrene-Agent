@@ -205,6 +205,8 @@ export const IPC = {
   // Review 快照（不可变文件变更审查）
   // renderer → main：获取指定 Run 的 ReviewSnapshot（不存在时按 halted 补生成）
   REVIEW_GET: "review:get",
+  // renderer → main：把指定 Run 修改过的文件恢复到运行前状态（基于 before/ 基线）
+  REVIEW_RESTORE: "review:restore",
 
 // sticker manager window
 	  STICKERS_MINIMIZE: "stickers:minimize",
@@ -351,6 +353,17 @@ export const IPC = {
   // 卡片展示走 AGUI_EVENT 的 CUSTOM 事件（与天气卡片同通道）
   // renderer → main：回传用户选择
   CHOICE_RESOLVE: "choice:resolve",
+
+  // pop_quiz 抽查测试（learn 模式）
+  // 与审批流同构：不设超时、10s 幂等重播、结算统一广播
+  // main → renderer：推送抽查卡片（重复推送同 id 覆盖，用于渲染端恢复）
+  POP_QUIZ_REQUEST: "pop-quiz:request",
+  // renderer → main：提交作答（返回值带判分结果，渲染端切展示态）
+  POP_QUIZ_RESOLVE: "pop-quiz:resolve",
+  // renderer → main：跳过整次抽查
+  POP_QUIZ_SKIP: "pop-quiz:skip",
+  // main → renderer：结算广播（提交/跳过/run 取消），渲染端据此清卡
+  POP_QUIZ_SETTLED: "pop-quiz:settled",
 
   // call window (voice call)
   CALL_OPEN: "call:open",                 // sidebar → main：打开通话窗口

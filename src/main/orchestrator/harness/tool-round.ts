@@ -25,6 +25,7 @@ import { resolveSideEffect } from "./side-effect-resolver";
 import { extractFileChangesFromOutput } from "../tools/registry/tool-evidence";
 import { classifyToolResultError } from "./error-classifier";
 import { decideRetry, getRetryParams, sleepWithJitter } from "./retry-policy";
+import { isToolBreakerTripped, nextToolFailureStreak, toolBreakerMessage } from "./tool-breaker";
 import { isCancellationError, raceWithSignal } from "../../abort-utils";
 import type { HarnessRun } from "./cyrene-harness";
 
@@ -192,6 +193,19 @@ async function runAskUserRound(
  * 输出持久化延后到重试收敛后的最终结果，确保一次调用只对应一条记录。
  */
 async function executeToolCallWithRetry(run: HarnessRun, call: ToolCall): Promise<ToolDispatchResult> {
+  // 熔断拦截：同工具连续失败达到阈值 → 不再 dispatch，直接合成 not_executed。
+  // 拦截必须在 dispatch 之前；合成结果流回 commitToolResult 时 not_executed 不改计数，
+  // 熔断不会被自己合成的结果解除。
+  const streak = run.state.toolFailureStreaks?.[call.name];
+  if (isToolBreakerTripped(streak)) {
+    return {
+      outcome: "not_executed",
+      category: "runtime_safety",
+      tool: call.name,
+      message: toolBreakerMessage(call.name, streak ?? 0),
+    };
+  }
+
   const { input } = run;
   const toolSideEffect = resolveSideEffect(input.tools.find((tool) => tool.id === call.name), parseToolCallArgs(call));
   input.onToolLifecycle?.({ toolCallId: call.id, toolName: call.name, toolSideEffect, status: "started" });
@@ -227,6 +241,13 @@ async function commitToolResult(
   const { input } = run;
   const toolSideEffect = result.toolSideEffect
     ?? resolveSideEffect(input.tools.find((tool) => tool.id === call.name), parseToolCallArgs(call));
+
+  // 熔断计数（结果必经点）：failure 递增、success 清零、not_executed/unknown 不动
+  const streaks = (run.state.toolFailureStreaks ??= {});
+  const streak = nextToolFailureStreak(streaks[call.name], result.outcome);
+  if (streak > 0) streaks[call.name] = streak;
+  else delete streaks[call.name];
+
   if (result.toolOutputRef && !run.toolOutputs.some((entry) => entry.recordId === result.toolOutputRef?.recordId)) {
     run.toolOutputs.push(result.toolOutputRef);
   }

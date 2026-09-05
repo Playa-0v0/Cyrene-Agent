@@ -390,6 +390,30 @@
 
             <label class="setting-row">
               <div>
+                <strong>朋友圈动态</strong>
+                <span>开启动态功能；关闭后昔涟停止发帖与点赞评论，对话也不再参考动态内容。</span>
+              </div>
+              <span class="switch"><input id="moments-enabled" type="checkbox" checked /><span class="switch__track"><span class="switch__thumb"></span></span></span>
+            </label>
+
+            <label class="setting-row" id="moments-posting-row">
+              <div>
+                <strong>昔涟主动发动态</strong>
+                <span>对话结束后，昔涟会把值得记录的时刻发成动态；每天最多 2 条，间隔至少 6 小时。</span>
+              </div>
+              <span class="switch"><input id="cyrene-moments-posting-enabled" type="checkbox" /><span class="switch__track"><span class="switch__thumb"></span></span></span>
+            </label>
+
+            <label class="setting-row" id="moments-reactions-row">
+              <div>
+                <strong>昔涟互动动态</strong>
+                <span>昔涟会为你的动态点赞、评论，并回复评论区中对她的留言。</span>
+              </div>
+              <span class="switch"><input id="cyrene-moments-reactions-enabled" type="checkbox" checked /><span class="switch__track"><span class="switch__thumb"></span></span></span>
+            </label>
+
+            <label class="setting-row">
+              <div>
                 <strong>聊天上下文增强</strong>
                 <span>仅在 Chat 模式下使用相关的过去信息和未接话题，让连续交流更自然；每轮最多增加一次异步模型调用。</span>
               </div>

@@ -4,6 +4,7 @@ import {
   EXERCISES_README_MD,
   MATERIALS_README_MD,
   NOTES_README_MD,
+  OUTLINE_TEMPLATE_MD,
   PROGRESS_MD,
   REVIEW_TEMPLATE_MD,
   TOPIC_TEMPLATE_MD,
@@ -23,6 +24,7 @@ const VAULT_ENTRIES: VaultInitEntry[] = [
   { relativePath: "exercises/README.md", content: EXERCISES_README_MD },
   { relativePath: "templates/topic-template.md", content: TOPIC_TEMPLATE_MD },
   { relativePath: "templates/review-template.md", content: REVIEW_TEMPLATE_MD },
+  { relativePath: "templates/outline-template.md", content: OUTLINE_TEMPLATE_MD },
   { relativePath: "learn/progress.md", content: PROGRESS_MD },
 ];
 

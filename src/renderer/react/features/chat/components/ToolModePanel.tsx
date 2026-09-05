@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "../../../i18n";
+import toolIconUrl from "../../../assets/tools.png?url";
 import "./ToolModePanel.css";
 
 type ToolMode = "work" | "code" | "learn" | "chat";
@@ -231,6 +232,7 @@ export const ToolModePanel: React.FC = () => {
   return (
     <div className="tool-panel">
       <header className="tool-panel__header">
+        <img className="tool-panel__heading-icon" src={toolIconUrl} alt="" />
         <h1 className="tool-panel__title">{t("toolPanel.title")}</h1>
         <p className="tool-panel__subtitle">
           {t("toolPanel.subtitle", { mode: TABS.find((item) => item.key === tab)?.label })}

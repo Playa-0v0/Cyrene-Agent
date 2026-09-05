@@ -380,6 +380,177 @@ describe("RunReviewTracker.finalizeReview", () => {
   });
 });
 
+describe("RunReviewTracker.restoreRun", () => {
+  it("修改过的文本文件:恢复为基线内容", () => {
+    const filePath = path.join(tmpRoot, "foo.ts");
+    fs.writeFileSync(filePath, "line1\nline2\nline3\n", "utf8");
+    tracker.captureBefore("run-1", filePath, "foo.ts");
+    fs.writeFileSync(filePath, "line1\nchanged\nline3\nextra\n", "utf8");
+
+    const outcome = tracker.restoreRun("run-1");
+
+    expect(outcome.restored).toBe(1);
+    expect(outcome.failed).toHaveLength(0);
+    expect(outcome.skipped).toHaveLength(0);
+    expect(fs.readFileSync(filePath, "utf8")).toBe("line1\nline2\nline3\n");
+  });
+
+  it("运行期间被删除的文件:基线写回重建", () => {
+    const filePath = path.join(tmpRoot, "deleted.ts");
+    fs.writeFileSync(filePath, "original\n", "utf8");
+    tracker.captureBefore("run-1", filePath, "deleted.ts");
+    fs.unlinkSync(filePath);
+
+    const outcome = tracker.restoreRun("run-1");
+
+    expect(outcome.restored).toBe(1);
+    expect(fs.readFileSync(filePath, "utf8")).toBe("original\n");
+  });
+
+  it("运行期间新建的文件:恢复 = 删除", () => {
+    const filePath = path.join(tmpRoot, "created.ts");
+    tracker.captureBefore("run-1", filePath, "created.ts"); // 文件不存在 → absent 标记
+    fs.writeFileSync(filePath, "new content\n", "utf8");
+
+    const outcome = tracker.restoreRun("run-1");
+
+    expect(outcome.restored).toBe(1);
+    expect(fs.existsSync(filePath)).toBe(false);
+  });
+
+  it("binary 文件:计入 skipped,不做任何写回", () => {
+    const filePath = path.join(tmpRoot, "model.bin");
+    fs.writeFileSync(filePath, Buffer.from([0x00, 0x01, 0x02, 0x00, 0x03]));
+    tracker.captureBefore("run-1", filePath, "model.bin");
+    fs.writeFileSync(filePath, Buffer.from([0x09, 0x09]));
+
+    const outcome = tracker.restoreRun("run-1");
+
+    expect(outcome.restored).toBe(0);
+    expect(outcome.skipped).toHaveLength(1);
+    expect(outcome.skipped[0].path).toBe("model.bin");
+    // 内容保持运行后状态（无内容可恢复）
+    expect(Buffer.compare(fs.readFileSync(filePath), Buffer.from([0x09, 0x09]))).toBe(0);
+  });
+
+  it("rename:旧路径写回基线 + 新路径删除", () => {
+    const fromPath = path.join(tmpRoot, "old-name.ts");
+    const toPath = path.join(tmpRoot, "new-name.ts");
+    fs.writeFileSync(fromPath, "content\n", "utf8");
+    tracker.captureBefore("run-1", fromPath, "old-name.ts");
+    tracker.recordRename("run-1", fromPath, toPath, "old-name.ts", "new-name.ts");
+
+    // 执行 rename
+    fs.renameSync(fromPath, toPath);
+
+    const outcome = tracker.restoreRun("run-1");
+
+    expect(outcome.restored).toBe(2); // 旧路径写回 + 新路径删除
+    expect(outcome.failed).toHaveLength(0);
+    expect(fs.existsSync(toPath)).toBe(false);
+    expect(fs.readFileSync(fromPath, "utf8")).toBe("content\n");
+  });
+
+  it("单文件恢复失败不阻断其他文件(错误隔离)", () => {
+    const goodPath = path.join(tmpRoot, "good.ts");
+    fs.writeFileSync(goodPath, "good-original\n", "utf8");
+    tracker.captureBefore("run-1", goodPath, "good.ts");
+    fs.writeFileSync(goodPath, "good-changed\n", "utf8");
+
+    // 构造坏路径：capture 后把目标文件换成同名目录 → 基线写回时 writeFileSync 必然失败
+    const badPath = path.join(tmpRoot, "bad.ts");
+    fs.writeFileSync(badPath, "bad-original\n", "utf8");
+    tracker.captureBefore("run-1", badPath, "bad.ts");
+    fs.unlinkSync(badPath);
+    fs.mkdirSync(badPath);
+
+    const outcome = tracker.restoreRun("run-1");
+
+    expect(outcome.failed).toHaveLength(1);
+    expect(outcome.failed[0].path).toBe("bad.ts");
+    expect(outcome.failed[0].reason).toBeTruthy();
+    // 好文件不受坏文件影响,仍恢复成功
+    expect(fs.readFileSync(goodPath, "utf8")).toBe("good-original\n");
+  });
+
+  it("无 journal:返回空 outcome", () => {
+    const outcome = tracker.restoreRun("run-empty");
+    expect(outcome.restored).toBe(0);
+    expect(outcome.skipped).toHaveLength(0);
+    expect(outcome.failed).toHaveLength(0);
+  });
+});
+
+describe("RunReviewTracker.cleanupOldReviews", () => {
+  /** 在 reviews/<runId>/ 下造一个目录,可指定 mtime */
+  function makeReviewDir(runId: string, mtime?: number): string {
+    const dirPath = path.join(tmpRoot, "cyrene-runs", "reviews", runId);
+    fs.mkdirSync(path.join(dirPath, "before"), { recursive: true });
+    fs.writeFileSync(path.join(dirPath, "journal.jsonl"), "", "utf8");
+    fs.writeFileSync(path.join(dirPath, "before", "hash1"), "baseline", "utf8");
+    if (mtime !== undefined) {
+      fs.utimesSync(dirPath, mtime / 1000, mtime / 1000);
+    }
+    return dirPath;
+  }
+
+  it("reviewsRoot 不存在:返回空数组", () => {
+    expect(tracker.cleanupOldReviews()).toEqual([]);
+  });
+
+  it("全部在限额内:不清理任何目录", () => {
+    makeReviewDir("run-a");
+    makeReviewDir("run-b");
+    expect(tracker.cleanupOldReviews()).toEqual([]);
+    expect(fs.existsSync(path.join(tmpRoot, "cyrene-runs", "reviews", "run-a"))).toBe(true);
+    expect(fs.existsSync(path.join(tmpRoot, "cyrene-runs", "reviews", "run-b"))).toBe(true);
+  });
+
+  it("超过保留天数:超龄目录被清理,新目录保留", () => {
+    const oldTime = Date.now() - 31 * 24 * 60 * 60 * 1000; // 31 天前
+    const oldDir = makeReviewDir("run-old", oldTime);
+    const newDir = makeReviewDir("run-new");
+
+    const removed = tracker.cleanupOldReviews();
+
+    expect(removed).toEqual([oldDir]);
+    expect(fs.existsSync(oldDir)).toBe(false);
+    expect(fs.existsSync(newDir)).toBe(true);
+  });
+
+  it("超过数量上限:最旧优先清理", () => {
+    const now = Date.now();
+    const dirA = makeReviewDir("run-a", now - 3000);
+    const dirB = makeReviewDir("run-b", now - 2000);
+    const dirC = makeReviewDir("run-c", now - 1000);
+
+    // 只允许 2 个目录:最旧的 run-a 应被清理
+    const removed = tracker.cleanupOldReviews({ maxDirs: 2, maxAgeDays: 365, maxBytes: 1024 * 1024 * 1024 });
+
+    expect(removed).toEqual([dirA]);
+    expect(fs.existsSync(dirA)).toBe(false);
+    expect(fs.existsSync(dirB)).toBe(true);
+    expect(fs.existsSync(dirC)).toBe(true);
+  });
+
+  it("超过总大小上限:最旧优先清理", () => {
+    const now = Date.now();
+    const dirA = makeReviewDir("run-a", now - 3000);
+    const dirB = makeReviewDir("run-b", now - 2000);
+
+    // 每个目录含 before/hash1(8 字节),两个目录合计 16 字节;限额 8 字节必然超限
+    const removed = tracker.cleanupOldReviews({
+      maxBytes: 8,
+      maxAgeDays: 365,
+      maxDirs: 200,
+    });
+
+    expect(removed).toEqual([dirA]);
+    expect(fs.existsSync(dirA)).toBe(false);
+    expect(fs.existsSync(dirB)).toBe(true);
+  });
+});
+
 describe("RunReviewTracker.finalizeIfPending", () => {
   it("已 finalize 的 Run:直接返回缓存,不重复生成", () => {
     const filePath = path.join(tmpRoot, "foo.ts");

@@ -445,7 +445,8 @@ export const runShellTool: ToolDefinition = {
     "- npm install / npm run / pip install / node xxx.js 等开发操作\n" +
     "- node --version / python --version 等查环境\n" +
     "- 用户明确要求'跑一下这条命令'\n" +
-    "- 需要管道/重定向组合的命令\n\n" +
+    "- 需要管道/重定向组合的命令\n" +
+    "- 建目录/建文件等文件工具做不到时的兜底（如 mkdir、echo 内容 > 文件、type nul > 新建空文件）\n\n" +
     "不要用于：\n" +
     "- 读文件 → read_file（更安全）\n" +
     "- 列目录 → list_dir\n" +
@@ -459,7 +460,7 @@ export const runShellTool: ToolDefinition = {
     "参数：command (完整命令行字符串，如 \"git status\")，cwd (可选工作目录)，shell (cmd 或 bash，默认 cmd)。",
   enabled: true,
   risk: "shell",
-  modes: ["code", "work"],
+  modes: ["learn", "code", "work"],
   effectKind: "unknown" as const,
   inputSchema: {
     type: "object",

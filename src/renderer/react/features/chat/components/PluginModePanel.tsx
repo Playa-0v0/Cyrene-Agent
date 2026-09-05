@@ -7,6 +7,7 @@ import type {
   PluginRuntimeStatus,
 } from "../../../../../shared/plugin-management";
 import { useTranslation } from "../../../i18n";
+import pluginIconUrl from "../../../assets/plugin.png?url";
 import "./PluginModePanel.css";
 
 interface PluginModePanelProps {
@@ -171,6 +172,7 @@ export function PluginModePanel({ api: providedApi }: PluginModePanelProps) {
     <div className="plugin-panel">
       <header className="plugin-panel__header">
         <div className="plugin-panel__heading">
+          <img className="plugin-panel__heading-icon" src={pluginIconUrl} alt="" />
           <h1 className="plugin-panel__title">{t("pluginPanel.title")}</h1>
           <p className="plugin-panel__subtitle">{t("pluginPanel.subtitle")}</p>
           <p className="plugin-panel__subtitle plugin-panel__registry">

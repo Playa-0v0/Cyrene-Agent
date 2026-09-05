@@ -29,6 +29,8 @@ import type {
   ReviewLine,
   ReviewRunStatus,
   ReviewFileMeta,
+  ReviewRestoreDetail,
+  ReviewRestoreOutcome,
 } from "../../../shared/review-types";
 
 // ── 常量 ────────────────────────────────────────────────
@@ -41,6 +43,15 @@ const BINARY_SIZE_THRESHOLD = 5 * 1024 * 1024; // 5MB
 
 /** 二进制检测采样大小 */
 const BINARY_SAMPLE_SIZE = 8192;
+
+/** Review 目录保留天数：超过即清理 */
+const RETENTION_MAX_AGE_DAYS = 30;
+
+/** Review 目录数量上限：超过按最旧优先清理 */
+const RETENTION_MAX_DIRS = 200;
+
+/** Review 总大小上限：超过按最旧优先清理 */
+const RETENTION_MAX_BYTES = 500 * 1024 * 1024;
 
 // ── 类型 ────────────────────────────────────────────────
 
@@ -86,6 +97,11 @@ function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+/** 统一取错误文案（记账用，不抛出）。 */
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 /**
  * 检测文件类型并读取内容。
  * - >5MB：binary（不读 content）
@@ -128,6 +144,13 @@ export class RunReviewTracker {
 
   constructor(userDataRoot: string) {
     this.reviewsRoot = path.join(userDataRoot, "cyrene-runs", "reviews");
+    // 首次创建即清理过期/超量 Review 目录（30 天 / 200 目录 / 500MB，最旧优先）；
+    // 清理失败不影响 tracker 可用性
+    try {
+      this.cleanupOldReviews();
+    } catch {
+      // 忽略：磁盘异常等场景下 review 功能降级但主流程不受影响
+    }
   }
 
   /**
@@ -412,6 +435,167 @@ export class RunReviewTracker {
     if (existing) return existing;
     if (!this.hasReviewData(runId)) return null;
     return this.finalizeReview(runId, startedAt, status);
+  }
+
+  // ── restoreRun：把 Run 涉及的文件恢复到运行前状态 ───────
+
+  /**
+   * 基于 journal + before/ 基线，把本次 Run 涉及的文件恢复到运行前状态：
+   * - 文本基线 → 原内容写回原路径（large-text 同样存了 content，一并恢复）
+   * - absent 标记（运行前不存在）→ 删除运行期间新建的文件
+   * - binary → 基线只存 metadata，无内容可恢复，计入 skipped
+   * - rename → 旧路径写回基线内容，新路径文件删除
+   * 单文件失败不阻断其他文件恢复（错误隔离）。
+   */
+  restoreRun(runId: string): Omit<ReviewRestoreOutcome, "ok"> {
+    const outcome: { restored: number; skipped: ReviewRestoreDetail[]; failed: ReviewRestoreDetail[] } = {
+      restored: 0,
+      skipped: [],
+      failed: [],
+    };
+
+    const events = this.readJournal(runId);
+    if (events.length === 0) return outcome;
+
+    // 重建 capture + rename 状态（与 finalizeReview 相同口径）
+    const captures = new Map<string, JournalCaptureEvent>();
+    const renames: JournalRenameEvent[] = [];
+    for (const event of events) {
+      if (event.type === "capture") captures.set(event.hash, event);
+      else renames.push(event);
+    }
+
+    // 先恢复各文件的基线状态（含 rename 旧路径的写回）
+    for (const cap of captures.values()) {
+      this.restoreCapture(runId, cap, outcome);
+    }
+
+    // rename 产生的新路径是本次运行引入的：恢复 = 删除
+    for (const ren of renames) {
+      try {
+        if (fs.existsSync(ren.toAbsPath)) {
+          fs.unlinkSync(ren.toAbsPath);
+          outcome.restored++;
+        }
+      } catch (err) {
+        outcome.failed.push({ path: ren.toDisplayPath, reason: errorMessage(err) });
+      }
+    }
+
+    logger.info(
+      LogTag.Runtime,
+      `[ReviewTracker] restore: runId=${runId} restored=${outcome.restored} skipped=${outcome.skipped.length} failed=${outcome.failed.length}`,
+    );
+    return outcome;
+  }
+
+  /** 恢复单个 capture 的文件到基线状态（错误隔离：失败只记账不抛出）。 */
+  private restoreCapture(
+    runId: string,
+    cap: JournalCaptureEvent,
+    outcome: { restored: number; skipped: ReviewRestoreDetail[]; failed: ReviewRestoreDetail[] },
+  ): void {
+    const beforeFile = this.getBeforePath(runId, cap.hash);
+    const absentMarker = beforeFile + ".absent";
+    const binaryMarker = beforeFile + ".binary";
+
+    try {
+      if (fs.existsSync(absentMarker)) {
+        // 运行前文件不存在（本次运行新建）→ 恢复 = 删除
+        if (fs.existsSync(cap.absPath)) {
+          fs.unlinkSync(cap.absPath);
+          outcome.restored++;
+        }
+        return;
+      }
+      if (fs.existsSync(binaryMarker)) {
+        // 二进制基线只存 metadata，无内容可恢复
+        outcome.skipped.push({ path: cap.displayPath, reason: "二进制文件基线只存元数据，无法恢复内容" });
+        return;
+      }
+      if (fs.existsSync(beforeFile)) {
+        // 文本基线：原内容写回（文件若已被删除则重建）
+        fs.writeFileSync(cap.absPath, fs.readFileSync(beforeFile));
+        outcome.restored++;
+        return;
+      }
+      // 基线数据缺失（极端：capture 未完成时崩溃）
+      outcome.skipped.push({ path: cap.displayPath, reason: "基线数据缺失" });
+    } catch (err) {
+      outcome.failed.push({ path: cap.displayPath, reason: errorMessage(err) });
+    }
+  }
+
+  // ── cleanupOldReviews：历史 Review 目录清理 ─────────────
+
+  /**
+   * 清理历史 Review 目录：超过保留天数、超过数量上限或超过总大小上限时，
+   * 按最旧优先删除。构造时自动执行一次，也可手动调用。
+   * @returns 被删除的目录路径列表
+   */
+  cleanupOldReviews(options?: { maxAgeDays?: number; maxDirs?: number; maxBytes?: number }): string[] {
+    const maxAgeDays = options?.maxAgeDays ?? RETENTION_MAX_AGE_DAYS;
+    const maxDirs = options?.maxDirs ?? RETENTION_MAX_DIRS;
+    const maxBytes = options?.maxBytes ?? RETENTION_MAX_BYTES;
+
+    if (!fs.existsSync(this.reviewsRoot)) return [];
+
+    // 收集各 run 目录的修改时间与递归大小
+    const entries: { dirPath: string; mtime: number; size: number }[] = [];
+    for (const ent of fs.readdirSync(this.reviewsRoot, { withFileTypes: true })) {
+      if (!ent.isDirectory()) continue;
+      const dirPath = path.join(this.reviewsRoot, ent.name);
+      try {
+        entries.push({ dirPath, mtime: fs.statSync(dirPath).mtimeMs, size: this.dirSize(dirPath) });
+      } catch {
+        // 目录已损坏/被占用：跳过
+      }
+    }
+    entries.sort((a, b) => a.mtime - b.mtime); // 最旧优先
+
+    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    let totalSize = entries.reduce((sum, e) => sum + e.size, 0);
+    let count = entries.length;
+    const removed: string[] = [];
+
+    for (const entry of entries) {
+      // 超龄 / 超量 / 超总大小 任一命中即删；按最旧优先遍历，
+      // 一旦三项都在限额内，后续目录更新，必然也都在限额内
+      if (entry.mtime >= cutoff && count <= maxDirs && totalSize <= maxBytes) break;
+      try {
+        fs.rmSync(entry.dirPath, { recursive: true, force: true });
+        removed.push(entry.dirPath);
+        count--;
+        totalSize -= entry.size;
+      } catch {
+        // 删除失败：继续尝试下一个（更旧的目录可能同样失败，不中断）
+      }
+    }
+
+    if (removed.length > 0) {
+      logger.info(LogTag.Runtime, `[ReviewTracker] cleanup: removed ${removed.length} review dir(s)`);
+    }
+    return removed;
+  }
+
+  /** 目录递归大小（字节）。 */
+  private dirSize(dirPath: string): number {
+    let total = 0;
+    const walk = (current: string): void => {
+      for (const ent of fs.readdirSync(current, { withFileTypes: true })) {
+        const full = path.join(current, ent.name);
+        if (ent.isDirectory()) walk(full);
+        else if (ent.isFile()) {
+          try {
+            total += fs.statSync(full).size;
+          } catch {
+            // 文件被并发删除：跳过
+          }
+        }
+      }
+    };
+    walk(dirPath);
+    return total;
   }
 
   // ── 内部辅助 ────────────────────────────────────────────

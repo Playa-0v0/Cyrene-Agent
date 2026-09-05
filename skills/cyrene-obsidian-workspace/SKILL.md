@@ -22,6 +22,7 @@ modes:
 | `materials/` | 用户放置原始学习资料 | 只读 |
 | `notes/` | 学习笔记 | 读写 |
 | `exercises/` | 练习、测验、复盘 | 读写 |
+| `exams/` | 正式试卷、答案解析、考试复盘 | 读写 |
 | `templates/` | 通用模板 | 读取 |
 | `learn/progress.md` | 学习进度总览 | 读写（静默维护） |
 
@@ -94,6 +95,7 @@ modes:
 
 - 新主题笔记：`notes/<subject>/<topic>.md`
 - 新练习/复盘：`exercises/<subject>/<yyyy-mm-dd>-<topic>.md`
+- 正式试卷：`exams/<subject>/<yyyy-mm-dd>-<topic>-试卷.md`（答案解析、考试复盘同目录同前缀）
 - 进度总览：`learn/progress.md`
 - 主题模板：`templates/topic-template.md`
 - 复盘模板：`templates/review-template.md`

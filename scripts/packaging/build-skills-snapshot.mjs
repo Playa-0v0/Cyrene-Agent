@@ -32,6 +32,9 @@ const SELF_SKILLS = new Set([
   "cyrene-work-hygiene",
   "cyrene-original-voice",
   "cyrene-obsidian-workspace",
+  "cyrene-diagram",
+  "cyrene-exam-paper",
+  "cyrene-plugin-dev",
 ]);
 
 async function collectVendorSkills() {

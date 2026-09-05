@@ -22,6 +22,10 @@
 }
 
 .plugin-panel__heading {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 14px;
+  align-items: center;
   min-width: 0;
 }
 
@@ -329,4 +333,11 @@
   .plugin-panel__grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.plugin-panel__heading-icon {
+  grid-row: span 3;
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
 }

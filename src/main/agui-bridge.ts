@@ -37,6 +37,7 @@ import * as chatsStore from "./chats/chats-store";
 import type { ConversationMode } from "../shared/chat-types";
 import { requestUserClarification, cancelPendingChoicesForRun } from "./user-choice";
 import { cancelPendingApprovalsForRun } from "./permission";
+import { cancelPendingQuizzesForRun, takeQuizEvidenceForRun } from "./orchestrator/pop-quiz";
 import { approvePlan, getPlanPath, moveToReview, supplementPlan } from "./orchestrator/plan-mode";
 import { buildPlanReviewCard, buildPlanSupplementCard } from "./orchestrator/harness/plan-tools";
 import type { AskUserAnswer } from "../shared/ask-clarification";
@@ -538,6 +539,7 @@ export function registerAgUiIpc(
       activeRuns.delete(runId);
       cancelPendingChoicesForRun(runId);
       cancelPendingApprovalsForRun(runId);
+      cancelPendingQuizzesForRun(runId);
       detachPendingTurnWatchers?.();
       detachPendingTurnWatchers = null;
     };
@@ -803,6 +805,8 @@ export function registerAgUiIpc(
                 model: options.settings.model,
                 apiKey: options.settings.apiKey,
               });
+              // 取走本轮抽查的实测作答（take 语义：取后即清，避免重复计入）
+              const quizEvidence = takeQuizEvidenceForRun(runId);
               void runLearnPostTurnHook({
                 adapter,
                 cfg: {
@@ -814,6 +818,7 @@ export function registerAgUiIpc(
                 systemPrompt: options.soulSystemBaseContent ?? "",
                 userMessage: latestUserText,
                 assistantMessage: lastResult.reply,
+                quizEvidence: quizEvidence.length > 0 ? quizEvidence : undefined,
               });
             }
           }
@@ -859,10 +864,11 @@ export function registerAgUiIpc(
       if (run && !run.abortController.signal.aborted) {
         run.abortController.abort();
       }
-      // 清理该 run 关联的 pending permission / ask_user 卡片。
+      // 清理该 run 关联的 pending permission / ask_user / pop_quiz 卡片。
       // 渲染端通过 RUN_FINISHED(result.status="cancelled") 自然收到卡片关闭信号。
       cancelPendingChoicesForRun(id);
       cancelPendingApprovalsForRun(id);
+      cancelPendingQuizzesForRun(id);
     };
     if (runId) {
       abortRun(runId);

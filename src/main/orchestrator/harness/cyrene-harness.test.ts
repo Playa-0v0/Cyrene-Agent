@@ -497,6 +497,41 @@ describe("CyreneHarness completion", () => {
     expect(fetchMock).toHaveBeenCalledTimes(52);
   });
 
+  it("同工具连续失败达到阈值后熔断：不再 dispatch,合成 not_executed 引导模型换方案", async () => {
+    // 模型连续 6 轮调用同一 write_file 工具,dispatch 每次都失败(semantic_failure 不重试)
+    const toolRounds = Array.from({ length: 6 }, (_, index) => (
+      assistantResponse({ toolCalls: [mutationToolCall(`call-${index + 1}`)] })
+    ));
+    const { fn: fetchMock } = fakeFetchSequencer([
+      ...toolRounds,
+      assistantResponse({ text: "换方案完成。" }),
+    ]);
+    vi.stubGlobal("fetch", fetchMock);
+    mockedDispatch.mockResolvedValue({
+      outcome: "failure",
+      category: "semantic_failure",
+      tool: "write_file",
+      message: "E_INVALID_ARGS: 缺少 filename",
+    });
+
+    const result = await runCyreneHarness({
+      systemPrompt: "you are a test agent",
+      messages: [{ role: "user", content: "反复调用同一个失败工具" }],
+      tools: [mutationTool()],
+      vendorConfig,
+    });
+
+    expect(result.finalAnswer).toBe("换方案完成。");
+    // 前 5 次真实 dispatch,第 6 次被熔断拦截(不再进入 dispatch)
+    expect(mockedDispatch).toHaveBeenCalledTimes(5);
+    // 第 6 轮工具结果为合成的 not_executed:最后一次模型请求里能看到熔断提示
+    const lastRequest = fakeStreamChatWithSdk.mock.calls[6]?.[0].request as { messages: ChatMessage[] };
+    const lastToolMessage = lastRequest.messages.filter((message) => message.role === "tool").at(-1);
+    expect(lastToolMessage?.toolCallId).toBe("call-6");
+    expect(String(lastToolMessage?.content)).toContain("not_executed");
+    expect(String(lastToolMessage?.content)).toContain("熔断");
+  });
+
   it("persists a structured compaction checkpoint before the next model request", async () => {
     const { fn: fetchMock } = fakeFetchSequencer([
       assistantResponse({ text: "## 原始任务与意图\n- 完成历史任务\n\n## 下一步\n- 继续回答" }),

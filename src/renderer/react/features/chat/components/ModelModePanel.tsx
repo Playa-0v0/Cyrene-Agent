@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "../../../i18n";
 import fallbackIconUrl from "../../../assets/status-moods/陪伴中.png?url";
+import modelIconUrl from "../../../assets/model.png?url";
 import "./ModelModePanel.css";
 
 interface ModelProfile {
@@ -148,6 +149,7 @@ export function ModelModePanel() {
   return (
     <div className="model-panel">
       <header className="model-panel__header">
+        <img className="model-panel__heading-icon" src={modelIconUrl} alt="" />
         <h1 className="model-panel__title">{t("modelPanel.title")}</h1>
         <p className="model-panel__subtitle">{t("modelPanel.subtitle")}</p>
       </header>

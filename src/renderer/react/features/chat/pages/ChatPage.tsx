@@ -9,6 +9,7 @@ import type { PlanReviewPhase } from "../components/PlanReviewPanel";
 import { ChatPageInspector, type ChatPageInspectorTabId } from "../components/ChatPageInspector";
 import {
   normalizeDeferredPlanChoice,
+  normalizePopQuizCard,
   shouldDismissAsk,
   type ComposerInteraction,
 } from "../components/run-presentation";
@@ -54,6 +55,8 @@ import {
 } from "./openSessionByDeps";
 import { useComposerAttachments } from "../hooks/useComposerAttachments";
 import { useSessionMessages } from "../hooks/useSessionMessages";
+import { useSchedulerEvents } from "../hooks/useSchedulerEvents";
+import { useChannelMirrorEvents } from "../hooks/useChannelMirrorEvents";
 import { AgentRunController, type AgentRunInput } from "./run/AgentRunController";
 import {
   appendPendingQueueEntry,
@@ -167,6 +170,22 @@ export function ChatPage() {
     patchMessageAttachments: updateMessageAttachments,
   } = useSessionMessages((targetMode) => activeSessionIdsRef.current[targetMode]);
 
+  // 定时任务执行事件：任务触发/流式回复/终态展示在当前会话（主进程 scheduler-runner 推送）
+  useSchedulerEvents({
+    getActiveSessionId: () => activeSessionIdsRef.current[activeModeRef.current],
+    appendMessages,
+    patchMessage: updateMessage,
+    persistMessage: (sessionId, message) => {
+      void chatStore()?.append(sessionId, message);
+    },
+  });
+
+  // 渠道消息镜像：微信/飞书等外部渠道收发消息以临时系统消息展示在当前会话（dispatcher 推送）
+  useChannelMirrorEvents({
+    getActiveSessionId: () => activeSessionIdsRef.current[activeModeRef.current],
+    appendMessages,
+  });
+
   useEffect(() => {
     const settings = settingsApprovalApi();
     if (!settings) return;
@@ -190,6 +209,47 @@ export function ChatPage() {
       setInteractionsBySession((current) => {
         for (const [sessionId, entry] of Object.entries(current)) {
           if (entry.interaction.kind === "permission" && entry.interaction.id === settlement.id) {
+            const next = { ...current };
+            delete next[sessionId];
+            return next;
+          }
+        }
+        return current;
+      });
+    });
+    return () => {
+      offRequest();
+      offSettled();
+    };
+  }, []);
+
+  // pop_quiz 抽查卡片（learn 模式）：与审批流同构的持久监听。
+  // 请求按 runId 路由到所属会话；结算广播只清 skipped/cancelled——
+  // submitted 时卡片要留在原地切展示态（判分结果 + 解析），等 run 结束统一收卡。
+  useEffect(() => {
+    const settings = settingsApprovalApi();
+    if (!settings) return;
+    const offRequest = settings.onPopQuizRequest((card) => {
+      const interaction = normalizePopQuizCard(card);
+      if (!interaction) return;
+      const currentMode = activeModeRef.current;
+      const currentSessionId = activeSessionIdsRef.current[currentMode];
+      const ownerSessionId = findSessionIdForRun(activeRunsBySession.current, card.runId)
+        ?? currentSessionId;
+      // 路由不到会话时先丢弃：主进程每 10s 幂等重播，会话就绪后卡片自然出现。
+      if (!ownerSessionId) return;
+      setInteractionForSession(ownerSessionId, interaction);
+      const activeRun = activeRunsBySession.current[ownerSessionId];
+      if (activeRun) {
+        updateMessage(ownerSessionId, activeRun.assistantId, { runStage: { kind: "waiting_user" } });
+        runCheckpointBySessionRef.current[ownerSessionId]?.("waiting_user");
+      }
+    });
+    const offSettled = settings.onPopQuizSettled((settlement) => {
+      if (settlement.reason === "submitted") return;
+      setInteractionsBySession((current) => {
+        for (const [sessionId, entry] of Object.entries(current)) {
+          if (entry.interaction.kind === "quiz" && entry.interaction.id === settlement.quizId) {
             const next = { ...current };
             delete next[sessionId];
             return next;
@@ -1454,6 +1514,17 @@ export function ChatPage() {
                 clearInteractionForSession(activeSessionId);
                 setInteractionBusyForSession(activeSessionId, false);
               }).catch(() => setInteractionBusyForSession(activeSessionId, false));
+            }}
+            onQuizSubmit={(submission) => {
+              const settings = settingsApprovalApi();
+              if (!settings) return Promise.resolve({ ok: false, error: "E_QUIZ_NO_BRIDGE" });
+              // 展示态切换由卡片组件处理，这里只透传判分结果
+              return settings.resolvePopQuiz(submission);
+            }}
+            onQuizSkip={(quizId) => {
+              const settings = settingsApprovalApi();
+              if (!settings) return Promise.resolve({ ok: false, error: "E_QUIZ_NO_BRIDGE" });
+              return settings.skipPopQuiz(quizId);
             }}
           />
         </div>
