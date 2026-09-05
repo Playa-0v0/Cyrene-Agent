@@ -13,13 +13,14 @@
 
 | 问题 | 状态 | 修复位置 |
 | --- | --- | --- |
-| 1 run_shell 捕获层 16KB 之外直接丢弃，汇总行/报错永远丢失 | 待修复 | run-shell-tool.ts：per-stream 捕获上限 2MB + captureTruncated 语义分离 + 返回 JSON 字段重排（stdout 置尾） |
-| 2 run_verification 硬编码 60s 超时，全量测试（实测 124s）必死 | 待修复 | verification-runner.ts：test 10min / build 5min / lint+typecheck 2min；reporter 显式 default |
-| 3 verification-runner 内层截断砍尾保头，长输出的汇总行落在截断区 | 待修复 | verification-runner.ts：truncateOutput 改头尾窗口 + 截断阈值放大 |
-| 4 run_shell 超时不可配（idle 2min / total 30min 硬编码），且 idle 检测误伤无输出长任务 | 待修复 | run-shell-tool.ts：新增 timeout_ms 参数（钳制 1s–30min）+ 显式 deadline 后禁用 idle |
+| 1 run_shell 捕获层 16KB 之外直接丢弃，汇总行/报错永远丢失 | 已修复（C1，72739039） | run-shell-tool.ts：per-stream 捕获上限 2MB + captureTruncated 语义分离 + 返回 JSON 字段重排（stdout 置尾） |
+| 2 run_verification 硬编码 60s 超时，全量测试（实测 124s）必死 | 已修复（C3，20b8707c） | verification-runner.ts：test 10min / build 5min / lint+typecheck 2min；reporter 显式 default |
+| 3 verification-runner 内层截断砍尾保头，长输出的汇总行落在截断区 | 已修复（C3，20b8707c） | verification-runner.ts：truncateOutput 改头尾窗口 + 截断阈值放大 |
+| 4 run_shell 超时不可配（idle 2min / total 30min 硬编码），且 idle 检测误伤无输出长任务 | 已修复（C4，e4f8f86b） | run-shell-tool.ts：新增 timeout_ms 参数（钳制 1s–30min）+ 显式 deadline 后禁用 idle |
 | 5 长命令无后台执行模式，模型只能整轮阻塞等待 | 待修复（二期） | run-shell-tool.ts + 新增 shell_job 工具（status/stop + wait_ms + 流式日志 64MB 上限 + 5 态状态机） |
-| 6 read_file 256KB 捕获层砍头：大文件 totalLines 在残件上统计，翻页到假 EOF 静默丢后半 | 待修复 | fs-tools.ts：10MB 内存上限 + totalLines 全量统计 + 真实行号翻页 |
-| 7 dispatcher 头尾窗口过小（头 4096 + 尾 1024），尾窗装不下汇总行+失败详情 | 待修复 | tool-dispatcher.ts：threshold 30K / head 12K / tail 8K |
+| 6 read_file 256KB 捕获层砍头：大文件 totalLines 在残件上统计，翻页到假 EOF 静默丢后半 | 已修复（C2，dc069032） | fs-tools.ts：10MB 内存上限 + totalLines 全量统计 + 真实行号翻页 |
+| 7 dispatcher 头尾窗口过小（头 4096 + 尾 1024），尾窗装不下汇总行+失败详情 | 已修复（C1，72739039） |
+| 8 run_shell kill 后 close 先于宽限期到达时，终止结果伪装成正常退出（timedOut=false、exitCode=1、终止原因丢失，executor 误判 succeeded）——C4 实施时测试发现 | 已修复（C4，e4f8f86b） | run-shell-tool.ts：stuckReason 跟踪 + buildResult 统一构造，close/error 路径合并终止事实 | tool-dispatcher.ts：threshold 30K / head 12K / tail 8K |
 
 ---
 
