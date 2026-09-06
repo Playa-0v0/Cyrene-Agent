@@ -240,7 +240,8 @@ export function MomentComposer({ submitting, onPublish }: MomentComposerProps) {
             candidates.map((name, index) => {
               const isCyrene = name === "cyrene";
               const display = isCyrene ? t("moments.mention.cyreneOptionLabel") : name;
-              const avatar = isCyrene ? null : getCharacterAvatar(name);
+              // 头像池覆盖到昔涟，@ 选择框里她也带头像——和别人外观一致
+              const avatar = getCharacterAvatar(isCyrene ? "昔涟" : name);
               return (
                 <button
                   type="button"

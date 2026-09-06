@@ -89,6 +89,12 @@
   border-radius: 10px;
   background: var(--cy-bg-elevated, #fff);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  /* QQ 群选择框通常不显示滑块，靠滚轮与键盘翻页（项目里选项不会多到需要拖动） */
+  scrollbar-width: none;
+}
+
+.moments-composer__mention-picker::-webkit-scrollbar {
+  display: none;
 }
 
 .moments-composer__mention-empty {
