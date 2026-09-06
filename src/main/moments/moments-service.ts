@@ -5,8 +5,9 @@
 // - 用户发帖 / 评论成功后调度昔涟反应（后台 LLM，经 enqueueLLMTask 串行）；
 // - 规则闸门前置：反应开关关闭或模型未配置时直接跳过，不浪费 token。
 //
-// 昔涟的反应结果由 agent 经 store 的昔涟提交通道落库；
-// 提交时在串行队列内复核开关与目标存在性，AI 思考期间世界变化不豁免。
+// 昔涟反应分两段：agent 只产出决策（stale/retry/invalid/decided），
+// 落库由本模块统一执行——决策与副作用分离，同样的两段后续可平移到
+// 反应队列的 decide/apply 执行器上。
 
 import { enqueueLLMTask } from "../llm-queue";
 import { loadGeneralSettings } from "../settings/settings-facade";
@@ -31,6 +32,7 @@ import {
   buildConversationSummary,
   type ConversationSummaryTurn,
 } from "./moments-context";
+import type { ReactionDecision, ReactionDecideOutcome } from "./reaction-queue";
 import {
   buildMomentsEventKey,
   canPost,
@@ -119,8 +121,6 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
   const agent: MomentsAgent = createMomentsAgent({
     buildPersona: deps.buildPersona,
     runModel: deps.runModel,
-    commitLike: (postId) => deps.store.createCyreneLike(postId),
-    commitComment: (input) => deps.store.createComment(input, "cyrene"),
     commitPost: (input) => deps.store.createCyrenePost(input),
     loadFeedItem: (postId) => deps.store.getFeedItem(postId),
     matchMedia: deps.matchMedia ?? (async () => null),
@@ -154,8 +154,35 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     });
   }
 
-  function scheduleUserPostReaction(post: MomentPost): void {
-    scheduleReaction("MomentsReact", () => agent.evaluateUserPost(post));
+  /**
+   * 昔涟表态决策落库：点赞走昔涟点赞通道，评论/回复走昔涟评论通道
+   * （store 串行队列内含开关与目标存在性复核，AI 思考期间世界变化不豁免）。
+   */
+  async function applyCyreneReaction(
+    target: { postId: string; replyTo?: string },
+    decision: ReactionDecision,
+  ): Promise<void> {
+    if (decision.action === "like" || decision.action === "like_comment") {
+      await deps.store.createCyreneLike(target.postId);
+    }
+    if (decision.action === "comment" || decision.action === "like_comment" || decision.action === "reply") {
+      await deps.store.createComment(
+        { postId: target.postId, content: decision.comment, replyTo: target.replyTo },
+        "cyrene",
+      );
+    }
+  }
+
+  /** 非 decided 或 silent 的结局对直通路径都是"什么都不做"：stale/invalid/retry 由队列语义接管重试与放弃 */
+  async function runCyreneReaction(outcome: ReactionDecideOutcome, target: { postId: string; replyTo?: string }): Promise<void> {
+    if (outcome.type !== "decided") return;
+    if (outcome.decision.action === "silent") return;
+    await applyCyreneReaction(target, outcome.decision);
+  }
+
+  function scheduleUserPostReaction(postId: string): void {
+    scheduleReaction("MomentsReact", () =>
+      agent.decideUserPostReaction(postId).then((outcome) => runCyreneReaction(outcome, { postId })));
   }
 
   function scheduleCommentReply(input: MomentCreateCommentInput, committed: MomentComment): void {
@@ -167,7 +194,9 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
       (input.replyTo !== undefined &&
         feed.comments.some((comment) => comment.id === input.replyTo && comment.author === "cyrene"));
     if (!targetsCyrene) return;
-    scheduleReaction("MomentsReply", () => agent.generateCommentReply(input.postId, committed.id));
+    scheduleReaction("MomentsReply", () =>
+      agent.decideCommentReply(input.postId, committed.id)
+        .then((outcome) => runCyreneReaction(outcome, { postId: input.postId, replyTo: committed.id })));
   }
 
   /** run 成功收尾：记录 ring buffer → 设置/去重闸门（LLM 前）→ 入队生成。 */
@@ -216,7 +245,7 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
 
     createUserPost: (input) =>
       deps.store.createUserPost(input).then((result) => {
-        if (result.applied) scheduleUserPostReaction(result.value);
+        if (result.applied) scheduleUserPostReaction(result.value.id);
         return result;
       }),
 

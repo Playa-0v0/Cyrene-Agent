@@ -1,10 +1,14 @@
-// Moments（动态 / 朋友圈）的 LLM 调用：评价用户动态 + 生成评论回复。
+// Moments（动态 / 朋友圈）的 LLM 调用：评价用户动态 + 生成评论回复 + 主动发帖。
 //
 // 后台调用规范（照 runProactiveModel 的约束）：
 // - 非流式、maxTokens 600，消息里不得含 tool 内容；
 // - JSON 决策输出 + 容错解析，解析失败一律静默放弃，不影响主流程；
 // - 由 moments-service 经后台串行队列调度，本模块不做排队；
 // - 记录 token 用量。
+//
+// 表态与回复只产出决策不落库：动态可能在排队期间被删除（决策前重读，变了
+// 返回 stale）、模型可能失败（返回 retry）、输出可能非法（返回 invalid），
+// 由调用方决定重试、放弃或落库——决策与副作用分离后才能做崩溃续接。
 
 import { recordUsage, recordRequest } from "../token-usage-store";
 import {
@@ -24,6 +28,7 @@ import {
 import { buildPostGenerationPacket } from "./moments-context";
 import { buildMomentImageQuery } from "./moment-media-matcher";
 import { MOMENTS_CYRENE_POST_TEXT_MAX } from "./moments-policy";
+import type { ReactionDecision, ReactionDecideOutcome } from "./reaction-queue";
 
 export const MOMENTS_MODEL_MAX_TOKENS = 600;
 
@@ -419,15 +424,11 @@ export async function runMomentsModel(input: RunMomentsModelInput): Promise<Mome
   }
 }
 
-// ── Agent：决策 → 提交 ──────────────────────────────────────────
+// ── Agent：决策（不落库） ───────────────────────────────────────
 
 export interface MomentsAgentDeps {
   buildPersona: () => string;
   runModel: (messages: ChatMessage[]) => Promise<MomentsModelOutput>;
-  /** 提交昔涟点赞（store 串行队列内含开关与存在性复核） */
-  commitLike: (postId: string) => Promise<unknown>;
-  /** 提交昔涟评论 */
-  commitComment: (input: { postId: string; content: string; replyTo?: string }) => Promise<unknown>;
   /** 提交昔涟动态（store 串行队列内含开关复核）；返回 applied 表示真的落库 */
   commitPost: (input: { text: string; media: MomentMedia[]; source: MomentPostSource }) => Promise<{ applied: boolean }>;
   /** 后置配图匹配：wantImage 时按文案+摘录选官方素材；未命中返回 null（纯文字降级） */
@@ -436,20 +437,38 @@ export interface MomentsAgentDeps {
   buildWorldbookContext?: (text: string) => string;
   /** 读取用户动态图片（user_attachment 副本）转 base64 直发多模态模型；未注入时不带图 */
   loadPostImages?: (post: MomentPost) => MomentPostImage[];
-  /** 执行时重读动态与评论线程：AI 思考期间世界可能已变 */
+  /** 决策前重读动态与评论线程：排队期间世界可能已变 */
   loadFeedItem: (postId: string) => MomentFeedItem | null;
   log?: (event: string, detail?: unknown) => void;
 }
 
 export interface MomentsAgent {
-  evaluateUserPost: (post: MomentPost) => Promise<void>;
-  generateCommentReply: (postId: string, replyTargetId: string) => Promise<void>;
-  /** 主动发帖决策：返回是否真的发出了动态（供策略层记账） */
+  /** 昔涟对动态表态的决策：动态已删 → stale；模型失败 → retry；输出非法 → invalid */
+  decideUserPostReaction: (postId: string) => Promise<ReactionDecideOutcome>;
+  /** 昔涟被回复后的决策：post 已删 / 触发评论已删 → stale */
+  decideCommentReply: (postId: string, replyTargetId: string) => Promise<ReactionDecideOutcome>;
+  /** 主动发帖决策：返回是否真的发出了动态（供策略层记账）；发帖不走决策/落库分离——配图匹配本身就是决策的一部分 */
   generatePost: (input: { summary: string; recentCyrenePosts: readonly MomentPost[] }) => Promise<boolean>;
 }
 
+/** 表态决策（like + 可选评论）映射为统一决策形态：silent / like / comment / like_comment */
+function toPostReactionDecision(decision: MomentReactionDecision): ReactionDecision {
+  if (decision.kind !== "react") return { action: "silent" };
+  if (decision.like && decision.commentText) {
+    return { action: "like_comment", comment: decision.commentText };
+  }
+  if (decision.like) return { action: "like" };
+  if (decision.commentText) return { action: "comment", comment: decision.commentText };
+  return { action: "silent" };
+}
+
 export function createMomentsAgent(deps: MomentsAgentDeps): MomentsAgent {
-  async function evaluateUserPost(post: MomentPost): Promise<void> {
+  async function decideUserPostReaction(postId: string): Promise<ReactionDecideOutcome> {
+    // 决策前重读：排队期间动态可能已被删除
+    const feed = deps.loadFeedItem(postId);
+    if (!feed) return { type: "stale", reason: "post_not_found" };
+    const post = feed.post;
+
     const output = await deps.runModel(buildReactionMessages({
       persona: deps.buildPersona(),
       // 用户动态文本扫 worldbook 关键词，命中注入设定防幻觉
@@ -462,25 +481,23 @@ export function createMomentsAgent(deps: MomentsAgentDeps): MomentsAgent {
       },
       localNow: new Date(),
     }));
-    if (output.kind !== "text") return;
+    if (output.kind !== "text") return { type: "retry", reason: output.reason };
 
     const decision = parseReactionDecision(output.text);
     if (decision.kind === "invalid") {
       deps.log?.("reaction_decision_invalid", decision.reason);
-      return;
+      return { type: "invalid", reason: decision.reason };
     }
-    if (decision.kind === "ignore") return;
-    if (decision.like) await deps.commitLike(post.id);
-    if (decision.commentText) {
-      await deps.commitComment({ postId: post.id, content: decision.commentText });
-    }
+    return { type: "decided", decision: toPostReactionDecision(decision) };
   }
 
-  async function generateCommentReply(postId: string, replyTargetId: string): Promise<void> {
-    // 执行时重读：动态或触发评论已被删除时静默放弃
+  async function decideCommentReply(postId: string, replyTargetId: string): Promise<ReactionDecideOutcome> {
+    // 决策前重读：动态或触发评论已被删除时任务作废
     const feed = deps.loadFeedItem(postId);
-    if (!feed) return;
-    if (!feed.comments.some((comment) => comment.id === replyTargetId)) return;
+    if (!feed) return { type: "stale", reason: "post_not_found" };
+    if (!feed.comments.some((comment) => comment.id === replyTargetId)) {
+      return { type: "stale", reason: "trigger_comment_not_found" };
+    }
 
     const output = await deps.runModel(buildReplyMessages({
       persona: deps.buildPersona(),
@@ -498,15 +515,15 @@ export function createMomentsAgent(deps: MomentsAgentDeps): MomentsAgent {
       triggerExcerpt: feed.post.source?.triggerExcerpt,
       localNow: new Date(),
     }));
-    if (output.kind !== "text") return;
+    if (output.kind !== "text") return { type: "retry", reason: output.reason };
 
     const decision = parseReplyDecision(output.text);
     if (decision.kind === "invalid") {
       deps.log?.("reply_decision_invalid", decision.reason);
-      return;
+      return { type: "invalid", reason: decision.reason };
     }
-    if (decision.kind === "skip") return;
-    await deps.commitComment({ postId, content: decision.text, replyTo: replyTargetId });
+    if (decision.kind === "skip") return { type: "decided", decision: { action: "silent" } };
+    return { type: "decided", decision: { action: "reply", comment: decision.text } };
   }
 
   async function generatePost(input: { summary: string; recentCyrenePosts: readonly MomentPost[] }): Promise<boolean> {
@@ -544,5 +561,5 @@ export function createMomentsAgent(deps: MomentsAgentDeps): MomentsAgent {
     return result.applied;
   }
 
-  return { evaluateUserPost, generateCommentReply, generatePost };
+  return { decideUserPostReaction, decideCommentReply, generatePost };
 }

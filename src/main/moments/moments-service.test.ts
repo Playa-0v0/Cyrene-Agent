@@ -279,6 +279,8 @@ describe("moments service 反应调度", () => {
   it("用户发帖成功后调度昔涟反应任务并完成点赞提交", async () => {
     const h = createHarness();
     const result = await h.service.createUserPost({ text: "第一条动态" });
+    // 决策→落库链路多一拍微任务，等一拍再断言提交结果
+    await flush();
 
     expect(result.applied).toBe(true);
     expect(h.labels).toEqual(["MomentsReact"]);
@@ -338,6 +340,7 @@ describe("moments service 评论回复调度", () => {
       content: "回复昔涟",
       replyTo: "c_cyrene",
     });
+    await flush();
 
     expect(result.applied).toBe(true);
     expect(h.labels).toEqual(["MomentsReply"]);
