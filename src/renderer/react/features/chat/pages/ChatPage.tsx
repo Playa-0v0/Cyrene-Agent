@@ -1478,10 +1478,12 @@ export function ChatPage() {
               if (!choice) return;
               setInteractionBusyForSession(activeSessionId, true);
               void choice.resolve(id, answer).then((result) => {
+                // ok:false = pending 已在主进程被结算（超时/取消等）：卡片不可能再提交成功，直接清掉，
+                // 避免留下一张点多少次都没反应的僵尸卡。
                 if (result.ok) {
-                  clearInteractionForSession(activeSessionId);
                   runCheckpointBySessionRef.current[activeSessionId]?.("running");
                 }
+                clearInteractionForSession(activeSessionId);
                 setInteractionBusyForSession(activeSessionId, false);
               }).catch(() => setInteractionBusyForSession(activeSessionId, false));
             }}
@@ -1491,10 +1493,11 @@ export function ChatPage() {
               if (!choice) return;
               setInteractionBusyForSession(activeSessionId, true);
               void choice.resolve(id, "").then((result) => {
+                // 同 onAnswer：ok:false 说明 pending 已被主进程结算，卡片清掉不留僵尸。
                 if (result.ok) {
-                  clearInteractionForSession(activeSessionId);
                   runCheckpointBySessionRef.current[activeSessionId]?.("running");
                 }
+                clearInteractionForSession(activeSessionId);
                 setInteractionBusyForSession(activeSessionId, false);
               }).catch(() => setInteractionBusyForSession(activeSessionId, false));
             }}

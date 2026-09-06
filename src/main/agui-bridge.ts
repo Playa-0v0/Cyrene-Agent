@@ -35,7 +35,12 @@ import type { StyleId } from "../shared/style-sampling";
 import type { PendingTurnLifecycle } from "./plugin-host/pending-turn-lifecycle";
 import * as chatsStore from "./chats/chats-store";
 import type { ConversationMode } from "../shared/chat-types";
-import { requestUserClarification, cancelPendingChoicesForRun } from "./user-choice";
+import {
+  requestUserClarification,
+  cancelPendingChoicesForRun,
+  type ChoiceCardData,
+  type ChoiceSettlement,
+} from "./user-choice";
 import { cancelPendingApprovalsForRun } from "./permission";
 import { cancelPendingQuizzesForRun, takeQuizEvidenceForRun } from "./orchestrator/pop-quiz";
 import { approvePlan, getPlanPath, moveToReview, supplementPlan } from "./orchestrator/plan-mode";
@@ -227,6 +232,23 @@ function startPlanReviewFlow(params: {
   send: (event: unknown) => void;
 }): void {
   const { sessionId, threadId, runId, send } = params;
+  // 计划审批卡与补充卡共用同一收发通道：run 已结束，渲染端靠持久监听器收卡。
+  // 卡片与结算（超时/取消）都带同一 runId 身份，结算事件让渲染端立即清卡，
+  // 不留点不出结果的僵尸卡（与 run 内 ask_user 卡同机制）。
+  const sendPlanCard = (cardData: ChoiceCardData): void => send({
+    type: "CUSTOM",
+    name: "cyrene.choice",
+    value: { ...cardData, sessionId },
+    threadId,
+    runId,
+  });
+  const sendPlanDismiss = (settlement: ChoiceSettlement): void => send({
+    type: "CUSTOM",
+    name: "cyrene.choice.dismiss",
+    value: settlement,
+    threadId,
+    runId,
+  });
   void (async () => {
     if (!moveToReview(sessionId)) return;
     console.log("[AgUiBridge][Plan] run finished with write_plan, entering PLAN_REVIEW");
@@ -247,14 +269,8 @@ function startPlanReviewFlow(params: {
     });
     const answer = await requestUserClarification(
       buildPlanReviewCard(planPath),
-      (cardData) => send({
-        type: "CUSTOM",
-        name: "cyrene.choice",
-        value: { ...cardData, sessionId },
-        threadId,
-        runId,
-      }),
-      undefined,
+      sendPlanCard,
+      sendPlanDismiss,
       { runId, revision: 1 },
     ) as AskUserAnswer;
     const decision = answer.answers.find((a) => a.field === "plan_decision");
@@ -271,14 +287,8 @@ function startPlanReviewFlow(params: {
     console.log("[AgUiBridge][Plan] user wants to supplement, asking for details");
     const supplementAnswer = await requestUserClarification(
       buildPlanSupplementCard(),
-      (cardData) => send({
-        type: "CUSTOM",
-        name: "cyrene.choice",
-        value: { ...cardData, sessionId },
-        threadId,
-        runId,
-      }),
-      undefined,
+      sendPlanCard,
+      sendPlanDismiss,
       { runId, revision: 2 },
     ) as AskUserAnswer;
     const supplementText = supplementAnswer.answers
