@@ -82,7 +82,7 @@ export interface MomentPostImage {
 }
 
 /** 用户动态图片挂到 user 消息尾部：成功转 image_url block 直发，失败降级"无法读取"文字块 */
-function appendImageBlocks(text: string, images?: readonly MomentPostImage[]): ChatMessageContent {
+export function appendImageBlocks(text: string, images?: readonly MomentPostImage[]): ChatMessageContent {
   if (!images || images.length === 0) return text;
   const blocks: OpenAIContentBlock[] = [{ type: "text", text }];
   for (const image of images) {
@@ -113,12 +113,14 @@ function formatDateTime(at: number): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
-function formatClock(at: number): string {
+/** 评论行前缀用的时分（HH:mm） */
+export function formatClock(at: number): string {
   const d = new Date(at);
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
-function formatNow(now: Date): string {
+/** prompt 里注入的当前时间（日期 + 星期） */
+export function formatNow(now: Date): string {
   return `${formatDateTime(now.getTime())} 周${WEEKDAYS[now.getDay()]}`;
 }
 
@@ -525,7 +527,7 @@ export function createMomentsAgent(deps: MomentsAgentDeps): MomentsAgent {
     }
     if (decision.kind === "skip") return false;
 
-    // 后置配图（§7.5）：LLM 只表态想要图，选图由本地 embedding 匹配完成；
+    // 后置配图：LLM 只表态想要图，选图由本地 embedding 匹配完成；
     // 未命中阈值 / 索引未就绪时降级纯文字，不硬凑图
     let media: MomentMedia[] = [];
     if (decision.wantImage) {

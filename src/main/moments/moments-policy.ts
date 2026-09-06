@@ -1,11 +1,11 @@
-// Moments 主动发帖的策略闸门（设计文档 §6.3 / §7）。
+// Moments 主动发帖的策略闸门。
 //
-// 与 Chat proactive 的分工（D4）：proactive 管"打断用户"的打扰预算，
+// 与 Chat proactive 的分工：proactive 管"打断用户"的打扰预算，
 // Moments 管"被动存在感"的存在感预算——朋友圈躺在 Feed 里，不弹通知，
-// 无夜间禁发（D9）、无 unansweredCount 拦截，两套预算互不共享。
+// 无夜间禁发、无 unansweredCount 拦截，两套预算互不共享。
 //
 // 规则闸门放在 LLM 之前：冷却 / 日上限 / run 粒度去重全部命中后才进入生成，
-// 省 token。去重键粒度是 run 不是 conversation（D10）：
+// 省 token。去重键粒度是 run 不是 conversation：
 // 一个会话里上午发包、晚上修 bug 是两件事，按会话去重会误杀第二件。
 
 import * as fs from "fs";
@@ -13,13 +13,13 @@ import * as path from "path";
 import { createHash } from "crypto";
 import { app } from "electron";
 
-// ── 常量（§7.2） ────────────────────────────────────────────────
+// ── 常量 ────────────────────────────────────────────────────────
 
 /** 同一草稿的最小发帖间隔：6 小时冷却 */
 export const MIN_POST_INTERVAL_MS = 6 * 60 * 60 * 1000;
 /** 每日发帖上限（是上限不是配额，允许 0/1/2 条） */
 export const MAX_POSTS_PER_DAY = 2;
-/** 昔涟生成动态的文案长度上限（§7.2；用户输入的 2000 上限是另一层，不混用） */
+/** 昔涟生成动态的文案长度上限（用户输入的 2000 上限是另一层，不混用） */
 export const MOMENTS_CYRENE_POST_TEXT_MAX = 300;
 /** 去重键 FIFO 容量 */
 export const RECENT_EVENT_KEYS_CAPACITY = 64;
@@ -54,7 +54,7 @@ export type MomentsPostGate =
   | { ok: true }
   | { ok: false; reason: "cooldown" | "daily_limit" };
 
-/** 冷却与日上限判定；不包含任何时段禁发 / 未回复拦截类条件（D9 / D4）。 */
+/** 冷却与日上限判定；不包含任何时段禁发 / 未回复拦截类条件。 */
 export function canPost(state: MomentsPolicyState, now: number): MomentsPostGate {
   if (state.lastPostAt !== null && now - state.lastPostAt < MIN_POST_INTERVAL_MS) {
     return { ok: false, reason: "cooldown" };
@@ -65,7 +65,7 @@ export function canPost(state: MomentsPolicyState, now: number): MomentsPostGate
   return { ok: true };
 }
 
-// ── 去重键（run 粒度，D10） ──────────────────────────────────────
+// ── 去重键（run 粒度） ──────────────────────────────────────────
 
 export interface MomentsEventKeyInput {
   conversationId: string;

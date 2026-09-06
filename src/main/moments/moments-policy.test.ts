@@ -1,5 +1,5 @@
-// moments-policy 单测：冷却 / 日上限 / run 粒度去重各分支（设计文档 §15）。
-// 按 §7.3 契约：断言里不存在 unansweredCount / 夜间时段禁发类条件。
+// moments-policy 单测：冷却 / 日上限 / run 粒度去重各分支。
+// 契约：断言里不存在 unansweredCount / 夜间时段禁发类条件。
 import fs from "fs";
 import os from "os";
 import path from "path";

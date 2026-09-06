@@ -30,7 +30,7 @@ export interface MomentMedia {
   ref: string;
 }
 
-/** 触发快照固化在 Post 上：Chat 指代回查不依赖原会话当前状态（D11）。 */
+/** 触发快照固化在 Post 上：Chat 指代回查不依赖原会话当前状态。 */
 export interface MomentPostSource {
   type: "manual" | "conversation";
   triggerConversationId?: string;

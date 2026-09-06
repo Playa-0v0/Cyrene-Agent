@@ -1,4 +1,4 @@
-// Moments（动态 / 朋友圈）的 Chat 背景上下文构建（设计文档 §8）。
+// Moments（动态 / 朋友圈）的 Chat 背景上下文构建。
 //
 // 两层结构：
 // - Layer 1 Recent Moments State：每轮常驻注入，最近 48h 内最多 3 条动态摘要；
@@ -96,7 +96,7 @@ function isMomentReaction(interaction: MomentComment | MomentReaction): interact
 // ── Layer 1：Recent Moments State（每轮常驻） ────────────────────
 
 /**
- * 最近 48h 内最多 3 条动态摘要（不分 author，昔涟自身动态同样覆盖，§8.4）。
+ * 最近 48h 内最多 3 条动态摘要（不分 author，昔涟自身动态同样覆盖）。
  * 昔涟的点赞 / 评论以行内标注体现；无近期动态时返回空串（调用方按空省略）。
  */
 export function buildRecentMomentsBlock(
@@ -245,7 +245,7 @@ export function buildMomentsContextBlock(
   }
   return parts.join("\n\n---\n\n");
 }
-// ── 主动发帖的上下文包（§6.3，Phase 4） ─────────────────────────
+// ── 主动发帖的上下文包 ─────────────────────────────────────────
 
 /** ring buffer 里的一轮对话（MomentEvent.summary 的原料）。 */
 export interface ConversationSummaryTurn {

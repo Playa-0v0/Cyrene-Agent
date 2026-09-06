@@ -52,12 +52,12 @@ import type {
 
 const MOMENTS_MODEL_TIMEOUT_MS = 45_000;
 
-/** ring buffer 保留的最近轮数（§7.1 契约 3：MomentEvent.summary 的原料） */
+/** ring buffer 保留的最近轮数（MomentEvent.summary 的原料） */
 const RING_BUFFER_MAX_TURNS = 6;
-/** 供新颖性判断的最近昔涟动态条数（§6.3） */
+/** 供新颖性判断的最近昔涟动态条数 */
 const RECENT_CYRENE_POSTS_FOR_NOVELTY = 5;
 
-/** Moments 一次 run 收尾的输入（§7.1：事件产生时冻结的不可变快照）。 */
+/** Moments 一次 run 收尾的输入（事件产生时冻结的不可变快照）。 */
 export interface MomentsTurnInput {
   conversationId: string;
   runId?: string;
@@ -233,7 +233,7 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     scheduleTurn,
   };
 }
-// ── 配图匹配（Phase 5）：贴图 embedding 索引由组合根晚绑定 ──────
+// ── 配图匹配：贴图 embedding 索引由组合根晚绑定 ─────────────────
 
 let getStickerEmbeddingIndex: () => StickerEmbeddingEntry[] | null = () => null;
 

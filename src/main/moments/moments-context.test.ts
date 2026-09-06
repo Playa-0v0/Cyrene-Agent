@@ -1,4 +1,4 @@
-// moments-context 单测：门控矩阵、防注入声明、空省略、删帖后不出现（设计文档 §15）。
+// moments-context 单测：门控矩阵、防注入声明、空省略、删帖后不出现。
 import { describe, expect, it } from "vitest";
 import type {
   MomentComment,
