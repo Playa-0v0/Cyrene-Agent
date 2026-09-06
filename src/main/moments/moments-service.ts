@@ -2,13 +2,16 @@
 //
 // 职责：
 // - 包装 moments-store 的 CRUD（读走内存缓存，写走串行队列）；
-// - 用户发帖 / 评论成功后调度昔涟反应（后台 LLM，经 enqueueLLMTask 串行）；
-// - 规则闸门前置：反应开关关闭或模型未配置时直接跳过，不浪费 token。
+// - 用户发帖 / 评论成功后把昔涟反应任务入持久化反应队列
+//   （拟人化延迟，到期由扫描器执行决策与落库）；
+// - run 收尾后按策略调度昔涟主动发帖（后台 LLM，经 enqueueLLMTask 串行）；
+// - 规则闸门前置：反应开关关闭或模型未配置时连任务都不入队，不浪费 token。
 //
-// 昔涟反应分两段：agent 只产出决策（stale/retry/invalid/decided），
-// 落库由本模块统一执行——决策与副作用分离，同样的两段后续可平移到
-// 反应队列的 decide/apply 执行器上。
+// 昔涟反应分两段：agent 只产出决策（stale/retry/invalid/decided），落库由
+// 反应队列的 apply 执行器统一提交——决策与副作用分离，崩溃后凭落盘的
+// 决策缓存续接，不重问模型。
 
+import { app } from "electron";
 import { enqueueLLMTask } from "../llm-queue";
 import { loadGeneralSettings } from "../settings/settings-facade";
 import { loadModelSettings } from "../settings/model-settings";
@@ -32,7 +35,15 @@ import {
   buildConversationSummary,
   type ConversationSummaryTurn,
 } from "./moments-context";
-import type { ReactionDecision, ReactionDecideOutcome } from "./reaction-queue";
+import {
+  applyNightWindow,
+  computeCyrenePostDelayMs,
+  computeCyreneReplyDelayMs,
+  createReactionQueue,
+  type ReactionDecision,
+  type ReactionQueue,
+  type ReactionTaskExecutor,
+} from "./reaction-queue";
 import {
   buildMomentsEventKey,
   canPost,
@@ -58,6 +69,8 @@ const MOMENTS_MODEL_TIMEOUT_MS = 45_000;
 const RING_BUFFER_MAX_TURNS = 6;
 /** 供新颖性判断的最近昔涟动态条数 */
 const RECENT_CYRENE_POSTS_FOR_NOVELTY = 5;
+/** 昔涟在线判定窗口：最近一次对话收尾距今不足 10 分钟视为在线 */
+const CYRENE_ONLINE_WINDOW_MS = 10 * 60_000;
 
 /** Moments 一次 run 收尾的输入（事件产生时冻结的不可变快照）。 */
 export interface MomentsTurnInput {
@@ -80,6 +93,12 @@ export interface MomentsService {
   toggleUserLike: (postId: string) => Promise<MomentCommitResult<{ liked: boolean }>>;
   /** run 成功收尾时调用：记录 ring buffer 并按策略调度昔涟主动发帖。 */
   scheduleTurn: (input: MomentsTurnInput) => void;
+  /** 启动反应队列周期扫描器（启动即补扫一轮，重启后逾期任务尽快续上）；由后台启动组挂载 */
+  startReactionScanner(): void;
+  /** 停止反应队列周期扫描器 */
+  stopReactionScanner(): void;
+  /** 手动扫描一轮到期反应任务（诊断与测试用）；已有排空在进行时返回 false */
+  drainReactionQueue(): Promise<boolean>;
 }
 
 interface MomentsStoreFacade {
@@ -114,6 +133,12 @@ export interface MomentsServiceDeps {
   buildWorldbookContext?: (text: string) => string;
   /** 读取用户动态图片转 base64（未注入时不带图） */
   loadPostImages?: (post: MomentPost) => MomentPostImage[];
+  /** 反应队列持久化路径（缺省 userData/moments-reaction-queue.json；测试注入临时文件） */
+  reactionQueueFilePath?: string | (() => string);
+  /** 时钟（延迟计算与在线感知用；缺省真实时间） */
+  now?: () => number;
+  /** 延迟抽签随机源（缺省 Math.random） */
+  random?: () => number;
   log?: (event: string, detail?: unknown) => void;
 }
 
@@ -131,6 +156,8 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
 
   const loadPolicyState = deps.loadPolicyState ?? loadMomentsPolicyState;
   const savePolicyState = deps.savePolicyState ?? saveMomentsPolicyState;
+  const now = deps.now ?? Date.now;
+  const random = deps.random ?? Math.random;
 
   // per-conversation ring buffer：MomentEvent.summary 的原料（内存态，V1 从简不落盘）
   const conversationTurns = new Map<string, ConversationSummaryTurn[]>();
@@ -143,15 +170,6 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
   function reactionsEnabled(): boolean {
     const settings = deps.loadGeneralSettings();
     return settings.momentsEnabled && settings.cyreneMomentsReactionsEnabled;
-  }
-
-  /** 闸门前置省 token：开关关闭或模型未配置时不入队。 */
-  function scheduleReaction(label: string, task: () => Promise<void>): void {
-    if (!reactionsEnabled()) return;
-    if (deps.loadVendorConfig() === null) return;
-    deps.enqueueTask(label, task).catch((error) => {
-      deps.log?.("reaction_task_failed", error instanceof Error ? error.message : String(error));
-    });
   }
 
   /**
@@ -173,16 +191,85 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     }
   }
 
-  /** 非 decided 或 silent 的结局对直通路径都是"什么都不做"：stale/invalid/retry 由队列语义接管重试与放弃 */
-  async function runCyreneReaction(outcome: ReactionDecideOutcome, target: { postId: string; replyTo?: string }): Promise<void> {
-    if (outcome.type !== "decided") return;
-    if (outcome.decision.action === "silent") return;
-    await applyCyreneReaction(target, outcome.decision);
+  /**
+   * 昔涟在线感知：任何会话的最近一次收尾距今不足 10 分钟即在线。
+   * ring buffer 是内存态，重启后视为离线——保守但正确。
+   */
+  function isCyreneOnline(): boolean {
+    let latest = 0;
+    for (const turns of conversationTurns.values()) {
+      const last = turns[turns.length - 1];
+      if (last && last.at > latest) latest = last.at;
+    }
+    return latest > 0 && now() - latest < CYRENE_ONLINE_WINDOW_MS;
+  }
+
+  /**
+   * 昔涟任务到期时间：在线走短延迟且不受深夜窗口影响（用户正和她聊天，
+   * 凌晨三点她就是醒着的）；离线走长尾分桶，且入队落在深夜时段时整体
+   * 推迟到次日早晨，避免半夜刷朋友圈。
+   */
+  function computeCyreneDueAt(kind: "post_eval" | "reply_eval"): number {
+    const online = isCyreneOnline();
+    const delayMs = kind === "post_eval"
+      ? computeCyrenePostDelayMs(online, random)
+      : computeCyreneReplyDelayMs(online, random);
+    const dueAt = now() + delayMs;
+    return online ? dueAt : applyNightWindow(dueAt, new Date(now()), random);
+  }
+
+  // 昔涟反应执行器：决策阶段复核闸门后委托 agent，副作用阶段统一落库。
+  // 角色任务尚无执行通道，未知主体的任务兜底作废，避免在队列里无限滞留。
+  const cyreneExecutor: ReactionTaskExecutor = {
+    async decide(task) {
+      if (task.actor !== "cyrene") return { type: "stale", reason: "unknown_actor" };
+      // 执行时复核闸门：入队时通过不代表到期时仍通过，世界已变则任务作废
+      if (!reactionsEnabled()) return { type: "stale", reason: "reactions_disabled" };
+      if (deps.loadVendorConfig() === null) return { type: "stale", reason: "model_not_configured" };
+      if (task.kind === "post_eval") return agent.decideUserPostReaction(task.postId);
+      if (task.kind === "reply_eval") {
+        // 回复任务必带触发评论 id：缺失视为数据损坏，作废任务
+        if (!task.triggerCommentId) return { type: "stale", reason: "missing_trigger_comment" };
+        return agent.decideCommentReply(task.postId, task.triggerCommentId);
+      }
+      return { type: "stale", reason: "unknown_task_kind" };
+    },
+    async apply(task, decision) {
+      await applyCyreneReaction({
+        postId: task.postId,
+        replyTo: task.kind === "reply_eval" ? task.triggerCommentId : undefined,
+      }, decision);
+    },
+  };
+
+  const reactionQueue: ReactionQueue = createReactionQueue({
+    filePath: deps.reactionQueueFilePath ?? defaultReactionQueueFilePath,
+    executor: cyreneExecutor,
+    now,
+    log: (event, detail) => deps.log?.(event, detail),
+  });
+
+  /** 入队失败不影响用户操作返回：反应是锦上添花，磁盘异常只记日志 */
+  function enqueueCyreneReaction(input: {
+    kind: "post_eval" | "reply_eval";
+    postId: string;
+    triggerCommentId?: string;
+  }): void {
+    try {
+      reactionQueue.enqueue({ actor: "cyrene", dueAt: computeCyreneDueAt(input.kind), ...input });
+    } catch (error) {
+      deps.log?.("reaction_enqueue_failed", error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /** 闸门前置（省一次落盘）：开关关闭或模型未配置时连任务都不入队 */
+  function reactionGateOpen(): boolean {
+    return reactionsEnabled() && deps.loadVendorConfig() !== null;
   }
 
   function scheduleUserPostReaction(postId: string): void {
-    scheduleReaction("MomentsReact", () =>
-      agent.decideUserPostReaction(postId).then((outcome) => runCyreneReaction(outcome, { postId })));
+    if (!reactionGateOpen()) return;
+    enqueueCyreneReaction({ kind: "post_eval", postId });
   }
 
   function scheduleCommentReply(input: MomentCreateCommentInput, committed: MomentComment): void {
@@ -194,9 +281,8 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
       (input.replyTo !== undefined &&
         feed.comments.some((comment) => comment.id === input.replyTo && comment.author === "cyrene"));
     if (!targetsCyrene) return;
-    scheduleReaction("MomentsReply", () =>
-      agent.decideCommentReply(input.postId, committed.id)
-        .then((outcome) => runCyreneReaction(outcome, { postId: input.postId, replyTo: committed.id })));
+    if (!reactionGateOpen()) return;
+    enqueueCyreneReaction({ kind: "reply_eval", postId: input.postId, triggerCommentId: committed.id });
   }
 
   /** run 成功收尾：记录 ring buffer → 设置/去重闸门（LLM 前）→ 入队生成。 */
@@ -223,7 +309,7 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     const summary = buildConversationSummary(turns);
     deps.enqueueTask("MomentsPost", async () => {
       // 执行时复核冷却与日上限：闸门通过到任务执行之间，世界可能已变
-      const gate = canPost(loadPolicyState(), Date.now());
+      const gate = canPost(loadPolicyState(), now());
       if (!gate.ok) {
         deps.log?.("post_gated", gate.reason);
         return;
@@ -233,7 +319,7 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
         .filter((post) => post.author === "cyrene")
         .slice(0, RECENT_CYRENE_POSTS_FOR_NOVELTY);
       const posted = await agent.generatePost({ summary, recentCyrenePosts });
-      if (posted) savePolicyState(recordPost(loadPolicyState(), Date.now()));
+      if (posted) savePolicyState(recordPost(loadPolicyState(), now()));
     }).catch((error) => {
       deps.log?.("post_task_failed", error instanceof Error ? error.message : String(error));
     });
@@ -260,6 +346,10 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     toggleUserLike: (postId) => deps.store.toggleLike(postId, "user"),
 
     scheduleTurn,
+
+    startReactionScanner: () => reactionQueue.start(),
+    stopReactionScanner: () => reactionQueue.stop(),
+    drainReactionQueue: () => reactionQueue.drainOnce(),
   };
 }
 // ── 配图匹配：贴图 embedding 索引由组合根晚绑定 ─────────────────
@@ -307,6 +397,11 @@ function loadMomentsVendorConfig(): VendorConfig | null {
     explicitTransport: settings.explicitTransport,
     reasoning: settings.reasoning,
   };
+}
+
+/** 反应队列持久化文件：与 moments.json / moments-state.json 同目录但独立成文件，职责互不重叠 */
+function defaultReactionQueueFilePath(): string {
+  return path.join(app.getPath("userData"), "moments-reaction-queue.json");
 }
 
 /**

@@ -1,9 +1,12 @@
-// moments-service 调度测试：反应闸门前置、任务入队、评论触发范围与错误隔离；
-// 主动发帖调度：设置/去重闸门前置、执行时复核冷却、成功落库与记账。
+// moments-service 调度测试：昔涟反应任务入队（闸门前置、在线/深夜延迟、
+// 到期扫描后决策落库、退避重试与作废语义）；主动发帖调度：设置/去重闸门前置、
+// 执行时复核冷却、成功落库与记账。
+import fs from "fs";
+import os from "os";
 import * as path from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { VendorConfig } from "../orchestrator/vendors";
-import type { MomentsModelOutput } from "./moments-agent";
+import type { MomentPostImage, MomentsModelOutput } from "./moments-agent";
 import { defaultMomentsPolicyState, type MomentsPolicyState } from "./moments-policy";
 import type {
   MomentAuthor,
@@ -104,6 +107,27 @@ function makeTurnInput(overrides: Partial<MomentsTurnInput> = {}): MomentsTurnIn
     finishedAt: new Date("2026-09-04T19:00:00").getTime(),
     ...overrides,
   };
+}
+
+/** 反应队列临时持久化文件：每个 harness 独立一份，互不串扰 */
+function tempQueueFile(): string {
+  return path.join(fs.mkdtempSync(path.join(os.tmpdir(), "cyrene-moments-service-")), "moments-reaction-queue.json");
+}
+
+/** 读队列落盘文件里的任务快照（入队即落盘；文件尚不存在说明从未入队，视作空队列） */
+function readQueueTasks(filePath: string): Array<{
+  kind: string;
+  actor: string;
+  postId: string;
+  triggerCommentId?: string;
+  dueAt: number;
+}> {
+  try {
+    return (JSON.parse(fs.readFileSync(filePath, "utf8")) as { tasks: unknown[] }).tasks as never;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
 }
 
 interface FakeStoreState {
@@ -216,6 +240,12 @@ interface HarnessOptions {
   buildWorldbookContext?: (text: string) => string;
   /** 图片读取（缺省用真闭包，配合 mocked 校验函数断言全链路） */
   loadPostImages?: (post: MomentPost) => MomentPostImage[];
+  /** 时钟起点（缺省本地中午 12 点——避开深夜窗口，测试不随时区漂移） */
+  now?: number;
+  /** 延迟抽签随机源（缺省恒 0.5：分桶与桶内取值都可预计算） */
+  random?: () => number;
+  /** 反应队列持久化路径（缺省临时文件；可指向非法路径模拟磁盘异常） */
+  reactionQueueFilePath?: string;
 }
 
 // 全局默认：worldbook / 图片校验 mock 返回空，真闭包安全降级；个别用例按需覆盖
@@ -225,7 +255,7 @@ beforeEach(() => {
   mocks.validateCaptionImagePath.mockReset();
 });
 
-/** enqueueTask 默认内联执行，便于断言反应链路完整生效。 */
+/** enqueueTask 默认内联执行，便于断言主动发帖链路完整生效。 */
 function createHarness(options: HarnessOptions = {}) {
   const labels: string[] = [];
   const runModel = vi.fn(
@@ -248,6 +278,9 @@ function createHarness(options: HarnessOptions = {}) {
   };
   // 策略状态用内存版，测试不落盘也不碰 electron
   const policy: { current: MomentsPolicyState } = { current: defaultMomentsPolicyState() };
+  // 可控时钟：反应延迟与冷却复核都不依赖真实时间；默认本地中午，避开深夜窗口
+  const clock = { now: options.now ?? new Date(2026, 8, 4, 12, 0, 0).getTime() };
+  const queueFile = options.reactionQueueFilePath ?? tempQueueFile();
   const service = createMomentsService({
     store: fake.store,
     loadGeneralSettings: () => settings,
@@ -265,9 +298,12 @@ function createHarness(options: HarnessOptions = {}) {
     savePolicyState: (state: MomentsPolicyState) => {
       policy.current = state;
     },
+    reactionQueueFilePath: queueFile,
+    now: () => clock.now,
+    random: options.random ?? (() => 0.5),
     log,
   });
-  return { service, fake, labels, runModel, log, enqueueTask, settings, policy };
+  return { service, fake, labels, runModel, log, enqueueTask, settings, policy, clock, queueFile };
 }
 
 /** scheduleTurn 是同步入口，任务体里的 await 需要等一拍再断言。 */
@@ -275,38 +311,75 @@ async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-describe("moments service 反应调度", () => {
-  it("用户发帖成功后调度昔涟反应任务并完成点赞提交", async () => {
+describe("moments service 昔涟反应入队与到期执行", () => {
+  it("用户发帖成功后表态任务入队，到期扫描后决策落库点赞", async () => {
     const h = createHarness();
     const result = await h.service.createUserPost({ text: "第一条动态" });
-    // 决策→落库链路多一拍微任务，等一拍再断言提交结果
-    await flush();
 
     expect(result.applied).toBe(true);
-    expect(h.labels).toEqual(["MomentsReact"]);
+    // 到期前不执行：任务躺在队列里，模型未被调用
+    expect(h.runModel).not.toHaveBeenCalled();
+    const [task] = readQueueTasks(h.queueFile);
+    expect(task).toMatchObject({ kind: "post_eval", actor: "cyrene", postId: "moment_post1" });
+
+    // 离线长尾延迟（random 恒 0.5 落在 45~75 分钟桶取中值 60 分钟）：未到期先扫一轮不执行
+    await h.service.drainReactionQueue();
+    expect(h.runModel).not.toHaveBeenCalled();
+
+    h.clock.now += 60 * 60_000;
+    await h.service.drainReactionQueue();
+
     expect(h.runModel).toHaveBeenCalledTimes(1);
     expect(h.fake.state.cyreneLikes).toHaveLength(1);
     expect(h.fake.state.cyreneComments).toHaveLength(0);
+    // 执行成功后任务出队并同步落盘清空
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
   });
 
-  it("反应总开关关闭时 CRUD 照常、不调度任务", async () => {
+  it("昔涟在线（最近对话收尾不足 10 分钟）时表态走短延迟，深夜入队也不推迟到早晨", async () => {
+    const night = new Date(2026, 8, 4, 3, 0, 0).getTime();
+    const h = createHarness({ now: night });
+    // 主动发帖开关默认关：scheduleTurn 只记录 ring buffer，恰好是在线感知的原料
+    h.service.scheduleTurn(makeTurnInput({ finishedAt: night }));
+
+    await h.service.createUserPost({ text: "凌晨的动态" });
+    const [task] = readQueueTasks(h.queueFile);
+
+    // 在线短延迟 1~8 分钟直接生效，不套深夜窗口（用户正和昔涟聊天，她就是醒着的）
+    expect(task.dueAt - night).toBeGreaterThanOrEqual(60_000);
+    expect(task.dueAt - night).toBeLessThan(8 * 60_000);
+  });
+
+  it("深夜入队的离线任务整体推迟到次日早晨", async () => {
+    const night = new Date(2026, 8, 4, 3, 0, 0).getTime();
+    const h = createHarness({ now: night });
+
+    await h.service.createUserPost({ text: "凌晨的动态" });
+    const [task] = readQueueTasks(h.queueFile);
+
+    // 离线正常延迟落在 4:00，但深夜窗口把它替换为 8:00 + random(0.5)*120 分钟 = 9:00
+    expect(task.dueAt).toBe(new Date(2026, 8, 4, 9, 0, 0).getTime());
+  });
+
+  it("反应总开关关闭时 CRUD 照常、不入队反应任务", async () => {
     const h = createHarness({ momentsEnabled: false });
     const result = await h.service.createUserPost({ text: "不触发反应" });
 
     expect(result.applied).toBe(true);
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
     expect(h.enqueueTask).not.toHaveBeenCalled();
   });
 
-  it("反应子开关关闭时不调度任务", async () => {
+  it("反应子开关关闭时不入队任务", async () => {
     const h = createHarness({ cyreneMomentsReactionsEnabled: false });
     await h.service.createUserPost({ text: "x" });
-    expect(h.enqueueTask).not.toHaveBeenCalled();
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
   });
 
-  it("模型未配置（缺 API key）时不调度任务", async () => {
+  it("模型未配置（缺 API key）时不入队任务", async () => {
     const h = createHarness({ vendorConfig: null });
     await h.service.createUserPost({ text: "x" });
-    expect(h.enqueueTask).not.toHaveBeenCalled();
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
   });
 
   it("发帖被拒绝时不调度反应", async () => {
@@ -315,22 +388,74 @@ describe("moments service 反应调度", () => {
 
     const result = await h.service.createUserPost({ text: "" });
     expect(result.applied).toBe(false);
-    expect(h.enqueueTask).not.toHaveBeenCalled();
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
   });
 
-  it("模型调用出错时任务静默结束，不产生任何提交", async () => {
+  it("到期执行时反应开关已关闭：任务作废且不调模型", async () => {
     const h = createHarness();
-    h.runModel.mockResolvedValue({ kind: "error", reason: "timeout" });
-
     await h.service.createUserPost({ text: "x" });
-    expect(h.labels).toEqual(["MomentsReact"]);
-    expect(h.fake.state.cyreneLikes).toHaveLength(0);
-    expect(h.fake.state.cyreneComments).toHaveLength(0);
+    // 入队后用户关掉开关：执行时闸门复核不通过，任务按世界已变作废
+    h.settings.cyreneMomentsReactionsEnabled = false;
+
+    h.clock.now += 60 * 60_000;
+    await h.service.drainReactionQueue();
+
+    expect(h.runModel).not.toHaveBeenCalled();
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+    expect(h.log).toHaveBeenCalledWith("reaction_task_stale", expect.objectContaining({ reason: "reactions_disabled" }));
+  });
+
+  it("到期前动态被删除：任务作废且不调模型", async () => {
+    const h = createHarness();
+    await h.service.createUserPost({ text: "x" });
+    h.fake.state.posts.length = 0;
+
+    h.clock.now += 60 * 60_000;
+    await h.service.drainReactionQueue();
+
+    expect(h.runModel).not.toHaveBeenCalled();
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+  });
+
+  it("模型供应商失败时任务按退避梯度重试，恢复后完成表态", async () => {
+    const h = createHarness();
+    h.runModel.mockResolvedValueOnce({ kind: "error", reason: "timeout" });
+    await h.service.createUserPost({ text: "x" });
+
+    h.clock.now += 60 * 60_000;
+    await h.service.drainReactionQueue();
+    // 第一次失败：任务保留并退避 5 分钟，不放弃
+    expect(h.runModel).toHaveBeenCalledTimes(1);
+    expect(readQueueTasks(h.queueFile)).toHaveLength(1);
+
+    h.clock.now += 5 * 60_000;
+    await h.service.drainReactionQueue();
+    // 退避期满重试成功：决策落库，任务删除
+    expect(h.runModel).toHaveBeenCalledTimes(2);
+    expect(h.fake.state.cyreneLikes).toHaveLength(1);
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+  });
+
+  it("反应任务落盘持久化：服务重建（模拟重启）后任务仍能到期执行", async () => {
+    const queueFile = tempQueueFile();
+    const first = createHarness({ reactionQueueFilePath: queueFile });
+    const result = await first.service.createUserPost({ text: "重启前的动态" });
+    const dueAt = readQueueTasks(queueFile)[0].dueAt;
+
+    // 重建服务实例（同一队列文件）：重启后按落盘 dueAt 续接执行
+    const second = createHarness({ reactionQueueFilePath: queueFile, now: dueAt });
+    // store 在真实环境同样落盘恢复；测试里手动回放同一动态
+    second.fake.state.posts.push(makePost({ id: result.value.id, text: "重启前的动态" }));
+    await second.service.drainReactionQueue();
+
+    expect(second.runModel).toHaveBeenCalledTimes(1);
+    expect(second.fake.state.cyreneLikes).toEqual([result.value.id]);
+    expect(readQueueTasks(queueFile)).toEqual([]);
   });
 });
 
 describe("moments service 评论回复调度", () => {
-  it("回复昔涟评论的用户评论触发 MomentsReply 并落库回复", async () => {
+  it("回复昔涟评论的用户评论入队回复任务，到期落库回复", async () => {
     const h = createHarness({ modelResponse: '{"shouldReply":true,"text":"收到啦"}' });
     h.fake.state.posts.push(makePost({ id: "moment_p1", author: "user" }));
     h.fake.state.comments.push(makeComment({ id: "c_cyrene", postId: "moment_p1", author: "cyrene" }));
@@ -340,21 +465,39 @@ describe("moments service 评论回复调度", () => {
       content: "回复昔涟",
       replyTo: "c_cyrene",
     });
-    await flush();
 
     expect(result.applied).toBe(true);
-    expect(h.labels).toEqual(["MomentsReply"]);
-    // 用户评论落库后 id 为 comment_c2，昔涟回复携带 replyTo 指向它
+    // 用户评论落库后 id 为 comment_c2，回复任务的触发评论即它
+    const [task] = readQueueTasks(h.queueFile);
+    expect(task).toMatchObject({
+      kind: "reply_eval",
+      actor: "cyrene",
+      postId: "moment_p1",
+      triggerCommentId: "comment_c2",
+    });
+
+    // 离线回复延迟（random 恒 0.5 落在 35~55 分钟桶取中值 45 分钟）
+    h.clock.now += 45 * 60_000;
+    await h.service.drainReactionQueue();
+
+    expect(h.runModel).toHaveBeenCalledTimes(1);
     expect(h.fake.state.cyreneComments).toEqual([{ postId: "moment_p1", content: "收到啦", replyTo: "comment_c2" }]);
   });
 
-  it("在昔涟动态下的顶级评论同样触发回复", async () => {
+  it("在昔涟动态下的顶级评论同样入队回复任务，沉默决策不落库", async () => {
     const h = createHarness({ modelResponse: '{"shouldReply":false,"text":""}' });
     h.fake.state.posts.push(makePost({ id: "moment_p1", author: "cyrene" }));
 
     await h.service.createUserComment({ postId: "moment_p1", content: "顶级评论" });
-    expect(h.labels).toEqual(["MomentsReply"]);
+    const [task] = readQueueTasks(h.queueFile);
+    expect(task).toMatchObject({ kind: "reply_eval", postId: "moment_p1", triggerCommentId: "comment_c1" });
+
+    h.clock.now += 45 * 60_000;
+    await h.service.drainReactionQueue();
+
+    // silent 无副作用，任务正常删除
     expect(h.fake.state.cyreneComments).toHaveLength(0);
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
   });
 
   it("用户动态下回复用户自己的评论不触发回复", async () => {
@@ -364,16 +507,16 @@ describe("moments service 评论回复调度", () => {
 
     const result = await h.service.createUserComment({ postId: "moment_p1", content: "用户回用户", replyTo: "c_user" });
     expect(result.applied).toBe(true);
-    expect(h.enqueueTask).not.toHaveBeenCalled();
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
   });
 
-  it("触发回复的目标评论已不存在时不入队", async () => {
+  it("动态不存在时不入队回复任务", async () => {
     const h = createHarness();
     h.fake.state.posts.push(makePost({ id: "moment_p1", author: "cyrene" }));
 
-    // 动态存在但回复目标不存在：调度前 getFeedItem 找不到目标评论则不调度
+    // 动态不存在：调度前 getFeedItem 找不到目标则不调度
     await h.service.createUserComment({ postId: "moment_post9", content: "评论" });
-    expect(h.enqueueTask).not.toHaveBeenCalled();
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
   });
 });
 
@@ -452,7 +595,7 @@ describe("moments service 主动发帖调度", () => {
 
   it("任务执行时处于冷却期则不调用模型，仅记录日志", async () => {
     const h = createHarness({ cyreneMomentsPostingEnabled: true });
-    h.policy.current = { ...defaultMomentsPolicyState(), lastPostAt: Date.now() - 60_000 };
+    h.policy.current = { ...defaultMomentsPolicyState(), lastPostAt: h.clock.now - 60_000 };
     h.service.scheduleTurn(makeTurnInput());
     await flush();
 
@@ -490,16 +633,15 @@ describe("moments service 主动发帖调度", () => {
 });
 
 describe("moments service 错误隔离", () => {
-  it("入队失败被记录且不影响用户操作返回", async () => {
-    const h = createHarness();
-    h.enqueueTask.mockRejectedValue(new Error("队列炸了"));
+  it("反应入队失败（磁盘异常）只记日志，不影响用户发帖返回", async () => {
+    // 队列文件的父路径是一个普通文件：mkdir 必然失败，模拟磁盘异常
+    const blocker = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "cyrene-moments-block-")), "blocker.txt");
+    fs.writeFileSync(blocker, "not a directory");
+    const h = createHarness({ reactionQueueFilePath: path.join(blocker, "queue.json") });
 
     const result = await h.service.createUserPost({ text: "x" });
     expect(result.applied).toBe(true);
-
-    // catch 在微任务里结算，等一拍再断言日志
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(h.log).toHaveBeenCalledWith("reaction_task_failed", "队列炸了");
+    expect(h.log).toHaveBeenCalledWith("reaction_enqueue_failed", expect.any(String));
   });
 
   it("主动发帖任务失败被记录且不记账", async () => {
@@ -708,7 +850,9 @@ describe("moments worldbook 注入与图片读取", () => {
     });
 
     expect(result.applied).toBe(true);
-    await flush();
+    // 到期扫描后模型才被调用，prompt 在决策时组装
+    h.clock.now += 60 * 60_000;
+    await h.service.drainReactionQueue();
 
     const messages = h.runModel.mock.calls[0][0] as Array<{ role: string; content?: unknown }>;
     expect(mocks.getKeywordMatchedWorldbookEntries).toHaveBeenCalledWith("见到风堇了");
