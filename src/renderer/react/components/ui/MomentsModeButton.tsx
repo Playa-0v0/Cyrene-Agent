@@ -50,12 +50,8 @@ export function MomentsModeButton({ active = false, onClick }: MomentsModeButton
   return <button className={`cy-side-action ${active ? "is-active" : ""}`} onClick={onClick} type="button" title={t("ui.moments")} aria-pressed={active}>
     <span className="cy-side-action-icon">
       <img src={momentsIconUrl} alt="" width="22" height="22" style={{ objectFit: "contain" }} />
+      {unreadCount > 0 && <span className="cy-side-action-dot" aria-hidden="true" />}
     </span>
     <span className="cy-side-action-label">{t("ui.moments")}</span>
-    {unreadCount > 0 && (
-      <span className="cy-side-action-badge">
-        {unreadCount >= 99 ? "99+" : unreadCount}
-      </span>
-    )}
   </button>;
 }

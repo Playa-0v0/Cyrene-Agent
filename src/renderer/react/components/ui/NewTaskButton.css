@@ -22,6 +22,7 @@
 }
 
 .cy-side-action-icon {
+  position: relative;
   width: 20px;
   height: 20px;
   display: flex;
@@ -41,19 +42,14 @@
   white-space: nowrap;
 }
 
-/* 侧栏动作按钮的未读徽标：靠右顶齐，红底白字小胶囊 */
-.cy-side-action-badge {
-  margin-left: auto;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  box-sizing: border-box;
-  border-radius: 9px;
+/* 侧栏动作按钮的未读红点：不显示数字，贴在图标右上角的小圆点 */
+.cy-side-action-dot {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
   background: #ff3b5c;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 18px;
-  text-align: center;
-  flex-shrink: 0;
+  pointer-events: none;
 }
