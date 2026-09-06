@@ -284,6 +284,15 @@ export function normalizeModelSettings(input: Partial<ModelSettings> | null | un
   const rawVision = input?.vision as Partial<VisionModelConfig> & { syncWithMain?: boolean } | undefined;
   if (rawVision && rawVision.syncWithMain === true) {
     multimodal = true;
+  } else if (
+    // 旧版配置没有 multimodal 字段（那时只有独立视觉模型，没有直发开关）：
+    // 已配好独立视觉模型且未声明与主模型同步的用户，升级后继续走独立视觉模型，
+    // 不被默认 true 静默旁路；一旦字段持久化过就不再进这条迁移
+    typeof input?.multimodal !== "boolean"
+    && rawVision
+    && rawVision.baseUrl && rawVision.apiKey && rawVision.model
+  ) {
+    multimodal = false;
   }
 
   const hasPersistedProfiles = Array.isArray(input?.modelProfiles);
@@ -452,6 +461,14 @@ export function loadVisionConfig(from: ModelSettings = loadModelSettings()): Vis
   const settings = resolveModelSettingsProfile(from);
 
   if (settings.multimodal) {
+    // 主模型走 Anthropic 协议时，视觉链路（永远按 OpenAI 兼容拼 /chat/completions）
+    // 复用主模型 baseUrl 必然 404；已配好独立视觉模型则优先用，避免发图即失败
+    if (settings.explicitTransport === "anthropic") {
+      const v = settings.vision;
+      if (v?.baseUrl && v.apiKey && v.model) {
+        return { baseUrl: v.baseUrl, apiKey: v.apiKey, model: v.model };
+      }
+    }
     if (!settings.apiKey || !settings.model) return null;
     return { baseUrl: settings.baseUrl, apiKey: settings.apiKey, model: settings.model };
   }
