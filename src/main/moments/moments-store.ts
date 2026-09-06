@@ -21,6 +21,8 @@ import {
   MOMENT_MAX_IMAGES_PER_POST,
   MOMENT_MAX_POST_TEXT_LENGTH,
   MOMENT_MAX_POST_TITLE_LENGTH,
+  type ApplyCommentResult,
+  type CharacterTimeline,
   type MomentAuthor,
   type MomentComment,
   type MomentCommitResult,
@@ -35,7 +37,7 @@ import {
 
 const STORE_FILE_NAME = "moments.json";
 const MEDIA_ROOT_DIR_NAME = "moments-media";
-const CURRENT_SCHEMA_VERSION = 1;
+const CURRENT_SCHEMA_VERSION = 2;
 
 const MIME_TO_EXT: Record<string, string> = {
   "image/png": "png",
@@ -61,6 +63,33 @@ let cyreneBehaviorGate: (behavior: CyreneMomentBehavior) => boolean = () => true
 /** 注册昔涟行为开关检查（moments-ipc 注入，读取 general settings）。 */
 export function setCyreneBehaviorGate(gate: (behavior: CyreneMomentBehavior) => boolean): void {
   cyreneBehaviorGate = gate;
+}
+
+/**
+ * 角色行为开关（默认全放行，settings 就绪后由 IPC 层注入真实读取）。
+ * 与昔涟开关分离：用户可以单独关掉角色互动而保留昔涟反应。
+ */
+let characterBehaviorGate: () => boolean = () => true;
+
+/** 注册角色行为开关检查。 */
+export function setCharacterBehaviorGate(gate: () => boolean): void {
+  characterBehaviorGate = gate;
+}
+
+/**
+ * 入驻朋友圈的角色名单（角色注册表注入）。
+ * store 只信任注入名单内的 author——渲染端无法伪造角色身份写库。
+ */
+let knownCharacterAuthors = new Set<string>();
+
+/** 注册角色名单（角色注册表就绪后注入；名单变更可重复注入）。 */
+export function setCharacterAuthorRegistry(names: ReadonlySet<string>): void {
+  knownCharacterAuthors = new Set(names);
+}
+
+/** 校验 author 合法：user / cyrene / 注册表内角色。 */
+function isValidAuthor(author: string): boolean {
+  return author === "user" || author === "cyrene" || knownCharacterAuthors.has(author);
 }
 
 export function initialize(): void {
@@ -272,9 +301,13 @@ export function deletePost(postId: string): Promise<MomentCommitResult<null>> {
 export function createComment(
   input: MomentCreateCommentInput,
   author: MomentAuthor,
+  options: { sourceTaskId?: string } = {},
 ): Promise<MomentCommitResult<MomentComment>> {
   return enqueue(() => {
     const store = requireCache();
+    if (!isValidAuthor(author)) {
+      return { applied: false, reason: "invalid_input" as const };
+    }
     // 昔涟的评论属于反应行为：提交时复核开关，AI 思考期间关闭则拒绝
     if (author === "cyrene" && !cyreneBehaviorGate("reaction")) {
       return { applied: false, reason: "moments_disabled" as const };
@@ -293,6 +326,14 @@ export function createComment(
       }
     }
 
+    // 反应任务幂等：该任务已产出过评论 → 不重复写，返回既有评论（崩溃重跑续接）
+    if (options.sourceTaskId) {
+      const existing = store.comments.find(
+        (comment) => comment.postId === input.postId && comment.sourceTaskId === options.sourceTaskId,
+      );
+      if (existing) return { applied: true, value: existing };
+    }
+
     const comment: MomentComment = {
       id: `comment_${Date.now()}_${randomUUID().slice(0, 8)}`,
       postId: input.postId,
@@ -300,6 +341,7 @@ export function createComment(
       content,
       replyTo: input.replyTo,
       createdAt: Date.now(),
+      sourceTaskId: options.sourceTaskId,
     };
     store.comments.push(comment);
     persist();
@@ -359,6 +401,153 @@ export function createCyreneLike(postId: string): Promise<MomentCommitResult<{ l
     notifyChanged();
     return { applied: true, value: { liked: true } };
   });
+}
+
+/**
+ * 角色点赞提交：目标态语义——"确保已点赞"。
+ * 已点赞时幂等成功（点赞唯一约束天然幂等，崩溃重跑无副作用），
+ * 调用方无需区分"这次点的"和"早就点过的"。
+ */
+export function createCharacterLike(
+  nickname: string,
+  postId: string,
+): Promise<MomentCommitResult<{ liked: true }>> {
+  return enqueue(() => {
+    if (!characterBehaviorGate()) {
+      return { applied: false, reason: "moments_disabled" as const };
+    }
+    if (!isValidAuthor(nickname)) {
+      return { applied: false, reason: "invalid_input" as const };
+    }
+    const store = requireCache();
+    if (!store.posts.some((post) => post.id === postId)) {
+      return { applied: false, reason: "post_not_found" as const };
+    }
+    const exists = store.reactions.some(
+      (reaction) => reaction.postId === postId && reaction.actor === nickname && reaction.type === "like",
+    );
+    if (exists) return { applied: true, value: { liked: true } };
+
+    store.reactions.push({ postId, actor: nickname, type: "like", createdAt: Date.now() });
+    persist();
+    notifyChanged();
+    return { applied: true, value: { liked: true } };
+  });
+}
+
+/**
+ * 角色评论提交（AI 反应通道）。
+ * 携带 sourceTaskId 时具备崩溃幂等：同一任务重跑发现评论已落库，
+ * 返回 already_applied + 既有评论——调用方必须继续后续调度（如给被评论者入回复任务），
+ * already_applied 不代表"无事可做"。
+ */
+export function createCharacterComment(
+  nickname: string,
+  input: {
+    postId: string;
+    content: string;
+    replyTo?: string;
+    sourceTaskId?: string;
+  },
+): Promise<ApplyCommentResult> {
+  return enqueue(() => {
+    if (!characterBehaviorGate()) {
+      return { status: "rejected", reason: "moments_disabled" as const };
+    }
+    if (!isValidAuthor(nickname)) {
+      return { status: "rejected", reason: "invalid_input" as const };
+    }
+    const store = requireCache();
+    const content = (input.content ?? "").trim();
+    if (!content || content.length > MOMENT_MAX_COMMENT_TEXT_LENGTH) {
+      return { status: "rejected", reason: "invalid_input" as const };
+    }
+    const post = store.posts.find((candidate) => candidate.id === input.postId);
+    if (!post) return { status: "rejected", reason: "post_not_found" as const };
+    if (input.replyTo) {
+      const target = store.comments.find((comment) => comment.id === input.replyTo);
+      if (!target || target.postId !== input.postId) {
+        return { status: "rejected", reason: "reply_to_not_found" as const };
+      }
+    }
+
+    // 反应任务幂等：该任务已产出过评论 → 不重复写，返回既有评论供续接
+    if (input.sourceTaskId) {
+      const existing = store.comments.find(
+        (comment) => comment.postId === input.postId && comment.sourceTaskId === input.sourceTaskId,
+      );
+      if (existing) return { status: "already_applied", comment: existing };
+    }
+
+    const comment: MomentComment = {
+      id: `comment_${Date.now()}_${randomUUID().slice(0, 8)}`,
+      postId: input.postId,
+      author: nickname,
+      content,
+      replyTo: input.replyTo,
+      createdAt: Date.now(),
+      sourceTaskId: input.sourceTaskId,
+    };
+    store.comments.push(comment);
+    persist();
+    notifyChanged();
+    return { status: "created", comment };
+  });
+}
+
+/**
+ * 角色朋友圈记忆：跨动态的互动时间线（纯读内存缓存）。
+ * 收集该角色的评论（含他人对其评论的回复）与点赞；评论占主槽位、点赞限量——
+ * 近期狂点赞的角色不该把有内容的对话挤出记忆。
+ */
+export function getCharacterTimeline(
+  nickname: string,
+  options: { commentLimit?: number; likeLimit?: number } = {},
+): CharacterTimeline {
+  const store = requireCache();
+  const commentLimit = options.commentLimit ?? 6;
+  const likeLimit = options.likeLimit ?? 2;
+
+  // 该角色全部评论，时间倒序取前 commentLimit 条
+  const ownComments = store.comments
+    .filter((comment) => comment.author === nickname)
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const selectedComments = ownComments.slice(0, commentLimit);
+  const truncatedComments = Math.max(0, ownComments.length - selectedComments.length);
+
+  const commentEntries = selectedComments.map((comment) => ({
+    kind: "comment" as const,
+    post: store.posts.find((post) => post.id === comment.postId),
+    comment,
+    // 该评论下的直接回复（正序），保留"你评论 → 对方回了什么"的连续性
+    replies: store.comments
+      .filter((reply) => reply.replyTo === comment.id)
+      .sort((a, b) => a.createdAt - b.createdAt),
+  })).filter((entry): entry is { kind: "comment"; post: MomentPost; comment: MomentComment; replies: MomentComment[] } =>
+    Boolean(entry.post),
+  );
+
+  const likeEntries = store.reactions
+    .filter((reaction) => reaction.actor === nickname && reaction.type === "like")
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, likeLimit)
+    .map((reaction) => ({
+      kind: "like" as const,
+      post: store.posts.find((post) => post.id === reaction.postId),
+      reaction,
+    }))
+    .filter((entry): entry is { kind: "like"; post: MomentPost; reaction: (typeof store.reactions)[number] } =>
+      Boolean(entry.post),
+    );
+
+  // 合并后按互动时间正序排列（旧 → 新），呈现为连续日记
+  const entries = [...commentEntries, ...likeEntries].sort((a, b) => {
+    const timeA = a.kind === "comment" ? a.comment.createdAt : a.reaction.createdAt;
+    const timeB = b.kind === "comment" ? b.comment.createdAt : b.reaction.createdAt;
+    return timeA - timeB;
+  });
+
+  return { entries, truncatedComments };
 }
 
 function newPostId(): string {
