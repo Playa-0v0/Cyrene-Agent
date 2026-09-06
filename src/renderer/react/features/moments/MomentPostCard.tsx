@@ -9,7 +9,7 @@ import {
 } from "../../../../shared/moments-types";
 import { resolveAsset } from "../../../../shared/renderer-base";
 import { useTranslation } from "../../i18n";
-import { getCharacterPortrait } from "../../character-portraits";
+import { getCharacterAvatar } from "../../character-avatars";
 import { formatMomentTime } from "./moments-utils";
 
 const CYRENE_AVATAR_URL = resolveAsset("avatars/cyrene-avatar.png");
@@ -159,9 +159,9 @@ export function MomentPostCard({
 
             {comments.map((comment) => {
               const target = comment.replyTo ? commentsById.get(comment.replyTo) : undefined;
-              // 角色评论带立绘头像：朋友圈里 NPC 也有脸，头像是最直观的身份标识
-              const portraitUrl = isCharacterAuthor(comment.author)
-                ? getCharacterPortrait(comment.author)
+              // 角色评论带头像：朋友圈里 NPC 也有脸，头像是最直观的身份标识
+              const avatarUrl = isCharacterAuthor(comment.author)
+                ? getCharacterAvatar(comment.author)
                 : null;
               return (
                 <button
@@ -171,10 +171,10 @@ export function MomentPostCard({
                   id={`moment-comment-${comment.id}`}
                   onClick={() => startReply(comment.id)}
                 >
-                  {portraitUrl && (
+                  {avatarUrl && (
                     <img
                       className="moment-card__comment-avatar"
-                      src={portraitUrl}
+                      src={avatarUrl}
                       alt=""
                       draggable={false}
                     />

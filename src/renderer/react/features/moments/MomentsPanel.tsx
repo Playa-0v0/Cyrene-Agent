@@ -19,7 +19,7 @@ import {
   touchMomentsLastReadAt,
   type MomentNoticeItem,
 } from "./moments-utils";
-import { getCharacterPortrait } from "../../character-portraits";
+import { getCharacterAvatar } from "../../character-avatars";
 import { resolveAsset } from "../../../../shared/renderer-base";
 import momentsIconUrl from "../../assets/moments.png?url";
 import "./MomentsPanel.css";
@@ -223,8 +223,8 @@ const NOTICE_ACTION_KEYS: Record<MomentNoticeItem["kind"], string> = {
 function NoticeRow({ notice, onClick }: { notice: MomentNoticeItem; onClick: (notice: MomentNoticeItem) => void }) {
   const { t } = useTranslation();
   const isCyrene = notice.actor === "cyrene";
-  // 昔涟走专属头像，角色走立绘池，两者都不是（理论不会出现）则无头像
-  const portraitUrl = isCyrene ? CYRENE_AVATAR_URL : getCharacterPortrait(notice.actor);
+  // 昔涟走专属头像，角色走头像池（朋友圈专用小头像），两者都不是（理论不会出现）则无头像
+  const avatarUrl = isCyrene ? CYRENE_AVATAR_URL : getCharacterAvatar(notice.actor);
   const displayName = isCyrene ? t("moments.cyreneName") : notice.actor;
   return (
     <button
@@ -232,7 +232,7 @@ function NoticeRow({ notice, onClick }: { notice: MomentNoticeItem; onClick: (no
       className="moments-notice-item"
       onClick={() => onClick(notice)}
     >
-      {portraitUrl && <img className="moments-notice-item__avatar" src={portraitUrl} alt="" draggable={false} />}
+      {avatarUrl && <img className="moments-notice-item__avatar" src={avatarUrl} alt="" draggable={false} />}
       <span className="moments-notice-item__main">
         <span className="moments-notice-item__text">
           <span className={`moments-notice-item__name${isCyrene ? " is-cyrene" : ""}`}>{displayName}</span>
