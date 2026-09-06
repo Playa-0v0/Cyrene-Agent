@@ -1,7 +1,74 @@
 import { describe, expect, it, vi } from "vitest";
-import { getInitialMode, LAST_MODE_STORAGE_KEY, normalizeWeatherData, stageForStep } from "./chat-page-normalizers";
+import type { ChatSession } from "../../../../../shared/chat-types";
+import { getInitialMode, LAST_MODE_STORAGE_KEY, normalizeWeatherData, stageForStep, toUiMessages } from "./chat-page-normalizers";
 
 describe("chat page normalizers", () => {
+  it("preserves channel source metadata while hydrating a bound conversation", () => {
+    const session: ChatSession = {
+      id: "conversation-1",
+      title: "微信会话",
+      identityId: null,
+      mode: "chat",
+      schemaVersion: 1,
+      createdAt: 1,
+      updatedAt: 2,
+      messages: [{
+        id: "message-1",
+        role: "user",
+        content: "你好",
+        at: 2,
+        channelSource: { channel: "wechat", senderName: "伙伴" },
+      }],
+    };
+    const [message] = toUiMessages(session);
+
+    expect(message.channelSource).toEqual({ channel: "wechat", senderName: "伙伴" });
+    expect(message.modelContext).toBeUndefined();
+  });
+
+  it("preserves hidden model context for desktop continuation", () => {
+    const session: ChatSession = {
+      id: "conversation-1",
+      title: "群聊会话",
+      identityId: null,
+      mode: "chat",
+      schemaVersion: 1,
+      createdAt: 1,
+      updatedAt: 2,
+      messages: [{
+        id: "message-1",
+        role: "user",
+        content: "大家好",
+        modelContext: "[QQ群发送者：伙伴]\n大家好",
+        channelSource: { channel: "qq", senderName: "伙伴" },
+        at: 2,
+      }],
+    };
+
+    expect(toUiMessages(session)[0].modelContext).toBe("[QQ群发送者：伙伴]\n大家好");
+  });
+
+  it("drops invalid persisted channel metadata during hydration", () => {
+    const session: ChatSession = {
+      id: "conversation-1",
+      title: "旧会话",
+      identityId: null,
+      mode: "chat",
+      schemaVersion: 1,
+      createdAt: 1,
+      updatedAt: 2,
+      messages: [{
+        id: "message-1",
+        role: "user",
+        content: "旧消息",
+        at: 2,
+        channelSource: { channel: "broken" },
+      }],
+    } as unknown as ChatSession;
+
+    expect(toUiMessages(session)[0].channelSource).toBeUndefined();
+  });
+
   it("normalizes a complete Open-Meteo weather card", () => {
     expect(normalizeWeatherData({
       source: "open-meteo",

@@ -101,16 +101,21 @@ export function createChannelsSubsystem(
       .slice(-limit)
       .map((message) => ({
         role: message.role === "model" ? "assistant" as const : "user" as const,
-        content: message.content,
+        content: message.modelContext?.trim() || message.content,
       }));
   });
 
-  setDispatcherAppendBoundConversationMessage((conversationId, role, content) => {
+  setDispatcherAppendBoundConversationMessage((conversationId, role, content, metadata) => {
     const session = appendMessage(conversationId, {
       id: randomUUID(),
       role: role === "assistant" ? "model" : "user",
       content,
       at: Date.now(),
+      modelContext: metadata.modelContext,
+      channelSource: {
+        channel: metadata.channel,
+        senderName: metadata.senderName,
+      },
     });
     if (!session) throw new Error("Bound conversation no longer exists");
     const win = deps.getReactChatWindow();

@@ -172,6 +172,12 @@ export function resolveStickerImagePath(stickerId: string): string | null {
 }
 
 /** Dispatcher 配置（依赖注入）。 */
+export interface BoundConversationMessageMetadata {
+  channel: ChannelId;
+  senderName?: string;
+  modelContext?: string;
+}
+
 export interface DispatcherDeps {
   manager: ChannelManager;
   /** 渲染端 chatWindow 用于镜像显示（可选） */
@@ -193,6 +199,7 @@ export interface DispatcherDeps {
     conversationId: string,
     role: "user" | "assistant",
     content: string,
+    metadata: BoundConversationMessageMetadata,
   ) => void | Promise<void>;
   /** 可选 — 把文本合成成音频。失败返回 null，dispatcher 会跳过 audio。 */
   synthesizeTts?: (text: string, context: DispatcherTtsContext) => Promise<Buffer | DispatcherTtsResult | null>;
@@ -358,7 +365,12 @@ export class ChannelDispatcher {
     }
     if (boundConversationId && this.deps.appendBoundConversationMessage) {
       try {
-        await this.deps.appendBoundConversationMessage(boundConversationId, "user", formatChannelUserText(msg));
+        const agentUserText = formatChannelUserText(msg);
+        await this.deps.appendBoundConversationMessage(boundConversationId, "user", msg.text, {
+          channel: msg.channel,
+          senderName: msg.senderName,
+          modelContext: agentUserText === msg.text ? undefined : agentUserText,
+        });
       } catch (err) {
         console.warn(LOG, "appendBoundConversationMessage (incoming) 失败:", err);
       }
@@ -482,7 +494,11 @@ export class ChannelDispatcher {
     }
     if (boundConversationId && this.deps.appendBoundConversationMessage) {
       try {
-        await this.deps.appendBoundConversationMessage(boundConversationId, "assistant", replyText);
+        await this.deps.appendBoundConversationMessage(boundConversationId, "assistant", replyText, {
+          channel: msg.channel,
+          senderName: msg.senderName,
+          modelContext: undefined,
+        });
       } catch (err) {
         console.warn(LOG, "appendBoundConversationMessage (outgoing) 失败:", err);
       }
@@ -611,6 +627,7 @@ export function setDispatcherAppendBoundConversationMessage(
     conversationId: string,
     role: "user" | "assistant",
     content: string,
+    metadata: BoundConversationMessageMetadata,
   ) => void | Promise<void>,
 ): void {
   channelDispatcher.deps.appendBoundConversationMessage = fn;

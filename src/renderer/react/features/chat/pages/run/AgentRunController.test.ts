@@ -127,6 +127,43 @@ afterEach(() => {
 });
 
 describe("AgentRunController", () => {
+  it("uses hidden channel model context when continuing a bound conversation from desktop", async () => {
+    const api = createFakeApi({ success: true, runId: "run-1" });
+    const store = createFakeStore();
+    const { host } = createRecordingHost();
+    const input = createInput({
+      session: {
+        id: "session-1",
+        messages: [
+          {
+            id: "channel-user",
+            role: "user",
+            content: "大家好",
+            modelContext: "[QQ群发送者：伙伴]\n大家好",
+            channelSource: { channel: "qq", senderName: "伙伴" },
+            at: 1,
+          },
+          { id: "channel-model", role: "model", content: "你好", channelSource: { channel: "qq" }, at: 2 },
+          { id: "user-1", role: "user", content: "继续说", at: 3 },
+        ],
+      } as unknown as ChatSession,
+    });
+    const { promise } = launch(input, { api, store, host, registries: createRegistries() });
+    await flush();
+
+    expect(api.run).toHaveBeenCalledWith(expect.objectContaining({
+      messages: [
+        expect.objectContaining({ role: "user", content: "[QQ群发送者：伙伴]\n大家好" }),
+        expect.objectContaining({ role: "model", content: "你好" }),
+        expect.objectContaining({ role: "user", content: "继续说" }),
+      ],
+    }));
+
+    api.emit(RUN_STARTED_EVENT);
+    api.emit({ type: "RUN_FINISHED", runId: "run-1", result: { status: "success" } });
+    await promise;
+  });
+
   it("桥或存储未就绪时直接把错误写进消息并落盘，不进入 run 流程", async () => {
     const input = createInput();
     const store = createFakeStore();

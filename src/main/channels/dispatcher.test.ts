@@ -132,9 +132,43 @@ describe("channels/dispatcher", () => {
     expect(result?.targetId).toBe("chat-1");
     expect(loadRecentChannelHistory).not.toHaveBeenCalled();
     expect(loadBoundConversationHistory).toHaveBeenCalledWith("conversation-7", 16);
-    expect(appendBoundConversationMessage).toHaveBeenNthCalledWith(1, "conversation-7", "user", "你好");
-    expect(appendBoundConversationMessage).toHaveBeenNthCalledWith(2, "conversation-7", "assistant", "共享回复");
+    expect(appendBoundConversationMessage).toHaveBeenNthCalledWith(1, "conversation-7", "user", "你好", {
+      channel,
+      senderName: "测试用户",
+      modelContext: undefined,
+    });
+    expect(appendBoundConversationMessage).toHaveBeenNthCalledWith(2, "conversation-7", "assistant", "共享回复", {
+      channel,
+      senderName: "测试用户",
+      modelContext: undefined,
+    });
     expect(buildAndRunAgent).toHaveBeenCalledOnce();
+  });
+
+  it("keeps QQ group identity in model context without putting it in the visible bound message", async () => {
+    const appendBoundConversationMessage = vi.fn();
+    const dispatcher = new ChannelDispatcher({
+      manager: makeManager(),
+      resolveBoundConversationId: () => "conversation-group",
+      loadBoundConversationHistory: vi.fn(async () => []),
+      appendBoundConversationMessage,
+      buildAndRunAgent: vi.fn(async () => ({ text: "收到", sticker: null })),
+    });
+
+    await dispatcher.handleIncoming(makeIncoming({
+      channel: "qq",
+      chatType: "group",
+      senderId: "10001",
+      senderName: "小明",
+      chatId: "20001",
+      text: "大家好",
+    }));
+
+    expect(appendBoundConversationMessage).toHaveBeenNthCalledWith(1, "conversation-group", "user", "大家好", {
+      channel: "qq",
+      senderName: "小明",
+      modelContext: "[群聊发送者：小明 (10001)]\n大家好",
+    });
   });
 
   it("falls back to channel history when bound desktop history cannot be loaded", async () => {
