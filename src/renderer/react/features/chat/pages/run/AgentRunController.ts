@@ -35,7 +35,11 @@ import {
   startSessionTodos,
   type TodoStateBySession,
 } from "../session-runtime-state";
-import { resolveEarlyTtsSplitMode, type EarlyTtsPlaybackQueue } from "../../tts/early-tts-queue";
+import {
+  resolveEarlyTtsSplitMode,
+  type EarlyTtsPlaybackQueue,
+  type EarlyTtsSplitMode,
+} from "../../tts/early-tts-queue";
 
 /** 一次模型运行的全部输入：目标会话、消息占位与恢复/接管信息。 */
 export interface AgentRunInput {

@@ -50,6 +50,8 @@ export class StreamingMarkdownSegmenter {
 
   append(delta: string): string[] {
     if (delta) this.buffer += delta;
+    // off 模式流式中途不切分：提前返回，省去对已累积文本的全量重扫
+    if (this.splitMode === "off") return [];
     return this.scan(false);
   }
 

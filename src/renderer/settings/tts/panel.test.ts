@@ -50,7 +50,7 @@ function addOptionGroup(id: string, values: string[]): HTMLElement {
   const group = document.createElement("div");
   group.id = id;
   group.className = "option-blocks";
-  group.setAttribute("role", "radiogroup");
+  group.setAttribute("role", "group");
   for (const value of values) {
     const button = document.createElement("button");
     button.type = "button";
