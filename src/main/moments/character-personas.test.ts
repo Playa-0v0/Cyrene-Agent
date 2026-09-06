@@ -139,6 +139,16 @@ describe("parsePersonaFrontmatter", () => {
     expect(parsed.like).toBe("高");
     expect(parsed.personaText).toBe("正文");
   });
+
+  it("presence 键解析：写了映射档位，未写为 null", () => {
+    const parsed = parsePersonaFrontmatter(`---\ncomment: 高\nlike: 高\npresence: 高\n---\n正文`);
+    expect(parsed.presence).toBe("高");
+    const without = parsePersonaFrontmatter(`---\ncomment: 高\n---\n正文`);
+    expect(without.presence).toBeNull();
+    const invalid = parsePersonaFrontmatter(`---\npresence: 超高\n---\n正文`);
+    expect(invalid.presence).toBeNull();
+    expect(invalid.invalidKeys).toEqual(["presence"]);
+  });
 });
 
 // ── 注册表加载 ──────────────────────────────────────────────────
@@ -186,6 +196,16 @@ describe("loadCharacterPersonas", () => {
       expect(persona.commentDice).toBe(comment);
       expect(persona.likeDice).toBe(like);
     }
+  });
+
+  it("presence 未写为 0 不参与专骰；写了映射到固定概率", () => {
+    const root = writePersonasDir({
+      "风堇.md": "---\ncomment: 高\nlike: 高\npresence: 高\n---\n# 卡",
+      "万敌.md": "---\ncomment: 低\nlike: 低\n---\n# 卡",
+    });
+    const registry = loadCharacterPersonas({ promptDirectories: [root] });
+    expect(registry.get("风堇")!.presenceDice).toBe(0.8);
+    expect(registry.get("万敌")!.presenceDice).toBe(0);
   });
 
   it("activity 未写时取点赞与评论的较高档", () => {

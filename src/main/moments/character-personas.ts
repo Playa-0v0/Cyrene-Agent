@@ -67,6 +67,20 @@ const LIKE_DICE: Record<LevelWord, number> = {
   极低: 0.05,
 };
 
+/**
+ * 特别关注骰 → 用户发动态时额外掷一次专骰，命中即直接刷到（不占普通抽签名额）。
+ * 语义是"这位角色对用户的朋友圈格外上心"：大部分动态都会看见，但看见后赞不赞、
+ * 评不评仍由双骰和模型决定。未写 presence 键的角色为 0，不参与专骰。
+ */
+const PRESENCE_DICE: Record<LevelWord, number> = {
+  高: 0.8,
+  中高: 0.6,
+  中: 0.4,
+  中低: 0.25,
+  低: 0.12,
+  极低: 0.05,
+};
+
 /** 档位从低到高的序，供"较高档"比较 */
 const LEVEL_RANK: Record<LevelWord, number> = {
   极低: 0,
@@ -92,15 +106,17 @@ function higherLevel(a: LevelWord, b: LevelWord): LevelWord {
 
 // ── frontmatter 解析（程序读 frontmatter，模型读正文） ──────────
 
-const FRONTMATTER_KEYS = ["activity", "comment", "like"] as const;
+const FRONTMATTER_KEYS = ["activity", "comment", "like", "presence"] as const;
 
 export interface PersonaFrontmatterParse {
   /** 剥离 frontmatter 块后的正文（模型只读这部分） */
   personaText: string;
-  /** 三个档位词；未写或写错的位置为 null，由加载方回退 */
+  /** 四个档位词；未写或写错的位置为 null，由加载方回退 */
   activity: LevelWord | null;
   comment: LevelWord | null;
   like: LevelWord | null;
+  /** 用户动态的特别关注档位；未写 = 不参与专骰 */
+  presence: LevelWord | null;
   /** 写了但档位词无法识别的键名，供日志提示用户改回 */
   invalidKeys: string[];
 }
@@ -146,6 +162,7 @@ export function parsePersonaFrontmatter(raw: string): PersonaFrontmatterParse {
     activity: parsed.activity ?? null,
     comment: parsed.comment ?? null,
     like: parsed.like ?? null,
+    presence: parsed.presence ?? null,
     invalidKeys,
   };
 }
@@ -165,6 +182,8 @@ export interface CharacterPersona {
   commentDice: number;
   /** 点赞骰：未进评论路径时随手点赞的概率 */
   likeDice: number;
+  /** 特别关注骰：用户发动态时的额外刷到概率；0 = 不参与专骰 */
+  presenceDice: number;
 }
 
 export interface CharacterPersonaLoadOptions {
@@ -215,6 +234,7 @@ export function loadCharacterPersonas(options: CharacterPersonaLoadOptions = {})
       activityWeight: ACTIVITY_WEIGHTS[activityWord],
       commentDice: COMMENT_DICE[commentWord],
       likeDice: LIKE_DICE[likeWord],
+      presenceDice: parsed.presence ? PRESENCE_DICE[parsed.presence] : 0,
     });
   }
 

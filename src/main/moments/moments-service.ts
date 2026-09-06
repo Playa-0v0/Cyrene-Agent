@@ -521,6 +521,8 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
    * 角色抽签入队：先抽几位刷到（零人 = 合法冷场），再按活跃度加权抽人，
    * 每位抽中者独立掷双骰分流——评论骰中走模型表态，未中再掷点赞骰，
    * 中则零模型成本随机点赞，都未中即刷到但划走。
+   * 用户动态另有特别关注通道：声明 presence 的角色先掷专骰，命中即直接
+   * 刷到（额外候选，不占抽签名额，骰不中仍可被普通抽签抽中）。
    * 掷骰在入队瞬间一次定型，到期执行不重掷——延迟期间世界的任何
    * 变化都不改变骰子结果，行为可预测可测试。
    */
@@ -529,14 +531,22 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     const personas = [...loadPersonas().values()];
     if (personas.length === 0) return;
 
+    // 特别关注骰只对用户动态掷：角色间的关系亲疏不适用这条通道
+    const spotlit = post.author === "user"
+      ? personas.filter((persona) => persona.presenceDice > 0 && random() < persona.presenceDice)
+      : [];
+    const rest = personas.filter((persona) => !spotlit.includes(persona));
+
     const candidateCount = pickCandidateCount(random);
-    if (candidateCount === 0) return;
+    const candidates = candidateCount === 0 && spotlit.length === 0
+      ? []
+      : [...spotlit, ...pickWeightedCandidates(rest, candidateCount, random)];
 
     // 已点赞者跳过：再掷也赞不了第二次，模型表态的点赞路径同样作废
     const feed = deps.store.getFeedItem(post.id);
     const likedActors = new Set((feed?.likes ?? []).map((reaction) => reaction.actor));
 
-    for (const persona of pickWeightedCandidates(personas, candidateCount, random)) {
+    for (const persona of candidates) {
       if (likedActors.has(persona.nickname)) continue;
       const outcome = rollReactionDice(persona, random);
       if (outcome === "silent") continue;

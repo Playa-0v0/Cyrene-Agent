@@ -111,20 +111,20 @@ const CHARACTER_REPLY_BUCKETS: readonly DelayBucket[] = [
   { weight: 20, minMs: 40 * MINUTE_MS, maxMs: 60 * MINUTE_MS },
 ];
 
-/** 昔涟表态：在线 1~8 分钟；离线长尾 20 分钟 ~ 2 小时 */
+/** 昔涟表态：在线 1~8 分钟；离线 1~40 分钟（她和用户关系最好，看到就会回应，不拖长尾） */
 const CYRENE_POST_OFFLINE_BUCKETS: readonly DelayBucket[] = [
-  { weight: 50, minMs: 20 * MINUTE_MS, maxMs: 45 * MINUTE_MS },
-  { weight: 30, minMs: 45 * MINUTE_MS, maxMs: 75 * MINUTE_MS },
-  { weight: 15, minMs: 75 * MINUTE_MS, maxMs: 100 * MINUTE_MS },
-  { weight: 5, minMs: 100 * MINUTE_MS, maxMs: 120 * MINUTE_MS },
+  { weight: 50, minMs: 1 * MINUTE_MS, maxMs: 10 * MINUTE_MS },
+  { weight: 30, minMs: 10 * MINUTE_MS, maxMs: 25 * MINUTE_MS },
+  { weight: 15, minMs: 25 * MINUTE_MS, maxMs: 35 * MINUTE_MS },
+  { weight: 5, minMs: 35 * MINUTE_MS, maxMs: 40 * MINUTE_MS },
 ];
 
-/** 昔涟回复：在线 1~5 分钟；离线长尾 15 ~ 90 分钟 */
+/** 昔涟回复：在线 1~5 分钟；离线 1~40 分钟（整体比表态偏快，被回复后她会尽快接话） */
 const CYRENE_REPLY_OFFLINE_BUCKETS: readonly DelayBucket[] = [
-  { weight: 50, minMs: 15 * MINUTE_MS, maxMs: 35 * MINUTE_MS },
-  { weight: 30, minMs: 35 * MINUTE_MS, maxMs: 55 * MINUTE_MS },
-  { weight: 15, minMs: 55 * MINUTE_MS, maxMs: 75 * MINUTE_MS },
-  { weight: 5, minMs: 75 * MINUTE_MS, maxMs: 90 * MINUTE_MS },
+  { weight: 50, minMs: 1 * MINUTE_MS, maxMs: 8 * MINUTE_MS },
+  { weight: 30, minMs: 8 * MINUTE_MS, maxMs: 20 * MINUTE_MS },
+  { weight: 15, minMs: 20 * MINUTE_MS, maxMs: 32 * MINUTE_MS },
+  { weight: 5, minMs: 32 * MINUTE_MS, maxMs: 40 * MINUTE_MS },
 ];
 
 export function computeCharacterPostDelayMs(random: () => number): number {

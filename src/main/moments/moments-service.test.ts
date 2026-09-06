@@ -630,6 +630,59 @@ describe("moments service 评论回复调度", () => {
 });
 
 describe("moments service 角色抽签与双骰分流", () => {
+  it("特别关注角色：专骰命中直接成为候选，不占普通抽签名额", async () => {
+    const h = createHarness({
+      cyreneMomentsReactionsEnabled: false,
+      random: scriptedRandom([
+        0.4,        // 风堇专骰（presence 0.5）：命中 → 直接刷到
+        0.4,        // 抽签第一掷：2 位角色刷到（名额不受专骰影响）
+        0.4, 0.4,   // 加权抽取：长夜月、万敌（风堇已排除出抽签池）
+        0.01,       // 风堇：评论骰命中 → 走模型表态
+        0.5, 0.5,   // 风堇延迟：20~60 分钟桶取中值 40 分钟
+        0.5, 0.05,  // 长夜月：评论骰未中、点赞骰命中 → 随机点赞
+        0.5, 0.5,   // 长夜月延迟
+        0.5, 0.5,   // 万敌：双骰都未中 → 刷到但划走
+      ]),
+      loadPersonas: () => new Map([
+        ["万敌", makePersona()],
+        ["长夜月", makePersona({ nickname: "长夜月", assetFileName: "长夜月.png", activityWeight: 0.7 })],
+        ["风堇", makePersona({ nickname: "风堇", assetFileName: "风堇.png", commentDice: 0.5, presenceDice: 0.5 })],
+      ]),
+    });
+
+    await h.service.createUserPost({ text: "第一条动态" });
+
+    // 专骰命中的风堇排最前；抽签照常抽出 2 人（名额未被挤占），万敌划走后剩两条任务
+    const tasks = readQueueTasks(h.queueFile);
+    expect(tasks).toHaveLength(2);
+    expect(tasks[0]).toMatchObject({ kind: "post_eval", actor: "风堇", postId: "moment_post1" });
+    expect(tasks[1]).toMatchObject({ kind: "auto_like", actor: "长夜月", postId: "moment_post1" });
+  });
+
+  it("特别关注只对用户动态生效：昔涟发动态不掷专骰", async () => {
+    // 风堇 presence 拉满（必中）做反向验证：若昔涟动态错误地掷了专骰，
+    // 她必然出现在任务里；正确行为下她只能靠普通抽签，冷场掷值下无人入队
+    const h = createHarness({
+      cyreneMomentsPostingEnabled: true,
+      cyreneMomentsReactionsEnabled: false,
+      modelResponse: '{"shouldPost":true,"text":"今日份的晚霞"}',
+      random: scriptedRandom([
+        0.05,       // 抽签第一掷：冷场（0 人刷到）
+      ]),
+      loadPersonas: () => new Map([
+        ["万敌", makePersona()],
+        ["风堇", makePersona({ nickname: "风堇", assetFileName: "风堇.png", presenceDice: 1.0 })],
+      ]),
+    });
+
+    h.service.scheduleTurn(makeTurnInput({ finishedAt: h.clock.now - 11 * 60_000 }));
+    await flush();
+    expect(h.fake.state.cyrenePosts).toHaveLength(1);
+
+    // 昔涟动态下专骰不掷：冷场即无人，风堇不因 presence 拥有特权
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+  });
+
   it("用户发帖触发角色抽签：评论骰走模型表态、点赞骰零模型成本", async () => {
     // 昔涟反应关闭用于隔断她的随机消耗：角色抽签是独立链路，不随昔涟反应关闭而静默
     const h = createHarness({

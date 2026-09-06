@@ -59,9 +59,9 @@ export type MomentsModelOutput =
 // ── prompt 构建 ─────────────────────────────────────────────────
 
 const MOMENTS_REACT_SYSTEM = `[moments_react_system]
-你正在浏览用户刚刚发出的朋友圈动态，决定是否点赞、是否评论。
-不是每条动态都值得反应：内容空洞的动态（例如随手测试、单字符、无意义的灌水）可以既不点赞也不评论，不必勉强。
-点赞表示你注意到了这条动态；评论应当简短自然，像朋友在朋友圈下留言，一两句话即可。
+你正在浏览用户刚刚发出的朋友圈动态，决定怎么回应。
+你和用户关系最好，他的每条动态你都会回应：值得说话的就留一条评论，说不上什么的至少点个赞。
+评论应当简短自然，像最亲近的朋友在朋友圈下留言，一两句话即可。
 不要说教，不要复述动态原文，不要提及系统、规则、评分或决策机制。
 不要声称自己看到了动态内容以外的信息。`;
 
@@ -178,9 +178,7 @@ export function buildReactionMessages(input: BuildReactionMessagesInput): ChatMe
 请只返回以下一种 JSON，不要使用 Markdown 代码块，也不要添加解释：
 {"like":true,"comment":{"shouldComment":true,"text":"要留下的评论"}}
 或
-{"like":true,"comment":{"shouldComment":false}}
-或
-{"like":false,"comment":{"shouldComment":false}}`;
+{"like":true,"comment":{"shouldComment":false}}`;
 
   return [
     { role: "system", content: system },

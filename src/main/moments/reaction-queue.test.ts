@@ -416,7 +416,7 @@ describe("长尾延迟分桶", () => {
     }
   });
 
-  it("昔涟离线：表态 20 分钟 ~ 2 小时、回复 15 ~ 90 分钟，各桶都有覆盖", () => {
+  it("昔涟离线：表态与回复都落在 1~40 分钟，回复整体比表态偏快", () => {
     const random = createSeededRandom(1234);
     const posts: number[] = [];
     const replies: number[] = [];
@@ -424,12 +424,15 @@ describe("长尾延迟分桶", () => {
       posts.push(computeCyrenePostDelayMs(false, random));
       replies.push(computeCyreneReplyDelayMs(false, random));
     }
-    expect(Math.min(...posts)).toBeGreaterThanOrEqual(20 * MINUTE);
-    expect(Math.max(...posts)).toBeLessThan(2 * HOUR);
-    expect(Math.min(...replies)).toBeGreaterThanOrEqual(15 * MINUTE);
-    expect(Math.max(...replies)).toBeLessThan(90 * MINUTE);
+    expect(Math.min(...posts)).toBeGreaterThanOrEqual(MINUTE);
+    expect(Math.max(...posts)).toBeLessThan(40 * MINUTE);
+    expect(Math.min(...replies)).toBeGreaterThanOrEqual(MINUTE);
+    expect(Math.max(...replies)).toBeLessThan(40 * MINUTE);
     // 四个桶都有样本（长尾桶不被随机种子意外跳过）
-    expect(bucketRatios(posts, [45 * MINUTE, 75 * MINUTE, 100 * MINUTE]).every((ratio) => ratio > 0.02)).toBe(true);
-    expect(bucketRatios(replies, [35 * MINUTE, 55 * MINUTE, 75 * MINUTE]).every((ratio) => ratio > 0.02)).toBe(true);
+    expect(bucketRatios(posts, [10 * MINUTE, 25 * MINUTE, 35 * MINUTE]).every((ratio) => ratio > 0.02)).toBe(true);
+    expect(bucketRatios(replies, [8 * MINUTE, 20 * MINUTE, 32 * MINUTE]).every((ratio) => ratio > 0.02)).toBe(true);
+    // 回复中位数快于表态中位数：被回复后她会优先接话
+    const median = (values: number[]) => values.slice().sort((a, b) => a - b)[Math.floor(values.length / 2)];
+    expect(median(replies)).toBeLessThan(median(posts));
   });
 });
