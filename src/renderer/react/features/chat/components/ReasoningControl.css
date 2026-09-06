@@ -46,16 +46,21 @@
 
 .cy-reasoning-popover .ant-segmented-item {
   min-width: 44px;
-  color: #5d5d5d;
+  color: var(--cy-text-muted, #5d5d5d);
   font: 500 12px/28px var(--rb-font-sans, sans-serif);
 }
 
-.cy-reasoning-popover .ant-segmented-item-selected {
-  color: #fff;
+/* antd v6 的滑块是 .ant-segmented-thumb 元素（v4 时代的 item::after 写法已失效，
+   默认白色块会盖住选中文字）。改为半透明强调色高亮 + 选中文字用强调色，
+   跟随昔涟主题变量（--cy-accent），变量缺失时回退默认粉。 */
+.cy-reasoning-popover .ant-segmented-thumb {
+  border-radius: 8px;
+  background: rgba(255, 91, 138, 0.22);
+  background: color-mix(in srgb, var(--cy-accent, #FF5B8A) 22%, transparent);
+  box-shadow: none;
 }
 
-.cy-reasoning-popover .ant-segmented-item-selected::after {
-  border-radius: 8px;
-  background: var(--cy-accent);
-  box-shadow: none;
+.cy-reasoning-popover .ant-segmented-item-selected {
+  color: var(--cy-accent, #FF5B8A);
+  font-weight: 600;
 }
