@@ -9,6 +9,9 @@ const channelMocks = vi.hoisted(() => ({
   flush: vi.fn(),
   listSessions: vi.fn(),
   getSession: vi.fn(),
+  appendMessage: vi.fn(),
+  loadBoundConversationHistory: undefined as ((conversationId: string, limit: number) => Promise<Array<{ role: "user" | "assistant"; content: string }>>) | undefined,
+  appendBoundConversationMessage: undefined as ((conversationId: string, role: "user" | "assistant", content: string, metadata: { channel: "wechat" | "feishu" | "qq" | "qqbot"; senderName?: string; modelContext?: string }) => void) | undefined,
   buildAndRunAgent: undefined as ((...args: unknown[]) => Promise<unknown>) | undefined,
   agentError: undefined as Error | undefined,
   agentResult: { reply: "渠道回复", toolResults: [] } as {
@@ -44,8 +47,8 @@ vi.mock("./dispatcher", () => ({
   setDispatcherLoadRecentHistory: vi.fn(),
   setDispatcherObserveExternalChat: vi.fn(),
   setDispatcherResolveBoundConversation: vi.fn((handler) => { channelMocks.resolveBoundConversation = handler; }),
-  setDispatcherLoadBoundConversationHistory: vi.fn(),
-  setDispatcherAppendBoundConversationMessage: vi.fn(),
+  setDispatcherLoadBoundConversationHistory: vi.fn((handler) => { channelMocks.loadBoundConversationHistory = handler; }),
+  setDispatcherAppendBoundConversationMessage: vi.fn((handler) => { channelMocks.appendBoundConversationMessage = handler; }),
   setDispatcherSynthesizeTts: vi.fn(),
   formatChannelUserText: vi.fn(() => "渠道问题"),
 }));
@@ -56,7 +59,7 @@ vi.mock("./conversation-binding-store", () => ({
 vi.mock("../chats/chats-store", () => ({
   listSessions: channelMocks.listSessions,
   getSession: channelMocks.getSession,
-  appendMessage: vi.fn(),
+  appendMessage: channelMocks.appendMessage,
 }));
 
 // 避免拉起真实 tool registry（会级联 import RAG 等重依赖）
@@ -138,9 +141,46 @@ beforeEach(() => {
   vi.clearAllMocks();
   channelMocks.agentError = undefined;
   channelMocks.agentResult = { reply: "渠道回复", toolResults: [] };
+  channelMocks.loadBoundConversationHistory = undefined;
+  channelMocks.appendBoundConversationMessage = undefined;
 });
 
 describe("createChannelsSubsystem lifecycle", () => {
+  it("loads model context for new mirrored messages and keeps old messages compatible", async () => {
+    channelMocks.getSession.mockReturnValue({
+      messages: [
+        { role: "user", content: "旧消息" },
+        { role: "user", content: "大家好", modelContext: "[QQ群发送者：伙伴]\n大家好" },
+        { role: "model", content: "你好" },
+      ],
+    });
+    createChannelsSubsystem(makeChannelsDeps());
+
+    await expect(channelMocks.loadBoundConversationHistory?.("desktop-1", 10)).resolves.toEqual([
+      { role: "user", content: "旧消息" },
+      { role: "user", content: "[QQ群发送者：伙伴]\n大家好" },
+      { role: "assistant", content: "你好" },
+    ]);
+  });
+
+  it("persists clean bubble text together with channel and model-context metadata", () => {
+    channelMocks.appendMessage.mockReturnValue({ id: "desktop-1" });
+    createChannelsSubsystem(makeChannelsDeps());
+
+    channelMocks.appendBoundConversationMessage?.("desktop-1", "user", "大家好", {
+      channel: "qq",
+      senderName: "伙伴",
+      modelContext: "[QQ群发送者：伙伴]\n大家好",
+    });
+
+    expect(channelMocks.appendMessage).toHaveBeenCalledWith("desktop-1", expect.objectContaining({
+      role: "user",
+      content: "大家好",
+      modelContext: "[QQ群发送者：伙伴]\n大家好",
+      channelSource: { channel: "qq", senderName: "伙伴" },
+    }));
+  });
+
   it("resolves bindings from metadata without reading the full conversation", () => {
     channelMocks.bindingResolve.mockReturnValue("desktop-1");
     channelMocks.listSessions.mockReturnValue([{ id: "desktop-1" }]);

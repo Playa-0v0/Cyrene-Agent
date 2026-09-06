@@ -5,7 +5,7 @@ import { Component, createContext, useCallback, useContext, useEffect, useMemo, 
 import { t, useTranslation } from "../../../i18n";
 import { normalizeModelMarkdown } from "./markdown-normalize";
 import { resolveAsset } from "../../../../../shared/renderer-base";
-import type { AgentRoundRecord, ConversationMode, ProcessMessageRecord, ReasoningBlock, RunActivityRecord, TaskDelegationDisplayRecord, ToolExecutionRecord, ToolFileChange } from "../../../../../shared/chat-types";
+import type { AgentRoundRecord, ChatMessageChannelSource, ConversationMode, ProcessMessageRecord, ReasoningBlock, RunActivityRecord, TaskDelegationDisplayRecord, ToolExecutionRecord, ToolFileChange } from "../../../../../shared/chat-types";
 import type { ContextUsageSnapshot } from "../../../../../shared/context-usage";
 import thinkingMoodUrl from "../../../assets/status-moods/思考中.png?url";
 import completedThinkingMoodUrl from "../../../assets/status-moods/提醒.png?url";
@@ -66,6 +66,9 @@ export interface ChatMessageItem {
   weather?: WeatherData;
   /** 上下文容量快照：运行中为每轮 preRequest 实时值，run 结束后为终态快照。 */
   contextUsage?: ContextUsageSnapshot;
+  /** 渠道群聊的发送者/引用等隐藏模型上下文；不直接渲染。 */
+  modelContext?: string;
+  channelSource?: ChatMessageChannelSource;
 }
 
 export interface ChatMessageAttachment {
@@ -185,18 +188,50 @@ function AssistantContent({
   content,
   streaming,
   stickerUrl,
+  channelSource,
 }: {
   content: string;
   streaming: boolean;
   stickerUrl?: string;
+  channelSource?: ChatMessageChannelSource;
 }) {
   const { t } = useTranslation();
   return (
     <div className="cy-message__assistant-body">
+      {channelSource && <ChannelSourceLabel source={channelSource} direction="outgoing" />}
       {content && <MarkdownContent content={content} streaming={streaming} />}
       {stickerUrl && <img className="cy-message__sticker" src={stickerUrl} alt={t("messageList.assistantStickerAlt")} draggable={false} />}
     </div>
   );
+}
+
+const channelNameKeys: Record<ChatMessageChannelSource["channel"], string> = {
+  wechat: "messageList.channelSource.wechat",
+  feishu: "messageList.channelSource.feishu",
+  qq: "messageList.channelSource.qq",
+  qqbot: "messageList.channelSource.qqbot",
+};
+
+function ChannelSourceLabel({
+  source,
+  direction,
+}: {
+  source: ChatMessageChannelSource;
+  direction: "incoming" | "outgoing";
+}) {
+  return <span className="cy-message__channel-source">{formatChannelSourceLabel(source, direction)}</span>;
+}
+
+export function formatChannelSourceLabel(
+  source: ChatMessageChannelSource,
+  direction: "incoming" | "outgoing",
+): string {
+  const channelKey = channelNameKeys[source.channel];
+  const channelName = channelKey ? t(channelKey) : t("messageList.channelSource.unknown");
+  if (direction === "outgoing") return t("messageList.channelSource.outgoing", { channel: channelName });
+  return source.senderName
+    ? t("messageList.channelSource.incomingSender", { channel: channelName, sender: source.senderName })
+    : t("messageList.channelSource.incoming", { channel: channelName });
 }
 
 function DotSpinner() {
@@ -621,14 +656,17 @@ function UserContent({
   content,
   stickerUrl,
   attachments = [],
+  channelSource,
 }: {
   content: string;
   stickerUrl?: string;
   attachments?: ChatMessageAttachment[];
+  channelSource?: ChatMessageChannelSource;
 }) {
   const { t } = useTranslation();
   return (
     <div className="cy-message__user-body">
+      {channelSource && <ChannelSourceLabel source={channelSource} direction="incoming" />}
       <UserAttachments attachments={attachments} />
       {content && <MarkdownContent content={content} />}
       {stickerUrl && <img className="cy-message__sticker" src={stickerUrl} alt={t("messageList.userStickerAlt")} draggable={false} />}
@@ -715,7 +753,7 @@ function createRoles(
     variant: "filled" as const,
     rootClassName: "cy-message cy-message--user",
     avatar: <UserMessageAvatar src={userAvatarUrl} />,
-    contentRender: (content: string, info: { extraInfo?: { messageId?: string; stickerUrl?: string; attachments?: ChatMessageAttachment[] } }) => (
+    contentRender: (content: string, info: { extraInfo?: { messageId?: string; stickerUrl?: string; attachments?: ChatMessageAttachment[]; channelSource?: ChatMessageChannelSource } }) => (
       info.extraInfo?.messageId === editingMessageId
         ? <LastUserMessageEditor
             value={editDraft}
@@ -728,6 +766,7 @@ function createRoles(
             content={content}
             stickerUrl={info.extraInfo?.stickerUrl}
             attachments={info.extraInfo?.attachments}
+            channelSource={info.extraInfo?.channelSource}
           />
     ),
     footer: (content: string, info: { extraInfo?: { messageId?: string } }) => {
@@ -753,11 +792,12 @@ function createRoles(
     variant: "filled" as const,
     rootClassName: "cy-message cy-message--assistant",
     avatar: <CyreneMessageAvatar />,
-    contentRender: (content: string, info: { extraInfo?: { streaming?: boolean; stickerUrl?: string } }) => (
+    contentRender: (content: string, info: { extraInfo?: { streaming?: boolean; stickerUrl?: string; channelSource?: ChatMessageChannelSource } }) => (
       <AssistantContent
         content={content}
         streaming={Boolean(info.extraInfo?.streaming)}
         stickerUrl={info.extraInfo?.stickerUrl}
+        channelSource={info.extraInfo?.channelSource}
       />
     ),
     footer: (content: string, info: { extraInfo?: { messageId?: string; streaming?: boolean; ttsCacheKey?: string } }) => {
@@ -896,6 +936,7 @@ export function createMessageItems(messages: ChatMessageItem[], enabledStickers:
           stickerUrl: stickerId ? resolveStickerUrl(stickerId, enabledStickers) : undefined,
           attachments: message.attachments,
           messageId: message.id,
+          channelSource: message.channelSource,
         },
       }];
     }
@@ -973,6 +1014,7 @@ export function createMessageItems(messages: ChatMessageItem[], enabledStickers:
           streaming: message.streaming,
           ttsCacheKey: message.ttsCacheKey,
           stickerUrl: message.sticker ? resolveStickerUrl(message.sticker, enabledStickers) : undefined,
+          channelSource: message.channelSource,
         },
       });
     }

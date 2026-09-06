@@ -16,7 +16,7 @@ vi.mock("@ant-design/x-markdown", () => ({ XMarkdown: ({ content }: { content?: 
 vi.mock("@ant-design/x-markdown/plugins/Latex", () => ({ default: () => ({}) }));
 vi.mock("../../../../../shared/renderer-base", () => ({ resolveAsset: (path: string) => path }));
 
-import { createMessageItems, RunActivityDetail, type ChatMessageItem } from "./ChatMessageList";
+import { createMessageItems, formatChannelSourceLabel, RunActivityDetail, type ChatMessageItem } from "./ChatMessageList";
 import { extractMessageStickerId, stripMessageStickerMarkers } from "./message-sticker";
 
 describe("React chat sticker messages", () => {
@@ -42,6 +42,32 @@ describe("formal answer visibility", () => {
     };
 
     expect(createMessageItems([message], []).map((item) => item.role)).toEqual(["activity"]);
+  });
+});
+
+describe("bound channel message presentation", () => {
+  it("uses compact human-readable labels for incoming and outgoing messages", () => {
+    expect(formatChannelSourceLabel({ channel: "wechat", senderName: "伙伴" }, "incoming")).toBe("微信 · 伙伴");
+    expect(formatChannelSourceLabel({ channel: "qq" }, "incoming")).toBe("来自QQ");
+    expect(formatChannelSourceLabel({ channel: "qq" }, "outgoing")).toBe("已回复至QQ");
+  });
+
+  it("falls back safely when persisted channel metadata is invalid", () => {
+    expect(formatChannelSourceLabel({ channel: "unknown" } as never, "incoming")).toBe("来自外部渠道");
+  });
+
+  it("keeps the visible text clean and carries channel source metadata to the bubble", () => {
+    const message = {
+      id: "wechat-user",
+      role: "user",
+      content: "下午见",
+      channelSource: { channel: "wechat", senderName: "伙伴" },
+    } as ChatMessageItem;
+
+    const [item] = createMessageItems([message], []);
+
+    expect(item.content).toBe("下午见");
+    expect(item.extraInfo?.channelSource).toEqual({ channel: "wechat", senderName: "伙伴" });
   });
 });
 

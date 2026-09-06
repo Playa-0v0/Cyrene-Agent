@@ -106,6 +106,14 @@ export interface TaskDelegationDisplayRecord extends TaskDelegationPresentation 
   roundId?: string;
 }
 
+export type ChatMessageChannel = "wechat" | "feishu" | "qq" | "qqbot";
+
+/** 外部渠道镜像来源。只用于展示，不改变桌面对话或渠道 Agent 的运行身份。 */
+export interface ChatMessageChannelSource {
+  channel: ChatMessageChannel;
+  senderName?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
@@ -122,6 +130,8 @@ export interface ChatMessage {
   at: number;
   /** 不直接显示在聊天气泡里，但会拼入模型上下文。 */
   modelContext?: string;
+  /** 绑定的微信/QQ等渠道来源；正文保持为用户实际发送的内容。 */
+  channelSource?: ChatMessageChannelSource;
   attachments?: MessageAttachment[];
   /** 表情包 ID（内置或用户自定义） */
   sticker?: string | null;
