@@ -115,6 +115,12 @@ export interface MomentsService {
   deletePost: (postId: string) => Promise<MomentCommitResult<null>>;
   createUserComment: (input: MomentCreateCommentInput) => Promise<MomentCommitResult<MomentComment>>;
   toggleUserLike: (postId: string) => Promise<MomentCommitResult<{ liked: boolean }>>;
+  /** 昔涟在聊天里发动态（工具通道）：即时落库不排队，成功后进角色抽签池。 */
+  cyreneCreatePostFromTool: (input: { title?: string; text: string }) => Promise<MomentCommitResult<MomentPost>>;
+  /** 昔涟在聊天里点赞（工具通道）：幂等，已点过返回既有结果。 */
+  cyreneLikeFromTool: (postId: string) => Promise<MomentCommitResult<{ liked: true }>>;
+  /** 昔涟在聊天里评论/回复（工具通道）：落库后按需续接互动链。 */
+  cyreneCommentFromTool: (input: MomentCreateCommentInput) => Promise<MomentCommitResult<MomentComment>>;
   /** run 成功收尾时调用：记录 ring buffer 并按策略调度昔涟主动发帖。 */
   scheduleTurn: (input: MomentsTurnInput) => void;
   /** 启动反应队列周期扫描器（启动即补扫一轮，重启后逾期任务尽快续上）；由后台启动组挂载 */
@@ -629,6 +635,29 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
       }),
 
     toggleUserLike: (postId) => deps.store.toggleLike(postId, "user"),
+
+    // ── 聊天工具通道 ──────────────────────────────────────────
+    // 昔涟在对话中主动使用朋友圈：即时落库不走反应延迟（她正和用户聊天，
+    // "当场发"才自然）；闸门沿用提交时复核，设置关闭时返回可读原因。
+    // 发帖成功后照常进角色抽签池，评论落库后续接互动链。
+
+    cyreneCreatePostFromTool: async (input) => {
+      const result = await deps.store.createCyrenePost({
+        title: input.title,
+        text: input.text,
+      });
+      if (result.applied) scheduleCharacterPostReactions(result.value);
+      return result;
+    },
+
+    cyreneLikeFromTool: (postId) => deps.store.createCyreneLike(postId),
+
+    cyreneCommentFromTool: (input) =>
+      deps.store.createComment(input, "cyrene").then((result) => {
+        // 她回复的可能是角色评论：被回复的角色还等着回她，链路照常续接
+        if (result.applied) ensureFollowUpScheduled(result.value);
+        return result;
+      }),
 
     scheduleTurn,
 

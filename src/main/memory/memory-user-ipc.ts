@@ -301,6 +301,7 @@ export function registerMemoryUserToolIpc(deps: MemoryUserToolIpcDependencies): 
       description: t.description,
       enabled: t.enabled,
       modes: t.modes ?? null,
+      chatBuiltin: t.chatBuiltin === true,
       deprecated: t.deprecated ?? null,
     }));
   });

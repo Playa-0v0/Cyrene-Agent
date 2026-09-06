@@ -13,6 +13,8 @@ interface ToolCatalogItem {
   description: string;
   enabled: boolean;
   modes: Array<"chat" | "work" | "code" | "learn"> | null;
+  /** chat 模式内置人格工具（如朋友圈三件套）：默认对 chat 可见，不依赖总开关 */
+  chatBuiltin?: boolean;
   deprecated: string | null;
 }
 
@@ -51,10 +53,13 @@ const CHAT_TOOL_WHITELIST = [
   "recall_history",
 ];
 
-/** Chat 模式可见性：严格 opt-in，仅显式勾选（override.chat===true）放行。
- *  不走"未声明 modes 即全可见"的默认规则——与主进程 run-capabilities 同口径。 */
+/** Chat 模式可见性：严格 opt-in，仅显式勾选（override.chat===true）放行；
+ *  内置人格工具（chatBuiltin）默认放行——与主进程 run-capabilities 同口径，
+ *  用户勾掉（override.chat===false）后关闭。 */
 function isChatToolOn(tool: ToolCatalogItem, overrides: Overrides): boolean {
-  return overrides[tool.id]?.chat === true;
+  const override = overrides[tool.id]?.chat;
+  if (override !== undefined) return override;
+  return tool.chatBuiltin === true;
 }
 
 function GithubIcon() {

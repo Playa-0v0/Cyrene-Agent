@@ -431,7 +431,7 @@ describe("moments service 昔涟反应入队与到期执行", () => {
     const [task] = readQueueTasks(h.queueFile);
     expect(task).toMatchObject({ kind: "post_eval", actor: "cyrene", postId: "moment_post1" });
 
-    // 离线长尾延迟（random 恒 0.5 落在 45~75 分钟桶取中值 60 分钟）：未到期先扫一轮不执行
+    // 离线表态延迟（random 恒 0.5 落在 10~25 分钟桶取值 17 分钟）：未到期先扫一轮不执行
     await h.service.drainReactionQueue();
     expect(h.runModel).not.toHaveBeenCalled();
 
@@ -585,7 +585,7 @@ describe("moments service 评论回复调度", () => {
       triggerCommentId: "comment_c2",
     });
 
-    // 离线回复延迟（random 恒 0.5 落在 35~55 分钟桶取中值 45 分钟）
+    // 离线回复延迟（random 恒 0.5 落在 8~20 分钟桶取值 14 分钟，45 分钟必然到期）
     h.clock.now += 45 * 60_000;
     await h.service.drainReactionQueue();
 
@@ -850,7 +850,7 @@ describe("moments service 昔涟×角色互动闭环与回复链", () => {
       ],
       random: scriptedRandom([
         0.4, 0.5, 0.01, 0.5, 0.5,  // 万敌刷到并命中评论骰，表态延迟 40 分钟
-        0.5, 0.5,                   // 昔演回复延迟（离线长尾）：45 分钟
+        0.5, 0.5,                   // 昔演回复延迟（离线分桶）：14 分钟
         0.5, 0.2,                   // 万敌回复延迟：20 分钟
       ]),
       loadPersonas: () => new Map([["万敌", makePersona()]]),
@@ -951,7 +951,7 @@ describe("moments service 昔涟×角色互动闭环与回复链", () => {
       ],
       random: scriptedRandom([
         0.4, 0.5, 0.01, 0.5, 0.5,  // 万敌刷到并命中评论骰，表态延迟 40 分钟
-        0.5, 0.5,                   // 重放续接的昔演回应延迟：45 分钟
+        0.5, 0.5,                   // 重放续接的昔演回应延迟（离线分桶）：14 分钟
       ]),
       loadPersonas: () => new Map([["万敌", makePersona()]]),
     });
@@ -1191,6 +1191,62 @@ describe("moments service 主动发帖调度", () => {
 
     expect(h.fake.state.cyrenePosts).toHaveLength(0);
     expect(h.policy.current.lastPostAt).toBeNull();
+  });
+});
+
+describe("moments service 聊天工具通道", () => {
+  it("昔涟发动态：即时落库不走反应延迟，角色照常抽签入队", async () => {
+    const h = createHarness({
+      cyreneMomentsPostingEnabled: true,
+      random: scriptedRandom([
+        0.4,        // 抽签第一掷：2 人刷到
+        0.4, 0.4,   // 加权抽取：先长夜月（权重 0.7）后万敌
+        0.01,       // 长夜月：评论骰命中 → 走模型表态
+        0.5, 0.5,   // 长夜月延迟 40 分钟
+        0.5, 0.5,   // 万敌：双骰未中 → 划走
+      ]),
+      loadPersonas: () => new Map([
+        ["万敌", makePersona()],
+        ["长夜月", makePersona({ nickname: "长夜月", assetFileName: "长夜月.png", activityWeight: 0.7 })],
+      ]),
+    });
+
+    const result = await h.service.cyreneCreatePostFromTool({ text: "今天和主人聊得超开心" });
+    expect(result.applied).toBe(true);
+    // 即时落库：不排昔涟自己的反应任务，模型一次都没调
+    expect(h.fake.state.cyrenePosts).toEqual([{ text: "今天和主人聊得超开心", source: undefined }]);
+    expect(h.runModel).not.toHaveBeenCalled();
+    // 但角色抽签照常：长夜月的表态任务已入队等延迟
+    expect(readQueueTasks(h.queueFile)).toEqual([
+      expect.objectContaining({ kind: "post_eval", actor: "长夜月", postId: expect.any(String) }),
+    ]);
+  });
+
+  it("昔涟发动态被闸门拒绝时原样返回原因，角色不入队", async () => {
+    const h = createHarness({ loadPersonas: () => new Map([["万敌", makePersona()]]) });
+    h.fake.state.rejectNextCyrenePost = true;
+
+    const result = await h.service.cyreneCreatePostFromTool({ text: "发不出去的动态" });
+    expect(result).toEqual({ applied: false, reason: "moments_disabled" });
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+  });
+
+  it("昔涟评论用户动态：落库即时可见并续接互动链", async () => {
+    const h = createHarness();
+    await h.service.createUserPost({ text: "第一条动态" });
+
+    const result = await h.service.cyreneCommentFromTool({ postId: "moment_post1", content: "路过留个爪印" });
+    expect(result.applied).toBe(true);
+    // 顶级评论落库即时可见：不排任何延迟任务（她正和用户聊天，当场说）
+    expect(h.fake.state.cyreneComments).toEqual([{ postId: "moment_post1", content: "路过留个爪印", replyTo: undefined }]);
+    expect(h.fake.state.comments.some((c) => c.author === "cyrene")).toBe(true);
+  });
+
+  it("昔涟点赞走昔涟通道幂等提交", async () => {
+    const h = createHarness();
+    const result = await h.service.cyreneLikeFromTool("moment_post1");
+    expect(result).toEqual({ applied: true, value: { liked: true } });
+    expect(h.fake.state.cyreneLikes).toEqual(["moment_post1"]);
   });
 });
 
