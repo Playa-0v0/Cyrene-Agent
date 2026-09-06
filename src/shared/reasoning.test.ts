@@ -581,3 +581,45 @@ describe("foldReasoning — 持久化折叠（用户第三轮修订 #4）", () =
     expect(foldReasoning(topLevel, existing, true)).toEqual({ mode: "on", effort: "low" });
   });
 });
+
+describe("resolveReasoningCapability — 厂商/模型家族错配时按模型名推断", () => {
+  test("I1 自定义端点托管 glm-5.3-flash（方舟 coding plan 场景）→ 命中 glm-5.3 强制思考规则", () => {
+    const cap = resolveReasoningCapability("unknown", "glm-5.3-flash");
+    expect(cap.control).toBe("toggle-effort");
+    expect(cap.requestStyle).toBe("thinking-type");
+    expect(cap.supportedEfforts).toEqual(["low", "high", "max"]);
+    expect(cap.supportsDisable).toBe(false);
+    expect(cap.autoEffort).toBe("high");
+  });
+
+  test("I2 自定义端点托管 glm-5.3 → 同一规则", () => {
+    const cap = resolveReasoningCapability("unknown", "glm-5.3");
+    expect(cap.control).toBe("toggle-effort");
+  });
+
+  test("I3 托管 doubao-seed 系列 → 命中豆包 toggle 规则", () => {
+    const cap = resolveReasoningCapability("unknown", "doubao-seed-2-1-pro-260628");
+    expect(cap.control).toBe("toggle");
+    expect(cap.supportsDisable).toBe(true);
+  });
+
+  test("I4 未识别模型名 → 保持 UNKNOWN 兜底（control=none）", () => {
+    const cap = resolveReasoningCapability("unknown", "some-homemade-endpoint-model");
+    expect(cap.control).toBe("none");
+    expect(cap.requestStyle).toBe("none");
+  });
+
+  test("I5 厂商家族无真实规则 + 模型名也未识别 → 仍 UNKNOWN（不误匹配）", () => {
+    const cap = resolveReasoningCapability("glm", "not-a-real-glm-model");
+    expect(cap.control).toBe("none");
+    expect(cap.requestStyle).toBe("none");
+  });
+
+  test("I6 家族错配回归：豆包档案跑 glm-5.3-flash（方舟 coding plan 真实场景）→ 按模型名命中 glm 规则", () => {
+    const cap = resolveReasoningCapability("doubao", "glm-5.3-flash");
+    expect(cap.control).toBe("toggle-effort");
+    expect(cap.requestStyle).toBe("thinking-type");
+    expect(cap.supportedEfforts).toEqual(["low", "high", "max"]);
+    expect(cap.supportsDisable).toBe(false);
+  });
+});
