@@ -1,6 +1,7 @@
 // moments-service 调度测试：昔涟反应任务入队（闸门前置、在线/深夜延迟、
 // 到期扫描后决策落库、退避重试与作废语义）；主动发帖调度：设置/去重闸门前置、
-// 执行时复核冷却、成功落库与记账。
+// 执行时复核冷却、成功落库与记账；角色链路：抽签双骰分流、昔涟×角色
+// 互动闭环、回复链深度收束、崩溃重放续接与深夜窗口。
 import fs from "fs";
 import os from "os";
 import * as path from "path";
@@ -111,6 +112,32 @@ function makeTurnInput(overrides: Partial<MomentsTurnInput> = {}): MomentsTurnIn
   };
 }
 
+/** 构造角色人设：缺省万敌的中活跃参数，骰子概率留足脚本化空间 */
+function makePersona(overrides: Partial<CharacterPersona> = {}): CharacterPersona {
+  return {
+    nickname: "万敌",
+    assetFileName: "万敌.png",
+    personaText: "测试人设",
+    headerText: "",
+    activityWeight: 0.3,
+    commentDice: 0.06,
+    likeDice: 0.12,
+    ...overrides,
+  };
+}
+
+/**
+ * 脚本随机源：按序吐出预设值，耗尽后恒吐末值——抽签、掷骰与延迟分桶的
+ * 每一次随机消耗都可预计算，入队结果与 dueAt 精确可断言。
+ */
+function scriptedRandom(values: number[]): () => number {
+  let index = 0;
+  return () => {
+    if (index >= values.length) return values[values.length - 1] ?? 0.5;
+    return values[index++];
+  };
+}
+
 /** 反应队列临时持久化文件：每个 harness 独立一份，互不串扰 */
 function tempQueueFile(): string {
   return path.join(fs.mkdtempSync(path.join(os.tmpdir(), "cyrene-moments-service-")), "moments-reaction-queue.json");
@@ -142,6 +169,8 @@ interface FakeStoreState {
   characterComments: Array<{ nickname: string; postId: string; content: string; replyTo?: string }>;
   rejectNextPost: boolean;
   rejectNextCyrenePost: boolean;
+  /** 下一次角色评论落库抛异常：模拟"决策已落盘、副作用提交失败"的崩溃窗口 */
+  failNextCharacterComment: boolean;
 }
 
 /** 内存版 store：记录昔涟提交，可预置动态与评论、可制造下一次发帖失败。 */
@@ -156,6 +185,7 @@ function createFakeStore() {
     characterComments: [],
     rejectNextPost: false,
     rejectNextCyrenePost: false,
+    failNextCharacterComment: false,
   };
 
   const store = {
@@ -250,6 +280,11 @@ function createFakeStore() {
       nickname: string,
       input: { postId: string; content: string; replyTo?: string; sourceTaskId?: string },
     ): Promise<ApplyCommentResult> => {
+      // 决策已落盘但落库瞬间故障：副作用没提交成，任务凭缓存决策重放
+      if (state.failNextCharacterComment) {
+        state.failNextCharacterComment = false;
+        throw new Error("落库瞬间的磁盘故障");
+      }
       // 镜像真实 store：同一反应任务的评论幂等，重跑返回既有评论供续接
       if (input.sourceTaskId) {
         const existing = state.comments.find(
@@ -285,7 +320,8 @@ interface HarnessOptions {
   cyreneMomentsPostingEnabled?: boolean;
   /** null 表示模型未配置；缺省为已配置 */
   vendorConfig?: VendorConfig | null;
-  modelResponse?: string;
+  /** 模型响应：单值恒返回；数组按调用顺序依次消耗（驱动多段对话链） */
+  modelResponse?: string | string[];
   /** 配图匹配（未注入时走默认闭包恒 null，纯文字落库） */
   matchMedia?: (query: string) => Promise<MomentMedia | null>;
   /** worldbook 注入（缺省用真闭包，配合 mocked rag 断言全链路） */
@@ -312,10 +348,21 @@ beforeEach(() => {
 /** enqueueTask 默认内联执行，便于断言主动发帖链路完整生效。 */
 function createHarness(options: HarnessOptions = {}) {
   const labels: string[] = [];
+  // 模型响应队列：数组按调用顺序依次消耗（耗尽后恒返回末值），
+  // 驱动"发帖 → 表态 → 回复 → 再回"这类多段互动链；单值恒返回
+  const modelResponses = options.modelResponse === undefined
+    ? null
+    : Array.isArray(options.modelResponse)
+      ? [...options.modelResponse]
+      : [options.modelResponse];
   const runModel = vi.fn(
     async (): Promise<MomentsModelOutput> => ({
       kind: "text",
-      text: options.modelResponse ?? '{"like":true,"comment":{"shouldComment":false}}',
+      text: modelResponses === null
+        ? '{"like":true,"comment":{"shouldComment":false}}'
+        : modelResponses.length > 1
+          ? (modelResponses.shift() as string)
+          : modelResponses[0],
     }),
   );
   const log = vi.fn();
@@ -572,6 +619,311 @@ describe("moments service 评论回复调度", () => {
     // 动态不存在：调度前 getFeedItem 找不到目标则不调度
     await h.service.createUserComment({ postId: "moment_post9", content: "评论" });
     expect(readQueueTasks(h.queueFile)).toEqual([]);
+  });
+});
+
+describe("moments service 角色抽签与双骰分流", () => {
+  it("用户发帖触发角色抽签：评论骰走模型表态、点赞骰零模型成本", async () => {
+    // 昔涟反应关闭用于隔断她的随机消耗：角色抽签是独立链路，不随昔涟反应关闭而静默
+    const h = createHarness({
+      cyreneMomentsReactionsEnabled: false,
+      modelResponse: '{"action":"like"}',
+      random: scriptedRandom([
+        0.4,        // 抽签第一掷：2 位角色刷到
+        0.4, 0.4,   // 加权抽取：先长夜月（权重 0.7）后万敌（权重 0.3）
+        0.5, 0.05,  // 长夜月：评论骰未中、点赞骰命中 → 随机点赞
+        0.5, 0.5,   // 长夜月延迟：20~60 分钟桶取中值 40 分钟
+        0.01,       // 万敌：评论骰命中 → 走模型表态
+        0.5, 0.5,   // 万敌延迟：同为 40 分钟
+      ]),
+      loadPersonas: () => new Map([
+        ["万敌", makePersona()],
+        ["长夜月", makePersona({ nickname: "长夜月", assetFileName: "长夜月.png", activityWeight: 0.7 })],
+      ]),
+    });
+
+    const result = await h.service.createUserPost({ text: "第一条动态" });
+    expect(result.applied).toBe(true);
+
+    const tasks = readQueueTasks(h.queueFile);
+    expect(tasks).toHaveLength(2);
+    expect(tasks[0]).toMatchObject({ kind: "auto_like", actor: "长夜月", postId: "moment_post1" });
+    expect(tasks[1]).toMatchObject({ kind: "post_eval", actor: "万敌", postId: "moment_post1" });
+    // 掷骰与延迟在入队瞬间一次定型
+    expect(tasks[0].dueAt - h.clock.now).toBe(40 * 60_000);
+    expect(tasks[1].dueAt - h.clock.now).toBe(40 * 60_000);
+
+    h.clock.now += 40 * 60_000;
+    await h.service.drainReactionQueue();
+
+    // 只有模型表态任务调模型：随机点赞零模型成本
+    expect(h.runModel).toHaveBeenCalledTimes(1);
+    expect(h.fake.state.characterLikes).toEqual([
+      { nickname: "长夜月", postId: "moment_post1" },
+      { nickname: "万敌", postId: "moment_post1" },
+    ]);
+    expect(h.fake.state.characterComments).toEqual([]);
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+  });
+
+  it("角色表态输出非法时降级沉默：任务完成删除，不重试不落库", async () => {
+    const h = createHarness({
+      cyreneMomentsReactionsEnabled: false,
+      modelResponse: '{"action":"bogus"}',
+      random: scriptedRandom([
+        0.4,       // 2 位刷到（池中只有万敌，抽满即止）
+        0.5,       // 抽中万敌
+        0.01,      // 评论骰命中 → 走模型表态
+        0.5, 0.5,  // 表态延迟 40 分钟
+      ]),
+      loadPersonas: () => new Map([["万敌", makePersona()]]),
+    });
+    await h.service.createUserPost({ text: "x" });
+
+    h.clock.now += 40 * 60_000;
+    await h.service.drainReactionQueue();
+
+    expect(h.runModel).toHaveBeenCalledTimes(1);
+    expect(h.fake.state.characterLikes).toEqual([]);
+    expect(h.fake.state.characterComments).toEqual([]);
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+    expect(h.log).toHaveBeenCalledWith(
+      "reaction_decision_invalid",
+      expect.objectContaining({ reason: "invalid_action" }),
+    );
+  });
+
+  it("模型未配置：表态任务不入队，零模型成本的随机点赞照常入队并落库", async () => {
+    const h = createHarness({
+      vendorConfig: null,
+      random: scriptedRandom([
+        0.4, 0.5, 0.01,              // 第一帖：评论骰命中 → 需要模型，不入队
+        0.4, 0.5, 0.5, 0.05,        // 第二帖：评论骰未中、点赞骰命中 → 入队
+        0.5, 0.5,                    // 点赞延迟 40 分钟
+      ]),
+      loadPersonas: () => new Map([["万敌", makePersona()]]),
+    });
+
+    await h.service.createUserPost({ text: "第一帖" });
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+
+    await h.service.createUserPost({ text: "第二帖" });
+    const [task] = readQueueTasks(h.queueFile);
+    expect(task).toMatchObject({ kind: "auto_like", actor: "万敌", postId: "moment_post2" });
+
+    h.clock.now += 40 * 60_000;
+    await h.service.drainReactionQueue();
+
+    // 点赞不花 token：模型未配置也不影响随手点赞落库
+    expect(h.runModel).not.toHaveBeenCalled();
+    expect(h.fake.state.characterLikes).toEqual([{ nickname: "万敌", postId: "moment_post2" }]);
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+  });
+
+  it("总开关关闭时角色抽签整体静默", async () => {
+    const h = createHarness({
+      momentsEnabled: false,
+      loadPersonas: () => new Map([["万敌", makePersona()]]),
+    });
+    await h.service.createUserPost({ text: "x" });
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+  });
+
+  it("执行时角色已从人设注册表移除：任务作废且不调模型", async () => {
+    // 人设 md 随时可改：注册表每次现读，角色被移除后旧任务自然失效
+    const personas = new Map([["万敌", makePersona()]]);
+    const h = createHarness({
+      cyreneMomentsReactionsEnabled: false,
+      random: scriptedRandom([0.4, 0.5, 0.01, 0.5, 0.5]),
+      loadPersonas: () => personas,
+    });
+    await h.service.createUserPost({ text: "x" });
+    personas.delete("万敌");
+
+    h.clock.now += 40 * 60_000;
+    await h.service.drainReactionQueue();
+
+    expect(h.runModel).not.toHaveBeenCalled();
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+    expect(h.log).toHaveBeenCalledWith(
+      "reaction_task_stale",
+      expect.objectContaining({ reason: "unknown_actor" }),
+    );
+  });
+
+  it("深夜入队的角色任务整体推迟到次日早晨", async () => {
+    const night = new Date(2026, 8, 4, 3, 0, 0).getTime();
+    const h = createHarness({
+      now: night,
+      cyreneMomentsPostingEnabled: true,
+      modelResponse: '{"shouldPost":true,"text":"夜深了，随手记一笔"}',
+      random: scriptedRandom([
+        0.4, 0.5,       // 抽签：2 位刷到（池中只有万敌）
+        0.5, 0.05,      // 评论骰未中、点赞骰命中 → 随机点赞
+        0.5, 0.5,       // 常规延迟 40 分钟（将被深夜窗口整体替换）
+        0.8,            // 深夜窗口：次日 8:00 + 96 分钟
+      ]),
+      loadPersonas: () => new Map([["万敌", makePersona()]]),
+    });
+
+    // 昔涟深夜发帖成功，角色同样刷到她的动态
+    h.service.scheduleTurn(makeTurnInput({ finishedAt: night - 11 * 60_000 }));
+    await flush();
+    expect(h.fake.state.cyrenePosts).toHaveLength(1);
+
+    const [task] = readQueueTasks(h.queueFile);
+    expect(task).toMatchObject({ kind: "auto_like", actor: "万敌" });
+    // 深夜窗口直接替换常规延迟（不叠加）：统一落到次日早晨的随机时刻
+    expect(task.dueAt).toBe(new Date(2026, 8, 4, 8, 0, 0).getTime() + 96 * 60_000);
+  });
+});
+
+describe("moments service 昔涟×角色互动闭环与回复链", () => {
+  it("互动闭环：角色评论昔涟动态 → 昔涟回应 → 角色再回后深度收束", async () => {
+    const h = createHarness({
+      cyreneMomentsPostingEnabled: true,
+      modelResponse: [
+        '{"shouldPost":true,"text":"今日份的晚霞"}',
+        '{"action":"comment","comment":"好耶"}',
+        '{"shouldReply":true,"text":"哈哈"}',
+        '{"action":"reply","comment":"嘿嘿"}',
+      ],
+      random: scriptedRandom([
+        0.4, 0.5, 0.01, 0.5, 0.5,  // 万敌刷到并命中评论骰，表态延迟 40 分钟
+        0.5, 0.5,                   // 昔演回复延迟（离线长尾）：45 分钟
+        0.5, 0.2,                   // 万敌回复延迟：20 分钟
+      ]),
+      loadPersonas: () => new Map([["万敌", makePersona()]]),
+    });
+
+    // 昔涟发帖（任务内联执行）；finishedAt 早于现在 11 分钟 → 昔涟按离线长尾节奏回应
+    h.service.scheduleTurn(makeTurnInput({ finishedAt: h.clock.now - 11 * 60_000 }));
+    await flush();
+    expect(h.fake.state.cyrenePosts).toHaveLength(1);
+    const [postEval] = readQueueTasks(h.queueFile);
+    expect(postEval).toMatchObject({ kind: "post_eval", actor: "万敌", postId: "moment_cy1" });
+
+    // ① 万敌表态落库为顶级评论 → 昔涟的动态下有人说话，昔涟回应任务入队
+    h.clock.now += 40 * 60_000;
+    await h.service.drainReactionQueue();
+    expect(h.fake.state.characterComments).toEqual([
+      { nickname: "万敌", postId: "moment_cy1", content: "好耶", replyTo: undefined },
+    ]);
+    const [cyreneReplyTask] = readQueueTasks(h.queueFile);
+    expect(cyreneReplyTask).toMatchObject({
+      kind: "reply_eval",
+      actor: "cyrene",
+      postId: "moment_cy1",
+      triggerCommentId: "comment_c1",
+    });
+
+    // ② 昔演回复万敌 → 被回复的角色可能回话，万敌的回复任务入队
+    h.clock.now += 45 * 60_000;
+    await h.service.drainReactionQueue();
+    expect(h.fake.state.cyreneComments).toEqual([
+      { postId: "moment_cy1", content: "哈哈", replyTo: "comment_c1" },
+    ]);
+    const [characterReplyTask] = readQueueTasks(h.queueFile);
+    expect(characterReplyTask).toMatchObject({
+      kind: "reply_eval",
+      actor: "万敌",
+      postId: "moment_cy1",
+      triggerCommentId: "comment_c2",
+    });
+
+    // ③ 万敌再回：落点深度已达上限，不再给昔涟入队，链自然收束
+    h.clock.now += 20 * 60_000;
+    await h.service.drainReactionQueue();
+    expect(h.fake.state.characterComments).toHaveLength(2);
+    expect(h.fake.state.characterComments[1]).toEqual({
+      nickname: "万敌",
+      postId: "moment_cy1",
+      content: "嘿嘿",
+      replyTo: "comment_c2",
+    });
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+    // 发帖生成 + 万敌表态 + 昔演回应 + 万敌再回，恰好四次模型调用
+    expect(h.runModel).toHaveBeenCalledTimes(4);
+  });
+
+  it("用户插话开启新链：深度耗尽的评论区里用户回复谁，谁就可能回应", async () => {
+    const h = createHarness({
+      loadPersonas: () => new Map([["万敌", makePersona()]]),
+    });
+    // 昔涟动态下预置一条 AI 自主接龙到深度上限的评论链
+    h.fake.state.posts.push(makePost({ id: "moment_cy1", author: "cyrene", text: "昔涟的动态" }));
+    h.fake.state.comments.push(
+      makeComment({ id: "comment_c1", postId: "moment_cy1", author: "万敌", content: "好耶" }),
+      makeComment({ id: "comment_c2", postId: "moment_cy1", author: "cyrene", replyTo: "comment_c1" }),
+      makeComment({ id: "comment_c3", postId: "moment_cy1", author: "万敌", replyTo: "comment_c2" }),
+    );
+
+    const result = await h.service.createUserComment({
+      postId: "moment_cy1",
+      content: "你们聊得真热闹",
+      replyTo: "comment_c3",
+    });
+    expect(result.applied).toBe(true);
+
+    // 用户评论是链的锚点：昔涟与被回复的万敌都以深度 1 重新起算，双双入队
+    const tasks = readQueueTasks(h.queueFile);
+    expect(tasks).toHaveLength(2);
+    expect(tasks[0]).toMatchObject({
+      kind: "reply_eval",
+      actor: "cyrene",
+      postId: "moment_cy1",
+      triggerCommentId: "comment_c4",
+    });
+    expect(tasks[1]).toMatchObject({
+      kind: "reply_eval",
+      actor: "万敌",
+      postId: "moment_cy1",
+      triggerCommentId: "comment_c4",
+    });
+  });
+
+  it("落库瞬间的崩溃窗口：凭落盘决策重放，不重问模型且续接互动链", async () => {
+    const h = createHarness({
+      cyreneMomentsPostingEnabled: true,
+      modelResponse: [
+        '{"shouldPost":true,"text":"今日份的晚霞"}',
+        '{"action":"comment","comment":"好耶"}',
+      ],
+      random: scriptedRandom([
+        0.4, 0.5, 0.01, 0.5, 0.5,  // 万敌刷到并命中评论骰，表态延迟 40 分钟
+        0.5, 0.5,                   // 重放续接的昔演回应延迟：45 分钟
+      ]),
+      loadPersonas: () => new Map([["万敌", makePersona()]]),
+    });
+    h.service.scheduleTurn(makeTurnInput({ finishedAt: h.clock.now - 11 * 60_000 }));
+    await flush();
+
+    // 模型决策已产出并落盘，但评论落库瞬间故障：任务保留等待重放
+    h.fake.state.failNextCharacterComment = true;
+    h.clock.now += 40 * 60_000;
+    await h.service.drainReactionQueue();
+    expect(h.runModel).toHaveBeenCalledTimes(2);
+    expect(h.fake.state.characterComments).toEqual([]);
+    const [retryTask] = readQueueTasks(h.queueFile);
+    expect(retryTask).toMatchObject({ kind: "post_eval", actor: "万敌" });
+    expect(h.log).toHaveBeenCalledWith(
+      "reaction_apply_failed",
+      expect.objectContaining({ actor: "万敌" }),
+    );
+
+    // 重放：决策缓存直接执行，不再调模型；评论落库后续接昔涟回应任务
+    await h.service.drainReactionQueue();
+    expect(h.runModel).toHaveBeenCalledTimes(2);
+    expect(h.fake.state.characterComments).toEqual([
+      { nickname: "万敌", postId: "moment_cy1", content: "好耶", replyTo: undefined },
+    ]);
+    const [followUp] = readQueueTasks(h.queueFile);
+    expect(followUp).toMatchObject({
+      kind: "reply_eval",
+      actor: "cyrene",
+      postId: "moment_cy1",
+      triggerCommentId: "comment_c1",
+    });
   });
 });
 
