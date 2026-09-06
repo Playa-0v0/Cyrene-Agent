@@ -98,6 +98,26 @@ function ttsEl(id: string): HTMLInputElement {
   return document.getElementById(id) as HTMLInputElement;
 }
 
+// 切分模式按钮组：按 data-value 同步 is-active 与 aria-pressed
+function applySplitModeSelection(mode: "sentence" | "paragraph"): void {
+  const group = document.getElementById("tts-early-read-split-mode");
+  if (!group) return;
+  group.querySelectorAll<HTMLButtonElement>(".option-block").forEach((button) => {
+    const active = button.dataset.value === mode;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+// 切分模式按钮组：整体禁用/启用
+function setSplitModeDisabled(disabled: boolean): void {
+  const group = document.getElementById("tts-early-read-split-mode");
+  if (!group) return;
+  group.querySelectorAll<HTMLButtonElement>(".option-block").forEach((button) => {
+    button.disabled = disabled;
+  });
+}
+
 // 当前加载的 TTS 配置（内存缓存，改一个字段就存一次）
 
 // 加载配置并填充表单
@@ -127,6 +147,11 @@ async function loadTtsConfig(): Promise<void> {
   ttsEl("tts-auto-read").checked = Boolean(ttsState.config.ttsAutoRead);
   ttsEl("tts-speed").value = String(ttsState.config.ttsSpeed ?? 1);
   ttsEl("tts-volume").value = String(ttsState.config.ttsVolume ?? 1);
+  // 自动朗读文本切分开关 + 切分模式按钮组（关闭时置灰按钮组）
+  const splitEnabled = ttsState.config.ttsEarlyReadSplitEnabled !== false;
+  ttsEl("tts-early-read-split-enabled").checked = splitEnabled;
+  applySplitModeSelection(ttsState.config.ttsEarlyReadSplitMode === "paragraph" ? "paragraph" : "sentence");
+  setSplitModeDisabled(!splitEnabled);
   updateTtsSliderLabels();
 
   // MiniMax
@@ -251,11 +276,29 @@ ttsEl("tts-auto-read").addEventListener("change", () => {
   void saveTtsField("ttsAutoRead", ttsEl("tts-auto-read").checked);
 });
 
+// 自动朗读文本切分开关（关闭时禁用切分模式按钮组并立即保存）
+ttsEl("tts-early-read-split-enabled").addEventListener("change", () => {
+  const enabled = ttsEl("tts-early-read-split-enabled").checked;
+  setSplitModeDisabled(!enabled);
+  void saveTtsField("ttsEarlyReadSplitEnabled", enabled);
+});
+
 // 语速/音量滑块（change 时保存，input 时实时显示）
 ttsEl("tts-speed").addEventListener("input", updateTtsSliderLabels);
 ttsEl("tts-speed").addEventListener("change", () => saveTtsField("ttsSpeed", Number(ttsEl("tts-speed").value)));
 ttsEl("tts-volume").addEventListener("input", updateTtsSliderLabels);
 ttsEl("tts-volume").addEventListener("change", () => saveTtsField("ttsVolume", Number(ttsEl("tts-volume").value)));
+
+// 自动朗读文本切分模式（点击按钮即时保存并切换高亮）
+const splitModeGroup = document.getElementById("tts-early-read-split-mode");
+splitModeGroup?.querySelectorAll<HTMLButtonElement>(".option-block").forEach((button) => {
+  button.addEventListener("click", () => {
+    if (button.disabled) return;
+    const mode = button.dataset.value === "paragraph" ? "paragraph" : "sentence";
+    applySplitModeSelection(mode);
+    void saveTtsField("ttsEarlyReadSplitMode", mode);
+  });
+});
 
 // GPT-SoVITS 超时输入框（number，blur 时保存并做简单边界限制）
 ttsEl("tts-gptsovits-timeout").addEventListener("change", () => {

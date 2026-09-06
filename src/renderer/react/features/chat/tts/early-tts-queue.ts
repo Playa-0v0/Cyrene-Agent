@@ -1,5 +1,17 @@
 export type EarlyTtsPlaybackResult = "completed" | "skipped" | "interrupted" | "error";
 export type EarlyTtsPlay = (segment: string, index: number) => Promise<EarlyTtsPlaybackResult>;
+/** 自动语音早播的文本切分模式：sentence=一句一切（默认）；paragraph=一段一切（仅空行段落切分）；off=不切分（收完整条再整段朗读）。 */
+export type EarlyTtsSplitMode = "sentence" | "paragraph" | "off";
+
+/** 把设置层的「开关+模式」换算为队列实际切分模式：开关关闭则整段朗读；否则按 mode 选择，非法值一律回退一句一切。 */
+export function resolveEarlyTtsSplitMode(
+  enabled: unknown,
+  mode: unknown,
+): EarlyTtsSplitMode {
+  if (enabled === false) return "off";
+  if (mode === "paragraph") return "paragraph";
+  return "sentence";
+}
 
 const SENTENCE_END = /[。！？!?；;]/;
 
@@ -31,10 +43,15 @@ export class StreamingMarkdownSegmenter {
   private buffer = "";
   private committed = 0;
 
-  constructor(private readonly minChars = 4) {}
+  constructor(
+    private readonly minChars = 4,
+    private readonly splitMode: EarlyTtsSplitMode = "sentence",
+  ) {}
 
   append(delta: string): string[] {
     if (delta) this.buffer += delta;
+    // off 模式流式中途不切分：提前返回，省去对已累积文本的全量重扫
+    if (this.splitMode === "off") return [];
     return this.scan(false);
   }
 
@@ -58,7 +75,9 @@ export class StreamingMarkdownSegmenter {
 
     const commit = (end: number, allowTable: boolean) => {
       const candidate = this.buffer.slice(segmentStart, end).trim();
-      if (!candidate || codePointLength(candidate) < this.minChars) return;
+      if (!candidate) return;
+      // 仅流式中途以最小长度防碎；收尾提交完整剩余文本时不受此限
+      if (!final && codePointLength(candidate) < this.minChars) return;
       if (!allowTable && hasOpenGfmTableTail(candidate)) return;
       segments.push(candidate);
       segmentStart = end;
@@ -159,11 +178,11 @@ export class StreamingMarkdownSegmenter {
       }
 
       if (SENTENCE_END.test(character)) {
-        commit(index + 1, false);
+        if (this.splitMode === "sentence") commit(index + 1, false);
         continue;
       }
       if (character === "\n" && next === "\n") {
-        commit(index + 1, true);
+        if (this.splitMode !== "off") commit(index + 1, true);
       }
     }
 
@@ -173,14 +192,19 @@ export class StreamingMarkdownSegmenter {
       && state.linkLabelDepth === 0
       && state.linkDestinationDepth === 0
       && !state.angleTag;
-    if (final && structuresClosed) commit(this.buffer.length, true);
+    if (final) {
+      // off 模式不做任何中途切分：收尾时无论结构是否闭合都整段提交，
+      // 避免因末尾残留未闭合 Markdown 结构把整条回复丢弃。
+      if (this.splitMode === "off") commit(this.buffer.length, true);
+      else if (structuresClosed) commit(this.buffer.length, true);
+    }
     return segments;
   }
 }
 
 /** Serializes complete speech segments so a later sentence never interrupts the current audio. */
 export class EarlyTtsPlaybackQueue {
-  private readonly segmenter = new StreamingMarkdownSegmenter();
+  private readonly segmenter: StreamingMarkdownSegmenter;
   private readonly pending: string[] = [];
   private drainPromise: Promise<void> | null = null;
   private cancelled = false;
@@ -192,7 +216,10 @@ export class EarlyTtsPlaybackQueue {
   constructor(
     private readonly play: EarlyTtsPlay,
     private readonly cancelPlayback: () => void = () => undefined,
-  ) {}
+    splitMode: EarlyTtsSplitMode = "sentence",
+  ) {
+    this.segmenter = new StreamingMarkdownSegmenter(4, splitMode);
+  }
 
   append(delta: string): void {
     if (this.cancelled || this.finished) return;
