@@ -44,7 +44,7 @@ import { runDocumentIndexJob } from "../rag/document-index-worker";
 import { createLlmClient } from "../services/llm/llm-client";
 import { createTtsSynthesisService } from "../services/tts/tts-synthesis-service";
 import { createEmbeddingIndexService } from "../services/embedding/embedding-index-service";
-import { registerMomentsMediaMatcher } from "../moments/moments-service";
+import { momentsService, registerMomentsMediaMatcher } from "../moments/moments-service";
 import {
   addL2MemoryVector,
   deleteUserMemoryVectors,
@@ -603,6 +603,11 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       startProactiveTrigger: async () => {
         core.services.proactive.initializeProactiveTrigger();
         return { dispose: () => core.services.proactive.stopProactiveTrigger() };
+      },
+      startMomentsReactionScanner: async () => {
+        // 启动即补扫一轮：重启前已逾期的反应任务尽快续上，不等第一个扫描周期
+        momentsService.startReactionScanner();
+        return { dispose: () => momentsService.stopReactionScanner() };
       },
     }),
 

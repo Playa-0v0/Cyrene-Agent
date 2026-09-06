@@ -41,6 +41,7 @@ function makeBackgroundDeps(calls: string[], overrides: Partial<BackgroundDepend
     prewarmScreenshot: vi.fn(async () => { calls.push("screenshot"); }),
     scheduleUpdateCheck: vi.fn(async () => { calls.push("update-check"); return () => undefined; }),
     startProactiveTrigger: vi.fn(async () => { calls.push("proactive"); return () => undefined; }),
+    startMomentsReactionScanner: vi.fn(async () => { calls.push("moments-scanner"); return () => undefined; }),
     ...overrides,
   };
 
@@ -75,6 +76,25 @@ describe("startBackground", () => {
     expect(calls).toEqual(expect.arrayContaining(["mcp", "channels", "scheduler"]));
     expect(calls.indexOf("mcp")).toBeLessThan(calls.indexOf("channels"));
     expect(calls.indexOf("channels")).toBeLessThan(calls.indexOf("scheduler"));
+  });
+
+  it("starts the moments reaction scanner after the proactive trigger and disposes it on shutdown", async () => {
+    const calls: string[] = [];
+    const disposeScanner = vi.fn();
+    const deps = makeBackgroundDeps(calls, {
+      startMomentsReactionScanner: vi.fn(async () => { calls.push("moments-scanner"); return { dispose: disposeScanner }; }),
+    });
+    const background = startBackground(deps);
+    await background.settled;
+
+    // 扫描器跟在主动触发器之后启动（同组串行），失败只降级不阻塞 ready
+    expect(calls.indexOf("proactive")).toBeLessThan(calls.indexOf("moments-scanner"));
+
+    await deps.shutdown.requestControlledShutdown({
+      reason: "test",
+      finalAction: () => undefined,
+    });
+    expect(disposeScanner).toHaveBeenCalledOnce();
   });
 
   it("continues after MCP barrier timeout and marks degradation", async () => {

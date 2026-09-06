@@ -4,7 +4,7 @@
  * 退出时 abort 并等待/放弃，迟到完成的任务立即执行其返回的 dispose。
  *
  * 依赖组（A–D 并发；组内箭头为严格顺序）：
- *   A: MCP 清理 → 内置同步 → MCP 恢复（30s 屏障）→ channels 启动 → scheduler 启动 → 主动触发器
+ *   A: MCP 清理 → 内置同步 → MCP 恢复（30s 屏障）→ channels 启动 → scheduler 启动 → 主动触发器 → 动态反应队列扫描器
  *   B: 记忆协调 → 向量索引刷新 → 重排序器预热
  *   C: 截图预热
  *   D: 更新检查
@@ -35,6 +35,8 @@ export interface BackgroundDependencies {
   prewarmScreenshot(signal: AbortSignal): Promise<void>;
   scheduleUpdateCheck(signal: AbortSignal): Promise<{ dispose(): void } | void>;
   startProactiveTrigger(signal: AbortSignal): Promise<{ dispose(): void } | void>;
+  /** 启动动态反应队列周期扫描器（含启动补扫，重启后逾期任务尽快续上） */
+  startMomentsReactionScanner(signal: AbortSignal): Promise<{ dispose(): void } | void>;
 }
 
 export interface BackgroundHandle {
@@ -128,6 +130,7 @@ export function startBackground(deps: BackgroundDependencies): BackgroundHandle 
   let proactiveTriggerDisposer: OptionalDisposer;
   let updateCheckDisposer: OptionalDisposer;
   let embeddingRefreshDisposer: OptionalDisposer;
+  let momentsScannerDisposer: OptionalDisposer;
 
   const isShuttingDown = (): boolean => {
     const phase = readiness.getPhase();
@@ -178,6 +181,11 @@ export function startBackground(deps: BackgroundDependencies): BackgroundHandle 
     id: "proactive-trigger",
     phase: "stopProducers",
     dispose: async () => { disposeOptional(proactiveTriggerDisposer); },
+  });
+  shutdown.register({
+    id: "moments-reaction-scanner",
+    phase: "stopProducers",
+    dispose: async () => { disposeOptional(momentsScannerDisposer); },
   });
   shutdown.register({
     id: "scheduler",
@@ -232,6 +240,11 @@ export function startBackground(deps: BackgroundDependencies): BackgroundHandle 
     await runTracked("proactive-trigger", "proactive", async (signal) => {
       if (signal.aborted) throw new Error("aborted before proactive trigger start");
       proactiveTriggerDisposer = await deps.startProactiveTrigger(signal);
+    });
+    // 动态反应队列扫描器：纯定时器启动，失败只降级不影响其余生产者
+    await runTracked("moments-reaction-scanner", "moments", async (signal) => {
+      if (signal.aborted) throw new Error("aborted before moments reaction scanner start");
+      momentsScannerDisposer = await deps.startMomentsReactionScanner(signal);
     });
   }
 
