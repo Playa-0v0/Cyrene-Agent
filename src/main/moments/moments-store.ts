@@ -269,6 +269,8 @@ function commitCreatePost(author: MomentAuthor, input: MomentCreatePostInput): M
     title: title || undefined,
     text,
     media,
+    // 点名列表在 service 层已过滤为合法名单，store 原样落盘；无点名不写字段
+    mentions: input.mentions?.length ? [...new Set(input.mentions)] : undefined,
     createdAt: Date.now(),
     source: { type: "manual" },
   };

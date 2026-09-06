@@ -211,6 +211,7 @@ function createFakeStore() {
         title: input.title,
         text: input.text,
         media: input.media ?? [],
+        mentions: input.mentions,
         createdAt: 1_000,
       };
       state.posts.push(post);
@@ -1247,6 +1248,100 @@ describe("moments service 聊天工具通道", () => {
     const result = await h.service.cyreneLikeFromTool("moment_post1");
     expect(result).toEqual({ applied: true, value: { liked: true } });
     expect(h.fake.state.cyreneLikes).toEqual(["moment_post1"]);
+  });
+});
+
+describe("moments service @ 点名直达", () => {
+  it("@ 昔涟与角色：秒回任务直达，不掷抽签双骰，被点名者退出抽签池", async () => {
+    const h = createHarness({
+      modelResponse: [
+        '{"like":true,"comment":{"shouldComment":true,"text":"来啦来啦"}}',
+        '{"action":"like_comment","comment":"算我一个"}',
+      ],
+      random: scriptedRandom([
+        0.5, 0.5,   // 昔涟秒回延迟：第一桶（60%）取中值 60 秒
+        0.5, 0.5,   // 万敌秒回延迟：同为 60 秒
+        0.05,       // 抽签第一掷：冷场（长夜月未被点名，走抽签未刷到）
+      ]),
+      loadPersonas: () => new Map([
+        ["万敌", makePersona()],
+        ["长夜月", makePersona({ nickname: "长夜月", assetFileName: "长夜月.png", activityWeight: 0.7 })],
+      ]),
+    });
+
+    // 路人甲不在白名单：service 提交前丢弃，落库 mentions 只剩合法名单
+    const result = await h.service.createUserPost({
+      text: "@昔涟 @万敌 周末出来玩吗",
+      mentions: ["cyrene", "万敌", "路人甲"],
+    });
+    expect(result.applied).toBe(true);
+    expect(result.value.mentions).toEqual(["cyrene", "万敌"]);
+    expect(h.fake.state.posts[0].mentions).toEqual(["cyrene", "万敌"]);
+
+    // 两个秒回任务：无普通延迟、无抽签任务；长夜月冷场没进来
+    const tasks = readQueueTasks(h.queueFile);
+    expect(tasks).toHaveLength(2);
+    expect(tasks[0]).toMatchObject({ kind: "post_eval", actor: "cyrene", postId: "moment_post1", mentioned: true });
+    expect(tasks[1]).toMatchObject({ kind: "post_eval", actor: "万敌", postId: "moment_post1", mentioned: true });
+    expect(tasks[0].dueAt - h.clock.now).toBe(60_000);
+    expect(tasks[1].dueAt - h.clock.now).toBe(60_000);
+
+    h.clock.now += 60_000;
+    await h.service.drainReactionQueue();
+
+    expect(h.runModel).toHaveBeenCalledTimes(2);
+    // prompt 感知点名：两个模型调用的 user 消息都带 @ 提示
+    expect(h.runModel.mock.calls[0][0][1].content).toContain("@ 了你");
+    expect(h.runModel.mock.calls[1][0][1].content).toContain("@ 了你");
+    expect(h.fake.state.cyreneComments).toEqual([{ postId: "moment_post1", content: "来啦来啦", replyTo: undefined }]);
+    expect(h.fake.state.characterComments).toEqual([
+      { nickname: "万敌", postId: "moment_post1", content: "算我一个", replyTo: undefined },
+    ]);
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+  });
+
+  it("非法点名全部过滤：无名点名的动态走昔涟普通反应链路", async () => {
+    const h = createHarness({
+      random: scriptedRandom([
+        0.5, 0.5,   // 昔涟普通表态延迟（离线分桶）
+        0.05,       // 角色抽签冷场
+      ]),
+      loadPersonas: () => new Map([["万敌", makePersona()]]),
+    });
+
+    await h.service.createUserPost({ text: "@路人甲 你好", mentions: ["路人甲"] });
+    expect(h.fake.state.posts[0].mentions).toBeUndefined();
+    // 走普通链路：昔涟任务无点名标记
+    const tasks = readQueueTasks(h.queueFile);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({ kind: "post_eval", actor: "cyrene" });
+    expect(tasks[0].mentioned).toBeUndefined();
+  });
+
+  it("昔涟聊天工具手动互动：取消她在该动态下的 pending 自动任务", async () => {
+    const h = createHarness({
+      random: scriptedRandom([
+        0.5, 0.5,   // 昔涟自动表态延迟：10~25 分钟桶取值 17.5 分钟
+        0.05,       // 角色抽签冷场
+      ]),
+      loadPersonas: () => new Map([["万敌", makePersona()]]),
+    });
+
+    await h.service.createUserPost({ text: "第一条动态" });
+    expect(readQueueTasks(h.queueFile)).toHaveLength(1);
+    expect(readQueueTasks(h.queueFile)[0]).toMatchObject({ actor: "cyrene", postId: "moment_post1" });
+
+    // 5 分钟时她在聊天里手动评论：pending 自动任务立即作废
+    h.clock.now += 5 * 60_000;
+    const manual = await h.service.cyreneCommentFromTool({ postId: "moment_post1", content: "手动回复" });
+    expect(manual.applied).toBe(true);
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+
+    // 到期后扫描：不再有自动表态，模型没被调用，没有第二条评论
+    h.clock.now += 20 * 60_000;
+    await h.service.drainReactionQueue();
+    expect(h.runModel).not.toHaveBeenCalled();
+    expect(h.fake.state.cyreneComments).toEqual([{ postId: "moment_post1", content: "手动回复", replyTo: undefined }]);
   });
 });
 

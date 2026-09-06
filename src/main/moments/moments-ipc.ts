@@ -55,9 +55,14 @@ export function registerMomentsIpc(ipcOption?: IpcScope): void {
 
   // 角色入驻名单：立绘池 ∩ 人设 md。store 只信任名单内的角色身份写入（渲染端无法伪造）。
   // 启动时先注册一次——重启后队列里存留的角色任务（如随机点赞）会先于任何抽签被扫描执行
-  momentsStore.setCharacterAuthorRegistry(
-    new Set(loadCharacterPersonas({ log: logMoments }).keys()),
-  );
+  const characterRegistry = () => new Set(loadCharacterPersonas({ log: logMoments }).keys());
+  momentsStore.setCharacterAuthorRegistry(characterRegistry());
+
+  // 点名名单：渲染端选择框的数据源（昔涟 + 全部入驻角色，昵称按名排序）
+  ipc.handle(IPC.MOMENTS_LIST_CHARACTERS, () => {
+    const characters = [...characterRegistry()].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+    return ["cyrene", ...characters];
+  });
 
   ipc.handle(IPC.MOMENTS_LIST, (_event, options?: { limit?: number; before?: number }) =>
     momentsService.listFeed(options));

@@ -226,6 +226,7 @@ const momentsApi: import("../shared/moments-types").MomentsApi = {
   deletePost: (postId) => ipcRenderer.invoke(IPC.MOMENTS_DELETE_POST, postId),
   createComment: (input) => ipcRenderer.invoke(IPC.MOMENTS_CREATE_COMMENT, input),
   toggleLike: (postId) => ipcRenderer.invoke(IPC.MOMENTS_TOGGLE_LIKE, postId),
+  listCharacters: () => ipcRenderer.invoke(IPC.MOMENTS_LIST_CHARACTERS),
   onChanged: (callback) => {
     const handler = () => callback();
     ipcRenderer.on(IPC.MOMENTS_CHANGED, handler);

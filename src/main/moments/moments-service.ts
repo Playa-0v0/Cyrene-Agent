@@ -45,6 +45,7 @@ import {
   computeCharacterReplyDelayMs,
   computeCyrenePostDelayMs,
   computeCyreneReplyDelayMs,
+  computeMentionDelayMs,
   createReactionQueue,
   type ReactionDecideOutcome,
   type ReactionDecision,
@@ -294,6 +295,7 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     actor: string;
     postId: string;
     triggerCommentId?: string;
+    mentioned?: boolean;
     dueAt: number;
   }): void {
     try {
@@ -316,7 +318,7 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     // 执行时复核闸门：入队时通过不代表到期时仍通过，世界已变则任务作废
     if (!reactionsEnabled()) return { type: "stale", reason: "reactions_disabled" };
     if (deps.loadVendorConfig() === null) return { type: "stale", reason: "model_not_configured" };
-    if (task.kind === "post_eval") return agent.decideUserPostReaction(task.postId);
+    if (task.kind === "post_eval") return agent.decideUserPostReaction(task.postId, task.mentioned === true);
     if (task.kind === "reply_eval") {
       // 回复任务必带触发评论 id：缺失视为数据损坏，作废任务
       if (!task.triggerCommentId) return { type: "stale", reason: "missing_trigger_comment" };
@@ -532,9 +534,10 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
    * 掷骰在入队瞬间一次定型，到期执行不重掷——延迟期间世界的任何
    * 变化都不改变骰子结果，行为可预测可测试。
    */
-  function scheduleCharacterPostReactions(post: MomentPost): void {
+  function scheduleCharacterPostReactions(post: MomentPost, exclude: ReadonlySet<string> = new Set()): void {
     if (!characterReactionsEnabled()) return;
-    const personas = [...loadPersonas().values()];
+    // 已被点名直达的角色不参与抽签：同一人挂两条表态任务没有意义
+    const personas = [...loadPersonas().values()].filter((persona) => !exclude.has(persona.nickname));
     if (personas.length === 0) return;
 
     // 特别关注骰只对用户动态掷：角色间的关系亲疏不适用这条通道
@@ -568,11 +571,41 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
   }
 
   function scheduleUserPostReaction(post: MomentPost): void {
-    if (reactionGateOpen()) {
+    // 点名直达：@ 的人不掷抽签与双骰，直接走模型表态 + 秒回延迟。
+    // 名单在入队前过滤为合法主体（昔涟或注册角色），手滑写的名字静默忽略。
+    const personas = loadPersonas();
+    const mentionedCyrene = post.mentions?.includes("cyrene") ?? false;
+    const mentionedCharacters = [...new Set(post.mentions ?? [])]
+      .filter((name): name is string => name !== "cyrene" && personas.has(name));
+
+    if (mentionedCyrene && reactionGateOpen() && deps.loadVendorConfig() !== null) {
+      enqueueReactionTask({
+        kind: "post_eval",
+        actor: "cyrene",
+        postId: post.id,
+        mentioned: true,
+        // 秒回档不套深夜窗口：用户半夜 @ 昔涟，说明醒着在等她
+        dueAt: now() + computeMentionDelayMs(random),
+      });
+    } else if (reactionGateOpen()) {
       enqueueCyreneReaction({ kind: "post_eval", postId: post.id });
     }
-    // 角色抽签自带闸门：昔涟反应关闭不影响角色刷到（两条独立链路）
-    scheduleCharacterPostReactions(post);
+
+    for (const nickname of mentionedCharacters) {
+      // 点名任务零门槛：开关照常复核（执行时 stale），但不需要模型配置预检
+      // 之外的抽签/双骰——被点名不回应很失礼，说什么由模型按人设决定
+      enqueueReactionTask({
+        kind: "post_eval",
+        actor: nickname,
+        postId: post.id,
+        mentioned: true,
+        dueAt: now() + computeMentionDelayMs(random),
+      });
+    }
+
+    // 角色抽签自带闸门：昔涟反应关闭不影响角色刷到（两条独立链路）；
+    // 已被点名直达的角色从抽签池排除，避免同一人挂两条表态任务
+    scheduleCharacterPostReactions(post, new Set(mentionedCharacters));
   }
 
   /** run 成功收尾：记录 ring buffer → 设置/去重闸门（LLM 前）→ 入队生成。 */
@@ -619,11 +652,17 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     listFeed: (options) => deps.store.listFeed(options),
     getFeedItem: (postId) => deps.store.getFeedItem(postId),
 
-    createUserPost: (input) =>
-      deps.store.createUserPost(input).then((result) => {
-        if (result.applied) scheduleUserPostReaction(result.value);
-        return result;
-      }),
+    createUserPost: (input) => {
+      // 点名白名单过滤：只保留昔涟与注册角色，渲染端传来的其他名字一律丢弃
+      // （mentions 决定调度行为，不能信任渲染端输入；文本本身不受影响）
+      const legal = new Set<string>(["cyrene", ...loadPersonas().keys()]);
+      const mentions = [...new Set(input.mentions ?? [])].filter((name) => legal.has(name));
+      return deps.store.createUserPost(mentions.length > 0 ? { ...input, mentions } : { ...input, mentions: undefined })
+        .then((result) => {
+          if (result.applied) scheduleUserPostReaction(result.value);
+          return result;
+        });
+    },
 
     deletePost: (postId) => deps.store.deletePost(postId),
 
@@ -650,12 +689,22 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
       return result;
     },
 
-    cyreneLikeFromTool: (postId) => deps.store.createCyreneLike(postId),
+    cyreneLikeFromTool: (postId) =>
+      deps.store.createCyreneLike(postId).then((result) => {
+        // 手动点赞 = 她已经刷到并表态过：取消该动态下她所有待执行的自动任务，
+        // 防止 20 分钟后自动表态再冒出一条重复评论
+        reactionQueue.cancelTasks({ actor: "cyrene", postId });
+        return result;
+      }),
 
     cyreneCommentFromTool: (input) =>
       deps.store.createComment(input, "cyrene").then((result) => {
-        // 她回复的可能是角色评论：被回复的角色还等着回她，链路照常续接
-        if (result.applied) ensureFollowUpScheduled(result.value);
+        // 手动评论同理：她在聊天里当场说过话了，自动任务全部作废
+        if (result.applied) {
+          reactionQueue.cancelTasks({ actor: "cyrene", postId: input.postId });
+          // 她回复的可能是角色评论：被回复的角色还等着回她，链路照常续接
+          ensureFollowUpScheduled(result.value);
+        }
         return result;
       }),
 

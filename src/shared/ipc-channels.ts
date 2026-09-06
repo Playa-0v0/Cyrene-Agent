@@ -103,6 +103,8 @@ export const IPC = {
   MOMENTS_CREATE_COMMENT: "moments:create-comment",
   MOMENTS_TOGGLE_LIKE: "moments:toggle-like",
   MOMENTS_CHANGED: "moments:changed",
+  // 点名名单：@ 选择框数据源（昔涟 + 全部入驻角色）
+  MOMENTS_LIST_CHARACTERS: "moments:list-characters",
 
   // settings window
   SETTINGS_MINIMIZE: "settings:minimize",

@@ -45,6 +45,8 @@ export interface MomentPost {
   title?: string;
   text: string;
   media: MomentMedia[];
+  /** 正文点名列表：@ 的角色昵称（含 "cyrene"），渲染端据此高亮、调度层据此直达 */
+  mentions?: string[];
   createdAt: number;
   updatedAt?: number;
   source?: MomentPostSource;
@@ -145,6 +147,8 @@ export interface MomentImageUploadInput {
 export interface MomentCreatePostInput {
   title?: string;
   text: string;
+  /** 点名列表：正文里 @ 的角色昵称（含 "cyrene"），由前端选择框产出，主进程过滤未注册名 */
+  mentions?: string[];
   images?: MomentImageUploadInput[];
 }
 
@@ -180,5 +184,7 @@ export interface MomentsApi {
   deletePost: (postId: string) => Promise<MomentCommitResult<null>>;
   createComment: (input: MomentCreateCommentInput) => Promise<MomentCommitResult<MomentComment>>;
   toggleLike: (postId: string) => Promise<MomentCommitResult<{ liked: boolean }>>;
+  /** 点名名单：昔涟 + 全部入驻角色昵称（@ 选择框数据源） */
+  listCharacters: () => Promise<string[]>;
   onChanged: (callback: () => void) => () => void;
 }

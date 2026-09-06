@@ -160,7 +160,7 @@ export interface BuildReactionMessagesInput {
   persona: string;
   /** 关键词命中的 worldbook 设定块（含常驻）；空串表示无命中不注入 */
   worldbook?: string;
-  post: { title?: string; text: string; imageCount: number; images?: MomentPostImage[] };
+  post: { title?: string; text: string; imageCount: number; images?: MomentPostImage[]; mentioned?: boolean };
   localNow: Date;
 }
 
@@ -171,6 +171,8 @@ export function buildReactionMessages(input: BuildReactionMessagesInput): ChatMe
   if (input.post.title?.trim()) lines.push(`标题：${input.post.title.trim()}`);
   lines.push(`正文：${input.post.text.trim()}`);
   lines.push(`配图：${input.post.imageCount} 张`);
+  // 点名提示：被 @ 的人通常意识到"这是问我的"，回应会更有针对性
+  if (input.post.mentioned) lines.push("（用户在这条动态里 @ 了你）");
   lines.push(`当前时间：${formatNow(input.localNow)}`);
 
   const user = `${lines.join("\n")}
@@ -441,8 +443,9 @@ export interface MomentsAgentDeps {
 }
 
 export interface MomentsAgent {
-  /** 昔涟对动态表态的决策：动态已删 → stale；模型失败 → retry；输出非法 → invalid */
-  decideUserPostReaction: (postId: string) => Promise<ReactionDecideOutcome>;
+  /** 昔涟对动态表态的决策：动态已删 → stale；模型失败 → retry；输出非法 → invalid。
+   *  mentioned：用户在这条动态里 @ 了昔涟——prompt 会感知点名，延迟也走秒回档。 */
+  decideUserPostReaction: (postId: string, mentioned?: boolean) => Promise<ReactionDecideOutcome>;
   /** 昔涟被回复后的决策：post 已删 / 触发评论已删 → stale */
   decideCommentReply: (postId: string, replyTargetId: string) => Promise<ReactionDecideOutcome>;
   /** 主动发帖决策：返回是否真的发出了动态（供策略层记账）；发帖不走决策/落库分离——配图匹配本身就是决策的一部分 */
@@ -461,7 +464,7 @@ function toPostReactionDecision(decision: MomentReactionDecision): ReactionDecis
 }
 
 export function createMomentsAgent(deps: MomentsAgentDeps): MomentsAgent {
-  async function decideUserPostReaction(postId: string): Promise<ReactionDecideOutcome> {
+  async function decideUserPostReaction(postId: string, mentioned?: boolean): Promise<ReactionDecideOutcome> {
     // 决策前重读：排队期间动态可能已被删除
     const feed = deps.loadFeedItem(postId);
     if (!feed) return { type: "stale", reason: "post_not_found" };
@@ -476,6 +479,7 @@ export function createMomentsAgent(deps: MomentsAgentDeps): MomentsAgent {
         text: post.text,
         imageCount: post.media.length,
         images: deps.loadPostImages?.(post),
+        mentioned,
       },
       localNow: new Date(),
     }));

@@ -399,11 +399,15 @@ function buildMemorySection(timeline?: CharacterTimeline | null): string {
   ].join("\n");
 }
 
-function buildPostSection(post: MomentPost): string[] {
+function buildPostSection(post: MomentPost, viewerNickname?: string): string[] {
   const lines = [`${authorLabel(post.author)}发布了这条动态：`];
   if (post.title?.trim()) lines.push(`标题：${post.title.trim()}`);
   lines.push(`正文：${post.text.trim()}`);
   lines.push(`配图：${post.media.length} 张`);
+  // 点名提示：正文里 @ 了正在阅读的角色，回应应当冲着点名来，沉默/答非所问都很失礼
+  if (viewerNickname && post.mentions?.includes(viewerNickname)) {
+    lines.push(`（${authorLabel(post.author)}在这条动态里 @ 了你）`);
+  }
   return lines;
 }
 
@@ -427,7 +431,7 @@ export function buildCharacterPostEvalMessages(input: CharacterReactionMessagesI
     buildMemorySection(input.timeline),
     [
       "—— 此刻 ——",
-      ...buildPostSection(input.post),
+      ...buildPostSection(input.post, persona.nickname),
       "",
       "动态下已有的评论：",
       buildPostEvalCommentBlock(input.comments),

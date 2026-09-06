@@ -610,6 +610,10 @@
     "delete": "删除",
     "confirmDelete": "确定删除这条动态吗？评论和点赞会一起删除。",
     "replyPrefix": "回复",
+    "mention": {
+      "pickerEmpty": "没有匹配的名字",
+      "cyreneOptionLabel": "昔涟"
+    },
     "notice": {
       "title": "消息",
       "bellTitle": "互动消息",

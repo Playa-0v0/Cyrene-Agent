@@ -30,6 +30,8 @@ export interface ReactionTask {
   postId: string;
   /** reply_eval 时：触发本次回复的评论 id（参与去重键，不同评论的回复任务互不去重） */
   triggerCommentId?: string;
+  /** 用户在这条动态里 @ 了该动作者：直达任务（绕过抽签与双骰），prompt 会感知点名 */
+  mentioned?: boolean;
   /** 到期执行时间 */
   dueAt: number;
   /** 供应商失败计数（退避重试用） */
@@ -127,6 +129,14 @@ const CYRENE_REPLY_OFFLINE_BUCKETS: readonly DelayBucket[] = [
   { weight: 5, minMs: 32 * MINUTE_MS, maxMs: 40 * MINUTE_MS },
 ];
 
+/** 被 @ 点名的秒回档：30 秒 ~ 3 分钟——"刚好在看手机"的节奏。
+ *  不是 0 秒（那是机器人），用户点名 = 在等回应，来得要比自然刷到快得多。 */
+const MENTION_BUCKETS: readonly DelayBucket[] = [
+  { weight: 60, minMs: 30_000, maxMs: 90_000 },
+  { weight: 30, minMs: 90_000, maxMs: 3 * MINUTE_MS },
+  { weight: 10, minMs: 3 * MINUTE_MS, maxMs: 5 * MINUTE_MS },
+];
+
 export function computeCharacterPostDelayMs(random: () => number): number {
   return pickBucketDelay(CHARACTER_POST_BUCKETS, random);
 }
@@ -143,6 +153,11 @@ export function computeCyrenePostDelayMs(online: boolean, random: () => number):
 export function computeCyreneReplyDelayMs(online: boolean, random: () => number): number {
   if (online) return MINUTE_MS + Math.floor(random() * 4 * MINUTE_MS);
   return pickBucketDelay(CYRENE_REPLY_OFFLINE_BUCKETS, random);
+}
+
+/** 被 @ 点名的回应延迟：秒回档。调用方不套深夜窗口——用户半夜点名，说明醒着在等。 */
+export function computeMentionDelayMs(random: () => number): number {
+  return pickBucketDelay(MENTION_BUCKETS, random);
 }
 
 // 深夜窗口：[01:00, 07:00) 本地时间入队的任务推迟到当日 08:00 + 随机 0~120 分钟，
@@ -177,6 +192,8 @@ export interface EnqueueReactionInput {
   actor: string;
   postId: string;
   triggerCommentId?: string;
+  /** 用户在这条动态里 @ 了该动作者：任务为点名直达，prompt 会感知 */
+  mentioned?: boolean;
   /** 到期时间（调用方用延迟函数算好）；缺省立即到期 */
   dueAt?: number;
 }
@@ -197,6 +214,8 @@ export interface ReactionQueueDeps {
 export interface ReactionQueue {
   /** 入队（同去重键的未完成任务已存在时返回 null）；立即落盘 */
   enqueue(input: EnqueueReactionInput): ReactionTask | null;
+  /** 取消某动作者在某动态下的全部待执行任务，返回取消条数 */
+  cancelTasks(input: { actor: string; postId: string }): number;
   /** 当前任务快照（诊断与测试用） */
   list(): ReactionTask[];
   /** 手动扫描一轮到期任务；已有排空在进行时返回 false（single-flight） */
@@ -408,12 +427,26 @@ export function createReactionQueue(deps: ReactionQueueDeps): ReactionQueue {
         actor: input.actor,
         postId: input.postId,
         triggerCommentId: input.triggerCommentId,
+        mentioned: input.mentioned,
         dueAt: input.dueAt ?? now(),
         attempts: 0,
       };
       tasks!.push(task);
       persist();
       return { ...task };
+    },
+
+    /**
+     * 取消某动作者在某动态下的全部待执行任务：昔涟在聊天里手动互动后调用，
+     * 防止自动表态任务到期后冒出第二条重复评论。返回取消条数供日志。
+     */
+    cancelTasks(input: { actor: string; postId: string }): number {
+      ensureLoaded();
+      const before = tasks!.length;
+      tasks = tasks!.filter((task) => !(task.actor === input.actor && task.postId === input.postId));
+      const cancelled = before - tasks.length;
+      if (cancelled > 0) persist();
+      return cancelled;
     },
 
     list() {

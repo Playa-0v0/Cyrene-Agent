@@ -1,5 +1,5 @@
 import { CommentOutlined, DeleteOutlined, HeartFilled, HeartOutlined } from "@ant-design/icons";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   MOMENT_MAX_COMMENT_TEXT_LENGTH,
   buildMomentMediaUrl,
@@ -13,6 +13,42 @@ import { getCharacterAvatar } from "../../character-avatars";
 import { formatMomentTime } from "./moments-utils";
 
 const CYRENE_AVATAR_URL = resolveAsset("avatars/cyrene-avatar.png");
+
+/**
+ * 正文按 @昵称 切片：点名片段高亮显示（QQ 群的蓝色 @ 手感）。
+ * 昵称来自 post.mentions（主进程白名单），文本里的其他 @ 不着色。
+ */
+function renderPostText(text: string, mentions: readonly string[] | undefined, cyreneLabel: string) {
+  if (!mentions || mentions.length === 0) return text;
+  const displayNames = mentions.map((name) => (name === "cyrene" ? cyreneLabel : name));
+  // 找出每个 @昵称 在文本中的位置，按出现顺序切片
+  const marks: Array<{ start: number; end: number }> = [];
+  for (const display of displayNames) {
+    let cursor = 0;
+    for (;;) {
+      const at = text.indexOf(`@${display}`, cursor);
+      if (at < 0) break;
+      marks.push({ start: at, end: at + display.length + 1 });
+      cursor = at + display.length + 1;
+    }
+  }
+  if (marks.length === 0) return text;
+  marks.sort((a, b) => a.start - b.start);
+  const nodes: ReactNode[] = [];
+  let pos = 0;
+  for (const mark of marks) {
+    if (mark.start < pos) continue; // 重叠片段跳过
+    if (mark.start > pos) nodes.push(text.slice(pos, mark.start));
+    nodes.push(
+      <span key={`${mark.start}-${mark.end}`} className="moment-card__mention">
+        {text.slice(mark.start, mark.end)}
+      </span>,
+    );
+    pos = mark.end;
+  }
+  if (pos < text.length) nodes.push(text.slice(pos));
+  return nodes;
+}
 
 interface MomentPostCardProps {
   item: MomentFeedItem;
@@ -96,7 +132,9 @@ export function MomentPostCard({
       <div className="moment-card__body">
         <div className="moment-card__name">{authorName(post.author)}</div>
         {post.title && <div className="moment-card__title">{post.title}</div>}
-        {post.text && <div className="moment-card__text">{post.text}</div>}
+        {post.text && (
+          <div className="moment-card__text">{renderPostText(post.text, post.mentions, t("moments.cyreneName"))}</div>
+        )}
 
         {post.media.length > 0 && (
           <div className={imageClass}>
