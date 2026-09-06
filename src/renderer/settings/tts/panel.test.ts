@@ -24,6 +24,7 @@ const REQUIRED_INPUT_IDS = [
   "tts-mossland-key",
   "tts-mossland-voice",
   "tts-mossland-text",
+  "tts-early-read-split-enabled",
 ];
 
 function addInput(id: string): void {
@@ -45,12 +46,37 @@ function addSelect(id: string, values: string[]): HTMLSelectElement {
   return select;
 }
 
+function addOptionGroup(id: string, values: string[]): HTMLElement {
+  const group = document.createElement("div");
+  group.id = id;
+  group.className = "option-blocks";
+  group.setAttribute("role", "group");
+  for (const value of values) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "option-block";
+    button.dataset.value = value;
+    button.textContent = value;
+    button.setAttribute("aria-pressed", "false");
+    group.appendChild(button);
+  }
+  document.body.appendChild(group);
+  return group;
+}
+
+function splitModeButtons(): HTMLButtonElement[] {
+  const group = document.getElementById("tts-early-read-split-mode");
+  if (!group) return [];
+  return Array.from(group.querySelectorAll<HTMLButtonElement>(".option-block"));
+}
+
 describe("TTS settings panel", () => {
   beforeEach(() => {
     vi.resetModules();
     document.body.replaceChildren();
     REQUIRED_INPUT_IDS.forEach(addInput);
     addSelect("tts-minimax-model", ["speech-2.8-turbo", "speech-2.8-hd"]);
+    addOptionGroup("tts-early-read-split-mode", ["sentence", "paragraph"]);
     addSelect("tts-gptsovits-format", ["wav", "mp3"]);
     addSelect("tts-custom-cloud-format", ["mp3", "wav"]);
     addSelect("tts-mossland-model", ["moss-tts-1.5-flash", "moss-tts-1.0-pro"]);
@@ -90,5 +116,72 @@ describe("TTS settings panel", () => {
 
     expect((document.getElementById("tts-mossland-model") as HTMLSelectElement).value)
       .toBe("moss-tts-1.0-pro");
+  });
+
+  it("persists the early-read split mode when the paragraph button is clicked", async () => {
+    const saveSettings = vi.fn(async () => ({}));
+    Object.assign(window, {
+      tts: {
+        loadSettings: vi.fn(async () => ({ ttsEarlyReadSplitMode: "sentence" })),
+        saveSettings,
+      },
+    });
+    await import("./panel");
+    await Promise.resolve();
+    saveSettings.mockClear();
+
+    const paragraph = splitModeButtons().find((button) => button.dataset.value === "paragraph");
+    expect(paragraph).toBeDefined();
+    paragraph!.click();
+    await Promise.resolve();
+
+    expect(saveSettings).toHaveBeenCalledWith({ ttsEarlyReadSplitMode: "paragraph" });
+    expect(paragraph!.classList.contains("is-active")).toBe(true);
+    expect(paragraph!.getAttribute("aria-pressed")).toBe("true");
+    expect(splitModeButtons().find((button) => button.dataset.value === "sentence")!.classList.contains("is-active")).toBe(false);
+  });
+
+  it("restores the early-read split switch and disables buttons when saved off", async () => {
+    Object.assign(window, {
+      tts: {
+        loadSettings: vi.fn(async () => ({
+          ttsEarlyReadSplitEnabled: false,
+          ttsEarlyReadSplitMode: "paragraph",
+        })),
+        saveSettings: vi.fn(async () => ({})),
+      },
+    });
+
+    await import("./panel");
+    await Promise.resolve();
+
+    const toggle = document.getElementById("tts-early-read-split-enabled") as HTMLInputElement;
+    const buttons = splitModeButtons();
+    expect(toggle.checked).toBe(false);
+    expect(buttons.every((button) => button.disabled)).toBe(true);
+    const paragraph = buttons.find((button) => button.dataset.value === "paragraph")!;
+    expect(paragraph.classList.contains("is-active")).toBe(true);
+    expect(paragraph.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("persists the early-read split switch when toggled off and disables buttons", async () => {
+    const saveSettings = vi.fn(async () => ({}));
+    Object.assign(window, {
+      tts: {
+        loadSettings: vi.fn(async () => ({ ttsEarlyReadSplitEnabled: true })),
+        saveSettings,
+      },
+    });
+    await import("./panel");
+    await Promise.resolve();
+    saveSettings.mockClear();
+
+    const toggle = document.getElementById("tts-early-read-split-enabled") as HTMLInputElement;
+    toggle.checked = false;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(splitModeButtons().every((button) => button.disabled)).toBe(true);
+    expect(saveSettings).toHaveBeenCalledWith({ ttsEarlyReadSplitEnabled: false });
   });
 });

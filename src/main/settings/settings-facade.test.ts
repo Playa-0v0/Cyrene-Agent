@@ -146,3 +146,28 @@ describe("tool switch persistence round trip (chatToolsEnabled + toolModeOverrid
     expect(finalSettings.toolModeOverrides).toEqual({ music_search: { chat: true } });
   });
 });
+
+describe("general early-read TTS split settings", () => {
+  it("defaults split enabled with sentence mode when settings are empty", () => {
+    const settings = normalizeGeneralSettings({});
+    expect(settings.ttsEarlyReadSplitEnabled).toBe(true);
+    expect(settings.ttsEarlyReadSplitMode).toBe("sentence");
+  });
+
+  it("keeps an explicitly disabled split switch", () => {
+    expect(normalizeGeneralSettings({ ttsEarlyReadSplitEnabled: false } as never).ttsEarlyReadSplitEnabled)
+      .toBe(false);
+  });
+
+  it("falls back to enabled when the stored switch is not a boolean", () => {
+    expect(normalizeGeneralSettings({ ttsEarlyReadSplitEnabled: "no" } as never).ttsEarlyReadSplitEnabled)
+      .toBe(true);
+  });
+
+  it("keeps paragraph mode and falls back to sentence for unknown modes", () => {
+    expect(normalizeGeneralSettings({ ttsEarlyReadSplitMode: "paragraph" } as never).ttsEarlyReadSplitMode)
+      .toBe("paragraph");
+    expect(normalizeGeneralSettings({ ttsEarlyReadSplitMode: "chapter" } as never).ttsEarlyReadSplitMode)
+      .toBe("sentence");
+  });
+});

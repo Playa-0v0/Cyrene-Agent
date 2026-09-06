@@ -199,3 +199,6 @@ docs/superpowers/
 !docs/electron-33-to-43-upgrade-assessment.md
 PRODUCT.md
 sticker-descriptions/
+
+# Cyrene agent
+.cyrene/
