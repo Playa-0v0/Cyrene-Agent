@@ -9,6 +9,7 @@ import {
 } from "../../../../shared/moments-types";
 import { resolveAsset } from "../../../../shared/renderer-base";
 import { useTranslation } from "../../i18n";
+import { getCharacterPortrait } from "../../character-portraits";
 import { formatMomentTime } from "./moments-utils";
 
 const CYRENE_AVATAR_URL = resolveAsset("avatars/cyrene-avatar.png");
@@ -40,8 +41,10 @@ export function MomentPostCard({
   const [commentError, setCommentError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
+  // 作者显示名：昔涟/用户走既定名，其余一律按角色人设昵称原样显示
   const authorName = (author: MomentAuthor): string =>
-    author === "cyrene" ? t("moments.cyreneName") : userDisplayName;
+    author === "cyrene" ? t("moments.cyreneName") : author === "user" ? userDisplayName : author;
+  const isCharacterAuthor = (author: MomentAuthor): boolean => author !== "user" && author !== "cyrene";
 
   const likedByUser = likes.some((like) => like.actor === "user");
   // 点赞行只展示真实落库的点赞（角色/昔涟的延迟点赞到达后经广播刷新出现）
@@ -155,6 +158,10 @@ export function MomentPostCard({
 
             {comments.map((comment) => {
               const target = comment.replyTo ? commentsById.get(comment.replyTo) : undefined;
+              // 角色评论带立绘头像：朋友圈里 NPC 也有脸，头像是最直观的身份标识
+              const portraitUrl = isCharacterAuthor(comment.author)
+                ? getCharacterPortrait(comment.author)
+                : null;
               return (
                 <button
                   type="button"
@@ -162,15 +169,31 @@ export function MomentPostCard({
                   className="moment-card__comment"
                   onClick={() => startReply(comment.id)}
                 >
-                  <span className="moment-card__comment-name">{authorName(comment.author)}</span>
-                  {target && (
-                    <>
-                      <span className="moment-card__comment-reply">{t("moments.replyPrefix")}</span>
-                      <span className="moment-card__comment-name">{authorName(target.author)}</span>
-                    </>
+                  {portraitUrl && (
+                    <img
+                      className="moment-card__comment-avatar"
+                      src={portraitUrl}
+                      alt=""
+                      draggable={false}
+                    />
                   )}
-                  <span className="moment-card__comment-colon">：</span>
-                  <span className="moment-card__comment-content">{comment.content}</span>
+                  <span className="moment-card__comment-main">
+                    <span
+                      className={`moment-card__comment-name${
+                        isCharacterAuthor(comment.author) ? " moment-card__comment-name--character" : ""
+                      }`}
+                    >
+                      {authorName(comment.author)}
+                    </span>
+                    {target && (
+                      <>
+                        <span className="moment-card__comment-reply">{t("moments.replyPrefix")}</span>
+                        <span className="moment-card__comment-name">{authorName(target.author)}</span>
+                      </>
+                    )}
+                    <span className="moment-card__comment-colon">：</span>
+                    <span className="moment-card__comment-content">{comment.content}</span>
+                  </span>
                 </button>
               );
             })}

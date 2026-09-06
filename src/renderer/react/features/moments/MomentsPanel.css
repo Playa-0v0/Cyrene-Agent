@@ -413,7 +413,9 @@
 }
 
 .moment-card__comment {
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
   width: 100%;
   text-align: left;
   border: none;
@@ -431,9 +433,30 @@
   background: rgba(255, 91, 138, 0.06);
 }
 
+/* 角色评论的立绘头像：小圆角缩略，与文字行顶部对齐 */
+.moment-card__comment-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  object-fit: cover;
+  flex: none;
+  margin-top: 2px;
+}
+
+.moment-card__comment-main {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
 .moment-card__comment-name {
   color: var(--cy-accent, #ff5b8a);
   font-weight: 600;
+}
+
+/* 角色名标识色：与昔涟的粉色区分开，一眼认出"这是角色在说话" */
+.moment-card__comment-name--character {
+  color: #6c7cff;
 }
 
 .moment-card__comment-reply {
