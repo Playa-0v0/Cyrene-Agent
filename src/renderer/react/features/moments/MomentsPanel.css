@@ -532,3 +532,155 @@
   height: 38px;
   object-fit: contain;
 }
+
+/* ── 通知铃铛与下拉 ─────────────────────────────────── */
+
+.moments-panel__notice-root {
+  position: relative;
+  margin-left: auto;
+  align-self: center;
+}
+
+.moments-panel__notice-bell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--cy-text-muted, #6e6e73);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.moments-panel__notice-bell:hover {
+  background: #f4f4f5;
+  color: var(--cy-text, #1d1d1f);
+}
+
+.moments-panel__notice-badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: #ff3b5c;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.moments-notice-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: 300px;
+  border: 1px solid var(--cy-border, #e8e8ec);
+  border-radius: 12px;
+  background: var(--cy-bg-elevated, #fff);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.moments-notice-popover__title {
+  padding: 10px 14px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cy-text, #1d1d1f);
+  border-bottom: 1px solid var(--cy-border, #e8e8ec);
+}
+
+.moments-notice-popover__empty {
+  padding: 28px 0;
+  text-align: center;
+  color: var(--cy-text-muted, #6e6e73);
+  font-size: 12px;
+}
+
+.moments-notice-popover__list {
+  max-height: 56vh;
+  overflow-y: auto;
+}
+
+.moments-notice-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.moments-notice-item:hover {
+  background: #f7f7f9;
+}
+
+.moments-notice-item__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  object-fit: cover;
+  flex: none;
+  margin-top: 1px;
+}
+
+.moments-notice-item__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.moments-notice-item__text {
+  font-size: 13px;
+  color: var(--cy-text, #1d1d1f);
+  line-height: 1.5;
+}
+
+.moments-notice-item__name {
+  font-weight: 600;
+  color: #6c7cff;
+}
+
+/* 昔涟的名字走粉色主色，与角色蓝区分开 */
+.moments-notice-item__name.is-cyrene {
+  color: var(--cy-accent, #ff5b8a);
+}
+
+.moments-notice-item__excerpt {
+  font-size: 12px;
+  color: var(--cy-text-muted, #6e6e73);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.moments-notice-item__time {
+  font-size: 11px;
+  color: var(--cy-text-muted, #6e6e73);
+  opacity: 0.8;
+}
+
+/* 通知跳转定位后的高亮：短暂点亮目标卡片帮助视线跟上 */
+@keyframes moment-card-flash {
+  0% { background: rgba(255, 91, 138, 0.16); }
+  100% { background: transparent; }
+}
+
+.moment-card.is-flash {
+  animation: moment-card-flash 1.6s ease-out;
+  border-radius: 10px;
+}

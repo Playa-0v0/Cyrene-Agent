@@ -81,7 +81,8 @@ export function MomentPostCard({
   }
 
   return (
-    <article className="moment-card">
+    // id 作为通知跳转的滚动锚点：点击通知列表里的条目可定位到对应动态
+    <article className="moment-card" id={`moment-post-${post.id}`}>
       <div className="moment-card__avatar">
         {post.author === "cyrene" ? (
           <img src={CYRENE_AVATAR_URL} alt={t("moments.cyreneName")} draggable={false} />
@@ -167,6 +168,7 @@ export function MomentPostCard({
                   type="button"
                   key={comment.id}
                   className="moment-card__comment"
+                  id={`moment-comment-${comment.id}`}
                   onClick={() => startReply(comment.id)}
                 >
                   {portraitUrl && (

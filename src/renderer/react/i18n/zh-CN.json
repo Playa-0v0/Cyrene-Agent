@@ -610,6 +610,14 @@
     "delete": "删除",
     "confirmDelete": "确定删除这条动态吗？评论和点赞会一起删除。",
     "replyPrefix": "回复",
+    "notice": {
+      "title": "消息",
+      "bellTitle": "互动消息",
+      "empty": "还没有互动消息",
+      "actionLike": " 赞了你的动态",
+      "actionComment": " 评论了你的动态",
+      "actionReply": " 回复了你"
+    },
     "time": {
       "justNow": "刚刚",
       "minutesAgo": "{{count}} 分钟前",
