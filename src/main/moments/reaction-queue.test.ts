@@ -198,6 +198,21 @@ describe("反应队列持久化与执行", () => {
     expect(h.queue.list()).toEqual([]);
     expect(h.queue.enqueue({ kind: "post_eval", actor: "万敌", postId: "p1" })).not.toBeNull();
   });
+
+  it("start 启动即补扫一轮：重启后已逾期的任务立即续上", async () => {
+    const filePath = tempQueueFile();
+    const first = makeQueue({ filePath, now: 1_000 });
+    first.queue.enqueue({ kind: "post_eval", actor: "万敌", postId: "p1", dueAt: 500 });
+
+    // 模拟重启：新实例从磁盘恢复，start 的首轮补扫不等第一个扫描周期
+    const h = makeQueue({ filePath, now: 2_000 });
+    h.queue.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(h.decide).toHaveBeenCalledTimes(1);
+    expect(h.queue.list()).toEqual([]);
+    h.queue.stop();
+  });
 });
 
 describe("决策幂等与失败分类", () => {

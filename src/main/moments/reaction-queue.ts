@@ -376,6 +376,25 @@ export function createReactionQueue(deps: ReactionQueueDeps): ReactionQueue {
     }
   }
 
+  /** 排空一轮到期任务；防重入：模型调用可能超过扫描周期，上一轮没排空时本轮直接让位 */
+  async function drainOnce(): Promise<boolean> {
+    if (draining) return false;
+    draining = true;
+    try {
+      ensureLoaded();
+      const due = tasks!
+        .filter((task) => task.dueAt <= now())
+        .sort((a, b) => a.dueAt - b.dueAt);
+      // 扫描时刻的到期快照逐条执行；执行期间新入队的任务（延迟都在未来）留给下一轮
+      for (const task of due) {
+        await execute(task);
+      }
+      return true;
+    } finally {
+      draining = false;
+    }
+  }
+
   return {
     enqueue(input) {
       ensureLoaded();
@@ -402,29 +421,12 @@ export function createReactionQueue(deps: ReactionQueueDeps): ReactionQueue {
       return tasks!.map((task) => ({ ...task }));
     },
 
-    async drainOnce() {
-      // 防重入：模型调用可能超过扫描周期，上一轮没排空时本轮直接让位
-      if (draining) return false;
-      draining = true;
-      try {
-        ensureLoaded();
-        const due = tasks!
-          .filter((task) => task.dueAt <= now())
-          .sort((a, b) => a.dueAt - b.dueAt);
-        // 扫描时刻的到期快照逐条执行；执行期间新入队的任务（延迟都在未来）留给下一轮
-        for (const task of due) {
-          await execute(task);
-        }
-        return true;
-      } finally {
-        draining = false;
-      }
-    },
+    drainOnce,
 
     start() {
       if (timer !== null) return;
       const runDrain = () => {
-        void drainOnce().catch((error) => log("reaction_drain_failed", String(error)));
+        void drainOnce().catch((error: unknown) => log("reaction_drain_failed", String(error)));
       };
       timer = setInterval(runDrain, scanIntervalMs);
       // 启动即补扫一轮：重启后已逾期的任务尽快续上，不等第一个周期
