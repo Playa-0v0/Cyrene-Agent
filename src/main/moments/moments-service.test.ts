@@ -6,9 +6,11 @@ import os from "os";
 import * as path from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { VendorConfig } from "../orchestrator/vendors";
+import type { CharacterPersona } from "./character-personas";
 import type { MomentPostImage, MomentsModelOutput } from "./moments-agent";
 import { defaultMomentsPolicyState, type MomentsPolicyState } from "./moments-policy";
 import type {
+  ApplyCommentResult,
   MomentAuthor,
   MomentComment,
   MomentCommitResult,
@@ -136,6 +138,8 @@ interface FakeStoreState {
   cyreneLikes: string[];
   cyreneComments: Array<{ postId: string; content: string; replyTo?: string }>;
   cyrenePosts: Array<{ text: string; source?: MomentPostSource }>;
+  characterLikes: Array<{ nickname: string; postId: string }>;
+  characterComments: Array<{ nickname: string; postId: string; content: string; replyTo?: string }>;
   rejectNextPost: boolean;
   rejectNextCyrenePost: boolean;
 }
@@ -148,6 +152,8 @@ function createFakeStore() {
     cyreneLikes: [],
     cyreneComments: [],
     cyrenePosts: [],
+    characterLikes: [],
+    characterComments: [],
     rejectNextPost: false,
     rejectNextCyrenePost: false,
   };
@@ -179,7 +185,15 @@ function createFakeStore() {
     createComment: async (
       input: MomentCreateCommentInput,
       author: MomentAuthor,
+      options: { sourceTaskId?: string } = {},
     ): Promise<MomentCommitResult<MomentComment>> => {
+      // 镜像真实 store：同一反应任务的评论幂等，重跑返回既有评论
+      if (options.sourceTaskId) {
+        const existing = state.comments.find(
+          (comment) => comment.postId === input.postId && comment.sourceTaskId === options.sourceTaskId,
+        );
+        if (existing) return { applied: true, value: existing };
+      }
       const comment: MomentComment = {
         id: `comment_c${state.comments.length + 1}`,
         postId: input.postId,
@@ -187,6 +201,7 @@ function createFakeStore() {
         content: input.content,
         replyTo: input.replyTo,
         createdAt: 2_000,
+        sourceTaskId: options.sourceTaskId,
       };
       state.comments.push(comment);
       if (author === "cyrene") {
@@ -224,6 +239,43 @@ function createFakeStore() {
       state.cyrenePosts.push({ text: input.text, source: input.source });
       return { applied: true, value: post };
     },
+    createCharacterLike: async (
+      nickname: string,
+      postId: string,
+    ): Promise<MomentCommitResult<{ liked: true }>> => {
+      state.characterLikes.push({ nickname, postId });
+      return { applied: true, value: { liked: true } };
+    },
+    createCharacterComment: async (
+      nickname: string,
+      input: { postId: string; content: string; replyTo?: string; sourceTaskId?: string },
+    ): Promise<ApplyCommentResult> => {
+      // 镜像真实 store：同一反应任务的评论幂等，重跑返回既有评论供续接
+      if (input.sourceTaskId) {
+        const existing = state.comments.find(
+          (comment) => comment.postId === input.postId && comment.sourceTaskId === input.sourceTaskId,
+        );
+        if (existing) return { status: "already_applied", comment: existing };
+      }
+      const comment: MomentComment = {
+        id: `comment_c${state.comments.length + 1}`,
+        postId: input.postId,
+        author: nickname,
+        content: input.content,
+        replyTo: input.replyTo,
+        createdAt: 4_000,
+        sourceTaskId: input.sourceTaskId,
+      };
+      state.comments.push(comment);
+      state.characterComments.push({
+        nickname,
+        postId: input.postId,
+        content: input.content,
+        replyTo: input.replyTo,
+      });
+      return { status: "created", comment };
+    },
+    getCharacterTimeline: () => ({ entries: [], truncatedComments: 0 }),
   };
   return { store, state };
 }
@@ -244,6 +296,8 @@ interface HarnessOptions {
   now?: number;
   /** 延迟抽签随机源（缺省恒 0.5：分桶与桶内取值都可预计算） */
   random?: () => number;
+  /** 角色注册表（缺省空：角色链路整体静默，只测昔涟；角色用例显式注入） */
+  loadPersonas?: () => Map<string, CharacterPersona>;
   /** 反应队列持久化路径（缺省临时文件；可指向非法路径模拟磁盘异常） */
   reactionQueueFilePath?: string;
 }
@@ -301,6 +355,7 @@ function createHarness(options: HarnessOptions = {}) {
     reactionQueueFilePath: queueFile,
     now: () => clock.now,
     random: options.random ?? (() => 0.5),
+    loadPersonas: options.loadPersonas ?? (() => new Map()),
     log,
   });
   return { service, fake, labels, runModel, log, enqueueTask, settings, policy, clock, queueFile };

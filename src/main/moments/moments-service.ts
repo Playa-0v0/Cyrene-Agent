@@ -2,14 +2,18 @@
 //
 // 职责：
 // - 包装 moments-store 的 CRUD（读走内存缓存，写走串行队列）；
-// - 用户发帖 / 评论成功后把昔涟反应任务入持久化反应队列
-//   （拟人化延迟，到期由扫描器执行决策与落库）；
-// - run 收尾后按策略调度昔涟主动发帖（后台 LLM，经 enqueueLLMTask 串行）；
+// - 用户发帖 / 评论成功后调度反应任务入持久化反应队列：
+//   昔涟全模型决策；角色先抽签（谁刷到）再双骰分流（评/赞/划走），
+//   到期由扫描器执行决策与落库，长尾延迟 + 深夜窗口保证拟人节奏；
+// - AI 评论落库后事件驱动续接互动链：角色评论昔涟动态 → 昔涟回应 →
+//   角色再回（深度内）——回复链深度达到上限时自然收束，用户插话开新链；
+// - run 收尾后按策略调度昔涟主动发帖（后台 LLM，经 enqueueLLMTask 串行），
+//   昔涟发帖同样进角色抽签池；
 // - 规则闸门前置：反应开关关闭或模型未配置时连任务都不入队，不浪费 token。
 //
-// 昔涟反应分两段：agent 只产出决策（stale/retry/invalid/decided），落库由
-// 反应队列的 apply 执行器统一提交——决策与副作用分离，崩溃后凭落盘的
-// 决策缓存续接，不重问模型。
+// 反应执行分两段：agent/角色决策只产出结果（stale/retry/invalid/decided），
+// 落库由反应队列的 apply 执行器统一提交——决策与副作用分离，崩溃后凭落盘的
+// 决策缓存续接，不重问模型；AI 评论一律携带 sourceTaskId，重跑幂等。
 
 import { app } from "electron";
 import { enqueueLLMTask } from "../llm-queue";
@@ -37,13 +41,31 @@ import {
 } from "./moments-context";
 import {
   applyNightWindow,
+  computeCharacterPostDelayMs,
+  computeCharacterReplyDelayMs,
   computeCyrenePostDelayMs,
   computeCyreneReplyDelayMs,
   createReactionQueue,
+  type ReactionDecideOutcome,
   type ReactionDecision,
   type ReactionQueue,
+  type ReactionTask,
   type ReactionTaskExecutor,
 } from "./reaction-queue";
+import {
+  pickCandidateCount,
+  pickWeightedCandidates,
+  rollReactionDice,
+  withinReplyDepthLimit,
+} from "./character-reactions";
+import {
+  buildCharacterPostEvalMessages,
+  buildCharacterReplyEvalMessages,
+  loadCharacterPersonas,
+  parseCharacterPostDecision,
+  parseCharacterReplyDecision,
+  type CharacterPersona,
+} from "./character-personas";
 import {
   buildMomentsEventKey,
   canPost,
@@ -110,6 +132,9 @@ interface MomentsStoreFacade {
   toggleLike: typeof momentsStore.toggleLike;
   createCyreneLike: typeof momentsStore.createCyreneLike;
   createCyrenePost: typeof momentsStore.createCyrenePost;
+  createCharacterLike: typeof momentsStore.createCharacterLike;
+  createCharacterComment: typeof momentsStore.createCharacterComment;
+  getCharacterTimeline: typeof momentsStore.getCharacterTimeline;
 }
 
 export interface MomentsServiceDeps {
@@ -133,6 +158,11 @@ export interface MomentsServiceDeps {
   buildWorldbookContext?: (text: string) => string;
   /** 读取用户动态图片转 base64（未注入时不带图） */
   loadPostImages?: (post: MomentPost) => MomentPostImage[];
+  /**
+   * 角色注册表加载（缺省每次读盘：md 随时可改，下次抽签即生效；
+   * 测试注入内存版控制名单）。返回空 Map 时角色链路整体静默。
+   */
+  loadPersonas?: () => Map<string, CharacterPersona>;
   /** 反应队列持久化路径（缺省 userData/moments-reaction-queue.json；测试注入临时文件） */
   reactionQueueFilePath?: string | (() => string);
   /** 时钟（延迟计算与在线感知用；缺省真实时间） */
@@ -143,10 +173,19 @@ export interface MomentsServiceDeps {
 }
 
 export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
+  // 角色注册表：注入优先；缺省每次读盘（md 随时可改，无需重启生效）
+  const loadPersonas = deps.loadPersonas
+    ?? (() => loadCharacterPersonas({ log: (event, detail) => deps.log?.(event, detail) }));
+
   const agent: MomentsAgent = createMomentsAgent({
     buildPersona: deps.buildPersona,
     runModel: deps.runModel,
-    commitPost: (input) => deps.store.createCyrenePost(input),
+    commitPost: async (input) => {
+      const result = await deps.store.createCyrenePost(input);
+      // 昔涟发帖成功后同样进角色抽签池：角色们也会刷到她的动态
+      if (result.applied) scheduleCharacterPostReactions(result.value);
+      return result;
+    },
     loadFeedItem: (postId) => deps.store.getFeedItem(postId),
     matchMedia: deps.matchMedia ?? (async () => null),
     buildWorldbookContext: deps.buildWorldbookContext,
@@ -172,22 +211,32 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     return settings.momentsEnabled && settings.cyreneMomentsReactionsEnabled;
   }
 
+  /** 朋友圈总开关（角色链路的闸门；角色的独立细粒度开关后续随设置接入） */
+  function momentsEnabled(): boolean {
+    return deps.loadGeneralSettings().momentsEnabled;
+  }
+
   /**
-   * 昔涟表态决策落库：点赞走昔涟点赞通道，评论/回复走昔涟评论通道
+   * 昔涟表态落库：点赞走昔涟点赞通道，评论/回复走昔涟评论通道——
+   * 评论一律携带任务 id（sourceTaskId）幂等落库，崩溃重跑不重复写入
    * （store 串行队列内含开关与目标存在性复核，AI 思考期间世界变化不豁免）。
    */
-  async function applyCyreneReaction(
-    target: { postId: string; replyTo?: string },
-    decision: ReactionDecision,
-  ): Promise<void> {
+  async function cyreneApply(task: ReactionTask, decision: ReactionDecision): Promise<void> {
     if (decision.action === "like" || decision.action === "like_comment") {
-      await deps.store.createCyreneLike(target.postId);
+      await deps.store.createCyreneLike(task.postId);
     }
     if (decision.action === "comment" || decision.action === "like_comment" || decision.action === "reply") {
-      await deps.store.createComment(
-        { postId: target.postId, content: decision.comment, replyTo: target.replyTo },
+      const result = await deps.store.createComment(
+        {
+          postId: task.postId,
+          content: decision.comment,
+          replyTo: task.kind === "reply_eval" ? task.triggerCommentId : undefined,
+        },
         "cyrene",
+        { sourceTaskId: task.id },
       );
+      // 评论落库后续接互动链：她回复的可能是角色评论，角色还等着回她
+      if (result.applied) ensureFollowUpScheduled(result.value);
     }
   }
 
@@ -218,71 +267,274 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     return online ? dueAt : applyNightWindow(dueAt, new Date(now()), random);
   }
 
-  // 昔涟反应执行器：决策阶段复核闸门后委托 agent，副作用阶段统一落库。
-  // 角色任务尚无执行通道，未知主体的任务兜底作废，避免在队列里无限滞留。
-  const cyreneExecutor: ReactionTaskExecutor = {
-    async decide(task) {
-      if (task.actor !== "cyrene") return { type: "stale", reason: "unknown_actor" };
-      // 执行时复核闸门：入队时通过不代表到期时仍通过，世界已变则任务作废
-      if (!reactionsEnabled()) return { type: "stale", reason: "reactions_disabled" };
-      if (deps.loadVendorConfig() === null) return { type: "stale", reason: "model_not_configured" };
-      if (task.kind === "post_eval") return agent.decideUserPostReaction(task.postId);
-      if (task.kind === "reply_eval") {
-        // 回复任务必带触发评论 id：缺失视为数据损坏，作废任务
-        if (!task.triggerCommentId) return { type: "stale", reason: "missing_trigger_comment" };
-        return agent.decideCommentReply(task.postId, task.triggerCommentId);
-      }
-      return { type: "stale", reason: "unknown_task_kind" };
-    },
-    async apply(task, decision) {
-      await applyCyreneReaction({
-        postId: task.postId,
-        replyTo: task.kind === "reply_eval" ? task.triggerCommentId : undefined,
-      }, decision);
-    },
-  };
+  /**
+   * 角色任务到期时间：表态与随机点赞同表（秒赞同样穿帮，延迟是拟人感的来源），
+   * 回复整体更快但同样长尾；角色没有"在线"概念，深夜窗口恒生效。
+   */
+  function computeCharacterDueAt(kind: "post_eval" | "reply_eval" | "auto_like"): number {
+    const delayMs = kind === "reply_eval"
+      ? computeCharacterReplyDelayMs(random)
+      : computeCharacterPostDelayMs(random);
+    return applyNightWindow(now() + delayMs, new Date(now()), random);
+  }
 
-  const reactionQueue: ReactionQueue = createReactionQueue({
-    filePath: deps.reactionQueueFilePath ?? defaultReactionQueueFilePath,
-    executor: cyreneExecutor,
-    now,
-    log: (event, detail) => deps.log?.(event, detail),
-  });
+  /** 入队（含落盘异常兜底）：反应是锦上添花，磁盘故障只记日志不阻断调用方 */
+  function enqueueReactionTask(input: {
+    kind: "post_eval" | "reply_eval" | "auto_like";
+    actor: string;
+    postId: string;
+    triggerCommentId?: string;
+    dueAt: number;
+  }): void {
+    try {
+      reactionQueue.enqueue(input);
+    } catch (error) {
+      deps.log?.("reaction_enqueue_failed", error instanceof Error ? error.message : String(error));
+    }
+  }
 
-  /** 入队失败不影响用户操作返回：反应是锦上添花，磁盘异常只记日志 */
   function enqueueCyreneReaction(input: {
     kind: "post_eval" | "reply_eval";
     postId: string;
     triggerCommentId?: string;
   }): void {
-    try {
-      reactionQueue.enqueue({ actor: "cyrene", dueAt: computeCyreneDueAt(input.kind), ...input });
-    } catch (error) {
-      deps.log?.("reaction_enqueue_failed", error instanceof Error ? error.message : String(error));
+    enqueueReactionTask({ actor: "cyrene", dueAt: computeCyreneDueAt(input.kind), ...input });
+  }
+
+  /** 昔涟表态决策：闸门复核后委托 agent（agent 内含目标重读与模型调用） */
+  async function cyreneDecide(task: ReactionTask): Promise<ReactionDecideOutcome> {
+    // 执行时复核闸门：入队时通过不代表到期时仍通过，世界已变则任务作废
+    if (!reactionsEnabled()) return { type: "stale", reason: "reactions_disabled" };
+    if (deps.loadVendorConfig() === null) return { type: "stale", reason: "model_not_configured" };
+    if (task.kind === "post_eval") return agent.decideUserPostReaction(task.postId);
+    if (task.kind === "reply_eval") {
+      // 回复任务必带触发评论 id：缺失视为数据损坏，作废任务
+      if (!task.triggerCommentId) return { type: "stale", reason: "missing_trigger_comment" };
+      // 执行时复核回复链深度：入队后评论区可能继续生长，落点已超上限则收束
+      const feed = deps.store.getFeedItem(task.postId);
+      if (feed && !withinReplyDepthLimit(feed.comments, task.triggerCommentId)) {
+        return { type: "stale", reason: "reply_depth_exceeded" };
+      }
+      return agent.decideCommentReply(task.postId, task.triggerCommentId);
+    }
+    return { type: "stale", reason: "unknown_task_kind" };
+  }
+
+  /**
+   * 角色任务的世界复核：注册表、总开关、模型配置、目标动态，任一不过即作废。
+   * 注册表每次现读——人设 md 随时可改，角色被移除后旧任务自然失效。
+   */
+  function characterWorldCheck(task: ReactionTask):
+    | { ok: true; feed: NonNullable<ReturnType<MomentsStoreFacade["getFeedItem"]>>; persona: CharacterPersona }
+    | { ok: false; outcome: ReactionDecideOutcome } {
+    const persona = loadPersonas().get(task.actor);
+    if (!persona) return { ok: false, outcome: { type: "stale", reason: "unknown_actor" } };
+    if (!momentsEnabled()) return { ok: false, outcome: { type: "stale", reason: "moments_disabled" } };
+    if (deps.loadVendorConfig() === null) return { ok: false, outcome: { type: "stale", reason: "model_not_configured" } };
+    const feed = deps.store.getFeedItem(task.postId);
+    if (!feed) return { ok: false, outcome: { type: "stale", reason: "post_not_found" } };
+    return { ok: true, feed, persona };
+  }
+
+  /**
+   * 角色表态决策：组装角色卡 + 朋友圈记忆 + 评论区上下文调模型，
+   * 解析为队列统一决策形态；输出非法按 invalid 降级 silent 处理（由队列统一执行）。
+   */
+  async function characterDecide(task: ReactionTask): Promise<ReactionDecideOutcome> {
+    const check = characterWorldCheck(task);
+    if (!check.ok) return check.outcome;
+    const { feed, persona } = check;
+
+    const worldbookSource = [
+      feed.post.title ?? "",
+      feed.post.text,
+      // 回复场景把评论文本也纳入关键词扫描：设定命中依赖具体讨论内容
+      ...(task.kind === "reply_eval" ? feed.comments.map((comment) => comment.content) : []),
+    ].filter(Boolean).join("\n");
+    const baseInput = {
+      persona,
+      worldbook: deps.buildWorldbookContext?.(worldbookSource) ?? "",
+      timeline: deps.store.getCharacterTimeline(persona.nickname),
+      post: feed.post,
+      postImages: deps.loadPostImages?.(feed.post),
+      comments: feed.comments,
+      localNow: new Date(now()),
+    };
+
+    if (task.kind === "post_eval") {
+      const output = await deps.runModel(buildCharacterPostEvalMessages(baseInput));
+      if (output.kind !== "text") return { type: "retry", reason: output.reason };
+      const decision = parseCharacterPostDecision(output.text);
+      if (decision.action === "invalid") return { type: "invalid", reason: decision.reason };
+      return { type: "decided", decision };
+    }
+
+    if (task.kind === "reply_eval") {
+      // 回复任务必带触发评论 id；触发评论已删（世界已变）则作废
+      if (!task.triggerCommentId) return { type: "stale", reason: "missing_trigger_comment" };
+      if (!feed.comments.some((comment) => comment.id === task.triggerCommentId)) {
+        return { type: "stale", reason: "trigger_comment_not_found" };
+      }
+      // 执行时复核回复链深度：入队后评论区可能继续生长，落点已超上限则收束
+      if (!withinReplyDepthLimit(feed.comments, task.triggerCommentId)) {
+        return { type: "stale", reason: "reply_depth_exceeded" };
+      }
+      const output = await deps.runModel(buildCharacterReplyEvalMessages({
+        ...baseInput,
+        replyTargetId: task.triggerCommentId,
+      }));
+      if (output.kind !== "text") return { type: "retry", reason: output.reason };
+      const decision = parseCharacterReplyDecision(output.text);
+      if (decision.action === "invalid") return { type: "invalid", reason: decision.reason };
+      return { type: "decided", decision };
+    }
+
+    return { type: "stale", reason: "unknown_task_kind" };
+  }
+
+  /**
+   * 角色表态落库：点赞走角色点赞通道；评论走角色评论通道并携带任务 id 幂等。
+   * 评论落库后无论 created 还是 already_applied（崩溃重跑）都续接后续调度——
+   * already_applied 若被当作"无事可做"，"评论已落库但后续事件未入队"的
+   * 崩溃窗口会让互动链永久断裂。
+   */
+  async function characterApply(task: ReactionTask, decision: ReactionDecision): Promise<void> {
+    if (decision.action === "like" || decision.action === "like_comment") {
+      await deps.store.createCharacterLike(task.actor, task.postId);
+    }
+    if (decision.action === "comment" || decision.action === "like_comment" || decision.action === "reply") {
+      const result = await deps.store.createCharacterComment(task.actor, {
+        postId: task.postId,
+        content: decision.comment,
+        replyTo: task.kind === "reply_eval" ? task.triggerCommentId : undefined,
+        sourceTaskId: task.id,
+      });
+      if (result.status === "rejected") {
+        // 目标已删/开关已关：评论没有落库，无后续可续接
+        deps.log?.("character_comment_rejected", { taskId: task.id, actor: task.actor, reason: result.reason });
+        return;
+      }
+      ensureFollowUpScheduled(result.comment);
     }
   }
+
+  // 反应执行器：昔涟与角色共用一条队列，按 actor 分发各自的决策与落库逻辑。
+  const reactionExecutor: ReactionTaskExecutor = {
+    decide: (task) => (task.actor === "cyrene" ? cyreneDecide(task) : characterDecide(task)),
+    apply: async (task, decision) => {
+      if (task.actor === "cyrene") await cyreneApply(task, decision);
+      else await characterApply(task, decision);
+    },
+  };
+
+  const reactionQueue: ReactionQueue = createReactionQueue({
+    filePath: deps.reactionQueueFilePath ?? defaultReactionQueueFilePath,
+    executor: reactionExecutor,
+    now,
+    log: (event, detail) => deps.log?.(event, detail),
+  });
 
   /** 闸门前置（省一次落盘）：开关关闭或模型未配置时连任务都不入队 */
   function reactionGateOpen(): boolean {
     return reactionsEnabled() && deps.loadVendorConfig() !== null;
   }
 
-  function scheduleUserPostReaction(postId: string): void {
-    if (!reactionGateOpen()) return;
-    enqueueCyreneReaction({ kind: "post_eval", postId });
+  /**
+   * 回复任务入队前统一闸门：按主体分别复核开关与模型配置，再过回复链
+   * 深度闸门——AI 自主接龙到深度上限时收束，等用户插话开启新链。
+   */
+  function enqueueReplyEval(
+    actor: string,
+    trigger: MomentComment,
+    comments: readonly MomentComment[],
+  ): void {
+    if (actor === "cyrene") {
+      if (!reactionGateOpen()) return;
+    } else {
+      // 角色回复走模型：总开关与模型配置缺一不可
+      if (!momentsEnabled()) return;
+      if (deps.loadVendorConfig() === null) return;
+    }
+    if (!withinReplyDepthLimit(comments, trigger.id)) return;
+    enqueueReactionTask({
+      kind: "reply_eval",
+      actor,
+      postId: trigger.postId,
+      triggerCommentId: trigger.id,
+      dueAt: actor === "cyrene" ? computeCyreneDueAt("reply_eval") : computeCharacterDueAt("reply_eval"),
+    });
   }
 
-  function scheduleCommentReply(input: MomentCreateCommentInput, committed: MomentComment): void {
-    // 仅"回复昔涟"的评论才触发回复：昔涟自己的动态，或回复目标是昔涟的评论
-    const feed = deps.store.getFeedItem(input.postId);
+  /**
+   * 评论落库后的续接调度：任何新落库的评论都可能开启下一段互动——
+   * 昔涟动态下的他人评论（或回复昔涟的评论）给昔涟入回复任务；
+   * 回复目标是角色评论的给该角色入回复任务。
+   * 用户、昔涟、角色的评论统一走这里，触发规则一份代码三处复用。
+   */
+  function ensureFollowUpScheduled(comment: MomentComment): void {
+    const feed = deps.store.getFeedItem(comment.postId);
     if (!feed) return;
-    const targetsCyrene =
-      feed.post.author === "cyrene" ||
-      (input.replyTo !== undefined &&
-        feed.comments.some((comment) => comment.id === input.replyTo && comment.author === "cyrene"));
-    if (!targetsCyrene) return;
-    if (!reactionGateOpen()) return;
-    enqueueCyreneReaction({ kind: "reply_eval", postId: input.postId, triggerCommentId: committed.id });
+    const personas = loadPersonas();
+    const isCharacterAuthor = (author: string) =>
+      author !== "user" && author !== "cyrene" && personas.has(author);
+
+    // 昔涟的动态下有人说话：她可能回应（自己的评论除外，不自问自答）
+    if (feed.post.author === "cyrene" && comment.author !== "cyrene") {
+      enqueueReplyEval("cyrene", comment, feed.comments);
+    }
+    // 回复目标是他人的评论：被回复者可能回话
+    if (comment.replyTo) {
+      const target = feed.comments.find((candidate) => candidate.id === comment.replyTo);
+      if (target && target.author !== comment.author) {
+        if (target.author === "cyrene" && comment.author !== "cyrene") {
+          enqueueReplyEval("cyrene", comment, feed.comments);
+        } else if (isCharacterAuthor(target.author)) {
+          enqueueReplyEval(target.author, comment, feed.comments);
+        }
+      }
+    }
+  }
+
+  /**
+   * 角色抽签入队：先抽几位刷到（零人 = 合法冷场），再按活跃度加权抽人，
+   * 每位抽中者独立掷双骰分流——评论骰中走模型表态，未中再掷点赞骰，
+   * 中则零模型成本随机点赞，都未中即刷到但划走。
+   * 掷骰在入队瞬间一次定型，到期执行不重掷——延迟期间世界的任何
+   * 变化都不改变骰子结果，行为可预测可测试。
+   */
+  function scheduleCharacterPostReactions(post: MomentPost): void {
+    if (!momentsEnabled()) return;
+    const personas = [...loadPersonas().values()];
+    if (personas.length === 0) return;
+
+    const candidateCount = pickCandidateCount(random);
+    if (candidateCount === 0) return;
+
+    // 已点赞者跳过：再掷也赞不了第二次，模型表态的点赞路径同样作废
+    const feed = deps.store.getFeedItem(post.id);
+    const likedActors = new Set((feed?.likes ?? []).map((reaction) => reaction.actor));
+
+    for (const persona of pickWeightedCandidates(personas, candidateCount, random)) {
+      if (likedActors.has(persona.nickname)) continue;
+      const outcome = rollReactionDice(persona, random);
+      if (outcome === "silent") continue;
+      // 模型表态任务需要模型配置；随机点赞零模型成本，不受模型闸门限制
+      if (outcome === "post_eval" && deps.loadVendorConfig() === null) continue;
+      enqueueReactionTask({
+        kind: outcome,
+        actor: persona.nickname,
+        postId: post.id,
+        dueAt: computeCharacterDueAt(outcome),
+      });
+    }
+  }
+
+  function scheduleUserPostReaction(post: MomentPost): void {
+    if (reactionGateOpen()) {
+      enqueueCyreneReaction({ kind: "post_eval", postId: post.id });
+    }
+    // 角色抽签自带闸门：昔涟反应关闭不影响角色刷到（两条独立链路）
+    scheduleCharacterPostReactions(post);
   }
 
   /** run 成功收尾：记录 ring buffer → 设置/去重闸门（LLM 前）→ 入队生成。 */
@@ -331,7 +583,7 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
 
     createUserPost: (input) =>
       deps.store.createUserPost(input).then((result) => {
-        if (result.applied) scheduleUserPostReaction(result.value.id);
+        if (result.applied) scheduleUserPostReaction(result.value);
         return result;
       }),
 
@@ -339,7 +591,8 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
 
     createUserComment: (input) =>
       deps.store.createComment(input, "user").then((result) => {
-        if (result.applied) scheduleCommentReply(input, result.value);
+        // 用户评论落库后续接：在昔涟动态下说话、回复昔涟或回复角色都可能引来回应
+        if (result.applied) ensureFollowUpScheduled(result.value);
         return result;
       }),
 
@@ -468,6 +721,10 @@ export const momentsService: MomentsService = createMomentsService({
   buildWorldbookContext: buildMomentsWorldbookContext,
   loadPostImages: loadUserMomentPostImages,
   buildPersona: buildMomentsPersonaPrompt,
+  // 角色注册表：立绘池 ∩ 人设 md，md 随时可改，每次抽签/执行前现读
+  loadPersonas: () => loadCharacterPersonas({
+    log: (event, detail) => console.log(`[Moments] ${event}`, detail ?? ""),
+  }),
   enqueueTask: (label, task) => enqueueLLMTask(label, task),
   runModel: async (messages) => {
     const config = loadMomentsVendorConfig();
