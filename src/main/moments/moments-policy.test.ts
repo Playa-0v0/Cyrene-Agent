@@ -6,12 +6,15 @@ import path from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildMomentsEventKey,
+  canCharacterModelCall,
   canPost,
   defaultMomentsPolicyState,
   localDateKey,
   loadMomentsPolicyState,
+  MAX_CHARACTER_MODEL_CALLS_PER_DAY,
   MAX_POSTS_PER_DAY,
   MIN_POST_INTERVAL_MS,
+  recordCharacterModelCall,
   recordEventKey,
   recordPost,
   RECENT_EVENT_KEYS_CAPACITY,
@@ -110,6 +113,40 @@ describe("状态记账", () => {
     const tomorrow = NOW + 24 * 60 * 60 * 1000;
     state = recordPost(state, tomorrow);
     expect(state.postsToday).toEqual({ date: localDateKey(tomorrow), count: 1 });
+  });
+});
+
+describe("角色模型调用预算", () => {
+  it("未记账时放行；记账递增当日计数", () => {
+    let state = defaultMomentsPolicyState();
+    expect(canCharacterModelCall(state, NOW)).toBe(true);
+
+    state = recordCharacterModelCall(state, NOW);
+    expect(state.characterModelCalls).toEqual({ date: localDateKey(NOW), count: 1 });
+    state = recordCharacterModelCall(state, NOW + 60_000);
+    expect(state.characterModelCalls.count).toBe(2);
+    expect(canCharacterModelCall(state, NOW + 60_000)).toBe(true);
+  });
+
+  it("到达日上限后拒绝，次日自动恢复", () => {
+    const date = localDateKey(NOW);
+    const exhausted = {
+      ...defaultMomentsPolicyState(),
+      characterModelCalls: { date, count: MAX_CHARACTER_MODEL_CALLS_PER_DAY },
+    };
+    expect(canCharacterModelCall(exhausted, NOW)).toBe(false);
+
+    // 昨日记满不影响今天：日期滚动即恢复预算
+    const yesterday = NOW - 24 * 60 * 60 * 1000;
+    const staleDay = {
+      ...defaultMomentsPolicyState(),
+      characterModelCalls: { date: localDateKey(yesterday), count: MAX_CHARACTER_MODEL_CALLS_PER_DAY },
+    };
+    expect(canCharacterModelCall(staleDay, NOW)).toBe(true);
+
+    // 跨天记账从 1 重新起算
+    const rolled = recordCharacterModelCall(staleDay, NOW);
+    expect(rolled.characterModelCalls).toEqual({ date, count: 1 });
   });
 });
 

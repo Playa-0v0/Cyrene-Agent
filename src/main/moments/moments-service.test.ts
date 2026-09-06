@@ -9,7 +9,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { VendorConfig } from "../orchestrator/vendors";
 import type { CharacterPersona } from "./character-personas";
 import type { MomentPostImage, MomentsModelOutput } from "./moments-agent";
-import { defaultMomentsPolicyState, type MomentsPolicyState } from "./moments-policy";
+import {
+  defaultMomentsPolicyState,
+  localDateKey,
+  MAX_CHARACTER_MODEL_CALLS_PER_DAY,
+  type MomentsPolicyState,
+} from "./moments-policy";
 import type {
   ApplyCommentResult,
   MomentAuthor,
@@ -318,6 +323,7 @@ interface HarnessOptions {
   momentsEnabled?: boolean;
   cyreneMomentsReactionsEnabled?: boolean;
   cyreneMomentsPostingEnabled?: boolean;
+  momentsCharacterReactionsEnabled?: boolean;
   /** null 表示模型未配置；缺省为已配置 */
   vendorConfig?: VendorConfig | null;
   /** 模型响应：单值恒返回；数组按调用顺序依次消耗（驱动多段对话链） */
@@ -376,6 +382,7 @@ function createHarness(options: HarnessOptions = {}) {
     momentsEnabled: options.momentsEnabled ?? true,
     cyreneMomentsReactionsEnabled: options.cyreneMomentsReactionsEnabled ?? true,
     cyreneMomentsPostingEnabled: options.cyreneMomentsPostingEnabled ?? false,
+    momentsCharacterReactionsEnabled: options.momentsCharacterReactionsEnabled ?? true,
   };
   // 策略状态用内存版，测试不落盘也不碰 electron
   const policy: { current: MomentsPolicyState } = { current: defaultMomentsPolicyState() };
@@ -924,6 +931,101 @@ describe("moments service 昔涟×角色互动闭环与回复链", () => {
       postId: "moment_cy1",
       triggerCommentId: "comment_c1",
     });
+  });
+});
+
+describe("moments service 角色开关与模型调用预算", () => {
+  it("角色互动开关关闭：用户发帖不触发角色抽签，昔涟反应不受影响", async () => {
+    const h = createHarness({
+      momentsCharacterReactionsEnabled: false,
+      loadPersonas: () => new Map([["万敌", makePersona()]]),
+    });
+
+    await h.service.createUserPost({ text: "第一条动态" });
+
+    // 昔涟自己的表态照常入队，角色链路整体静默
+    const tasks = readQueueTasks(h.queueFile);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({ kind: "post_eval", actor: "cyrene" });
+  });
+
+  it("中途关闭开关：已入队的角色模型任务到期作废，不再调模型", async () => {
+    const h = createHarness({
+      cyreneMomentsReactionsEnabled: false,
+      modelResponse: '{"action":"comment","comment":"好耶"}',
+      random: scriptedRandom([0.4, 0.5, 0.01, 0.5, 0.5]),
+      loadPersonas: () => new Map([["万敌", makePersona()]]),
+    });
+    await h.service.createUserPost({ text: "第一条动态" });
+    expect(readQueueTasks(h.queueFile)).toHaveLength(1);
+
+    // 入队时开关还开着，到期时已关闭：世界已变，任务作废
+    h.settings.momentsCharacterReactionsEnabled = false;
+    h.clock.now += 40 * 60_000;
+    await h.service.drainReactionQueue();
+
+    expect(h.runModel).not.toHaveBeenCalled();
+    expect(h.fake.state.characterComments).toEqual([]);
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+    expect(h.log).toHaveBeenCalledWith(
+      "reaction_task_stale",
+      expect.objectContaining({ reason: "character_reactions_disabled" }),
+    );
+  });
+
+  it("模型调用记账：角色表态消耗一次当日预算", async () => {
+    const h = createHarness({
+      cyreneMomentsReactionsEnabled: false,
+      modelResponse: '{"action":"comment","comment":"好耶"}',
+      random: scriptedRandom([0.4, 0.5, 0.01, 0.5, 0.5]),
+      loadPersonas: () => new Map([["万敌", makePersona()]]),
+    });
+    await h.service.createUserPost({ text: "第一条动态" });
+    h.clock.now += 40 * 60_000;
+    await h.service.drainReactionQueue();
+
+    expect(h.fake.state.characterComments).toHaveLength(1);
+    expect(h.policy.current.characterModelCalls).toEqual({
+      date: localDateKey(h.clock.now),
+      count: 1,
+    });
+  });
+
+  it("模型调用日上限：到达后模型任务作废，随机点赞照常落库", async () => {
+    const h = createHarness({
+      cyreneMomentsReactionsEnabled: false,
+      random: scriptedRandom([
+        0.4,        // 抽签：2 位角色刷到
+        0.4, 0.4,   // 加权抽取：先长夜月（权重 0.7）后万敌（权重 0.3）
+        0.5, 0.05,  // 长夜月：点赞骰命中 → 随机点赞
+        0.5, 0.5,   // 长夜月延迟 40 分钟
+        0.01,       // 万敌：评论骰命中 → 走模型表态
+        0.5, 0.5,   // 万敌延迟 40 分钟
+      ]),
+      loadPersonas: () => new Map([
+        ["万敌", makePersona()],
+        ["长夜月", makePersona({ nickname: "长夜月", assetFileName: "长夜月.png", activityWeight: 0.7 })],
+      ]),
+    });
+    await h.service.createUserPost({ text: "第一条动态" });
+    expect(readQueueTasks(h.queueFile)).toHaveLength(2);
+
+    // 当日预算已耗尽：模型任务静默作废，点赞不花钱不受影响
+    h.policy.current.characterModelCalls = {
+      date: localDateKey(h.clock.now),
+      count: MAX_CHARACTER_MODEL_CALLS_PER_DAY,
+    };
+    h.clock.now += 40 * 60_000;
+    await h.service.drainReactionQueue();
+
+    expect(h.runModel).not.toHaveBeenCalled();
+    expect(h.fake.state.characterLikes).toEqual([{ nickname: "长夜月", postId: "moment_post1" }]);
+    expect(h.fake.state.characterComments).toEqual([]);
+    expect(readQueueTasks(h.queueFile)).toEqual([]);
+    expect(h.log).toHaveBeenCalledWith(
+      "reaction_task_stale",
+      expect.objectContaining({ reason: "character_daily_model_limit" }),
+    );
   });
 });
 

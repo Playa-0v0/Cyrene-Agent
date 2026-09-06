@@ -109,6 +109,7 @@ export interface GeneralSettings extends ChatAppearanceSettings {
   chatMomentsContextEnabled: boolean;
   cyreneMomentsPostingEnabled: boolean;
   cyreneMomentsReactionsEnabled: boolean;
+  momentsCharacterReactionsEnabled: boolean;
   petAlwaysOnTop: boolean;
   petVisible: boolean;
   petZoom: number;

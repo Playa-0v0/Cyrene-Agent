@@ -35,6 +35,8 @@ export interface GeneralSettings extends ChatAppearanceSettings {
   cyreneMomentsPostingEnabled: boolean;
   /** 昔涟对朋友圈动态的点赞/评论反应；默认开启（Feed 内被动行为，不打扰）。 */
   cyreneMomentsReactionsEnabled: boolean;
+  /** 角色对朋友圈动态的点赞/评论/互聊；默认开启（有独立日调用上限兜底成本）。 */
+  momentsCharacterReactionsEnabled: boolean;
   petAlwaysOnTop: boolean;
   petVisible: boolean;
   /** 桌宠缩放因子：1.0=默认，0.5~2.0，窗口与模型同步等比缩放。 */

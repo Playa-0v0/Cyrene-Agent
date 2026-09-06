@@ -46,8 +46,12 @@ export function registerMomentsIpc(ipcOption?: IpcScope): void {
     return true;
   });
 
-  // 角色行为的提交时开关复核：只受朋友圈总开关约束（角色的独立细粒度开关后续随设置接入）
-  momentsStore.setCharacterBehaviorGate(() => loadGeneralSettings().momentsEnabled);
+  // 角色行为的提交时开关复核：总开关 + 角色互动开关双闸。
+  // 随机点赞不走决策阶段，这里是它唯一的开关防线（入队前闸门关掉的是"还没入队的"）。
+  momentsStore.setCharacterBehaviorGate(() => {
+    const settings = loadGeneralSettings();
+    return settings.momentsEnabled && settings.momentsCharacterReactionsEnabled;
+  });
 
   // 角色入驻名单：立绘池 ∩ 人设 md。store 只信任名单内的角色身份写入（渲染端无法伪造）。
   // 启动时先注册一次——重启后队列里存留的角色任务（如随机点赞）会先于任何抽签被扫描执行

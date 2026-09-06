@@ -68,8 +68,10 @@ import {
 } from "./character-personas";
 import {
   buildMomentsEventKey,
+  canCharacterModelCall,
   canPost,
   loadMomentsPolicyState,
+  recordCharacterModelCall,
   recordEventKey,
   recordPost,
   saveMomentsPolicyState,
@@ -143,6 +145,7 @@ export interface MomentsServiceDeps {
     momentsEnabled: boolean;
     cyreneMomentsReactionsEnabled: boolean;
     cyreneMomentsPostingEnabled: boolean;
+    momentsCharacterReactionsEnabled: boolean;
   };
   /** 返回 null 表示模型未配置（缺 API key 等），反应调度直接跳过 */
   loadVendorConfig: () => VendorConfig | null;
@@ -211,9 +214,10 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     return settings.momentsEnabled && settings.cyreneMomentsReactionsEnabled;
   }
 
-  /** 朋友圈总开关（角色链路的闸门；角色的独立细粒度开关后续随设置接入） */
-  function momentsEnabled(): boolean {
-    return deps.loadGeneralSettings().momentsEnabled;
+  /** 角色链路闸门：朋友圈总开关 + 角色互动开关，两者都开角色才刷朋友圈。 */
+  function characterReactionsEnabled(): boolean {
+    const settings = deps.loadGeneralSettings();
+    return settings.momentsEnabled && settings.momentsCharacterReactionsEnabled;
   }
 
   /**
@@ -329,11 +333,25 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     | { ok: false; outcome: ReactionDecideOutcome } {
     const persona = loadPersonas().get(task.actor);
     if (!persona) return { ok: false, outcome: { type: "stale", reason: "unknown_actor" } };
-    if (!momentsEnabled()) return { ok: false, outcome: { type: "stale", reason: "moments_disabled" } };
+    if (!characterReactionsEnabled()) return { ok: false, outcome: { type: "stale", reason: "character_reactions_disabled" } };
     if (deps.loadVendorConfig() === null) return { ok: false, outcome: { type: "stale", reason: "model_not_configured" } };
     const feed = deps.store.getFeedItem(task.postId);
     if (!feed) return { ok: false, outcome: { type: "stale", reason: "post_not_found" } };
     return { ok: true, feed, persona };
+  }
+
+  /**
+   * 角色模型调用预算闸门：到达日上限时返回作废结果，有余量则先记账再放行。
+   * 记账在调用前完成——请求本身可能失败重试，重试也是真实调用，同样占预算；
+   * 随机点赞零模型成本，不经过这里。
+   */
+  function spendCharacterModelCall(): ReactionDecideOutcome | null {
+    const state = loadPolicyState();
+    if (!canCharacterModelCall(state, now())) {
+      return { type: "stale", reason: "character_daily_model_limit" };
+    }
+    savePolicyState(recordCharacterModelCall(state, now()));
+    return null;
   }
 
   /**
@@ -362,6 +380,8 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     };
 
     if (task.kind === "post_eval") {
+      const gated = spendCharacterModelCall();
+      if (gated) return gated;
       const output = await deps.runModel(buildCharacterPostEvalMessages(baseInput));
       if (output.kind !== "text") return { type: "retry", reason: output.reason };
       const decision = parseCharacterPostDecision(output.text);
@@ -379,6 +399,8 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
       if (!withinReplyDepthLimit(feed.comments, task.triggerCommentId)) {
         return { type: "stale", reason: "reply_depth_exceeded" };
       }
+      const gated = spendCharacterModelCall();
+      if (gated) return gated;
       const output = await deps.runModel(buildCharacterReplyEvalMessages({
         ...baseInput,
         replyTargetId: task.triggerCommentId,
@@ -451,8 +473,8 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
     if (actor === "cyrene") {
       if (!reactionGateOpen()) return;
     } else {
-      // 角色回复走模型：总开关与模型配置缺一不可
-      if (!momentsEnabled()) return;
+      // 角色回复走模型：角色开关与模型配置缺一不可
+      if (!characterReactionsEnabled()) return;
       if (deps.loadVendorConfig() === null) return;
     }
     if (!withinReplyDepthLimit(comments, trigger.id)) return;
@@ -503,7 +525,7 @@ export function createMomentsService(deps: MomentsServiceDeps): MomentsService {
    * 变化都不改变骰子结果，行为可预测可测试。
    */
   function scheduleCharacterPostReactions(post: MomentPost): void {
-    if (!momentsEnabled()) return;
+    if (!characterReactionsEnabled()) return;
     const personas = [...loadPersonas().values()];
     if (personas.length === 0) return;
 

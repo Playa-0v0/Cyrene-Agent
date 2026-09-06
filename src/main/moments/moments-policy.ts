@@ -19,6 +19,11 @@ import { app } from "electron";
 export const MIN_POST_INTERVAL_MS = 6 * 60 * 60 * 1000;
 /** 每日发帖上限（是上限不是配额，允许 0/1/2 条） */
 export const MAX_POSTS_PER_DAY = 2;
+/**
+ * 角色每日模型调用上限（post_eval + reply_eval 合计）。
+ * 随机点赞零模型成本不计入；昔涟不计入，沿用她自己的频率设计。
+ */
+export const MAX_CHARACTER_MODEL_CALLS_PER_DAY = 40;
 /** 昔涟生成动态的文案长度上限（用户输入的 2000 上限是另一层，不混用） */
 export const MOMENTS_CYRENE_POST_TEXT_MAX = 300;
 /** 去重键 FIFO 容量 */
@@ -32,10 +37,17 @@ export interface MomentsPolicyState {
   postsToday: { date: string; count: number };
   /** 已发事件的去重键（run 粒度，容量 64 FIFO 淘汰） */
   recentEventKeys: string[];
+  /** 角色当日模型调用计数（按本地日期滚动，跨重启不重置） */
+  characterModelCalls: { date: string; count: number };
 }
 
 export function defaultMomentsPolicyState(): MomentsPolicyState {
-  return { lastPostAt: null, postsToday: { date: "", count: 0 }, recentEventKeys: [] };
+  return {
+    lastPostAt: null,
+    postsToday: { date: "", count: 0 },
+    recentEventKeys: [],
+    characterModelCalls: { date: "", count: 0 },
+  };
 }
 
 function pad2(value: number): string {
@@ -102,6 +114,22 @@ export function recordPost(state: MomentsPolicyState, now: number): MomentsPolic
   return { ...state, lastPostAt: now, postsToday: { date, count } };
 }
 
+// ── 角色模型调用预算 ────────────────────────────────────────────
+
+/** 当日角色模型调用是否还有余量（上限只拦模型类任务，随机点赞不查这里）。 */
+export function canCharacterModelCall(state: MomentsPolicyState, now: number): boolean {
+  const today = localDateKey(now);
+  const count = state.characterModelCalls.date === today ? state.characterModelCalls.count : 0;
+  return count < MAX_CHARACTER_MODEL_CALLS_PER_DAY;
+}
+
+/** 角色模型调用记账：日期滚动，当日 +1。 */
+export function recordCharacterModelCall(state: MomentsPolicyState, now: number): MomentsPolicyState {
+  const date = localDateKey(now);
+  const count = state.characterModelCalls.date === date ? state.characterModelCalls.count + 1 : 1;
+  return { ...state, characterModelCalls: { date, count } };
+}
+
 // ── 持久化（moments-state.json，照 proactive-state-store 模式） ───
 
 function getStatePath(): string {
@@ -118,6 +146,7 @@ export function loadMomentsPolicyState(): MomentsPolicyState {
       ...base,
       ...raw,
       postsToday: { ...base.postsToday, ...(raw.postsToday ?? {}) },
+      characterModelCalls: { ...base.characterModelCalls, ...(raw.characterModelCalls ?? {}) },
       recentEventKeys: Array.isArray(raw.recentEventKeys) ? raw.recentEventKeys : [],
     };
   } catch {
