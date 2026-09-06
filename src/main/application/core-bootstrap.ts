@@ -97,6 +97,17 @@ function degradedMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+// 启动耗时埋点：无条件打印各阶段耗时与结束时刻（相对进程启动），供启动性能排查
+async function timedStep<T>(name: string, fn: () => T | Promise<T>): Promise<T> {
+  const start = performance.now();
+  try {
+    return await fn();
+  } finally {
+    const end = performance.now();
+    console.log(`[StartupTiming] core/${name} ${Math.round(end - start)}ms (at ${Math.round(end)}ms)`);
+  }
+}
+
 export async function startCore(deps: CoreDependencies): Promise<CoreResult> {
   const { shell, readiness, activation, shutdown } = deps;
 
@@ -105,7 +116,7 @@ export async function startCore(deps: CoreDependencies): Promise<CoreResult> {
 
   // Skill 系统：失败只降级，不阻塞聊天
   try {
-    await deps.initSkills();
+    await timedStep("initSkills", () => deps.initSkills());
   } catch (error) {
     console.error("[Core] initSkills failed:", error);
     readiness.markDegraded({ capability: "skills", message: degradedMessage(error), at: Date.now(), error });
@@ -116,7 +127,7 @@ export async function startCore(deps: CoreDependencies): Promise<CoreResult> {
 
   // SRT 沙箱：失败不阻塞启动（fallback 到直接 spawn）
   try {
-    await deps.initSandbox();
+    await timedStep("initSandbox", () => deps.initSandbox());
   } catch (error) {
     console.error("[Core] initSandbox failed at startup:", error);
     readiness.markDegraded({ capability: "sandbox", message: degradedMessage(error), at: Date.now(), error });
@@ -127,7 +138,7 @@ export async function startCore(deps: CoreDependencies): Promise<CoreResult> {
 
   // RAG：失败记录降级，聊天仍允许启动
   try {
-    await deps.initRag();
+    await timedStep("initRag", () => deps.initRag());
   } catch (error) {
     console.error("[Core] RAG init FAILED:", error);
     readiness.markDegraded({ capability: "rag", message: degradedMessage(error), at: Date.now(), error });
@@ -137,8 +148,10 @@ export async function startCore(deps: CoreDependencies): Promise<CoreResult> {
 
   // channels 只装配并同步注册内置 adapter；网络启动仍在 background 阶段。
   const channels = deps.createChannels(runtime, services);
-  channels.initialize();
-  await channels.adaptersRegistered;
+  await timedStep("channels-adapters", async () => {
+    channels.initialize();
+    await channels.adaptersRegistered;
+  });
 
   // scheduler store 先加载并注册 IPC，再启动插件：插件调度服务写入的是
   // 已加载的 store，不会覆盖磁盘任务；插件启停联动也在此时接线。
@@ -146,13 +159,13 @@ export async function startCore(deps: CoreDependencies): Promise<CoreResult> {
   scheduler.initialize();
 
   // 插件严格晚于内置 adapter id 预留，避免插件抢占 feishu/wechat/qq 等内置 id。
-  const plugins = await deps.startPlugins(services, scheduler);
+  const plugins = await timedStep("startPlugins", () => deps.startPlugins(services, scheduler));
 
   // 注册聊天渲染进程可能调用的全部 IPC 处理器 —— 必须先于 chat.load()
   deps.registerCoreIpc({ ipc: shell.ipc, runtime, services, channels, scheduler });
 
   // 全部处理器就绪后才加载聊天页面；页面加载失败属于致命错误（向上抛出）
-  await shell.chat.load();
+  await timedStep("chat-load", () => shell.chat.load());
 
   // 桌宠：仅在设置开启时创建（不创建后隐藏、不闪现）；辅助窗口按设置创建
   const generalSettings = deps.loadGeneralSettings();
@@ -214,10 +227,13 @@ export async function startCore(deps: CoreDependencies): Promise<CoreResult> {
     loadingShownAt: shell.loadingShownAt,
     minimumDurationMs: deps.minimumSplashMs,
   });
+  // 窗口已对用户可见的时刻锚点：在此之后打印结束的后台任务，都是“窗口出来后还在跑”的部分
+  console.log(`[StartupTiming] core/windows-revealed (at ${Math.round(performance.now())}ms)`);
   deps.markStartupWindowsReady();
 
   // 主窗口可激活：消费启动期间排队的激活请求
   await activation.markReady();
+  console.log(`[StartupTiming] core/startCore-total ${Math.round(performance.now())}ms`);
 
   return { runtime, services, channels, plugins, scheduler };
 }

@@ -86,7 +86,7 @@ describe("Work run_verification 收口", () => {
     expect(runStep).toHaveBeenCalledOnce();
     expect(runStep.mock.calls[0][0]).toMatchObject({
       executable: "builtin:vitest",
-      args: ["--reporter=verbose"],
+      args: ["--reporter=default"],
     });
   });
 

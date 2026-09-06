@@ -220,7 +220,7 @@ export class AgentRunController {
       const ack = await api.run({
         messages: this.input.session.messages.slice(-16).map((item) => ({
           role: item.role,
-          content: item.content,
+          content: item.modelContext?.trim() || item.content,
           at: item.at,
         })),
         userTurnId: this.input.userMessageId,

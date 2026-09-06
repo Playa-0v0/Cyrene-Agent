@@ -193,9 +193,10 @@ export const MODEL_REASONING_RULES: readonly ModelReasoningRule[] = [
   // ── glm（智谱）──
   // 精确型号在前；glm-5 基础型号放在精确型号之后（兜底更宽的 glm-5 系列）。
   // GLM-5.3 / GLM-5.3-Flash：强制思考模型（thinking.type=disabled 服务端报错，
-  // 官方文档 2026-08-26；z.ai 文档明确 FLASH 同为强制思考）。
-  // 支持 low/high/max 三档 effort。auto 档显式映射 high —— 服务端默认 max，
-  // auto 不发字段 ≡ max，多步任务思考爆炸。
+  // 官方文档 2026-08-26；z.ai 文档明确 FLASH 同为强制思考；
+  // 2026-09-06 实测方舟托管端点 api/coding/v3 同样返回 400，强制思考跨端点成立）。
+  // 支持 low/high/max 三档 effort（方舟端点 reasoning_effort 实测可用）。
+  // auto 档显式映射 high —— 服务端默认 max，auto 不发字段 ≡ max，多步任务思考爆炸。
   { providerId: "glm", modelPattern: /^glm-5\.3/i, capability: {
     control: "toggle-effort",
     supportedEfforts: ["low", "high", "max"],
@@ -340,13 +341,27 @@ export const MODEL_REASONING_RULES: readonly ModelReasoningRule[] = [
 /**
  * 按 (providerId, model) 解析推理 capability。
  * 未命中任何规则时返回兜底 { control: "none", requestStyle: "none", supportsDisable: false }。
+ *
+ * 模型名推断兜底：厂商家族与模型家族不一致时（自定义端点 / 托管场景，如方舟
+ * coding plan 上跑 glm-5.3-flash，档案厂商登记为「豆包（火山方舟）」），第一轮
+ * 同厂商匹配只能命中表尾通配兜底。此时按模型名跨家族找回真正的推理规则，
+ * 使推理控制在托管端点上同样可用。各家族表尾的通配兜底规则均引用同一个
+ * UNKNOWN_CAPABILITY 常量，用恒等判断跳过即可，不会误匹配。
  */
 export function resolveReasoningCapability(
   providerId: string,
   model: string,
 ): ReasoningCapability {
+  // 第一轮：同厂商精确规则（表尾通配兜底不算命中，留给第二轮）
   for (const rule of MODEL_REASONING_RULES) {
-    if (rule.providerId === providerId && rule.modelPattern.test(model)) {
+    if (rule.providerId === providerId && rule.modelPattern.test(model)
+        && rule.capability !== UNKNOWN_CAPABILITY) {
+      return rule.capability;
+    }
+  }
+  // 第二轮：模型名跨家族推断（第一轮未出真实规则时兜底）
+  for (const rule of MODEL_REASONING_RULES) {
+    if (rule.modelPattern.test(model) && rule.capability !== UNKNOWN_CAPABILITY) {
       return rule.capability;
     }
   }

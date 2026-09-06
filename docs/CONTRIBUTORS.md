@@ -39,6 +39,15 @@
 - 插件系统命名空间事件总线：`host:*`/`plugin:<id>:` 命名空间防伪造、监听器超时与自动退订（PR #53）
 - 插件动态提示词 Provider：运行时上下文扩展点，含模式过滤与配额限制（PR #55）
 
+### lucifergzsz414 ([lucifergzsz414](https://github.com/lucifergzsz414))
+- 渠道上下文绑定：外部聊天（如微信）可绑定桌面对话并共享文字上下文，消息双向镜像写入，绑定关系持久化（PR #62）
+
+---
+
+### Modusensus ([modusensus](https://github.com/modusensus))
+- 修复厂商/模型家族错配时思考控制失效：托管端点（如方舟 coding plan 跑 GLM）按模型名跨家族找回推理规则，下拉禁用与请求缺字段问题一并解决（PR #67）
+- 修复推理面板 Segmented 滑块在 antd v6 下白块盖字（PR #67）
+
 ---
 
 ## 特别鸣谢

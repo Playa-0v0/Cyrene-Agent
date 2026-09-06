@@ -32,10 +32,10 @@ function call(id: string, args: Record<string, unknown> = { to: "a@example.com" 
 }
 
 describe("dispatchToolCall truthful execution", () => {
-  it("preserves both the head and tail when pruning output above 8192 characters", () => {
+  it("preserves both the head and tail when pruning output above 30000 characters", () => {
     const output = [
       "HEAD_MARKER",
-      "a".repeat(8_500),
+      "a".repeat(31_000),
       "TAIL_MARKER",
     ].join("\n");
 
@@ -45,7 +45,15 @@ describe("dispatchToolCall truthful execution", () => {
     expect(result.preview).toContain("HEAD_MARKER");
     expect(result.preview).toContain("[... tool result middle pruned ...]");
     expect(result.preview).toContain("TAIL_MARKER");
-    expect(result.preview.length).toBeLessThanOrEqual(8_192);
+    // 预览预算 = 头 12K + 尾 8K + 剪枝标记
+    expect(result.preview.length).toBeLessThanOrEqual(12_000 + 8_000 + 100);
+  });
+
+  it("returns medium output (between 8K and 30K) untruncated", () => {
+    const output = "b".repeat(20_000);
+    const result = truncateOutput(output, DEFAULT_TRUNCATION, "call-1");
+    expect(result.truncated).toBe(false);
+    expect(result.preview).toBe(output);
   });
 
   it("preserves typed error facts in the failure observation", async () => {
@@ -140,7 +148,7 @@ describe("dispatchToolCall truthful execution", () => {
   });
 
   it("persists the complete normal-tool result before exposing its pruned preview", async () => {
-    const output = `HEAD\n${"MIDDLE".repeat(2_000)}\nTAIL`;
+    const output = `HEAD\n${"MIDDLE".repeat(6_000)}\nTAIL`;
     const put = vi.fn(async () => ({
       recordId: "a".repeat(64),
       resultRef: `tool-result://v1/${"a".repeat(64)}`,
@@ -176,7 +184,8 @@ describe("dispatchToolCall truthful execution", () => {
     expect(result.preview).toContain("HEAD");
     expect(result.preview).toContain("TAIL");
     expect(result.preview).not.toBe(output);
-    expect(result.preview?.length).toBeLessThanOrEqual(8_192);
+    // 预览预算 = 头 12K + 尾 8K + 剪枝标记
+    expect(result.preview?.length).toBeLessThanOrEqual(12_000 + 8_000 + 100);
   });
 
   it("persists short normal-tool results too", async () => {

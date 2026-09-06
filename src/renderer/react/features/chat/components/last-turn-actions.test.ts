@@ -47,4 +47,18 @@ describe("resolveRevisableLastTurn", () => {
       { id: "u4", role: "user", content: "还没有回复" },
     ], "chat")).toBeNull();
   });
+
+  it("does not expose actions when the final user message came from a bound channel", () => {
+    expect(resolveRevisableLastTurn([
+      { id: "u3", role: "user", content: "微信消息", channelSource: { channel: "wechat" as const } },
+      { id: "a3", role: "assistant", content: "渠道回复" },
+    ], "chat")).toBeNull();
+  });
+
+  it("does not expose actions when the final assistant message is mirrored to a bound channel", () => {
+    expect(resolveRevisableLastTurn([
+      { id: "u3", role: "user", content: "渠道消息" },
+      { id: "a3", role: "assistant", content: "QQ 回复", channelSource: { channel: "qq" as const } },
+    ], "chat")).toBeNull();
+  });
 });

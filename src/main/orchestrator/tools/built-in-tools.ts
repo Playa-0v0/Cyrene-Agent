@@ -22,6 +22,7 @@ import { readImageUrlTool } from "./builtin-tools/read-image-url-tool";
 import { installMcpServerTool } from "./builtin-tools/install-mcp-tool";
 import { runVerificationTool } from "./builtin-tools/run-verification-tool";
 import { runShellTool } from "./builtin-tools/run-shell-tool";
+import { shellJobTool } from "./builtin-tools/shell-job-tool";
 
 let sendToLive2DWindow: (channel: string, payload?: unknown) => void = () => {};
 export function setLive2dWindowSender(sender: typeof sendToLive2DWindow): void {
@@ -33,6 +34,8 @@ toolRegistry.register(fetchUrlTool);
 toolRegistry.register(downloadFileTool);
 toolRegistry.register(readImageUrlTool);
 toolRegistry.register(runShellTool);
+// run_shell 的后台配套工具：紧跟其后注册，工具目录里相邻展示
+toolRegistry.register(shellJobTool);
 toolRegistry.register(runVerificationTool);
 toolRegistry.register(installMcpServerTool);
 logger.info(LogTag.BuiltinTools, "registered: fetch_url / download_file / run_shell / install_mcp_server");

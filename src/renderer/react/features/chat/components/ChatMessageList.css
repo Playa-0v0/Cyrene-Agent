@@ -11,6 +11,41 @@
   min-height: 100%;
 }
 
+.cy-message-list__channel-context {
+  position: sticky;
+  z-index: 2;
+  top: 8px;
+  display: flex;
+  width: max-content;
+  max-width: min(100%, 360px);
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto 16px;
+  padding: 6px 12px;
+  border: 1px solid var(--cy-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cy-bg-workspace) 88%, transparent);
+  box-shadow: 0 4px 16px rgb(43 33 54 / 8%);
+  color: var(--cy-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  backdrop-filter: blur(12px);
+}
+
+.cy-message-list__channel-context > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cy-message-list__channel-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--cy-accent);
+}
+
 .cy-message {
   width: 100%;
   max-width: none;
@@ -72,6 +107,23 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 10px;
+}
+
+.cy-message__channel-source {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: currentColor;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  opacity: 0.68;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cy-message--assistant .cy-message__channel-source {
+  color: var(--cy-text-secondary);
 }
 
 .cy-message__attachments {

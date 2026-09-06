@@ -17,7 +17,7 @@ import { getRunReviewTracker } from "../review/run-review-tracker";
 
 const LOG_PREFIX = "[FsTools]";
 
-const READ_MAX_BYTES = 256 * 1024;       // 单文件最多读 256KB
+const READ_MAX_BYTES = 10 * 1024 * 1024;  // 内存保护上限：超过直接拒绝（不做静默截断）
 const LIST_MAX_ENTRIES = 200;            // 单次目录列举最多 200 项
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 图片最多 5MB
 
@@ -76,11 +76,21 @@ async function executeReadFile(args: Record<string, unknown>): Promise<string> {
     return JSON.stringify({ success: false, errorCode: "READ_FAILED", error: "读取失败: " + msg, retryable: false });
   }
 
-  const truncatedSize = buf.length > READ_MAX_BYTES;
-  const slice = truncatedSize ? buf.subarray(0, READ_MAX_BYTES) : buf;
+  // 超过内存保护上限直接拒绝：不做静默截断——截断后统计的 totalLines 会严重低报，
+  // 模型翻页到低报行数时拿到空内容误判 EOF，后半文件静默丢失
+  if (buf.length > READ_MAX_BYTES) {
+    return JSON.stringify({
+      success: false,
+      errorCode: "FILE_TOO_LARGE",
+      error: `文件超过 ${humanBytes(READ_MAX_BYTES)}（当前 ${humanBytes(stat.size)}），read_file 暂不支持读取。可用 search_text 直接获取匹配行的上下文。`,
+      path: filePath,
+      size: humanBytes(stat.size),
+      retryable: false,
+    });
+  }
 
   // 二进制启发：前 4KB 出现大量 \0 → 当作二进制
-  const head = slice.subarray(0, Math.min(slice.length, 4096));
+  const head = buf.subarray(0, Math.min(buf.length, 4096));
   let nullCount = 0;
   for (let i = 0; i < head.length; i++) if (head[i] === 0) nullCount++;
   if (nullCount > head.length * 0.05) {
@@ -94,11 +104,30 @@ async function executeReadFile(args: Record<string, unknown>): Promise<string> {
     });
   }
 
-  const text = slice.toString("utf8");
-  const lines = text.split(/\r?\n/);
-  const totalLines = lines.length;
-  const sliceLines = lines.slice(startLine - 1, startLine - 1 + maxLines);
-  const endLine = startLine + sliceLines.length - 1;
+  const text = buf.toString("utf8");
+  // 单次扫描：统计真实总行数，同时只收集 startLine 起的 maxLines 行。
+  // 不用 split 建全量行数组——10MB 短行文件会产生百万级字符串对象。
+  // 换行语义对齐旧的 split(/\r?\n/)：\n 是唯一分隔符，行内容不含结尾的 \r；EOF 无换行时末尾算一行。
+  const windowLines: string[] = [];
+  let totalLines = 1;
+  let currentLine = 1;
+  let lineStart = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 10 /* \n */) {
+      if (currentLine >= startLine && windowLines.length < maxLines) {
+        let lineEnd = i;
+        if (lineEnd > lineStart && text.charCodeAt(lineEnd - 1) === 13 /* \r */) lineEnd--;
+        windowLines.push(text.slice(lineStart, lineEnd));
+      }
+      currentLine++;
+      totalLines++;
+      lineStart = i + 1;
+    }
+  }
+  if (currentLine >= startLine && windowLines.length < maxLines) {
+    windowLines.push(text.slice(lineStart));
+  }
+  const endLine = startLine + windowLines.length - 1;
 
   // 结构化输出
   const result = {
@@ -106,14 +135,14 @@ async function executeReadFile(args: Record<string, unknown>): Promise<string> {
     startLine,
     endLine,
     totalLines,
-    content: sliceLines.map((line, i) => {
+    content: windowLines.map((line, i) => {
       const ln = startLine + i;
       return String(ln).padStart(5, " ") + " | " + line;
     }).join("\n"),
-    truncated: truncatedSize,
+    truncated: false,
   };
 
-  console.log(LOG_PREFIX, "read_file 完成: lines=" + startLine + ".." + endLine + "/" + totalLines + " truncated=" + truncatedSize);
+  console.log(LOG_PREFIX, "read_file 完成: lines=" + startLine + ".." + endLine + "/" + totalLines);
   return JSON.stringify(result);
 }
 
@@ -122,7 +151,8 @@ toolRegistry.register({
   name: "读取文件",
   description:
     "读取本地文本文件（小说、笔记、代码、配置、日志等）。返回带行号的文本内容。" +
-    "文件超过 256KB 会自动截断；可用 startLine/maxLines 翻页。\n\n" +
+    "支持最大 10MB 的文本文件；totalLines 是真实总行数，可用 startLine/maxLines 精确翻页。\n" +
+    "文件超过 10MB 会明确报错，改用 search_text 直接获取匹配行的上下文。\n\n" +
     "何时用：\n" +
     "- 用户消息里出现任何本地文件路径、文件名、扩展名（.txt/.md/.json/.py/.log 等）\n" +
     "- 用户问'这个文件写了什么''看看 xxx'\n" +

@@ -172,6 +172,15 @@ export function resolveStickerImagePath(stickerId: string): string | null {
 }
 
 /** Dispatcher 配置（依赖注入）。 */
+export interface BoundConversationMessageMetadata {
+  channel: ChannelId;
+  chatType: "private" | "group";
+  senderName?: string;
+  modelContext?: string;
+  /** 昔涟本轮选择、且目标渠道声明可发送的内置或用户表情包 ID。 */
+  sticker?: string;
+}
+
 export interface DispatcherDeps {
   manager: ChannelManager;
   /** 渲染端 chatWindow 用于镜像显示（可选） */
@@ -193,6 +202,7 @@ export interface DispatcherDeps {
     conversationId: string,
     role: "user" | "assistant",
     content: string,
+    metadata: BoundConversationMessageMetadata,
   ) => void | Promise<void>;
   /** 可选 — 把文本合成成音频。失败返回 null，dispatcher 会跳过 audio。 */
   synthesizeTts?: (text: string, context: DispatcherTtsContext) => Promise<Buffer | DispatcherTtsResult | null>;
@@ -358,7 +368,13 @@ export class ChannelDispatcher {
     }
     if (boundConversationId && this.deps.appendBoundConversationMessage) {
       try {
-        await this.deps.appendBoundConversationMessage(boundConversationId, "user", formatChannelUserText(msg));
+        const agentUserText = formatChannelUserText(msg);
+        await this.deps.appendBoundConversationMessage(boundConversationId, "user", msg.text, {
+          channel: msg.channel,
+          chatType: msg.chatType ?? "private",
+          senderName: msg.senderName,
+          modelContext: agentUserText === msg.text ? undefined : agentUserText,
+        });
       } catch (err) {
         console.warn(LOG, "appendBoundConversationMessage (incoming) 失败:", err);
       }
@@ -431,11 +447,14 @@ export class ChannelDispatcher {
     // sticker 决定纳入 OutgoingMessage.parts（统一消息模型）。
     // 由 onAgentRunFinished 计算（同一个 embedding 匹配结果，避免重复计算），
     // dispatcher 只负责解析本地路径 + 按 cap 降级。
-    // 桌面聊天窗的 sticker 由 onAgentRunFinished 内部 IPC 广播承担，此处不重复。
+    // 普通桌面 AG-UI 会话由 onAgentRunFinished 的 IPC 展示；渠道绑定会话则在下方
+    // 与 replyText 一起持久化选中的 stickerId，两条路径不会重复经过同一会话。
+    let resolvedStickerId: string | undefined;
     if (sticker && this.settings.stickerEnabled) {
       const stickerPath = resolveStickerImagePath(sticker);
       if (stickerPath) {
         parts.push({ kind: "sticker", stickerId: sticker, imagePath: stickerPath });
+        resolvedStickerId = sticker;
         console.log(LOG, `sticker 决定: id=${sticker} → ${stickerPath}`);
       } else {
         console.warn(LOG, `sticker 解析失败（跳过）: id=${sticker}`);
@@ -482,7 +501,13 @@ export class ChannelDispatcher {
     }
     if (boundConversationId && this.deps.appendBoundConversationMessage) {
       try {
-        await this.deps.appendBoundConversationMessage(boundConversationId, "assistant", replyText);
+        await this.deps.appendBoundConversationMessage(boundConversationId, "assistant", replyText, {
+          channel: msg.channel,
+          chatType: msg.chatType ?? "private",
+          senderName: msg.senderName,
+          modelContext: undefined,
+          ...(resolvedStickerId && adapterCap?.sticker !== false ? { sticker: resolvedStickerId } : {}),
+        });
       } catch (err) {
         console.warn(LOG, "appendBoundConversationMessage (outgoing) 失败:", err);
       }
@@ -611,6 +636,7 @@ export function setDispatcherAppendBoundConversationMessage(
     conversationId: string,
     role: "user" | "assistant",
     content: string,
+    metadata: BoundConversationMessageMetadata,
   ) => void | Promise<void>,
 ): void {
   channelDispatcher.deps.appendBoundConversationMessage = fn;

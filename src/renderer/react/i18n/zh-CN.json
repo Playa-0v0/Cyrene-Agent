@@ -97,7 +97,15 @@
     "svgCardPending": "卡片生成中…",
     "svgCardFallback": "SVG 内容无效或过长，已降级为源码显示",
     "diagramPreview": "图表预览",
-    "diagramZoomHint": "点击放大查看"
+    "diagramZoomHint": "点击放大查看",
+    "channelSource": {
+      "wechat": "微信",
+      "feishu": "飞书",
+      "qq": "QQ",
+      "qqbot": "QQ Bot",
+      "unknown": "外部渠道",
+      "sameConversation": "{{channels}} · 同一对话"
+    }
   },
   "contextRing": {
     "categorySystemPrompt": "系统提示词",

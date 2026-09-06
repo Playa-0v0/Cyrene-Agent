@@ -151,7 +151,9 @@ export const runVerificationTool: ToolDefinition = {
       verificationCommands = {
         test: {
           cmd: "builtin:vitest",
-          args: ["--reporter=verbose"],
+          // 显式 default reporter：低噪声（逐文件 + 末尾汇总），且不依赖项目
+          // vitest.config 里可能配置的 reporters（若项目自己配了 verbose，不传参会被带回去）
+          args: ["--reporter=default"],
           trust: "builtin",
           source: "vitest",
         },
@@ -245,8 +247,9 @@ export const runVerificationTool: ToolDefinition = {
         command: actualCommand,
         actualCwd: cwd || process.cwd(),
         exitCode: result.exitCode ?? -1,
-        stdout: result.stdout,
+        // stdout 置尾：保证下游截断的尾窗覆盖测试汇总行（Test Files/Tests passed）
         stderr: result.stderr,
+        stdout: result.stdout,
         spawnError: null,
         timedOut: result.timedOut,
         passed,

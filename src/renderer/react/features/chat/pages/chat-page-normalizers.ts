@@ -1,4 +1,4 @@
-import type { ChatSession, ConversationMode } from "../../../../../shared/chat-types";
+import type { ChatMessageChannelSource, ChatSession, ConversationMode } from "../../../../../shared/chat-types";
 import type { ChatMessageItem } from "../components/ChatMessageList";
 import {
   describePermissionRequest,
@@ -10,11 +10,28 @@ import type { PermissionApprovalRequest } from "./chat-page-bridge";
 import { recoverInterruptedMessage } from "./session-runtime-state";
 
 const CONVERSATION_MODES: readonly ConversationMode[] = ["chat", "work", "code", "learn"];
+const CHAT_MESSAGE_CHANNELS = new Set<ChatMessageChannelSource["channel"]>(["wechat", "feishu", "qq", "qqbot"]);
 /** 最后停留模式的 localStorage 键：写入方（ChatPage）与读取方（getInitialMode）共用同一常量。 */
 export const LAST_MODE_STORAGE_KEY = "cyrene-react-last-mode";
 
 export function isConversationMode(value: string): value is ConversationMode {
   return CONVERSATION_MODES.includes(value as ConversationMode);
+}
+
+function normalizeChannelSource(value: unknown): ChatMessageChannelSource | undefined {
+  const record = asRecord(value);
+  if (!record || typeof record.channel !== "string" || !CHAT_MESSAGE_CHANNELS.has(record.channel as ChatMessageChannelSource["channel"])) {
+    return undefined;
+  }
+  const senderName = asNonEmptyString(record.senderName);
+  const chatType = record.chatType === "private" || record.chatType === "group"
+    ? record.chatType
+    : undefined;
+  return {
+    channel: record.channel as ChatMessageChannelSource["channel"],
+    ...(chatType ? { chatType } : {}),
+    ...(senderName ? { senderName } : {}),
+  };
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -115,6 +132,8 @@ export function toUiMessages(session: ChatSession): ChatMessageItem[] {
       id: message.id,
       role: message.role === "model" ? "assistant" : "user",
       content: message.content,
+      modelContext: message.modelContext,
+      channelSource: normalizeChannelSource(message.channelSource),
       reasoning: message.reasoning,
       reasoningBlocks: message.reasoningBlocks,
       processMessages: message.processMessages,

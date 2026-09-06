@@ -34,10 +34,13 @@ export interface TruncationConfig {
   tailChars: number;
 }
 
+// 截断参数：30K 触发阈值 + 20K 预览预算（≤30K 完整返回；>30K 留头 12K + 尾 8K）。
+// 尾窗 8K 要装得下测试汇总行 + 数个失败用例 diff；头窗 12K 覆盖命令回显与早期报错。
+// 8K~30K 的中等输出（单文件测试、build 日志）不再截断，直接全文给模型。
 export const DEFAULT_TRUNCATION: TruncationConfig = {
-  thresholdChars: 8_192,
-  headChars: 4_096,
-  tailChars: 1_024,
+  thresholdChars: 30_000,
+  headChars: 12_000,
+  tailChars: 8_000,
 };
 
 export const TOOL_RESULT_PRUNE_MARKER = "\n\n[... tool result middle pruned ...]\n\n";

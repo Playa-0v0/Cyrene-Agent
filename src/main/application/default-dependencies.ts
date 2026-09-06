@@ -103,7 +103,7 @@ import { createProactiveLifecycle } from "../proactive/proactive-lifecycle";
 import { createCitaService } from "../services/cita/cita-service";
 import { createSocialContextService } from "../services/social-context/social-context-service";
 import { createGitService } from "../code-git/git-service";
-import { resolveGitExecutable } from "../code-git/git-executable";
+import { resolveGitExecutable, type ResolvedGitExecutable } from "../code-git/git-executable";
 import { registerCodeGitIpc } from "../code-git/code-git-ipc";
 import { installSingleInstanceGuard } from "../single-instance";
 import { createWindowManager } from "../windows/window-manager";
@@ -305,14 +305,20 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         setLive2dWindowSender((channel, payload) => shell.windowManager.sendToPetWindow(channel, payload));
 
         // Git：服务对象预创建；仓库监听只在打开仓库后启动
+        // 探测结果在进程内缓存：成功过一次就不再重复探测，避免启动高峰期
+        // 偶发超时导致 Git 面板误报"未检测到可用 Git"；探测失败不缓存，下次自动重试
+        let resolvedGit: ResolvedGitExecutable | null = null;
         const git = createGitService({
           getSession: chatsStore.getSession,
-          resolveExecutable: () => resolveGitExecutable({
-            systemCommand: "git",
-            bundledPath: app.isPackaged
-              ? path.join(process.resourcesPath, "mingit", "cmd", "git.exe")
-              : path.join(app.getAppPath(), "resources", "mingit", "cmd", "git.exe"),
-          }),
+          resolveExecutable: async () => {
+            resolvedGit ??= await resolveGitExecutable({
+              systemCommand: "git",
+              bundledPath: app.isPackaged
+                ? path.join(process.resourcesPath, "mingit", "cmd", "git.exe")
+                : path.join(app.getAppPath(), "resources", "mingit", "cmd", "git.exe"),
+            });
+            return resolvedGit;
+          },
         });
 
         // LSP：管理器预创建；具体语言服务进程按需启动

@@ -258,6 +258,8 @@ export class FeishuAdapter implements ChannelAdapter {
 
   private channel: LarkChannel | null = null;
   private status: ChannelStatus = { enabled: false, phase: "config_missing" };
+  /** connect() 失败后的定时重建句柄；连接成功、停用或手动 rebuild 时清除 */
+  private connectRetryTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     // start() 时再初始化
@@ -285,6 +287,10 @@ export class FeishuAdapter implements ChannelAdapter {
       domain: Domain.Feishu,
       loggerLevel: LoggerLevel.warn,
       transport: "websocket",
+      // 禁止启用 SDK 的 handshakeTimeoutMs 看门狗：其超时回调先 removeAllListeners()
+      // 再 terminate()，ws 库对"连接建立中"的 socket 会异步 emit('error')，
+      // 此刻监听器已清空，错误直接炸成主进程 Uncaught Exception。
+      // 首连失败的恢复由 start() 之后的定时重建兜底。
     });
 
     // 绑定入站消息
@@ -335,10 +341,32 @@ export class FeishuAdapter implements ChannelAdapter {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(LOG, "connect() failed:", msg);
       this.status = { enabled: true, phase: "error", message: msg };
+      this.scheduleConnectRetry();
+    }
+  }
+
+  /** 首连失败后定时重建整个 channel。SDK 内部的自动重连只覆盖"连上后断开"，
+   *  首连挂死（握手无响应）只能靠新建连接恢复；固定 30 秒重试直到成功或停用。 */
+  private scheduleConnectRetry(): void {
+    if (this.connectRetryTimer) return;
+    console.warn(LOG, "30 秒后自动重建连接");
+    this.connectRetryTimer = setTimeout(() => {
+      this.connectRetryTimer = null;
+      // 到点时用户可能已停用飞书，停用状态下不再重建
+      if (!loadChannelsSettings().feishu.enabled) return;
+      void this.rebuild();
+    }, 30_000);
+  }
+
+  private clearConnectRetryTimer(): void {
+    if (this.connectRetryTimer) {
+      clearTimeout(this.connectRetryTimer);
+      this.connectRetryTimer = null;
     }
   }
 
   async stop(): Promise<void> {
+    this.clearConnectRetryTimer();
     if (this.channel) {
       try {
         await this.channel.disconnect();
@@ -388,6 +416,7 @@ export class FeishuAdapter implements ChannelAdapter {
 
   /** 给外部：触发重建（用户改 AppID/Secret 后调用） */
   public async rebuild(): Promise<void> {
+    this.clearConnectRetryTimer();
     if (this.channel) {
       try {
         await this.channel.disconnect();
