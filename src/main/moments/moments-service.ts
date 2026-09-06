@@ -721,10 +721,16 @@ export const momentsService: MomentsService = createMomentsService({
   buildWorldbookContext: buildMomentsWorldbookContext,
   loadPostImages: loadUserMomentPostImages,
   buildPersona: buildMomentsPersonaPrompt,
-  // 角色注册表：立绘池 ∩ 人设 md，md 随时可改，每次抽签/执行前现读
-  loadPersonas: () => loadCharacterPersonas({
-    log: (event, detail) => console.log(`[Moments] ${event}`, detail ?? ""),
-  }),
+  // 角色注册表：立绘池 ∩ 人设 md，md 随时可改，每次抽签/执行前现读；
+  // 每次加载顺带同步 store 的角色写入名单——service 抽到谁、store 就认谁，
+  // 运行中新增人设 md 无需重启即可落库
+  loadPersonas: () => {
+    const personas = loadCharacterPersonas({
+      log: (event, detail) => console.log(`[Moments] ${event}`, detail ?? ""),
+    });
+    momentsStore.setCharacterAuthorRegistry(new Set(personas.keys()));
+    return personas;
+  },
   enqueueTask: (label, task) => enqueueLLMTask(label, task),
   runModel: async (messages) => {
     const config = loadMomentsVendorConfig();
