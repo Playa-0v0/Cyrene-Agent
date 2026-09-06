@@ -134,11 +134,13 @@ describe("channels/dispatcher", () => {
     expect(loadBoundConversationHistory).toHaveBeenCalledWith("conversation-7", 16);
     expect(appendBoundConversationMessage).toHaveBeenNthCalledWith(1, "conversation-7", "user", "你好", {
       channel,
+      chatType: "private",
       senderName: "测试用户",
       modelContext: undefined,
     });
     expect(appendBoundConversationMessage).toHaveBeenNthCalledWith(2, "conversation-7", "assistant", "共享回复", {
       channel,
+      chatType: "private",
       senderName: "测试用户",
       modelContext: undefined,
     });
@@ -166,9 +168,43 @@ describe("channels/dispatcher", () => {
 
     expect(appendBoundConversationMessage).toHaveBeenNthCalledWith(1, "conversation-group", "user", "大家好", {
       channel: "qq",
+      chatType: "group",
       senderName: "小明",
       modelContext: "[群聊发送者：小明 (10001)]\n大家好",
     });
+  });
+
+  it("persists the same selected built-in sticker in the bound desktop reply", async () => {
+    const appendBoundConversationMessage = vi.fn();
+    const dispatcher = new ChannelDispatcher({
+      manager: { getAdapter: () => ({ capability: { text: true, image: true, audio: false, file: false, video: false, markdown: false, card: false, sticker: true, maxTextLength: 2048 } }) } as any,
+      resolveBoundConversationId: () => "conversation-sticker",
+      loadBoundConversationHistory: vi.fn(async () => []),
+      appendBoundConversationMessage,
+      buildAndRunAgent: vi.fn(async () => ({ text: "收到", sticker: "OK" })),
+    });
+
+    await dispatcher.handleIncoming(makeIncoming({ channel: "wechat" }));
+
+    expect(appendBoundConversationMessage).toHaveBeenNthCalledWith(2, "conversation-sticker", "assistant", "收到", expect.objectContaining({
+      channel: "wechat",
+      sticker: "OK",
+    }));
+  });
+
+  it("does not persist a selected sticker when the channel capability rejects stickers", async () => {
+    const appendBoundConversationMessage = vi.fn();
+    const dispatcher = new ChannelDispatcher({
+      manager: makeManager(),
+      resolveBoundConversationId: () => "conversation-no-sticker",
+      loadBoundConversationHistory: vi.fn(async () => []),
+      appendBoundConversationMessage,
+      buildAndRunAgent: vi.fn(async () => ({ text: "收到", sticker: "OK" })),
+    });
+
+    await dispatcher.handleIncoming(makeIncoming());
+
+    expect(appendBoundConversationMessage.mock.calls[1]?.[3]).not.toHaveProperty("sticker");
   });
 
   it("falls back to channel history when bound desktop history cannot be loaded", async () => {

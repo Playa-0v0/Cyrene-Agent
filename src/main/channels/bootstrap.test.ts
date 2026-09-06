@@ -11,7 +11,7 @@ const channelMocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   appendMessage: vi.fn(),
   loadBoundConversationHistory: undefined as ((conversationId: string, limit: number) => Promise<Array<{ role: "user" | "assistant"; content: string }>>) | undefined,
-  appendBoundConversationMessage: undefined as ((conversationId: string, role: "user" | "assistant", content: string, metadata: { channel: "wechat" | "feishu" | "qq" | "qqbot"; senderName?: string; modelContext?: string }) => void) | undefined,
+  appendBoundConversationMessage: undefined as ((conversationId: string, role: "user" | "assistant", content: string, metadata: { channel: "wechat" | "feishu" | "qq" | "qqbot"; chatType: "private" | "group"; senderName?: string; modelContext?: string; sticker?: string }) => void) | undefined,
   buildAndRunAgent: undefined as ((...args: unknown[]) => Promise<unknown>) | undefined,
   agentError: undefined as Error | undefined,
   agentResult: { reply: "渠道回复", toolResults: [] } as {
@@ -169,15 +169,18 @@ describe("createChannelsSubsystem lifecycle", () => {
 
     channelMocks.appendBoundConversationMessage?.("desktop-1", "user", "大家好", {
       channel: "qq",
+      chatType: "group",
       senderName: "伙伴",
       modelContext: "[QQ群发送者：伙伴]\n大家好",
+      sticker: "OK",
     });
 
     expect(channelMocks.appendMessage).toHaveBeenCalledWith("desktop-1", expect.objectContaining({
       role: "user",
       content: "大家好",
       modelContext: "[QQ群发送者：伙伴]\n大家好",
-      channelSource: { channel: "qq", senderName: "伙伴" },
+      channelSource: { channel: "qq", chatType: "group", senderName: "伙伴" },
+      sticker: "OK",
     }));
   });
 
