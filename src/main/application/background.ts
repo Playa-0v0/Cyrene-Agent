@@ -134,14 +134,23 @@ export function startBackground(deps: BackgroundDependencies): BackgroundHandle 
     return phase === "stopping" || phase === "stopped" || phase === "failed";
   };
 
+  /** 启动耗时埋点：打印任务耗时与结束时刻（相对进程启动），供启动性能排查。 */
+  function logStartupTiming(label: string, start: number): void {
+    const end = performance.now();
+    console.log(`[StartupTiming] ${label} ${Math.round(end - start)}ms (at ${Math.round(end)}ms)`);
+  }
+
   /** 单项后台任务：失败记录降级（退出中导致的失败只记录日志），不阻塞组内后继。 */
   async function runTracked<T>(
     id: string,
     capability: string,
     task: (signal: AbortSignal) => Promise<T>,
   ): Promise<T | undefined> {
+    const start = performance.now();
     try {
-      return await runner.run(id, task);
+      const result = await runner.run(id, task);
+      logStartupTiming(`bg/${id}`, start);
+      return result;
     } catch (error) {
       if (isShuttingDown()) {
         console.warn(`[Background] ${id} aborted during shutdown`);
