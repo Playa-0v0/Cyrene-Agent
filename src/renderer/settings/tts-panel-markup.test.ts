@@ -35,13 +35,13 @@ describe("TTS settings 面板结构（自动朗读文本切分）", () => {
     }
   });
 
-  it("切分模式采用与语言设置同族的圆角按钮组，含一句一切/一段一切两个选项", () => {
-    expect(html).toContain('id="tts-early-read-split-mode"');
+  it("切分模式按钮组使用 group + aria-pressed 的 toggle 语义，含一句一切/一段一切", () => {
+    expect(html).toContain('id="tts-early-read-split-mode" role="group"');
+    expect(html).not.toContain('id="tts-early-read-split-mode" role="radiogroup"');
     expect(html).toContain('class="option-blocks option-blocks--wide"');
-    expect(html).toContain('role="radiogroup"');
-    expect(html).toContain('data-value="sentence"');
+    expect(html).toContain('data-value="sentence" aria-pressed="true"');
     expect(html).toContain(">一句一切</button>");
-    expect(html).toContain('data-value="paragraph"');
+    expect(html).toContain('data-value="paragraph" aria-pressed="false"');
     expect(html).toContain(">一段一切</button>");
     expect(html).not.toContain('<select id="tts-early-read-split-mode"');
   });

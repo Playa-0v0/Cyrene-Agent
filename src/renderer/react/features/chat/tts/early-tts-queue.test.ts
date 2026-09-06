@@ -89,6 +89,28 @@ describe("StreamingMarkdownSegmenter", () => {
     segmenter.append("```ts\nconst value = 1");
     expect(segmenter.finish("```ts\nconst value = 1")).toEqual(["```ts\nconst value = 1"]);
   });
+
+  it("sentence mode commits a short complete reply on finish, not during append", () => {
+    const segmenter = new StreamingMarkdownSegmenter(4, "sentence");
+    expect(segmenter.append("好的。")).toEqual([]);
+    expect(segmenter.finish("好的。")).toEqual(["好的。"]);
+  });
+
+  it("paragraph mode commits a short reply on finish", () => {
+    const segmenter = new StreamingMarkdownSegmenter(4, "paragraph");
+    expect(segmenter.append("好")).toEqual([]);
+    expect(segmenter.finish("好")).toEqual(["好"]);
+  });
+
+  it("off mode commits short replies on finish and never mid-stream", () => {
+    const one = new StreamingMarkdownSegmenter(4, "off");
+    expect(one.append("好")).toEqual([]);
+    expect(one.finish("好")).toEqual(["好"]);
+
+    const two = new StreamingMarkdownSegmenter(4, "off");
+    expect(two.append("嗯？")).toEqual([]);
+    expect(two.finish("嗯？")).toEqual(["嗯？"]);
+  });
 });
 
 describe("EarlyTtsPlaybackQueue", () => {
@@ -152,6 +174,15 @@ describe("EarlyTtsPlaybackQueue", () => {
     await queue.finish("第一句。第二句。还没\n\n第三段。");
     expect(play).toHaveBeenCalledTimes(1);
     expect(play.mock.calls[0][0]).toBe("第一句。第二句。还没\n\n第三段。");
+  });
+
+  it("queue in off mode plays a short reply exactly once on finish", async () => {
+    const play = vi.fn().mockResolvedValue("completed");
+    const queue = new EarlyTtsPlaybackQueue(play, undefined, "off");
+    queue.append("好");
+    await queue.finish("好");
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(play.mock.calls[0][0]).toBe("好");
   });
 });
 

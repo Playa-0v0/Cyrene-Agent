@@ -73,7 +73,9 @@ export class StreamingMarkdownSegmenter {
 
     const commit = (end: number, allowTable: boolean) => {
       const candidate = this.buffer.slice(segmentStart, end).trim();
-      if (!candidate || codePointLength(candidate) < this.minChars) return;
+      if (!candidate) return;
+      // 仅流式中途以最小长度防碎；收尾提交完整剩余文本时不受此限
+      if (!final && codePointLength(candidate) < this.minChars) return;
       if (!allowTable && hasOpenGfmTableTail(candidate)) return;
       segments.push(candidate);
       segmentStart = end;
