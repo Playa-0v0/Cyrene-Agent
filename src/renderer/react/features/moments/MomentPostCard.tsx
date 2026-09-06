@@ -9,7 +9,7 @@ import {
 } from "../../../../shared/moments-types";
 import { resolveAsset } from "../../../../shared/renderer-base";
 import { useTranslation } from "../../i18n";
-import { formatMomentTime, getBackgroundLikers } from "./moments-utils";
+import { formatMomentTime } from "./moments-utils";
 
 const CYRENE_AVATAR_URL = resolveAsset("avatars/cyrene-avatar.png");
 
@@ -44,9 +44,8 @@ export function MomentPostCard({
     author === "cyrene" ? t("moments.cyreneName") : userDisplayName;
 
   const likedByUser = likes.some((like) => like.actor === "user");
-  // 背景点赞：按动态 id 派生的路人好友名单，拼在真实点赞后面展示
-  const backgroundLikers = useMemo(() => getBackgroundLikers(post.id), [post.id]);
-  const likeNames = [...likes.map((like) => authorName(like.actor)), ...backgroundLikers];
+  // 点赞行只展示真实落库的点赞（角色/昔涟的延迟点赞到达后经广播刷新出现）
+  const likeNames = likes.map((like) => authorName(like.actor));
   const commentsById = useMemo(() => new Map(comments.map((comment) => [comment.id, comment])), [comments]);
   const replyTarget = replyTo ? commentsById.get(replyTo) : undefined;
 
