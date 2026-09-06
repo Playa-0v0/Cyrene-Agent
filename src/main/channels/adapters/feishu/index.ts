@@ -285,6 +285,9 @@ export class FeishuAdapter implements ChannelAdapter {
       domain: Domain.Feishu,
       loggerLevel: LoggerLevel.warn,
       transport: "websocket",
+      // 单次 WS 握手 8 秒未完成就掐断该次尝试，交给 SDK 自动重连；
+      // 不设时卡死的连接（网络黑洞）会一直挂着，外层 15 秒超时报错后底层也不再动
+      handshakeTimeoutMs: 8_000,
     });
 
     // 绑定入站消息
