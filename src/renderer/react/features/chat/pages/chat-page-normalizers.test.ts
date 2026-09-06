@@ -17,12 +17,12 @@ describe("chat page normalizers", () => {
         role: "user",
         content: "你好",
         at: 2,
-        channelSource: { channel: "wechat", senderName: "伙伴" },
+        channelSource: { channel: "wechat", chatType: "private", senderName: "伙伴" },
       }],
     };
     const [message] = toUiMessages(session);
 
-    expect(message.channelSource).toEqual({ channel: "wechat", senderName: "伙伴" });
+    expect(message.channelSource).toEqual({ channel: "wechat", chatType: "private", senderName: "伙伴" });
     expect(message.modelContext).toBeUndefined();
   });
 
@@ -40,7 +40,7 @@ describe("chat page normalizers", () => {
         role: "user",
         content: "大家好",
         modelContext: "[QQ群发送者：伙伴]\n大家好",
-        channelSource: { channel: "qq", senderName: "伙伴" },
+        channelSource: { channel: "qq", chatType: "group", senderName: "伙伴" },
         at: 2,
       }],
     };

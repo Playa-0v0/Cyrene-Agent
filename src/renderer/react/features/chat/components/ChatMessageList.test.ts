@@ -16,7 +16,7 @@ vi.mock("@ant-design/x-markdown", () => ({ XMarkdown: ({ content }: { content?: 
 vi.mock("@ant-design/x-markdown/plugins/Latex", () => ({ default: () => ({}) }));
 vi.mock("../../../../../shared/renderer-base", () => ({ resolveAsset: (path: string) => path }));
 
-import { createMessageItems, formatChannelSourceLabel, RunActivityDetail, type ChatMessageItem } from "./ChatMessageList";
+import { createMessageItems, formatChannelSourceLabel, resolveChannelConversationLabel, RunActivityDetail, type ChatMessageItem } from "./ChatMessageList";
 import { extractMessageStickerId, stripMessageStickerMarkers } from "./message-sticker";
 
 describe("React chat sticker messages", () => {
@@ -46,14 +46,31 @@ describe("formal answer visibility", () => {
 });
 
 describe("bound channel message presentation", () => {
-  it("uses compact human-readable labels for incoming and outgoing messages", () => {
-    expect(formatChannelSourceLabel({ channel: "wechat", senderName: "伙伴" }, "incoming")).toBe("微信 · 伙伴");
-    expect(formatChannelSourceLabel({ channel: "qq" }, "incoming")).toBe("来自QQ");
-    expect(formatChannelSourceLabel({ channel: "qq" }, "outgoing")).toBe("已回复至QQ");
+  it("shows a sender only for group messages instead of repeating channel status", () => {
+    expect(formatChannelSourceLabel({ channel: "wechat", chatType: "group", senderName: "伙伴" }, "incoming")).toBe("伙伴");
+    expect(formatChannelSourceLabel({ channel: "wechat", chatType: "private", senderName: "伙伴" }, "incoming")).toBe("");
+    expect(formatChannelSourceLabel({ channel: "qq", senderName: "旧消息昵称" }, "incoming")).toBe("");
+    expect(formatChannelSourceLabel({ channel: "qq" }, "outgoing")).toBe("");
   });
 
   it("falls back safely when persisted channel metadata is invalid", () => {
-    expect(formatChannelSourceLabel({ channel: "unknown" } as never, "incoming")).toBe("来自外部渠道");
+    expect(formatChannelSourceLabel({ channel: "unknown" } as never, "incoming")).toBe("");
+  });
+
+  it("summarizes channel context once for the whole conversation", () => {
+    expect(resolveChannelConversationLabel([
+      { id: "u1", role: "user", content: "微信消息", channelSource: { channel: "wechat" } },
+      { id: "a1", role: "assistant", content: "回复", channelSource: { channel: "wechat" } },
+    ])).toBe("微信 · 同一对话");
+
+    expect(resolveChannelConversationLabel([
+      { id: "u1", role: "user", content: "微信消息", channelSource: { channel: "wechat" } },
+      { id: "u2", role: "user", content: "QQ消息", channelSource: { channel: "qq" } },
+    ])).toBe("微信、QQ · 同一对话");
+
+    expect(resolveChannelConversationLabel([
+      { id: "u1", role: "user", content: "普通消息" },
+    ])).toBeNull();
   });
 
   it("keeps the visible text clean and carries channel source metadata to the bubble", () => {
@@ -61,13 +78,13 @@ describe("bound channel message presentation", () => {
       id: "wechat-user",
       role: "user",
       content: "下午见",
-      channelSource: { channel: "wechat", senderName: "伙伴" },
+      channelSource: { channel: "wechat", chatType: "group", senderName: "伙伴" },
     } as ChatMessageItem;
 
     const [item] = createMessageItems([message], []);
 
     expect(item.content).toBe("下午见");
-    expect(item.extraInfo?.channelSource).toEqual({ channel: "wechat", senderName: "伙伴" });
+    expect(item.extraInfo?.channelSource).toEqual({ channel: "wechat", chatType: "group", senderName: "伙伴" });
   });
 });
 

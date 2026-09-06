@@ -219,19 +219,36 @@ function ChannelSourceLabel({
   source: ChatMessageChannelSource;
   direction: "incoming" | "outgoing";
 }) {
-  return <span className="cy-message__channel-source">{formatChannelSourceLabel(source, direction)}</span>;
+  const label = formatChannelSourceLabel(source, direction);
+  return label ? <span className="cy-message__channel-source">{label}</span> : null;
 }
 
 export function formatChannelSourceLabel(
   source: ChatMessageChannelSource,
   direction: "incoming" | "outgoing",
 ): string {
-  const channelKey = channelNameKeys[source.channel];
-  const channelName = channelKey ? t(channelKey) : t("messageList.channelSource.unknown");
-  if (direction === "outgoing") return t("messageList.channelSource.outgoing", { channel: channelName });
-  return source.senderName
-    ? t("messageList.channelSource.incomingSender", { channel: channelName, sender: source.senderName })
-    : t("messageList.channelSource.incoming", { channel: channelName });
+  if (direction === "outgoing" || source.chatType !== "group") return "";
+  return source.senderName?.trim() ?? "";
+}
+
+function channelName(channel: ChatMessageChannelSource["channel"]): string {
+  const key = channelNameKeys[channel];
+  return key ? t(key) : t("messageList.channelSource.unknown");
+}
+
+/** 把逐条来源提示收拢为会话级提示，避免每个气泡都像日志。 */
+export function resolveChannelConversationLabel(
+  messages: readonly Pick<ChatMessageItem, "channelSource">[],
+): string | null {
+  const channels = Array.from(new Set(
+    messages
+      .map((message) => message.channelSource?.channel)
+      .filter((channel): channel is ChatMessageChannelSource["channel"] => Boolean(channel)),
+  ));
+  if (channels.length === 0) return null;
+  return t("messageList.channelSource.sameConversation", {
+    channels: channels.map(channelName).join("、"),
+  });
 }
 
 function DotSpinner() {
@@ -1154,6 +1171,7 @@ export function ChatMessageList({
   }, []);
 
   const items = createMessageItems(messages, enabledStickers);
+  const channelConversationLabel = resolveChannelConversationLabel(messages);
 
   return (
     <div
@@ -1162,6 +1180,12 @@ export function ChatMessageList({
       aria-live="polite"
       onScroll={updateScrollState}
     >
+      {channelConversationLabel && (
+        <div className="cy-message-list__channel-context" role="note" aria-label={channelConversationLabel}>
+          <span className="cy-message-list__channel-dot" aria-hidden="true" />
+          <span>{channelConversationLabel}</span>
+        </div>
+      )}
       <Bubble.List items={items} role={roles} autoScroll />
     </div>
   );

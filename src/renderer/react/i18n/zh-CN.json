@@ -104,9 +104,7 @@
       "qq": "QQ",
       "qqbot": "QQ Bot",
       "unknown": "外部渠道",
-      "incoming": "来自{{channel}}",
-      "incomingSender": "{{channel}} · {{sender}}",
-      "outgoing": "已回复至{{channel}}"
+      "sameConversation": "{{channels}} · 同一对话"
     }
   },
   "contextRing": {

@@ -112,8 +112,10 @@ export function createChannelsSubsystem(
       content,
       at: Date.now(),
       modelContext: metadata.modelContext,
+      sticker: metadata.sticker,
       channelSource: {
         channel: metadata.channel,
+        chatType: metadata.chatType,
         senderName: metadata.senderName,
       },
     });

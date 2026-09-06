@@ -111,6 +111,7 @@ export type ChatMessageChannel = "wechat" | "feishu" | "qq" | "qqbot";
 /** 外部渠道镜像来源。只用于展示，不改变桌面对话或渠道 Agent 的运行身份。 */
 export interface ChatMessageChannelSource {
   channel: ChatMessageChannel;
+  chatType?: "private" | "group";
   senderName?: string;
 }
 

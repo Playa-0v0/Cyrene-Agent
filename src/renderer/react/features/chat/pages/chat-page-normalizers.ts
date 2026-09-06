@@ -24,8 +24,12 @@ function normalizeChannelSource(value: unknown): ChatMessageChannelSource | unde
     return undefined;
   }
   const senderName = asNonEmptyString(record.senderName);
+  const chatType = record.chatType === "private" || record.chatType === "group"
+    ? record.chatType
+    : undefined;
   return {
     channel: record.channel as ChatMessageChannelSource["channel"],
+    ...(chatType ? { chatType } : {}),
     ...(senderName ? { senderName } : {}),
   };
 }
